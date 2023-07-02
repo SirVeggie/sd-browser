@@ -1,0 +1,37 @@
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #000a #0005;
+  }
+  
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Works on Chrome, Edge, and Safari */
+  ::-webkit-scrollbar {
+    width: 10px;
+    background-color: #0000;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background-color: #0001;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background-color: #000a;
+    border-radius: 3px;
+    border: 1px solid #0005;
+  }
+  
+  ::-webkit-resizer {
+    appearance: none;
+    background: linear-gradient(to right bottom, #0000 0%, #0000 68%, #0003 68%, #0003 76%, #0000 77%, #0000 84%, #0003 84%, #0003 90%, #0000 93%, #0000 100%);
+  }
+  
+  ::-webkit-scrollbar-corner {
+    background: #0000;
+    border-top: 16px solid #0001;
+    border-left: 16px solid #0001;
+    border-right: 16px solid transparent;
+    border-bottom: 16px solid transparent;
+  }
