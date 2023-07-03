@@ -38,7 +38,7 @@
     {#each $noteStore as n (n.id)}
         <div class="notification" animate:flip={{ duration: 400 }}>
             <div transition:fly={{ x: 10, duration: 400 }}>
-                {n.id}: {n.message}
+                {n.message}
             </div>
         </div>
     {/each}

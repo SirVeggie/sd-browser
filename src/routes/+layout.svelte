@@ -1,9 +1,18 @@
 <script>
+    import Webui from "$lib/components/Webui.svelte";
+
+    // import { onMount } from "svelte";
     import Notifier from "../lib/components/Notifier.svelte";
+    // import { page } from "$app/stores";
+    
+    // onMount(() => {
+        // $page.url.origin;
+    // });
 </script>
 
 <main>
     <slot />
+    <Webui />
     <Notifier />
 </main>
 

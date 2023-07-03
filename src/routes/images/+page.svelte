@@ -1,23 +1,62 @@
 <script lang="ts">
-    import { page } from "$app/stores";
-    import { notify } from "$lib/components/Notifier.svelte";
+    import NavArrows from "$lib/components/NavArrows.svelte";
     import ImageDisplay from "$lib/items/ImageDisplay.svelte";
     import ImageFull from "$lib/items/ImageFull.svelte";
+    import Input from "$lib/items/Input.svelte";
     import Intersecter from "$lib/items/Intersecter.svelte";
     import Link from "$lib/items/Link.svelte";
     import { imageStore } from "$lib/stores/imageStore";
     import type { ImageContainer } from "$lib/types";
 
     let imageAmount = 10;
-    $: images = Object.keys($imageStore).map((key) => $imageStore[key]);
-    $: reversed = [...images].reverse();
-    $: filtered = reversed.slice(0, imageAmount);
-    // $: filtered = images.slice(0, imageAmount);
     let id = "";
+    let input = "";
+
+    $: images = Object.keys($imageStore).map((key) => $imageStore[key]);
+    $: filtered = [...images].reverse().filter((img) => {
+        try {
+            return img.metadata.parameters?.toLowerCase().match(input) ?? !input;
+        } catch {
+            return false;
+        }
+    });
+    $: paginated = filtered.slice(0, imageAmount);
+    $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
+    $: nextIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) + 1;
+    $: leftArrow = prevIndex >= 0;
+    $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
 
     function openImage(img: ImageContainer) {
         // notify(`Opened ${img.id}`);
         id = img.id;
+    }
+
+    function goLeft() {
+        if (leftArrow) {
+            id = paginated[prevIndex].id;
+            scrollToImage();
+        }
+    }
+
+    function goRight() {
+        if (rightArrow) {
+            id = paginated[nextIndex].id;
+            if (nextIndex == paginated.length - 1) {
+                loadMore();
+            }
+            scrollToImage();
+        }
+    }
+
+    function scrollToImage() {
+        const el = document.getElementById(`img_${id}`);
+        if (el) {
+            el.scrollIntoView({ behavior: "auto", block: "center" });
+        }
+    }
+
+    function inputChange() {
+        imageAmount = 10;
     }
 
     function loadMore() {
@@ -28,12 +67,14 @@
 <div class="nav">
     <Link to="/">Back</Link>
     <div class="spacing" />
+    <Input bind:value={input} placeholder="Search" on:input={inputChange} />
+    <div class="spacing" />
     <Link to="/images/live">Live</Link>
 </div>
 
 <div class="grid">
-    {#each filtered as img (img.id)}
-        <div>
+    {#each paginated as img (img.id)}
+        <div id={`img_${img.id}`}>
             <ImageDisplay {img} onClick={() => openImage(img)} />
         </div>
     {/each}
@@ -41,11 +82,24 @@
 
 <div class="loader">
     <Intersecter onVisible={loadMore}>
-        <h1>Loading...</h1>
+        {#if paginated.length === filtered.length}
+            <p>You've reached the end.</p>
+        {:else}
+            <button on:click={loadMore}>
+                (click here to load more images)
+            </button>
+        {/if}
     </Intersecter>
+    <div class="spacer" />
 </div>
 
 <ImageFull enabled={!!id} img={$imageStore[id]} cancel={() => (id = "")} />
+<NavArrows
+    onLeft={goLeft}
+    onRight={goRight}
+    left={leftArrow}
+    right={rightArrow}
+/>
 
 <style lang="scss">
     .grid {
@@ -70,10 +124,24 @@
             justify-content: center;
             margin-top: 1em;
         }
-        h1 {
+        p,
+        button {
+            background-color: transparent;
+            border: none;
             font-family: "Open sans", sans-serif;
-            font-size: 2em;
+            font-size: 1em;
             color: #ddd;
+            display: block;
+            margin: 1em 0 0 0;
         }
+
+        button {
+            cursor: pointer;
+        }
+    }
+
+    .spacer {
+        height: 100px;
+        // background-color: red;
     }
 </style>

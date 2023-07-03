@@ -1,0 +1,9 @@
+{
+  "name": "SD Image Browser",
+  "short_name": "SD Browser",
+  "icons": [],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#242424",
+  "theme_color": "#242424"
+}

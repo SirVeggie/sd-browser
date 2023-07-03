@@ -5,7 +5,7 @@ export type ImageContainer = {
     file: string;
     width: number;
     height: number;
-    metadata: string;
+    metadata: Record<string, string>;
 };
 
 export type ServerError = {

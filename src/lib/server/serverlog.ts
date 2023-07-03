@@ -1,4 +1,4 @@
 
-export function log(message: string) {
+export function privatelog(message: string) {
     console.log(message);
 }
