@@ -24,5 +24,6 @@
         background-color: #242424;
         padding: 2em;
         box-sizing: border-box;
+        color: #ddd;
     }
 </style>

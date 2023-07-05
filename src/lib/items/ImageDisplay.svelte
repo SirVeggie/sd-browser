@@ -1,15 +1,15 @@
 <script lang="ts">
-    import type { ImageContainer } from "$lib/types";
+    import type { ClientImage } from "$lib/types";
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
 
-    export let img: ImageContainer;
+    export let img: ClientImage;
     export let onClick: (() => void) | undefined = undefined;
 </script>
 
 <div class={cx(onClick && "active")}>
     <Clickable up={onClick}>
-        <img src={img.file} alt={img.id} />
+        <img src={img.url} alt={img.id} />
     </Clickable>
 </div>
 

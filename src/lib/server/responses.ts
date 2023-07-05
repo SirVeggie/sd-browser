@@ -11,7 +11,9 @@ export function success(message: unknown, status = 200) {
     return new Response(JSON.stringify(message), { status });
 }
 
-export async function image(filepath: string) {
+export async function image(filepath: string | undefined) {
+    if (!filepath) return error('Image not found', 404);
+    
     let buffer;
     try {
         buffer = await readFile(filepath);

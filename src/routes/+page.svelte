@@ -3,4 +3,3 @@
 </script>
 
 <Link to="/images">Images</Link>
-<br />

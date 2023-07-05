@@ -5,30 +5,29 @@
     import Input from "$lib/items/Input.svelte";
     import Intersecter from "$lib/items/Intersecter.svelte";
     import Link from "$lib/items/Link.svelte";
-    import { imageStore } from "$lib/stores/imageStore";
-    import type { ImageContainer } from "$lib/types";
+    import { imageAmountStore, imageStore } from "$lib/stores/imageStore";
+    import { getImageInfo, searchImages } from "$lib/tools/imageRequests";
+    import { mapImagesToClient, validRegex } from "$lib/tools/misc";
+    import { sleep } from "$lib/tools/sleep";
+    import type { ClientImage, ImageInfo } from "$lib/types";
 
     let imageAmount = 10;
     let id = "";
     let input = "";
+    let info: ImageInfo | undefined = undefined;
+    
 
-    $: images = Object.keys($imageStore).map((key) => $imageStore[key]);
-    $: filtered = [...images].reverse().filter((img) => {
-        try {
-            return img.metadata.parameters?.toLowerCase().match(input) ?? !input;
-        } catch {
-            return false;
-        }
-    });
-    $: paginated = filtered.slice(0, imageAmount);
+    $: paginated = $imageStore.slice(0, imageAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
     $: nextIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) + 1;
     $: leftArrow = prevIndex >= 0;
     $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
 
-    function openImage(img: ImageContainer) {
-        // notify(`Opened ${img.id}`);
+    function openImage(img: ClientImage) {
         id = img.id;
+        getImageInfo(img.id).then((res) => {
+            info = res;
+        });
     }
 
     function goLeft() {
@@ -55,14 +54,27 @@
         }
     }
 
-    function inputChange() {
+    async function inputChange() {
+        await sleep(10);
+        if (!validRegex(input)) return;
         imageAmount = 10;
+        
+        searchImages({
+            search: input,
+        }).then((images) => {
+            imageStore.set(mapImagesToClient(images.imageIds));
+            imageAmountStore.set(images.amount);
+        });
     }
 
     function loadMore() {
         imageAmount += 10;
     }
 </script>
+
+<div class="stats">
+    Images found: {$imageAmountStore}
+</div>
 
 <div class="nav">
     <Link to="/">Back</Link>
@@ -82,7 +94,7 @@
 
 <div class="loader">
     <Intersecter onVisible={loadMore}>
-        {#if paginated.length === filtered.length}
+        {#if paginated.length === $imageStore.length}
             <p>You've reached the end.</p>
         {:else}
             <button on:click={loadMore}>
@@ -93,7 +105,13 @@
     <div class="spacer" />
 </div>
 
-<ImageFull enabled={!!id} img={$imageStore[id]} cancel={() => (id = "")} />
+<ImageFull
+    enabled={!!id}
+    imageId={id}
+    data={info}
+    cancel={() => (id = "")}
+/>
+
 <NavArrows
     onLeft={goLeft}
     onRight={goRight}
@@ -106,6 +124,13 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         grid-gap: 1em;
+    }
+    
+    .stats {
+        font-family: "Open sans", sans-serif;
+        font-size: 0.8em;
+        color: #ddd;
+        margin-bottom: 1em;
     }
 
     .nav {
@@ -124,6 +149,7 @@
             justify-content: center;
             margin-top: 1em;
         }
+        
         p,
         button {
             background-color: transparent;
@@ -142,6 +168,5 @@
 
     .spacer {
         height: 100px;
-        // background-color: red;
     }
 </style>

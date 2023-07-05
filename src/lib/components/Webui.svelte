@@ -1,7 +1,7 @@
 <script lang="ts">
     import { cx } from "$lib/tools/cx";
 
-    export let enabled = true;
+    export let enabled = false;
 
     let iframe: HTMLIFrameElement;
 
@@ -18,7 +18,7 @@
     <iframe
         title="sd"
         bind:this={iframe}
-        src="http://82.181.83.241:18888"
+        src="http://89.27.98.123:4555"
         frameborder="0"
         allow="fullscreen"
     />
@@ -39,11 +39,12 @@
         right: 0;
         bottom: 0;
 
-        transition: opacity 0.2s ease;
+        transition: opacity 0.2s ease, transform 0.2s ease;
 
         &.disabled {
             opacity: 0;
             pointer-events: none;
+            transform: translateX(100%);
         }
     }
 
