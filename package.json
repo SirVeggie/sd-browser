@@ -1,34 +1,39 @@
 {
-	"name": "svelte-playground",
+	"name": "sd-browser",
 	"version": "0.0.1",
 	"private": true,
+	"type": "module",
 	"scripts": {
+		"start": "pm2 startOrReload ecosystem.config.cjs",
+		"stop": "pm2 delete ecosystem.config.cjs",
 		"dev": "vite dev",
 		"ddev": "npm run dev -- --host",
+		"prod": "npm i && npm run build && npm start",
+		"deploy": "npm run fetch && npm run prod",
+		"fetch": "git fetch --all && git reset --hard origin/master",
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "eslint ."
 	},
+	"dependencies": {
+		"exifr": "^7.1.3"
+	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^2.0.0",
+		"@sveltejs/adapter-node": "^1.3.0",
 		"@sveltejs/kit": "^1.20.4",
 		"@types/node": "^20.3.2",
 		"@typescript-eslint/eslint-plugin": "^5.45.0",
 		"@typescript-eslint/parser": "^5.45.0",
-		"cross-env": "^7.0.3",
 		"eslint": "^8.28.0",
 		"eslint-plugin-svelte": "^2.30.0",
 		"svelte": "^4.0.0",
 		"svelte-check": "^3.4.3",
 		"tslib": "^2.4.1",
 		"typescript": "^5.0.0",
-		"vite": "^4.3.6"
-	},
-	"type": "module",
-	"dependencies": {
-		"exifr": "^7.1.3",
+		"vite": "^4.3.6",
 		"sass": "^1.63.6"
 	}
 }
