@@ -128,6 +128,7 @@
     
     .stats {
         position: absolute;
+        transform: translate(80%, -150%);
         font-family: "Open sans", sans-serif;
         font-size: 0.8em;
         color: #ddd;
