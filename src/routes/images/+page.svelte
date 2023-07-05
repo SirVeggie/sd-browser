@@ -127,6 +127,7 @@
     }
     
     .stats {
+        position: absolute;
         font-family: "Open sans", sans-serif;
         font-size: 0.8em;
         color: #ddd;

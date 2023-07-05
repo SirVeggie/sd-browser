@@ -17,6 +17,7 @@ export async function IndexFiles() {
     while (dirs.length > 0) {
         const dir = dirs.pop();
         if (!dir) continue;
+        console.log(`Indexing ${dir}`);
         const files = await readdir(dir);
 
         for (const file of files.filter(x => x.endsWith('.png'))) {
@@ -33,9 +34,10 @@ export async function IndexFiles() {
         }
 
         for (const file of files.filter(x => !x.endsWith('.png'))) {
-            const stats = await stat(path.join(dir, file));
-            console.log(`file ${file} | path ${path.join(dir, file)} | isDir ${stats.isDirectory()}`);
-            if (stats.isDirectory()) dirs.push(file);
+            const fullpath = path.join(dir, file);
+            const stats = await stat(fullpath);
+            console.log(`file ${file} | path ${fullpath} | isDir ${stats.isDirectory()}`);
+            if (stats.isDirectory()) dirs.push(fullpath);
         }
     }
 
