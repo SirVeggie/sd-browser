@@ -1,5 +1,7 @@
 <script lang="ts">
     import NavArrows from "$lib/components/NavArrows.svelte";
+    import { notify } from "$lib/components/Notifier.svelte";
+    import Button from "$lib/items/Button.svelte";
     import ImageDisplay from "$lib/items/ImageDisplay.svelte";
     import ImageFull from "$lib/items/ImageFull.svelte";
     import Input from "$lib/items/Input.svelte";
@@ -10,24 +12,40 @@
     import { mapImagesToClient, validRegex } from "$lib/tools/misc";
     import { sleep } from "$lib/tools/sleep";
     import type { ClientImage, ImageInfo } from "$lib/types";
+    import { onDestroy } from "svelte";
+    import { fade } from "svelte/transition";
 
-    let imageAmount = 10;
+    const increment = 20;
+    let currentAmount = increment;
     let id = "";
     let input = "";
     let info: ImageInfo | undefined = undefined;
-    
+    let timer: any;
 
-    $: paginated = $imageStore.slice(0, imageAmount);
+    $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
     $: nextIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) + 1;
     $: leftArrow = prevIndex >= 0;
     $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
+
+    onDestroy(() => {
+        closeImage();
+    });
 
     function openImage(img: ClientImage) {
         id = img.id;
         getImageInfo(img.id).then((res) => {
             info = res;
         });
+    }
+
+    function closeImage() {
+        id = "";
+        info = undefined;
+        if (timer) {
+            clearInterval(timer);
+            notify("Slideshow stopped");
+        }
     }
 
     function goLeft() {
@@ -54,11 +72,18 @@
         }
     }
 
+    let inputTimer: any;
     async function inputChange() {
-        await sleep(10);
+        clearTimeout(inputTimer);
+        inputTimer = setTimeout(() => {
+            applyInput();
+        }, 1000);
+    }
+
+    function applyInput() {
         if (!validRegex(input)) return;
-        imageAmount = 10;
-        
+        currentAmount = increment;
+
         searchImages({
             search: input,
         }).then((images) => {
@@ -68,7 +93,15 @@
     }
 
     function loadMore() {
-        imageAmount += 10;
+        currentAmount += increment;
+    }
+
+    function startSlideshow() {
+        timer = setInterval(() => {
+            console.log("next image");
+            goRight();
+        }, 5000);
+        notify("Slideshow started");
     }
 </script>
 
@@ -105,12 +138,7 @@
     <div class="spacer" />
 </div>
 
-<ImageFull
-    enabled={!!id}
-    imageId={id}
-    data={info}
-    cancel={() => (id = "")}
-/>
+<ImageFull enabled={!!id} imageId={id} data={info} cancel={closeImage} />
 
 <NavArrows
     onLeft={goLeft}
@@ -119,13 +147,19 @@
     right={rightArrow}
 />
 
+{#if id && !timer}
+    <div class="slideshow" transition:fade={{ duration: 100 }}>
+        <Button on:click={startSlideshow}>Slideshow</Button>
+    </div>
+{/if}
+
 <style lang="scss">
     .grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         grid-gap: 1em;
     }
-    
+
     .stats {
         position: absolute;
         transform: translate(80%, -150%);
@@ -145,13 +179,23 @@
         }
     }
 
+    .slideshow {
+        position: fixed;
+        top: 1.5em;
+        right: 2em;
+    }
+
+    .spacer {
+        height: 100px;
+    }
+
     .loader {
         & > :global(:first-child) {
             display: flex;
             justify-content: center;
             margin-top: 1em;
         }
-        
+
         p,
         button {
             background-color: transparent;
@@ -166,9 +210,5 @@
         button {
             cursor: pointer;
         }
-    }
-
-    .spacer {
-        height: 100px;
     }
 </style>

@@ -36,7 +36,6 @@ export async function IndexFiles() {
         for (const file of files.filter(x => !x.endsWith('.png'))) {
             const fullpath = path.join(dir, file);
             const stats = await stat(fullpath);
-            console.log(`file ${file} | path ${fullpath} | isDir ${stats.isDirectory()}`);
             if (stats.isDirectory()) dirs.push(fullpath);
         }
     }

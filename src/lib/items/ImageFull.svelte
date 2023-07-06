@@ -43,7 +43,7 @@
         if (!(typeof data === "object") || !data.prompt)
             return notify("No prompt to copy");
         navigator.clipboard.writeText(data.prompt).then(() => {
-            notify("Copied prompt to clipboard!");
+            notify("Copied prompt to clipboard");
         });
     }
 
@@ -53,7 +53,7 @@
             return notify("No positive to copy");
         const positive = getPositivePrompt(data.prompt);
         navigator.clipboard.writeText(positive).then(() => {
-            notify("Copied positive prompt!");
+            notify("Copied positive prompt");
         });
     }
 </script>
