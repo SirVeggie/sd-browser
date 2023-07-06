@@ -44,6 +44,7 @@
         info = undefined;
         if (timer) {
             clearInterval(timer);
+            timer = undefined;
             notify("Slideshow stopped");
         }
     }
