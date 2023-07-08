@@ -1,5 +1,9 @@
 import type { ClientImage } from "$lib/types";
 
+export function XOR(a: any, b: any): boolean {
+    return !a !== !b;
+}
+
 export function mapImagesToClient(ids: string[]): ClientImage[] {
     return ids.map(id => ({
         id,

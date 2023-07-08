@@ -1,4 +1,5 @@
 import { startFileManager } from "$lib/server/filemanager";
+import { startWebsocket } from "$lib/server/websocketServer";
 
 export async function handle({ resolve, event }) {
 
@@ -30,3 +31,4 @@ export async function handle({ resolve, event }) {
 // server startup (probably fires at first request?)
 
 startFileManager();
+startWebsocket();

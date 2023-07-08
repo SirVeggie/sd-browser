@@ -21,7 +21,7 @@
         min-height: 100dvh;
         background-color: #242424;
         --main-padding: 2em;
-        padding: var(--main-padding);
+        /* padding: var(--main-padding); */
         box-sizing: border-box;
         color: #ddd;
     }

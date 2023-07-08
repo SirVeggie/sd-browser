@@ -27,18 +27,13 @@
 <button on:click={toggle}>{enabled ? 'Close' : 'Open'}</button>
 
 <style lang="scss">
-    iframe {
-        display: block;
-        width: 100%;
-        height: 100%;
-    }
-
     div {
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
+        z-index: 50;
 
         transition: opacity 0.2s ease, transform 0.2s ease;
 
@@ -48,8 +43,15 @@
             transform: translateX(100%);
         }
     }
+    
+    iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
 
     button {
+        z-index: 99;
         font-size: 1.5em;
         appearance: none;
         border: 1px solid #fff1;

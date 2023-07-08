@@ -8,7 +8,7 @@ import exifr from 'exifr';
 import { getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { selectRandom } from '$lib/tools/misc';
+import { XOR, selectRandom } from '$lib/tools/misc';
 
 let imageList: ImageList = new Map();
 const datapath = './localData';
@@ -152,50 +152,35 @@ export function getImage(imageid: string) {
 }
 
 export function searchImages(search: string, mode: SearchMode) {
-    switch (mode) {
-        case 'contains':
-            return searchImagesContains(search);
-        case 'regex':
-            return searchImagesRegex(search);
-        case 'advanced':
-            return searchImagesAdvanced(search);
-        default:
-            return [];
-    }
-}
-
-function searchImagesContains(search: string): ServerImage[] {
+    const matcher = buildMatcher(search, mode);
     const list: ServerImage[] = [];
     for (const [, value] of imageList) {
-        if (getPositivePrompt(value.prompt).includes(search)) {
+        if (matcher(value)) {
             list.push(value);
         }
     }
     return list;
 }
 
-function searchImagesRegex(search: string): ServerImage[] {
-    const list: ServerImage[] = [];
-    const regex = new RegExp(search, 'i');
-    for (const [, value] of imageList) {
-        if (regex.test(getPositivePrompt(value.prompt))) {
-            list.push(value);
-        }
-    }
-    return list;
-}
-
-function searchImagesAdvanced(search: string): ServerImage[] {
+function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
     const parts = search.split(' AND ');
-    const list: ServerImage[] = [];
-    const regexes = parts.map(x => new RegExp(x, 'i'));
-    for (const [, value] of imageList) {
-        const positive = getPositivePrompt(value.prompt);
-        if (regexes.some(x => !x.test(positive)))
-            continue;
-        list.push(value);
-    }
-    return list;
+    const regexes = parts.map(x => {
+        const raw = x.replace(/^(NOT |FOLDER )*/, '');
+        return {
+            raw,
+            regex: new RegExp(raw, 'i'),
+            not: x.match(/^(FOLDER )?NOT /),
+            folder: x.match(/^(NOT )?FOLDER /),
+        };
+    });
+    return (image: ServerImage) => {
+        const positive = getPositivePrompt(image.prompt);
+        return !regexes.some(x => {
+            if (matching === 'contains')
+                return !XOR(x.not, (x.folder ? image.folder : positive).includes(x.raw));
+            return !XOR(x.not, x.regex.test(x.folder ? image.folder : positive));
+        });
+    };
 }
 
 export function sortImages(images: ServerImage[], sort: SortingMethod): ServerImage[] {

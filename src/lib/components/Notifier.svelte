@@ -47,6 +47,7 @@
 <style lang="scss">
     .notifications {
         position: fixed;
+        z-index: 100;
         top: 20px;
         right: 30px;
         left: 30px;
