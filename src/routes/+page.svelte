@@ -48,21 +48,25 @@
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
             updateImages(currentSearch);
-        }, 1000);
+        }, 5000);
+
+        window.addEventListener("keydown", keylistener);
+        
+        return () => {
+            clearTimeout(inputTimer);
+            clearInterval(updateTimer);
+            clearInterval(slideshowTimer);
+            closeImage();
+            window.removeEventListener("keydown", keylistener);
+        };
     });
 
-    onDestroy(() => {
-        clearTimeout(inputTimer);
-        clearInterval(updateTimer);
-        clearInterval(slideshowTimer);
-        closeImage();
-    });
-
-    function openImage(img: ClientImage) {
+    function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         id = img.id;
         getImageInfo(img.id).then((res) => {
             info = res;
         });
+        e?.target?.dispatchEvent(new Event("focus"));
     }
 
     function closeImage() {
@@ -120,9 +124,9 @@
 
     function updateImages(search: string) {
         currentSearch = search;
-        if (!nsfw && $nsfwFilter) search += ` AND NOT ${$nsfwFilter}`;
+        if (!nsfw && $nsfwFilter) search += ` AND ${$nsfwFilter}`;
         if (filterFolders) search += ` AND ${$folderFilter}`;
-        
+
         searchImages({
             search,
             sorting,
@@ -145,8 +149,26 @@
         slideshowTimer = setInterval(() => {
             console.log("next image");
             goRight();
-        }, 5000);
+        }, 4000);
         notify("Slideshow started");
+    }
+
+    function keylistener(e: KeyboardEvent) {
+        if (e.key === "ArrowLeft") {
+            goLeft();
+        } else if (e.key === "ArrowRight") {
+            goRight();
+        } else if (e.key === " ") {
+            if (!id) return;
+            e.preventDefault();
+            if (slideshowTimer) {
+                clearInterval(slideshowTimer);
+                slideshowTimer = undefined;
+                notify("Slideshow stopped");
+            } else {
+                startSlideshow();
+            }
+        }
     }
 </script>
 
@@ -206,7 +228,7 @@
 <div class="grid">
     {#each paginated as img (img.id)}
         <div id={`img_${img.id}`}>
-            <ImageDisplay {img} onClick={() => openImage(img)} />
+            <ImageDisplay {img} onClick={(e) => openImage(img, e)} />
         </div>
     {/each}
 </div>
@@ -252,7 +274,7 @@
         z-index: 1;
         padding-inline: calc(var(--main-padding) / 1);
         padding-top: calc(var(--main-padding) / 4);
-        box-shadow: 0 35px 10px -32px rgba(0, 0, 0, 0.7);
+        box-shadow: 0 35px 10px -32px rgba(0, 0, 0, 0.5);
     }
 
     .stats {

@@ -4,7 +4,7 @@
     import { cx } from "$lib/tools/cx";
 
     export let img: ClientImage;
-    export let onClick: (() => void) | undefined = undefined;
+    export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined = undefined;
 </script>
 
 <div class={cx(onClick && "active")}>

@@ -16,7 +16,7 @@
         down = false;
         goto(to);
     }
-    
+
     function handleFocusOut() {
         down = false;
     }
@@ -37,6 +37,7 @@
         font-family: "Open sans", sans-serif;
         display: inline-block;
         font-size: 0.8rem;
+        line-height: 1.2;
         text-decoration: none;
         appearance: none;
         padding: 0.5em 1em;

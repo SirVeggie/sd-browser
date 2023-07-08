@@ -1,10 +1,10 @@
 <script lang="ts">
     import { cx } from "$lib/tools/cx";
 
-    export let down: (() => void) | undefined = undefined;
-    export let up: (() => void) | undefined = undefined;
-    export let enter: (() => void) | undefined = undefined;
-    export let leave: (() => void) | undefined = undefined;
+    export let down: ((e: MouseEvent | KeyboardEvent) => void) | undefined = undefined;
+    export let up: ((e: MouseEvent | KeyboardEvent) => void) | undefined = undefined;
+    export let enter: ((e: FocusEvent) => void) | undefined = undefined;
+    export let leave: ((e: FocusEvent) => void) | undefined = undefined;
     
     let isDown = false;
     let _class = cx($$restProps.class, "clickable", isDown && "isDown");
@@ -13,23 +13,23 @@
         if (e instanceof KeyboardEvent && e.key !== " ") return;
         e.preventDefault();
         isDown = true;
-        down?.();
+        down?.(e);
     }
     
     function handleUp(e: MouseEvent | KeyboardEvent) {
         if (e instanceof KeyboardEvent && e.key !== " ") return;
         e.preventDefault();
         isDown = false;
-        up?.();
+        up?.(e);
     }
     
-    function handleFocusIn() {
-        enter?.();
+    function handleFocusIn(e: FocusEvent) {
+        enter?.(e);
     }
     
-    function handleFocusOut() {
+    function handleFocusOut(e: FocusEvent) {
         isDown = false;
-        leave?.();
+        leave?.(e);
     }
 </script>
 

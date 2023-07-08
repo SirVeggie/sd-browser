@@ -33,6 +33,7 @@
     button {
         font-family: "Open sans", sans-serif;
         font-size: 0.8rem;
+        line-height: 1.2;
         display: inline-block;
         appearance: none;
         padding: 0.5em 1em;

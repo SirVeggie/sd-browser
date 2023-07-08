@@ -1,4 +1,5 @@
 <script lang="ts">
+    import '../global.css';
     import Webui from "$lib/components/Webui.svelte";
     import { flyoutStore } from "$lib/stores/flyoutStore";
     import Notifier from "../lib/components/Notifier.svelte";

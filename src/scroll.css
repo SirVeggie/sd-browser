@@ -3,10 +3,6 @@
   scrollbar-color: #000a #0005;
 }
 
-* {
-  -webkit-tap-highlight-color: transparent;
-}
-
 /* Works on Chrome, Edge, and Safari */
 ::-webkit-scrollbar {
   width: 10px;
