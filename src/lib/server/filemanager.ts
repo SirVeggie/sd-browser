@@ -40,7 +40,7 @@ export async function indexFiles() {
         const dir = dirs.pop();
         if (!dir) continue;
         const dirShort = path.basename(dir);
-        console.log(`Indexing ${dir} (${dirShort})`);
+        console.log(`Indexing ${dir}`);
         const files = await readdir(dir);
 
         for (const file of files.filter(x => x.endsWith('.png'))) {
