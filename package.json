@@ -4,10 +4,9 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"start": "pm2 startOrReload ecosystem.config.cjs",
-		"start:node": "node -r dotenv/config build",
-		"local": "npm i && npm run build && npm run preview -- --host",
-		"stop": "pm2 delete ecosystem.config.cjs",
+		"start": "node -r dotenv/config build",
+		"start:pm2": "pm2 startOrReload ecosystem.config.cjs",
+		"stop:pm2": "pm2 delete ecosystem.config.cjs",
 		"dev": "vite dev",
 		"ddev": "npm run dev -- --host",
 		"prod": "npm i && npm run build && npm start",
