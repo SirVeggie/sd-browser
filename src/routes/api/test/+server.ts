@@ -1,11 +1,23 @@
-import { PASS } from '$env/static/private';
-import { error, success } from '$lib/server/responses';
+import { readImageAsWebp } from '$lib/server/convert.js';
+import { error } from '$lib/server/responses';
+import fs from 'fs/promises';
 
-export function GET({ request }) {
-    const auth = request.headers.get('Authorization');
+export async function GET(e) {
+    const image = 'C:\\files\\sd-shared\\outputs\\txt2img-images\\07805-1330062756-78fc05a013-920x1264-Euler-20.png';
     
-    if (!auth) return error('No authorization header', 401);
-    if (auth !== PASS) return error('Invalid authorization header', 401);
-    
-    return success('success');
+    let buffer;
+    try {
+        // buffer = await fs.readFile(image);
+        buffer = await readImageAsWebp(image);
+    } catch {
+        console.log(`Failed to read file: ${image}`);
+        return error('Failed to read file', 500);
+    }
+
+    return new Response(buffer, {
+        status: 200,
+        headers: {
+            'Content-Type': 'image/png',
+        }
+    });
 }

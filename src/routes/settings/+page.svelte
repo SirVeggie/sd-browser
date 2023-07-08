@@ -6,7 +6,7 @@
     import Button from "$lib/items/Button.svelte";
     import { cx } from "$lib/tools/cx";
     import { notify } from "$lib/components/Notifier.svelte";
-    import { folderFilter, nsfwFilter } from "$lib/stores/filterStore";
+    import { folderFilter, nsfwFilter } from "$lib/stores/searchStore";
 
     let inputTimer: any;
     let address = $flyoutStore.url;

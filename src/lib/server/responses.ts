@@ -1,5 +1,6 @@
 import type { ServerError } from "$lib/types";
 import { readFile } from "fs/promises";
+import { readImageAsWebp } from "./convert";
 
 export function error(message: string | ServerError, status = 500) {
     if (typeof message === 'string') message = { error: message };
@@ -16,7 +17,8 @@ export async function image(filepath: string | undefined) {
     
     let buffer;
     try {
-        buffer = await readFile(filepath);
+        // buffer = await readFile(filepath);
+        buffer = await readImageAsWebp(filepath);
     } catch {
         console.log(`Failed to read file: ${filepath}`);
         return error('Failed to read file', 500);

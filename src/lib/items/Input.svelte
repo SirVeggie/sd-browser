@@ -4,9 +4,18 @@
     export let element: HTMLInputElement | undefined = undefined;
 </script>
 
-<input type="text" bind:this={element} {placeholder} on:change on:input bind:value />
+<div class="input">
+    <input type="text" bind:this={element} {placeholder} on:change on:input bind:value />
+    <button on:click={() => value = ""}>x</button>
+</div>
 
 <style lang="scss">
+    div {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    
     input {
         font-family: "Open sans", sans-serif;
         width: 100%;
@@ -25,5 +34,15 @@
             outline: none;
             border: 1px solid #aaad;
         }
+    }
+    
+    button {
+        appearance: none;
+        background-color: transparent;
+        border: none;
+        position: absolute;
+        right: 0.5em;
+        cursor: pointer;
+        color: #ddd3;
     }
 </style>

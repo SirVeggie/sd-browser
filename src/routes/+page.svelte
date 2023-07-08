@@ -20,9 +20,9 @@
     } from "$lib/types";
     import { onMount } from "svelte";
     import { fade } from "svelte/transition";
-    import { nsfwFilter, folderFilter } from "$lib/stores/filterStore";
+    import { nsfwFilter, folderFilter } from "$lib/stores/searchStore";
 
-    const increment = 20;
+    const increment = 10;
     let currentAmount = increment;
     let id = "";
     let input = "";
@@ -36,7 +36,8 @@
     let sorting: SortingMethod = "date";
     let matching: SearchMode = "regex";
     let nsfw = false;
-    let filterFolders = false;
+    let filterFolders = true;
+    let moreTriggerVisible = false;
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
@@ -47,14 +48,18 @@
 
     onMount(() => {
         updateImages(currentSearch);
-        
+
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
             updateImages(currentSearch);
         }, 5000);
 
+        setTimeout(() => {
+            moreTriggerVisible = true;
+        }, 1000);
+
         window.addEventListener("keydown", keylistener);
-        
+
         return () => {
             clearTimeout(inputTimer);
             clearInterval(updateTimer);
@@ -176,7 +181,7 @@
 
 <div class="topbar">
     <div class="quickbar">
-        <span>Images found: {$imageAmountStore}</span>
+        <span>Images: {paginated.length} / {$imageAmountStore}</span>
         <label for="sorting">
             Sorting:
             <select id="sorting" bind:value={sorting} on:change={selectChange}>
@@ -221,7 +226,12 @@
     </div>
 
     <div class="nav">
-        <Input bind:element={inputElement} bind:value={input} placeholder="Search" on:input={inputChange} />
+        <Input
+            bind:element={inputElement}
+            bind:value={input}
+            placeholder="Search"
+            on:input={inputChange}
+        />
         <Button on:click={() => (live = true)}>Live</Button>
         <Link to="/settings">Settings</Link>
     </div>
@@ -235,18 +245,20 @@
     {/each}
 </div>
 
-<div class="loader">
-    <Intersecter onVisible={loadMore}>
-        {#if paginated.length === $imageStore.length}
-            <p>You've reached the end.</p>
-        {:else}
-            <button on:click={loadMore}>
-                (click here to load more images)
-            </button>
-        {/if}
-    </Intersecter>
-    <div class="spacer" />
-</div>
+{#if moreTriggerVisible}
+    <div class="loader">
+        <Intersecter onVisible={loadMore}>
+            {#if paginated.length === $imageStore.length}
+                <p>You've reached the end.</p>
+            {:else}
+                <button on:click={loadMore}>
+                    (click here to load more images)
+                </button>
+            {/if}
+        </Intersecter>
+        <div class="spacer" />
+    </div>
+{/if}
 
 <ImageFull
     enabled={!!id || !!live}
@@ -282,6 +294,7 @@
     .quickbar {
         display: flex;
         justify-content: space-between;
+        gap: 0.5em;
         flex-wrap: wrap;
         align-items: center;
         user-select: none;
@@ -295,6 +308,10 @@
         display: flex;
         gap: 0.5em;
         padding-bottom: 0.5em;
+
+        & > :global(.input) {
+            flex-grow: 1;
+        }
     }
 
     .grid {

@@ -47,6 +47,7 @@
 
             &.hidden {
                 opacity: 0;
+                position: absolute;
             }
         }
 
