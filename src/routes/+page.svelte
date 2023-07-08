@@ -18,7 +18,7 @@
         type SearchMode,
         searchModes,
     } from "$lib/types";
-    import { onDestroy, onMount } from "svelte";
+    import { onMount } from "svelte";
     import { fade } from "svelte/transition";
     import { nsfwFilter, folderFilter } from "$lib/stores/filterStore";
 
@@ -26,6 +26,7 @@
     let currentAmount = increment;
     let id = "";
     let input = "";
+    let inputElement: HTMLInputElement;
     let info: ImageInfo | undefined = undefined;
     let slideshowTimer: any;
     let inputTimer: any;
@@ -44,9 +45,9 @@
     $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
     $: latestId = paginated[0]?.id;
 
-    updateImages(currentSearch);
-    
     onMount(() => {
+        updateImages(currentSearch);
+        
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
             updateImages(currentSearch);
@@ -64,11 +65,11 @@
     });
 
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
+        inputElement.blur();
         id = img.id;
         getImageInfo(img.id).then((res) => {
             info = res;
         });
-        e?.target?.dispatchEvent(new Event("focus"));
     }
 
     function closeImage() {
@@ -174,7 +175,7 @@
 </script>
 
 <div class="topbar">
-    <div class="stats">
+    <div class="quickbar">
         <span>Images found: {$imageAmountStore}</span>
         <label for="sorting">
             Sorting:
@@ -208,11 +209,11 @@
             />
         </label>
 
-        <label for="filterFolders">
-            Filter folders:
+        <label for="folderFilter">
+            Folder filter:
             <input
                 type="checkbox"
-                id="filterFolders"
+                id="folderFilter"
                 bind:checked={filterFolders}
                 on:change={selectChange}
             />
@@ -220,7 +221,7 @@
     </div>
 
     <div class="nav">
-        <Input bind:value={input} placeholder="Search" on:input={inputChange} />
+        <Input bind:element={inputElement} bind:value={input} placeholder="Search" on:input={inputChange} />
         <Button on:click={() => (live = true)}>Live</Button>
         <Link to="/settings">Settings</Link>
     </div>
@@ -278,9 +279,10 @@
         box-shadow: 0 35px 10px -32px rgba(0, 0, 0, 0.5);
     }
 
-    .stats {
+    .quickbar {
         display: flex;
         justify-content: space-between;
+        flex-wrap: wrap;
         align-items: center;
         user-select: none;
         font-family: "Open sans", sans-serif;

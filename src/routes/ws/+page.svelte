@@ -1,9 +1,10 @@
 <script>
+    import { PUBLIC_WS_PORT } from "$env/static/public";
     import Button from "$lib/items/Button.svelte";
     import { io } from "socket.io-client";
     import { onDestroy, onMount } from "svelte";
 
-    const socket = io(":8001");
+    const socket = io(`:${PUBLIC_WS_PORT}`);
     onMount(() => {
         socket.on("connect", () => {
             console.log("connected");

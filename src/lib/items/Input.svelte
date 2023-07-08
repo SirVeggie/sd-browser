@@ -1,9 +1,10 @@
 <script lang="ts">
     export let placeholder = "";
     export let value = "";
+    export let element: HTMLInputElement | undefined = undefined;
 </script>
 
-<input type="text" {placeholder} on:change on:input bind:value />
+<input type="text" bind:this={element} {placeholder} on:change on:input bind:value />
 
 <style lang="scss">
     input {

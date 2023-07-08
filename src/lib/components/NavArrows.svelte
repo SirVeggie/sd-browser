@@ -30,7 +30,7 @@
         top: 50%;
         left: 0;
         transform: translateY(-50%);
-        z-index: 100;
+        z-index: 10;
         border-radius: 0 0.5em 0.5em 0;
     }
     
@@ -39,7 +39,7 @@
         top: 50%;
         right: 0;
         transform: translateY(-50%);
-        z-index: 100;
+        z-index: 10;
         border-radius: 0.5em 0 0 0.5em;
     }
 </style>
