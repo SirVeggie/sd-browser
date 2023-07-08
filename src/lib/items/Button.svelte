@@ -1,8 +1,8 @@
 <script lang="ts">
     export let down: (() => void) | undefined = undefined;
     export let up: (() => void) | undefined = undefined;
-
-    const buttonProps = {
+    
+    $: buttonProps = {
         class: $$restProps.class,
     };
 

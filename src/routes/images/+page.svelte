@@ -12,7 +12,7 @@
     import { mapImagesToClient, validRegex } from "$lib/tools/misc";
     import { sleep } from "$lib/tools/sleep";
     import type { ClientImage, ImageInfo } from "$lib/types";
-    import { onDestroy } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     import { fade } from "svelte/transition";
 
     const increment = 20;
@@ -20,15 +20,29 @@
     let id = "";
     let input = "";
     let info: ImageInfo | undefined = undefined;
-    let timer: any;
+    let slideshowTimer: any;
+    let inputTimer: any;
+    let updateTimer: any;
+    let currentSearch = "";
+    let live = false;
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
     $: nextIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) + 1;
     $: leftArrow = prevIndex >= 0;
     $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
+    $: latestId = paginated[0]?.id;
+
+    onMount(() => {
+        updateTimer = setInterval(() => {
+            updateImages(currentSearch);
+        }, 1000);
+    });
 
     onDestroy(() => {
+        clearTimeout(inputTimer);
+        clearInterval(updateTimer);
+        clearInterval(slideshowTimer);
         closeImage();
     });
 
@@ -42,9 +56,10 @@
     function closeImage() {
         id = "";
         info = undefined;
-        if (timer) {
-            clearInterval(timer);
-            timer = undefined;
+        live = false;
+        if (slideshowTimer) {
+            clearInterval(slideshowTimer);
+            slideshowTimer = undefined;
             notify("Slideshow stopped");
         }
     }
@@ -73,7 +88,6 @@
         }
     }
 
-    let inputTimer: any;
     async function inputChange() {
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
@@ -84,10 +98,14 @@
     function applyInput() {
         if (!validRegex(input)) return;
         currentAmount = increment;
+        updateImages(input);
+    }
 
+    function updateImages(search: string) {
         searchImages({
-            search: input,
+            search,
         }).then((images) => {
+            currentSearch = search;
             imageStore.set(mapImagesToClient(images.imageIds));
             imageAmountStore.set(images.amount);
         });
@@ -98,7 +116,7 @@
     }
 
     function startSlideshow() {
-        timer = setInterval(() => {
+        slideshowTimer = setInterval(() => {
             console.log("next image");
             goRight();
         }, 5000);
@@ -115,7 +133,8 @@
     <div class="spacing" />
     <Input bind:value={input} placeholder="Search" on:input={inputChange} />
     <div class="spacing" />
-    <Link to="/images/live">Live</Link>
+    <!-- <Link to="/images/live">Live</Link> -->
+    <Button on:click={() => (live = true)}>Live</Button>
 </div>
 
 <div class="grid">
@@ -139,7 +158,7 @@
     <div class="spacer" />
 </div>
 
-<ImageFull enabled={!!id} imageId={id} data={info} cancel={closeImage} />
+<ImageFull enabled={!!id || !!live} imageId={live ? latestId : id} data={info} cancel={closeImage} />
 
 <NavArrows
     onLeft={goLeft}
@@ -148,7 +167,7 @@
     right={rightArrow}
 />
 
-{#if id && !timer}
+{#if id && !slideshowTimer}
     <div class="slideshow" transition:fade={{ duration: 100 }}>
         <Button on:click={startSlideshow}>Slideshow</Button>
     </div>

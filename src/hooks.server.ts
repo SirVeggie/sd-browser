@@ -1,4 +1,4 @@
-import { IndexFiles } from "$lib/server/filemanager";
+import { startFileManager } from "$lib/server/filemanager";
 
 export async function handle({ resolve, event }) {
 
@@ -29,4 +29,4 @@ export async function handle({ resolve, event }) {
 
 // server startup (probably fires at first request?)
 
-IndexFiles();
+startFileManager();

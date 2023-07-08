@@ -1,3 +1,3 @@
 export function cx(...args: any[]): string {
-    return args.filter(Boolean).join(' ');
+    return args.filter(x => typeof x === 'string').join(' ');
 }

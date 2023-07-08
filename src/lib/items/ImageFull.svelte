@@ -72,13 +72,15 @@
                     <img src={imageUrl} alt={imageId} />
                     <!-- svelte-ignore a11y-click-events-have-key-events -->
                     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-                    <div class="info" on:click={prevent}>
-                        <p>{datastring}</p>
-                        <div class="buttons">
-                            <Button on:click={copyPrompt}>Copy</Button>
-                            <Button on:click={copyPositive}>+</Button>
+                    {#if data}
+                        <div class="info" on:click={prevent}>
+                            <p>{datastring}</p>
+                            <div class="buttons">
+                                <Button on:click={copyPrompt}>Copy</Button>
+                                <Button on:click={copyPositive}>+</Button>
+                            </div>
                         </div>
-                    </div>
+                    {/if}
                 </div>
             </div>
         </div>

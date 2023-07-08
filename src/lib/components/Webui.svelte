@@ -1,5 +1,6 @@
 <script lang="ts">
     import { cx } from "$lib/tools/cx";
+    import { flyoutStore } from "$lib/stores/flyoutStore";
 
     export let enabled = false;
 
@@ -18,7 +19,7 @@
     <iframe
         title="sd"
         bind:this={iframe}
-        src="http://89.27.98.123:4555"
+        src={$flyoutStore.url}
         frameborder="0"
         allow="fullscreen"
     />
