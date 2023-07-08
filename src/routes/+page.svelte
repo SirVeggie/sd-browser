@@ -44,6 +44,8 @@
     $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
     $: latestId = paginated[0]?.id;
 
+    updateImages(currentSearch);
+    
     onMount(() => {
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
@@ -118,7 +120,6 @@
     }
 
     function selectChange() {
-        console.log(currentSearch);
         updateImages(currentSearch);
     }
 
