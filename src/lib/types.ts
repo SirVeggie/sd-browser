@@ -1,11 +1,13 @@
 
 export type ImageList = Map<string, ServerImage>;
 
-export type SortingMethod = 'date' | 'name';
+export const sortingMethods = ['date', 'name', 'random'] as const;
+export type SortingMethod = typeof sortingMethods[number];
 
 export type ServerImage = {
     id: string;
     file: string;
+    folder: string;
     modifiedDate: number;
     createdDate: number;
     prompt?: string;
@@ -24,15 +26,16 @@ export function isClientImage(object: any): object is ClientImage {
 
 export type ImageInfo = {
     id: string;
+    folder: string;
     modifiedDate: number;
     createdDate: number;
     prompt?: string;
 };
 export function isImageInfo(object: any): object is ImageInfo {
-    return testType(object, ['id', 'modifiedDate', 'createdDate']);
+    return testType(object, ['id', 'folder', 'modifiedDate', 'createdDate']);
 }
 
-export const searchModes = ['contains', 'regex'] as const;
+export const searchModes = ['contains', 'regex', 'advanced'] as const;
 export type SearchMode = typeof searchModes[number];
 export function isSearchMode(object: any): object is SearchMode {
     return searchModes.includes(object);

@@ -8,6 +8,7 @@ import exifr from 'exifr';
 import { getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
+import { selectRandom } from '$lib/tools/misc';
 
 let imageList: ImageList = new Map();
 const datapath = './localData';
@@ -38,7 +39,8 @@ export async function indexFiles() {
     while (dirs.length > 0) {
         const dir = dirs.pop();
         if (!dir) continue;
-        console.log(`Indexing ${dir}`);
+        const dirShort = path.basename(dir);
+        console.log(`Indexing ${dir} (${dirShort})`);
         const files = await readdir(dir);
 
         for (const file of files.filter(x => x.endsWith('.png'))) {
@@ -52,6 +54,7 @@ export async function indexFiles() {
             const metadata = await readMetadata(fullpath);
             images.set(hash, {
                 id: hash,
+                folder: dirShort,
                 file: fullpath,
                 modifiedDate: 0,
                 createdDate: 0,
@@ -91,6 +94,7 @@ function setupWatcher() {
         const hash = hashString(file);
         imageList.set(hash, {
             id: hash,
+            folder: path.basename(path.dirname(file)),
             file,
             modifiedDate: 0,
             createdDate: 0,
@@ -109,6 +113,7 @@ function setupWatcher() {
         const newhash = hashString(to);
         imageList.set(newhash, {
             id: newhash,
+            folder: path.basename(path.dirname(to)),
             file: to,
             modifiedDate: 0,
             createdDate: 0,
@@ -152,6 +157,8 @@ export function searchImages(search: string, mode: SearchMode) {
             return searchImagesContains(search);
         case 'regex':
             return searchImagesRegex(search);
+        case 'advanced':
+            return searchImagesAdvanced(search);
         default:
             return [];
     }
@@ -178,12 +185,27 @@ function searchImagesRegex(search: string): ServerImage[] {
     return list;
 }
 
+function searchImagesAdvanced(search: string): ServerImage[] {
+    const parts = search.split(' AND ');
+    const list: ServerImage[] = [];
+    const regexes = parts.map(x => new RegExp(x, 'i'));
+    for (const [, value] of imageList) {
+        const positive = getPositivePrompt(value.prompt);
+        if (regexes.some(x => !x.test(positive)))
+            continue;
+        list.push(value);
+    }
+    return list;
+}
+
 export function sortImages(images: ServerImage[], sort: SortingMethod): ServerImage[] {
     switch (sort) {
         case 'date':
             return [...images].sort(createComparer<ServerImage>(x => x.modifiedDate, true));
         case 'name':
             return [...images].sort(createComparer<ServerImage>(x => x.file, false));
+        case 'random':
+            return selectRandom(images, 1000);
         default:
             return [];
     }

@@ -9,6 +9,7 @@ export async function GET(e) {
         return error('Image not found', 404);
     return success({
         id: src,
+        folder: image.folder,
         modifiedDate: image.modifiedDate,
         createdDate: image.createdDate,
         prompt: image.prompt,

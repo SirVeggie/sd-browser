@@ -2,7 +2,6 @@ import { get } from 'svelte/store';
 import { doGet, doPost, doServerGet, doServerPost, type FetchType } from './requests';
 import { page } from '$app/stores';
 import { isImageInfo, type ImageRequest, type ImageResponse, type ImageInfo } from '$lib/types';
-import { satisfies } from 'semver';
 
 export async function searchImages(search: Partial<ImageRequest>, fetch?: FetchType): Promise<ImageResponse> {
     const def: ImageRequest = {

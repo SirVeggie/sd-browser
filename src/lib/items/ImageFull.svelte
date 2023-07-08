@@ -21,11 +21,13 @@
     function formatMetadata(d: ImageInfo): string {
         const model = d.prompt?.match(/Model: (.*?),|$/)?.[1] ?? "Unknown";
         const sampler = d.prompt?.match(/Sampler: (.*?),|$/)?.[1] ?? "Unknown";
-        let info = `\nModel: ${model}`;
-        info += `\nSampler: ${sampler}`;
+        let info = "";
+        if (model) info += `Model: ${model}`;
+        if (sampler) info += `\nSampler: ${sampler}`;
         info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
         info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
-        info += `\n\n${d.prompt ?? "No prompt found"}`;
+        if (d.folder) info += `\nFolder: ${d.folder}`;
+        if (d.prompt) info += `\n\n${d.prompt}`;
         return info;
     }
 

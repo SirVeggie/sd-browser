@@ -10,8 +10,14 @@
     import { imageAmountStore, imageStore } from "$lib/stores/imageStore";
     import { getImageInfo, searchImages } from "$lib/tools/imageRequests";
     import { mapImagesToClient, validRegex } from "$lib/tools/misc";
-    import { sleep } from "$lib/tools/sleep";
-    import type { ClientImage, ImageInfo } from "$lib/types";
+    import {
+        sortingMethods,
+        type ClientImage,
+        type ImageInfo,
+        type SortingMethod,
+        type SearchMode,
+        searchModes,
+    } from "$lib/types";
     import { onDestroy, onMount } from "svelte";
     import { fade } from "svelte/transition";
 
@@ -25,6 +31,8 @@
     let updateTimer: any;
     let currentSearch = "";
     let live = false;
+    let sorting: SortingMethod = "date";
+    let matching: SearchMode = "advanced";
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
@@ -35,6 +43,7 @@
 
     onMount(() => {
         updateTimer = setInterval(() => {
+            if (sorting === "random") return;
             updateImages(currentSearch);
         }, 1000);
     });
@@ -88,11 +97,15 @@
         }
     }
 
-    async function inputChange() {
+    function inputChange() {
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
             applyInput();
         }, 1000);
+    }
+
+    function selectChange() {
+        updateImages(currentSearch);
     }
 
     function applyInput() {
@@ -104,11 +117,17 @@
     function updateImages(search: string) {
         searchImages({
             search,
-        }).then((images) => {
-            currentSearch = search;
-            imageStore.set(mapImagesToClient(images.imageIds));
-            imageAmountStore.set(images.amount);
-        });
+            sorting,
+            matching,
+        })
+            .then((images) => {
+                currentSearch = search;
+                imageStore.set(mapImagesToClient(images.imageIds));
+                imageAmountStore.set(images.amount);
+            })
+            .catch((err) => {
+                console.error(err);
+            });
     }
 
     function loadMore() {
@@ -125,7 +144,24 @@
 </script>
 
 <div class="stats">
-    Images found: {$imageAmountStore}
+    <span>Images found: {$imageAmountStore}</span>
+    <label for="sorting">
+        Sorting:
+        <select id="sorting" bind:value={sorting} on:change={selectChange}>
+            {#each sortingMethods as method}
+                <option value={method}>{method}</option>
+            {/each}
+        </select>
+    </label>
+
+    <label for="matching">
+        Matching:
+        <select id="matching" bind:value={matching} on:change={selectChange}>
+            {#each searchModes as method}
+                <option value={method}>{method}</option>
+            {/each}
+        </select>
+    </label>
 </div>
 
 <div class="nav">
@@ -158,7 +194,12 @@
     <div class="spacer" />
 </div>
 
-<ImageFull enabled={!!id || !!live} imageId={live ? latestId : id} data={info} cancel={closeImage} />
+<ImageFull
+    enabled={!!id || !!live}
+    imageId={live ? latestId : id}
+    data={info}
+    cancel={closeImage}
+/>
 
 <NavArrows
     onLeft={goLeft}
@@ -182,11 +223,40 @@
 
     .stats {
         position: absolute;
-        transform: translate(80%, -150%);
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        width: calc(100% - var(--main-padding) * 2.5);
+        transform: translateY(-130%);
         font-family: "Open sans", sans-serif;
         font-size: 0.8em;
         color: #ddd;
         margin-bottom: 1em;
+    }
+
+    select {
+        // appearance: none;
+        margin: 0;
+        padding: 0;
+        background-color: transparent;
+        border: none;
+        font-family: "Open sans", sans-serif;
+        font-size: 1em;
+        color: #ddd;
+        border-radius: 0.2em;
+
+        &:focus {
+            outline: none;
+        }
+
+        &:focus-visible {
+            background-color: #333;
+        }
+
+        option {
+            background-color: #222;
+            // border-radius: 0;
+        }
     }
 
     .nav {
