@@ -31,4 +31,4 @@ export async function handle({ resolve, event }) {
 // server startup (probably fires at first request?)
 
 startFileManager();
-startWebsocket();
+// startWebsocket();

@@ -12,13 +12,16 @@ export function success(message: unknown, status = 200) {
     return new Response(JSON.stringify(message), { status });
 }
 
-export async function image(filepath: string | undefined) {
+export async function image(filepath: string | undefined, webp = true) {
     if (!filepath) return error('Image not found', 404);
-    
+
     let buffer;
     try {
-        // buffer = await readFile(filepath);
-        buffer = await readImageAsWebp(filepath);
+        if (webp) {
+            buffer = await readImageAsWebp(filepath);
+        } else {
+            buffer = await readFile(filepath);
+        }
     } catch {
         console.log(`Failed to read file: ${filepath}`);
         return error('Failed to read file', 500);

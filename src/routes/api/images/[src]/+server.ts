@@ -4,5 +4,6 @@ import { image } from '$lib/server/responses.js';
 
 export async function GET(e) {
     const src = e.params.src;
-    return image(getImage(src)?.file);
+    const webp = e.url.searchParams.has('webp');
+    return image(getImage(src)?.file, webp);
 }

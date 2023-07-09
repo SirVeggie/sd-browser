@@ -6,6 +6,7 @@
    import Button from "./Button.svelte";
    import { notify } from "$lib/components/Notifier.svelte";
    import { getPositivePrompt } from "$lib/tools/metadataInterpreter";
+   import { webpMode } from "$lib/stores/searchStore";
 
    export let cancel: () => void;
    export let imageId: string | undefined;
@@ -15,7 +16,9 @@
    let promptElement: HTMLDivElement;
    let fallbackElement: HTMLDivElement;
 
-   $: imageUrl = imageId ? `/api/images/${imageId}` : "";
+   $: imageUrl = imageId
+      ? `/api/images/${imageId}${$webpMode ? "?webp=1" : ""}`
+      : "";
    $: basicInfo = !data ? "" : formatMetadata(data);
    $: promptInfo = !data ? "" : data.prompt ?? "";
    $: positivePrompt = !data ? "" : getPositivePrompt(data.prompt);

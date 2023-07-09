@@ -3,12 +3,15 @@
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
+    import { webpMode } from "$lib/stores/searchStore";
 
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
         undefined;
 
     let hasLoaded = false;
+    
+    $: src = img.url + ($webpMode ? "?webp=1" : "");
 </script>
 
 <div class={cx(onClick && "active")}>
@@ -20,7 +23,7 @@
         {/if}
         <img
             class={cx(!hasLoaded && "hidden")}
-            src={img.url}
+            {src}
             alt={img.id}
             on:load={() => (hasLoaded = true)}
         />
@@ -30,6 +33,7 @@
 <style lang="scss">
     div {
         font-family: "Open sans", sans-serif;
+        position: relative;
         display: block;
         background-color: #333;
         color: #ddd;
@@ -79,13 +83,5 @@
         color: #ddd;
         font-weight: bold;
         transition: opacity 0.4s ease;
-
-        // & > div {
-        //     width: 100%;
-        //     height: 100%;
-        //     display: flex;
-        //     justify-content: center;
-        //     align-items: center;
-        // }
     }
 </style>

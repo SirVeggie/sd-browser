@@ -1,8 +1,15 @@
 <script lang="ts">
-    import '../global.css';
+    import "../global.css";
     import Webui from "$lib/components/Webui.svelte";
-    import { flyoutStore } from "$lib/stores/flyoutStore";
+    import { flyoutStore, syncFlyoutWithLocalStorage } from "$lib/stores/flyoutStore";
     import Notifier from "../lib/components/Notifier.svelte";
+    import { onMount } from "svelte";
+    import { syncSearchWithLocalStorage } from "$lib/stores/searchStore";
+
+    onMount(() => {
+        // syncSearchWithLocalStorage();
+        // syncFlyoutWithLocalStorage();
+    });
 </script>
 
 <main>

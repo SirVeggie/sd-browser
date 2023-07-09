@@ -1,4 +1,4 @@
-<script>
+<!-- <script>
     import { PUBLIC_WS_PORT } from "$env/static/public";
     import Button from "$lib/items/Button.svelte";
     import { io } from "socket.io-client";
@@ -33,4 +33,4 @@
     .container {
         padding: var(--main-padding);
     }
-</style>
+</style> -->

@@ -20,7 +20,13 @@
     } from "$lib/types";
     import { onMount } from "svelte";
     import { fade } from "svelte/transition";
-    import { nsfwFilter, folderFilter } from "$lib/stores/searchStore";
+    import {
+        nsfwFilter,
+        folderFilter,
+        webpMode,
+        nsfwMode,
+        folderMode,
+    } from "$lib/stores/searchStore";
 
     const increment = 10;
     let currentAmount = increment;
@@ -35,8 +41,6 @@
     let live = false;
     let sorting: SortingMethod = "date";
     let matching: SearchMode = "regex";
-    let nsfw = false;
-    let filterFolders = true;
     let moreTriggerVisible = false;
 
     $: paginated = $imageStore.slice(0, currentAmount);
@@ -131,8 +135,8 @@
 
     function updateImages(search: string) {
         currentSearch = search;
-        if (!nsfw && $nsfwFilter) search += ` AND ${$nsfwFilter}`;
-        if (filterFolders) search += ` AND ${$folderFilter}`;
+        if (!$nsfwMode && $nsfwFilter) search += ` AND ${$nsfwFilter}`;
+        if ($folderMode) search += ` AND ${$folderFilter}`;
 
         searchImages({
             search,
@@ -209,7 +213,7 @@
             <input
                 type="checkbox"
                 id="nsfw"
-                bind:checked={nsfw}
+                bind:checked={$nsfwMode}
                 on:change={selectChange}
             />
         </label>
@@ -219,9 +223,14 @@
             <input
                 type="checkbox"
                 id="folderFilter"
-                bind:checked={filterFolders}
+                bind:checked={$folderMode}
                 on:change={selectChange}
             />
+        </label>
+
+        <label for="webp">
+            Use webp:
+            <input type="checkbox" id="webp" bind:checked={$webpMode} />
         </label>
     </div>
 
