@@ -10,6 +10,7 @@ import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { XOR, selectRandom, validRegex } from '$lib/tools/misc';
 import _ from 'lodash';
+import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 
 let imageList: ImageList = new Map();
 export const datapath = './localData';
@@ -105,6 +106,8 @@ function setupWatcher() {
             createdDate: 0,
             ...await readMetadata(file),
         });
+        generateCompressedFromId(hash);
+        generateThumbnailFromId(hash);
         // trigger frontend update?
     });
 

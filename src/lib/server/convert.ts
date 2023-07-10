@@ -1,6 +1,9 @@
 import { Readable, PassThrough } from 'stream';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import { compressedPath, getImage } from './filemanager';
+import path from 'path';
+import fs from 'fs/promises';
 
 ffmpeg.setFfmpegPath(ffmpegPath.path);
 
@@ -75,7 +78,7 @@ export function generateThumbnail(imagepath: string, outputpath: string): Promis
     });
 }
 
-export function generateCompressedImage(imagepath: string, outputpath: string): Promise<string> {
+export function generateCompressed(imagepath: string, outputpath: string): Promise<string> {
     return new Promise((resolve, reject) => {
         ffmpeg(imagepath)
             .outputOptions('-quality 90')
@@ -83,4 +86,24 @@ export function generateCompressedImage(imagepath: string, outputpath: string): 
             .on('end', () => resolve(outputpath))
             .saveToFile(outputpath);
     });
+}
+
+export async function generateCompressedFromId(id: string) {
+    const image = getImage(id);
+    if (!image) return;
+    const output = path.join(compressedPath, `${id}.webp`);
+    const stats = await fs.stat(output).catch(() => undefined);
+    if (stats?.isFile()) return;
+    console.log(`Generating for ${id}`);
+    await generateCompressed(image.file, output);
+}
+
+export async function generateThumbnailFromId(id: string) {
+    const image = getImage(id);
+    if (!image) return;
+    const output = path.join(compressedPath, `${id}.webp`);
+    const stats = await fs.stat(output).catch(() => undefined);
+    if (stats?.isFile()) return;
+    console.log(`Generating for ${id}`);
+    await generateThumbnail(image.file, output);
 }
