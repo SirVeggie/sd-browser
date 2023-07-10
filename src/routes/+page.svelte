@@ -8,7 +8,11 @@
     import Intersecter from "$lib/items/Intersecter.svelte";
     import Link from "$lib/items/Link.svelte";
     import { imageAmountStore, imageStore } from "$lib/stores/imageStore";
-    import { getImageInfo, searchImages } from "$lib/tools/imageRequests";
+    import {
+        generateCompressedImages,
+        getImageInfo,
+        searchImages,
+    } from "$lib/tools/imageRequests";
     import { mapImagesToClient, validRegex } from "$lib/tools/misc";
     import {
         sortingMethods,
@@ -27,6 +31,7 @@
         folderMode,
         searchFilter,
         collapseMode,
+        compressedMode,
     } from "$lib/stores/searchStore";
 
     const increment = 10;
@@ -79,6 +84,15 @@
         getImageInfo(img.id).then((res) => {
             info = res;
         });
+        
+        if ($compressedMode) {
+            const startIndex = Math.max(0, paginated.findIndex((img) => img.id === id) - 10);
+            const endIndex = Math.min(paginated.length, nextIndex + 100);
+            console.log(`Generating compressed images ${startIndex} - ${endIndex}`);
+            generateCompressedImages(
+                $imageStore.map((x) => x.id).slice(startIndex, endIndex)
+            );
+        }
     }
 
     function closeImage() {

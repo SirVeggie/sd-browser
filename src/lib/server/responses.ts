@@ -1,7 +1,7 @@
 import type { ServerError } from "$lib/types";
 import { readFile } from "fs/promises";
-import { generateThumbnail, readCompressedImage } from "./convert";
-import { getImage, thumbnailPath } from "./filemanager";
+import { generateCompressedImage, generateThumbnail } from "./convert";
+import { compressedPath, getImage, thumbnailPath } from "./filemanager";
 import path from "path";
 
 export function error(message: string | ServerError, status = 500) {
@@ -28,7 +28,12 @@ export async function image(imageid: string | undefined, type?: string) {
                 return await readFile(thumb);
             });
         } else if (type === 'compressed') {
-            buffer = await readCompressedImage(filepath);
+            const compressed = path.join(compressedPath, `${imageid}.webp`);
+            buffer = await readFile(compressed).catch(async () => {
+                console.log(`Generating compressed image for ${imageid}`);
+                await generateCompressedImage(filepath, compressed);
+                return await readFile(compressed);
+            });
         } else {
             buffer = await readFile(filepath);
         }

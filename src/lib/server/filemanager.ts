@@ -14,6 +14,7 @@ import _ from 'lodash';
 let imageList: ImageList = new Map();
 export const datapath = './localData';
 export const thumbnailPath = path.join(datapath, 'thumbnails');
+export const compressedPath = path.join(datapath, 'compressed');
 let watcher: Watcher | undefined;
 
 export async function startFileManager() {
@@ -23,7 +24,9 @@ export async function startFileManager() {
 
 export async function indexFiles() {
     console.log('Indexing files...');
-    fs.mkdir(datapath).catch(() => console.log('Failed to create data folder, might already exist'));
+    fs.mkdir(datapath).catch(() => '');
+    fs.mkdir(thumbnailPath).catch(() => '');
+    fs.mkdir(compressedPath).catch(() => '');
 
     // Read cached data
     let imageCache: ImageList | undefined;

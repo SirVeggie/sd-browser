@@ -47,3 +47,16 @@ export async function getImageInfo(imageid: string, fetch?: FetchType): Promise<
         return res;
     return undefined;
 }
+
+export async function generateCompressedImages(ids: string[], fetch?: FetchType): Promise<void> {
+    if (!ids || !ids.length)
+        return console.log('Invalid generation request');
+    let url = `/api/generate`;
+    if (!fetch)
+        url = get(page).url.origin + url;
+    const res = await (fetch ? doPost(url, fetch, ids) : doServerPost(url, ids));
+    if ('error' in res)
+        return console.error(res.error);
+    if ('message' in res)
+        return console.log(res.message);
+}

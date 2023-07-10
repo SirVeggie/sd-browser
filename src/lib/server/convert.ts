@@ -74,3 +74,12 @@ export function generateThumbnail(imagepath: string, outputpath: string): Promis
             .saveToFile(outputpath);
     });
 }
+
+export function generateCompressedImage(imagepath: string, outputpath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        ffmpeg(imagepath)
+            .on('error', reject)
+            .on('end', () => resolve(outputpath))
+            .saveToFile(outputpath);
+    });
+}
