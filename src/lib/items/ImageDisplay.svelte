@@ -3,15 +3,21 @@
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
-    import { thumbMode } from "$lib/stores/searchStore";
+    import { compressedMode, thumbMode } from "$lib/stores/searchStore";
 
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
         undefined;
 
     let hasLoaded = false;
-    
-    $: src = img.url + ($thumbMode ? "?type=thumbnail" : "");
+
+    $: src =
+        img.url +
+        ($thumbMode
+            ? "?type=thumbnail"
+            : $compressedMode
+            ? "?type=compressed"
+            : "");
 </script>
 
 <div class={cx(onClick && "active")}>
