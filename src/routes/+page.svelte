@@ -96,6 +96,9 @@
         if (leftArrow) {
             id = paginated[prevIndex].id;
             scrollToImage();
+            getImageInfo(id).then((res) => {
+                info = res;
+            });
         }
     }
 
@@ -106,6 +109,9 @@
                 loadMore();
             }
             scrollToImage();
+            getImageInfo(id).then((res) => {
+                info = res;
+            });
         }
     }
 
@@ -205,7 +211,7 @@
                 on:change={selectChange}
             />
         </label>
-        
+
         <label for="nsfw">
             NSFW:
             <input
