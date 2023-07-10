@@ -67,7 +67,7 @@ export function bufferToStream(buffer: Buffer): Readable {
 export function generateThumbnail(imagepath: string, outputpath: string): Promise<string> {
     return new Promise((resolve, reject) => {
         ffmpeg(imagepath)
-            .outputOptions('-quality 50')
+            .outputOptions('-quality 80')
             .size('460x?')
             .on('error', reject)
             .on('end', () => resolve(outputpath))
@@ -78,6 +78,7 @@ export function generateThumbnail(imagepath: string, outputpath: string): Promis
 export function generateCompressedImage(imagepath: string, outputpath: string): Promise<string> {
     return new Promise((resolve, reject) => {
         ffmpeg(imagepath)
+            .outputOptions('-quality 90')
             .on('error', reject)
             .on('end', () => resolve(outputpath))
             .saveToFile(outputpath);
