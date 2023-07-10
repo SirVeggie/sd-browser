@@ -56,7 +56,9 @@
     $: latestId = paginated[0]?.id;
 
     onMount(() => {
-        updateImages($searchFilter);
+        setTimeout(() => {
+            updateImages($searchFilter);
+        }, 100);
 
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
@@ -85,7 +87,7 @@
             info = res;
         });
 
-        if ($compressedMode === 'medium') {
+        if ($compressedMode === "medium") {
             const currentImages = $imageStore;
             const startIndex = Math.max(
                 0,
