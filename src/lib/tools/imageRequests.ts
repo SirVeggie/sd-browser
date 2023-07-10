@@ -10,6 +10,7 @@ export async function searchImages(search: Partial<ImageRequest>, fetch?: FetchT
         latestId: '',
         oldestId: '',
         sorting: 'date',
+        collapse: false,
     };
 
     const req = { ...def, ...search };

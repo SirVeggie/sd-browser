@@ -1,4 +1,4 @@
-import { readImageAsWebp } from '$lib/server/convert.js';
+import { readCompressedImage } from '$lib/server/convert';
 import { error } from '$lib/server/responses';
 
 export async function GET() {
@@ -6,7 +6,7 @@ export async function GET() {
     
     let buffer;
     try {
-        buffer = await readImageAsWebp(image);
+        buffer = await readCompressedImage(image);
     } catch {
         console.log(`Failed to read file: ${image}`);
         return error('Failed to read file', 500);

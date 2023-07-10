@@ -5,9 +5,9 @@ import { Server } from 'socket.io';
 
 let io: Server;
 
-export function wsSubscribe(event: string, callback: (msg: any) => void) {
-    // io.on('')
-}
+// export function wsSubscribe(event: string, callback: (msg: any) => void) {
+//     io.on('')
+// }
 
 export function startWebsocket() {
     const port = PUBLIC_WS_PORT;

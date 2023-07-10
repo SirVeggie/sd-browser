@@ -7,8 +7,8 @@
     import { syncSearchWithLocalStorage } from "$lib/stores/searchStore";
 
     onMount(() => {
-        // syncSearchWithLocalStorage();
-        // syncFlyoutWithLocalStorage();
+        syncSearchWithLocalStorage();
+        syncFlyoutWithLocalStorage();
     });
 </script>
 

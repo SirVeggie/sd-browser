@@ -3,7 +3,7 @@
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
-    import { webpMode } from "$lib/stores/searchStore";
+    import { thumbMode } from "$lib/stores/searchStore";
 
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
@@ -11,7 +11,7 @@
 
     let hasLoaded = false;
     
-    $: src = img.url + ($webpMode ? "?webp=1" : "");
+    $: src = img.url + ($thumbMode ? "?type=thumbnail" : "");
 </script>
 
 <div class={cx(onClick && "active")}>

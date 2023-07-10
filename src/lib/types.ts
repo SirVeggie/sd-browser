@@ -47,9 +47,10 @@ export type ImageRequest = {
     oldestId: string;
     matching: SearchMode;
     sorting: SortingMethod;
+    collapse: boolean;
 };
 export function isImageRequest(object: any): object is ImageRequest {
-    return testType(object, ['search', 'latestId', 'oldestId', 'sorting']);
+    return testType(object, ['search', 'latestId', 'oldestId', 'sorting', 'collapse']);
 }
 
 export type ImageResponse = {

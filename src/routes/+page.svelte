@@ -23,21 +23,21 @@
     import {
         nsfwFilter,
         folderFilter,
-        webpMode,
         nsfwMode,
         folderMode,
+        searchFilter,
+        collapseMode,
     } from "$lib/stores/searchStore";
 
     const increment = 10;
     let currentAmount = increment;
     let id = "";
-    let input = "";
+    let input = $searchFilter;
     let inputElement: HTMLInputElement;
+    let inputTimer: any;
     let info: ImageInfo | undefined = undefined;
     let slideshowTimer: any;
-    let inputTimer: any;
     let updateTimer: any;
-    let currentSearch = "";
     let live = false;
     let sorting: SortingMethod = "date";
     let matching: SearchMode = "regex";
@@ -51,11 +51,11 @@
     $: latestId = paginated[0]?.id;
 
     onMount(() => {
-        updateImages(currentSearch);
+        updateImages($searchFilter);
 
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
-            updateImages(currentSearch);
+            updateImages($searchFilter);
         }, 5000);
 
         setTimeout(() => {
@@ -130,11 +130,11 @@
     }
 
     function selectChange() {
-        updateImages(currentSearch);
+        updateImages($searchFilter);
     }
 
     function updateImages(search: string) {
-        currentSearch = search;
+        searchFilter.set(search);
         if (!$nsfwMode && $nsfwFilter) search += ` AND ${$nsfwFilter}`;
         if ($folderMode) search += ` AND ${$folderFilter}`;
 
@@ -142,6 +142,7 @@
             search,
             sorting,
             matching,
+            collapse: $collapseMode,
         })
             .then((images) => {
                 imageStore.set(mapImagesToClient(images.imageIds));
@@ -208,6 +209,16 @@
             </select>
         </label>
 
+        <label for="collapse">
+            Collapse:
+            <input
+                type="checkbox"
+                id="collapse"
+                bind:checked={$collapseMode}
+                on:change={selectChange}
+            />
+        </label>
+        
         <label for="nsfw">
             NSFW:
             <input
@@ -226,11 +237,6 @@
                 bind:checked={$folderMode}
                 on:change={selectChange}
             />
-        </label>
-
-        <label for="webp">
-            Use webp:
-            <input type="checkbox" id="webp" bind:checked={$webpMode} />
         </label>
     </div>
 

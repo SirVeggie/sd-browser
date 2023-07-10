@@ -1,5 +1,5 @@
 import { startFileManager } from "$lib/server/filemanager";
-import { startWebsocket } from "$lib/server/websocketServer";
+// import { startWebsocket } from "$lib/server/websocketServer";
 
 export async function handle({ resolve, event }) {
 

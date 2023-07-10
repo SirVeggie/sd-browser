@@ -6,12 +6,26 @@
     import Button from "$lib/items/Button.svelte";
     import { cx } from "$lib/tools/cx";
     import { notify } from "$lib/components/Notifier.svelte";
-    import { folderFilter, nsfwFilter } from "$lib/stores/searchStore";
+    import {
+        compressedMode,
+        folderFilter,
+        nsfwFilter,
+        thumbMode,
+    } from "$lib/stores/searchStore";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
-    let nsfw = $nsfwFilter;
-    let folders = $folderFilter;
+
+    $: setInput($flyoutStore.url);
+
+    onDestroy(() => {
+        clearTimeout(inputTimer);
+        inputTimer = undefined;
+    });
+
+    function setInput(value: string) {
+        address = value;
+    }
 
     function onInput() {
         clearTimeout(inputTimer);
@@ -25,44 +39,136 @@
         flyoutStore.update((x) => ({ ...x, enabled: !x.enabled }));
     }
 
-    onDestroy(() => {
-        clearTimeout(inputTimer);
-        inputTimer = undefined;
-    });
+    function reset() {
+        notify(`LocalStorage was cleared`);
+        localStorage.clear();
+        window.location.reload();
+    }
 </script>
 
 <div class="container">
     <div class="buttons">
         <Link to="/">Back</Link>
+        <Button on:click={reset}>Reset</Button>
         <Button
             class={cx(!$flyoutStore.enabled && "disabled")}
             on:click={toggleFlyout}>Flyout</Button
         >
     </div>
 
-    <p>Set flyout address (webui url)</p>
-    <Input bind:value={address} on:input={onInput} />
-    <p>Folder filter</p>
-    <Input bind:value={folders} on:input={() => folderFilter.set(folders)} />
-    <p>NSFW filter</p>
-    <Input bind:value={nsfw} on:input={() => nsfwFilter.set(nsfw)} />
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label>
+        Set flyout address (webui url)
+        <Input bind:value={address} on:input={onInput} />
+    </label>
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label>
+        Folder filter
+        <Input bind:value={$folderFilter} />
+    </label>
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label>
+        NSFW filter
+        <Input bind:value={$nsfwFilter} />
+    </label>
+
+    <label for="thumb" class="checkbox">
+        Use thumbnails
+        <input type="checkbox" id="thumb" bind:checked={$thumbMode} />
+    </label>
+
+    <label for="full" class="checkbox">
+        Use compressed full image
+        <input type="checkbox" id="full" bind:checked={$compressedMode} />
+    </label>
 </div>
 
 <style lang="scss">
     .container {
         padding: var(--main-padding);
+        display: flex;
+        flex-direction: column;
+        gap: 2em;
     }
-    
+
     .buttons :global(.disabled) {
         opacity: 0.5;
         filter: grayscale(1);
     }
 
-    p {
-        font-family: "Open sans", sans-serif;
-        color: #ddd;
-        margin: 2em 0.3em 0.2em;
-        // margin-top: 1em;
-        padding: 0;
+    label {
+        cursor: pointer;
+        user-select: none;
+
+        &.checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
     }
+
+    input[type="checkbox"] {
+        appearance: none;
+        background-color: #333;
+        border-radius: 0.2em;
+        font-size: 1em;
+        width: 13px;
+        height: 13px;
+        margin: 0;
+        padding: 0;
+        border: none;
+        cursor: pointer;
+        position: relative;
+        outline: 1px solid #aaa3;
+
+        &::before {
+            content: "";
+            position: absolute;
+            background-color: rgb(63, 187, 236);
+            top: 2px;
+            left: 2px;
+            right: 2px;
+            bottom: 2px;
+            transform: scale(0);
+            opacity: 0;
+            transition: 120ms transform ease, 120ms opacity ease;
+            border-radius: 0.15em;
+        }
+
+        &:checked::before {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    // p {
+    //     font-family: "Open sans", sans-serif;
+    //     color: #ddd;
+    //     // margin: 2em 0.3em 0.2em;
+    //     margin: 0;
+    //     padding: 0;
+    // }
+
+    // select {
+    //     margin: 0;
+    //     padding: 0;
+    //     background-color: transparent;
+    //     border: none;
+    //     font-family: "Open sans", sans-serif;
+    //     font-size: 1em;
+    //     color: #ddd;
+    //     border-radius: 0.2em;
+
+    //     &:focus {
+    //         outline: none;
+    //     }
+
+    //     &:focus-visible {
+    //         background-color: #333;
+    //     }
+
+    //     option {
+    //         background-color: #222;
+    //     }
+    // }
 </style>

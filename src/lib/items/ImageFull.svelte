@@ -6,7 +6,7 @@
    import Button from "./Button.svelte";
    import { notify } from "$lib/components/Notifier.svelte";
    import { getPositivePrompt } from "$lib/tools/metadataInterpreter";
-   import { webpMode } from "$lib/stores/searchStore";
+   import { compressedMode, thumbMode } from "$lib/stores/searchStore";
 
    export let cancel: () => void;
    export let imageId: string | undefined;
@@ -17,7 +17,7 @@
    let fallbackElement: HTMLDivElement;
 
    $: imageUrl = imageId
-      ? `/api/images/${imageId}${$webpMode ? "?webp=1" : ""}`
+      ? `/api/images/${imageId}${$compressedMode ? "?type=compressed" : ""}`
       : "";
    $: basicInfo = !data ? "" : formatMetadata(data);
    $: promptInfo = !data ? "" : data.prompt ?? "";

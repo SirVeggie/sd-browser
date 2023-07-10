@@ -1,6 +1,8 @@
 import type { ServerError } from "$lib/types";
 import { readFile } from "fs/promises";
-import { readImageAsWebp } from "./convert";
+import { generateThumbnail, readCompressedImage } from "./convert";
+import { getImage, thumbnailPath } from "./filemanager";
+import path from "path";
 
 export function error(message: string | ServerError, status = 500) {
     if (typeof message === 'string') message = { error: message };
@@ -12,13 +14,21 @@ export function success(message: unknown, status = 200) {
     return new Response(JSON.stringify(message), { status });
 }
 
-export async function image(filepath: string | undefined, webp = true) {
+export async function image(imageid: string | undefined, type?: string) {
+    const filepath = getImage(imageid ?? '')?.file;
     if (!filepath) return error('Image not found', 404);
 
     let buffer;
     try {
-        if (webp) {
-            buffer = await readImageAsWebp(filepath);
+        if (type === 'thumb') {
+            const thumb = path.join(thumbnailPath, `${imageid}.webp`);
+            buffer = await readFile(thumb).catch(async () => {
+                console.log(`Generating thumbnail for ${imageid}`);
+                await generateThumbnail(filepath, thumb);
+                return await readFile(thumb);
+            });
+        } else if (type === 'compressed') {
+            buffer = await readCompressedImage(filepath);
         } else {
             buffer = await readFile(filepath);
         }

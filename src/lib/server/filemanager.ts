@@ -9,9 +9,11 @@ import { getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { XOR, selectRandom } from '$lib/tools/misc';
+import _ from 'lodash';
 
 let imageList: ImageList = new Map();
-const datapath = './localData';
+export const datapath = './localData';
+export const thumbnailPath = path.join(datapath, 'thumbnails');
 let watcher: Watcher | undefined;
 
 export async function startFileManager() {
@@ -151,17 +153,30 @@ export function getImage(imageid: string) {
     return image;
 }
 
-export function searchImages(search: string, mode: SearchMode) {
+export function searchImages(search: string, mode: SearchMode, collapse?: boolean) {
     const matcher = buildMatcher(search, mode);
-    const list: ServerImage[] = [];
+    let list: ServerImage[] = [];
     for (const [, value] of imageList) {
         if (matcher(value)) {
             list.push(value);
         }
     }
+
+    if (collapse) {
+        list = _.uniqBy(list, x => simplifyPrompt(x.prompt));
+    }
+
     return list;
 }
 
+function simplifyPrompt(prompt: string | undefined) {
+    if (prompt === undefined) return '';
+    return prompt
+        .replace(/(, )?seed: \d+/i, '')
+        .replace(/(, )?([^,]*)version: [^,]*/ig, '');
+}
+
+// const keywords = ['AND', 'NOT', 'FOLDER'];
 function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
     const parts = search.split(' AND ');
     const regexes = parts.map(x => {
