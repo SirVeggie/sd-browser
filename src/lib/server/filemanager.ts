@@ -80,6 +80,33 @@ export async function indexFiles() {
 
     imageList = images;
     console.log(`Indexed ${imageList.size} images`);
+
+    cleanTempImages();
+}
+
+async function cleanTempImages() {
+    let count = 0;
+    await fs.readdir(thumbnailPath).then(files => {
+        for (const file of files) {
+            const id = path.basename(file, '.webp');
+            if (!imageList.has(id)) {
+                count++;
+                fs.unlink(path.join(thumbnailPath, file)).catch(() => '');
+            }
+        }
+    });
+    console.log(`Cleaned ${count} thumbnails`);
+    count = 0;
+    await fs.readdir(compressedPath).then(files => {
+        for (const file of files) {
+            const id = path.basename(file, '.webp');
+            if (!imageList.has(id)) {
+                count++;
+                fs.unlink(path.join(compressedPath, file)).catch(() => '');
+            }
+        }
+    });
+    console.log(`Cleaned ${count} preview images`);
 }
 
 function setupWatcher() {
