@@ -47,6 +47,7 @@
     let sorting: SortingMethod = "date";
     let matching: SearchMode = "regex";
     let moreTriggerVisible = false;
+    let triggerTimer: any;
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
@@ -61,10 +62,7 @@
         }, 100);
 
         startUpdate();
-
-        setTimeout(() => {
-            moreTriggerVisible = true;
-        }, 1000);
+        startTrigger(1000);
 
         window.addEventListener("keydown", keylistener);
 
@@ -151,6 +149,7 @@
     function applyInput() {
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
+            startTrigger(500);
             currentAmount = increment;
             updateImages(input);
         }, 1000);
@@ -163,6 +162,14 @@
             console.log("Updating images");
             updateImages($searchFilter);
         }, 5000);
+    }
+
+    function startTrigger(delay: number) {
+        moreTriggerVisible = false;
+        clearTimeout(triggerTimer);
+        triggerTimer = setTimeout(() => {
+            moreTriggerVisible = true;
+        }, delay);
     }
 
     function selectChange() {
