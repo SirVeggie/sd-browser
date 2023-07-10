@@ -20,7 +20,7 @@ export async function image(imageid: string | undefined, type?: string) {
 
     let buffer;
     try {
-        if (type === 'thumb') {
+        if (type === 'thumbnail') {
             const thumb = path.join(thumbnailPath, `${imageid}.webp`);
             buffer = await readFile(thumb).catch(async () => {
                 console.log(`Generating thumbnail for ${imageid}`);

@@ -84,14 +84,22 @@
         getImageInfo(img.id).then((res) => {
             info = res;
         });
-        
+
         if ($compressedMode) {
-            const startIndex = Math.max(0, paginated.findIndex((img) => img.id === id) - 10);
-            const endIndex = Math.min(paginated.length, nextIndex + 100);
-            console.log(`Generating compressed images ${startIndex} - ${endIndex}`);
-            generateCompressedImages(
-                $imageStore.map((x) => x.id).slice(startIndex, endIndex)
+            const currentImages = $imageStore;
+            const startIndex = Math.max(
+                0,
+                currentImages.findIndex((img) => img.id === id) - 10
             );
+            const endIndex = Math.min(currentImages.length, startIndex + 50);
+            setTimeout(() => {
+                console.log(
+                    `Generating compressed images ${startIndex} - ${endIndex}`
+                );
+                generateCompressedImages(
+                    currentImages.map((x) => x.id).slice(startIndex, endIndex)
+                );
+            }, 1000);
         }
     }
 

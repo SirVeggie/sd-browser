@@ -11,8 +11,19 @@ export async function POST(e) {
         return error('Invalid request', 400);
     }
 
-    await Promise.all(ids.map(generate));
+    await batchGenerate(ids);
     return success('Success');
+}
+
+async function batchGenerate(ids: string[]) {
+    const batchSize = 10;
+    for (let i = 0; i < ids.length; i += batchSize) {
+        await processBatch(ids.slice(i, i + batchSize));
+    }
+}
+
+async function processBatch(ids: string[]) {
+    await Promise.all(ids.map(generate));
 }
 
 async function generate(id: string) {

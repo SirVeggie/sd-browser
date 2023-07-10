@@ -2,11 +2,26 @@
     export let placeholder = "";
     export let value = "";
     export let element: HTMLInputElement | undefined = undefined;
+
+    async function clear() {
+        value = "";
+        element?.focus();
+        await Promise.resolve();
+        element?.dispatchEvent(new Event("input"));
+        element?.dispatchEvent(new Event("change"));
+    }
 </script>
 
 <div class="input">
-    <input type="text" bind:this={element} {placeholder} on:change on:input bind:value />
-    <button on:click={() => value = ""}>x</button>
+    <input
+        type="text"
+        bind:this={element}
+        {placeholder}
+        on:change
+        on:input
+        bind:value
+    />
+    <button on:click={clear}>x</button>
 </div>
 
 <style lang="scss">
@@ -15,7 +30,7 @@
         display: flex;
         align-items: center;
     }
-    
+
     input {
         font-family: "Open sans", sans-serif;
         width: 100%;
@@ -29,13 +44,13 @@
         border: 1px solid #1118;
         // border: 1px solid #fff;
         box-sizing: border-box;
-        
+
         &:focus {
             outline: none;
             border: 1px solid #aaad;
         }
     }
-    
+
     button {
         appearance: none;
         background-color: transparent;
