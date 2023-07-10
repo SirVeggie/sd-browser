@@ -13,7 +13,7 @@
         nsfwFilter,
         thumbMode,
     } from "$lib/stores/searchStore";
-    import { searchModes } from "$lib/types";
+    import { qualityModes, searchModes } from "$lib/types";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
@@ -75,7 +75,6 @@
         <Input bind:value={$nsfwFilter} />
     </label>
 
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
     <label for="matching">
         Matching:
         <select id="matching" bind:value={$matchingMode}>
@@ -84,15 +83,23 @@
             {/each}
         </select>
     </label>
-
-    <label for="thumb" class="checkbox">
-        Use thumbnails
-        <input type="checkbox" id="thumb" bind:checked={$thumbMode} />
+    
+    <label for="fullimage">
+        Full size quality:
+        <select id="fullimage" bind:value={$compressedMode}>
+            {#each qualityModes as quality}
+                <option value={quality}>{quality}</option>
+            {/each}
+        </select>
     </label>
-
-    <label for="full" class="checkbox">
-        Use compressed full image
-        <input type="checkbox" id="full" bind:checked={$compressedMode} />
+    
+    <label for="thumbnail">
+        Thumbnail quality:
+        <select id="thumbnail" bind:value={$thumbMode}>
+            {#each qualityModes as quality}
+                <option value={quality}>{quality}</option>
+            {/each}
+        </select>
     </label>
 </div>
 

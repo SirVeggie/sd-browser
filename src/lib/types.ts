@@ -41,6 +41,12 @@ export function isSearchMode(object: any): object is SearchMode {
     return searchModes.includes(object);
 }
 
+export const qualityModes = ['original', 'medium', 'low'] as const;
+export type QualityMode = typeof qualityModes[number];
+export function isQualityMode(object: any): object is QualityMode {
+    return qualityModes.includes(object);
+}
+
 export type ImageRequest = {
     search: string;
     latestId: string;
