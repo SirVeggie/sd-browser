@@ -6,6 +6,7 @@ import { isImageInfo, type ImageRequest, type ImageResponse, type ImageInfo, typ
 export async function searchImages(search: Partial<ImageRequest>, fetch?: FetchType): Promise<ImageResponse> {
     const def: ImageRequest = {
         search: '',
+        filters: [],
         matching: 'regex',
         latestId: '',
         oldestId: '',

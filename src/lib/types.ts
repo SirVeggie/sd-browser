@@ -35,7 +35,7 @@ export function isImageInfo(object: any): object is ImageInfo {
     return testType(object, ['id', 'folder', 'modifiedDate', 'createdDate']);
 }
 
-export const searchModes = ['regex', 'contains'] as const;
+export const searchModes = ['regex', 'words', 'contains'] as const;
 export type SearchMode = typeof searchModes[number];
 export function isSearchMode(object: any): object is SearchMode {
     return searchModes.includes(object);
@@ -47,8 +47,21 @@ export function isQualityMode(object: any): object is QualityMode {
     return qualityModes.includes(object);
 }
 
+const matchTypes = ['all', 'positive', 'negative', 'params', 'folder'] as const;
+export type MatchType = typeof matchTypes[number];
+export function isMatchType(object: any): object is MatchType {
+    return matchTypes.includes(object);
+}
+
+export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR'] as const;
+export type SearchKeyword = typeof searchKeywords[number];
+export function isSearchKeyword(object: any): object is SearchKeyword {
+    return searchKeywords.includes(object);
+}
+
 export type ImageRequest = {
     search: string;
+    filters: string[];
     latestId: string;
     oldestId: string;
     matching: SearchMode;
@@ -56,7 +69,7 @@ export type ImageRequest = {
     collapse: boolean;
 };
 export function isImageRequest(object: any): object is ImageRequest {
-    return testType(object, ['search', 'latestId', 'oldestId', 'sorting', 'collapse']);
+    return testType(object, ['search', 'filters', 'latestId', 'oldestId', 'sorting', 'collapse']);
 }
 
 export type ImageResponse = {

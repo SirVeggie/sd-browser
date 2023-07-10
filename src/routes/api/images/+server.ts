@@ -13,7 +13,7 @@ export async function POST(e) {
     if (!isImageRequest(query))
         return error('Invalid request', 400);
 
-    let images = searchImages(query.search, query.matching, query.collapse);
+    let images = searchImages(query.search, query.filters, query.matching, query.collapse);
     images = sortImages(images, query.sorting);
 
     const firstIndex = !query.latestId ? 0 : images.findIndex(i => i.id === query.latestId);

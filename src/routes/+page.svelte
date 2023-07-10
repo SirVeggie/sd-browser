@@ -32,6 +32,7 @@
         searchFilter,
         collapseMode,
         compressedMode,
+        matchingMode,
     } from "$lib/stores/searchStore";
 
     const increment = 10;
@@ -45,7 +46,6 @@
     let updateTimer: any;
     let live = false;
     let sorting: SortingMethod = "date";
-    let matching: SearchMode = "regex";
     let moreTriggerVisible = false;
     let triggerTimer: any;
 
@@ -178,13 +178,15 @@
 
     function updateImages(search: string) {
         searchFilter.set(search);
-        if (!$nsfwMode && $nsfwFilter) search += ` AND ${$nsfwFilter}`;
-        if ($folderMode) search += ` AND ${$folderFilter}`;
+        let filters = [];
+        if (!$nsfwMode && $nsfwFilter) filters.push($nsfwFilter);
+        if ($folderMode && $folderFilter) filters.push($folderFilter);
 
         searchImages({
             search,
+            filters,
             sorting,
-            matching,
+            matching: $matchingMode,
             collapse: $collapseMode,
         })
             .then((images) => {

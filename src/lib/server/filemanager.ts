@@ -2,10 +2,10 @@ import { IMG_FOLDER } from '$env/static/private';
 import { readdir, stat } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import type { ImageList, SearchMode, ServerImage, SortingMethod } from '$lib/types';
+import { searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
 import fs from 'fs/promises';
 import exifr from 'exifr';
-import { getPositivePrompt } from '$lib/tools/metadataInterpreter';
+import { getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { XOR, selectRandom, validRegex } from '$lib/tools/misc';
@@ -160,13 +160,14 @@ export function getImage(imageid: string) {
     return image;
 }
 
-export function searchImages(search: string, mode: SearchMode, collapse?: boolean) {
+export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean) {
     if (mode === 'regex' && !validRegex(search))
         return [];
     const matcher = buildMatcher(search, mode);
+    const filter = buildMatcher(filters.join(' AND '), 'regex');
     let list: ServerImage[] = [];
     for (const [, value] of imageList) {
-        if (matcher(value)) {
+        if (matcher(value) && filter(value)) {
             list.push(value);
         }
     }
@@ -185,26 +186,64 @@ function simplifyPrompt(prompt: string | undefined) {
         .replace(/(, )?([^,]*)version: [^,]*/ig, '');
 }
 
-// const keywords = ['AND', 'NOT', 'FOLDER'];
+const keywordRegex = `((${searchKeywords.join('|')})\\W?)*`;
+const removeRegex = new RegExp(`^${keywordRegex}`);
+const notRegex = new RegExp(`^${keywordRegex}NOT ?`);
+const allRegex = new RegExp(`^${keywordRegex}ALL ?`);
+const negativeRegex = new RegExp(`^${keywordRegex}(NEGATIVE|NEG) ?`);
+const folderRegex = new RegExp(`^${keywordRegex}(FOLDER|FD) ?`);
+const paramRegex = new RegExp(`^${keywordRegex}(PARAMS|PR) ?`);
 function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
     const parts = search.split(' AND ');
     const regexes = parts.map(x => {
-        const raw = x.replace(/^(NOT |FOLDER )*/, '');
+        const raw = x.replace(removeRegex, '');
+
+        let type: MatchType = 'positive';
+        if (allRegex.test(x)) type = 'all';
+        else if (negativeRegex.test(x)) type = 'negative';
+        else if (folderRegex.test(x)) type = 'folder';
+        else if (paramRegex.test(x)) type = 'params';
+
         return {
             raw,
             regex: new RegExp(raw, 'i'),
-            not: x.match(/^(FOLDER )?NOT /),
-            folder: x.match(/^(NOT )?FOLDER /),
+            not: x.match(notRegex),
+            type,
         };
     });
+
     return (image: ServerImage) => {
-        const positive = getPositivePrompt(image.prompt);
         return !regexes.some(x => {
-            if (matching === 'contains')
-                return !XOR(x.not, (x.folder ? image.folder : positive).includes(x.raw));
-            return !XOR(x.not, x.regex.test(x.folder ? image.folder : positive));
+            const text = getTextByType(image, x.type);
+
+            if (matching === 'contains') {
+                return !XOR(x.not, text.includes(x.raw));
+            } else if (matching === 'words') {
+                const words = x.raw.split(' ');
+                return !XOR(x.not, words.every(word => new RegExp(`\\b${word}\\b`, 'i').test(text)));
+            } else {
+                return !XOR(x.not, x.regex.test(text));
+            }
         });
     };
+}
+
+function getTextByType(image: ServerImage, type: MatchType) {
+    if (!image) return '';
+    switch (type) {
+        case 'all':
+            return `${image.prompt}, Folder: ${image.folder}`;
+        case 'positive':
+            return getPositivePrompt(image.prompt);
+        case 'negative':
+            return getNegativePrompt(image.prompt);
+        case 'params':
+            return getParams(image.prompt);
+        case 'folder':
+            return image.folder;
+        default:
+            return '';
+    }
 }
 
 export function sortImages(images: ServerImage[], sort: SortingMethod): ServerImage[] {
