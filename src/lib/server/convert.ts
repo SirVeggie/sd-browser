@@ -1,7 +1,7 @@
 import { Readable, PassThrough } from 'stream';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
-import { compressedPath, getImage } from './filemanager';
+import { compressedPath, getImage, thumbnailPath } from './filemanager';
 import path from 'path';
 import fs from 'fs/promises';
 
@@ -88,22 +88,22 @@ export function generateCompressed(imagepath: string, outputpath: string): Promi
     });
 }
 
-export async function generateCompressedFromId(id: string) {
-    const image = getImage(id);
-    if (!image) return;
+export async function generateCompressedFromId(id: string, file?: string) {
+    const imagepath = file ?? getImage(id)?.file;
+    if (!imagepath) return;
     const output = path.join(compressedPath, `${id}.webp`);
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;
-    console.log(`Generating for ${id}`);
-    await generateCompressed(image.file, output);
+    console.log(`Generating preview for ${id}`);
+    await generateCompressed(imagepath, output);
 }
 
-export async function generateThumbnailFromId(id: string) {
-    const image = getImage(id);
-    if (!image) return;
-    const output = path.join(compressedPath, `${id}.webp`);
+export async function generateThumbnailFromId(id: string, file?: string) {
+    const imagepath = file ?? getImage(id)?.file;
+    if (!imagepath) return;
+    const output = path.join(thumbnailPath, `${id}.webp`);
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;
-    console.log(`Generating for ${id}`);
-    await generateThumbnail(image.file, output);
+    console.log(`Generating thumbnail for ${id}`);
+    await generateThumbnail(imagepath, output);
 }

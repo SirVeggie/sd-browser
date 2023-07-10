@@ -98,6 +98,9 @@ function setupWatcher() {
     watcher.on('add', async file => {
         if (!file.endsWith('.png')) return;
         const hash = hashString(file);
+        await generateCompressedFromId(hash, file);
+        await generateThumbnailFromId(hash, file);
+        console.log(`Added ${file}`);
         imageList.set(hash, {
             id: hash,
             folder: path.basename(path.dirname(file)),
@@ -106,8 +109,6 @@ function setupWatcher() {
             createdDate: 0,
             ...await readMetadata(file),
         });
-        generateCompressedFromId(hash);
-        generateThumbnailFromId(hash);
         // trigger frontend update?
     });
 

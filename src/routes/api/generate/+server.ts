@@ -20,5 +20,5 @@ async function batchGenerate(ids: string[]) {
 }
 
 async function processBatch(ids: string[]) {
-    await Promise.all(ids.map(generateCompressedFromId));
+    await Promise.all(ids.map(x => generateCompressedFromId(x)));
 }
