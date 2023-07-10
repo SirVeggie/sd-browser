@@ -196,19 +196,6 @@
             </select>
         </label>
 
-        <label for="matching">
-            Matching:
-            <select
-                id="matching"
-                bind:value={matching}
-                on:change={selectChange}
-            >
-                {#each searchModes as method}
-                    <option value={method}>{method}</option>
-                {/each}
-            </select>
-        </label>
-
         <label for="collapse">
             Collapse:
             <input

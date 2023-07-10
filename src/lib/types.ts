@@ -35,7 +35,7 @@ export function isImageInfo(object: any): object is ImageInfo {
     return testType(object, ['id', 'folder', 'modifiedDate', 'createdDate']);
 }
 
-export const searchModes = ['contains', 'regex'] as const;
+export const searchModes = ['regex', 'contains'] as const;
 export type SearchMode = typeof searchModes[number];
 export function isSearchMode(object: any): object is SearchMode {
     return searchModes.includes(object);

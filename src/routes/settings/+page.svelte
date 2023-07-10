@@ -9,9 +9,11 @@
     import {
         compressedMode,
         folderFilter,
+        matchingMode,
         nsfwFilter,
         thumbMode,
     } from "$lib/stores/searchStore";
+    import { searchModes } from "$lib/types";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
@@ -46,6 +48,7 @@
     }
 </script>
 
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <div class="container">
     <div class="buttons">
         <Link to="/">Back</Link>
@@ -70,6 +73,16 @@
     <label>
         NSFW filter
         <Input bind:value={$nsfwFilter} />
+    </label>
+
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <label for="matching">
+        Matching:
+        <select id="matching" bind:value={$matchingMode}>
+            {#each searchModes as method}
+                <option value={method}>{method}</option>
+            {/each}
+        </select>
     </label>
 
     <label for="thumb" class="checkbox">
@@ -141,34 +154,26 @@
         }
     }
 
-    // p {
-    //     font-family: "Open sans", sans-serif;
-    //     color: #ddd;
-    //     // margin: 2em 0.3em 0.2em;
-    //     margin: 0;
-    //     padding: 0;
-    // }
+    select {
+        margin: 0;
+        padding: 0;
+        background-color: transparent;
+        border: none;
+        font-family: "Open sans", sans-serif;
+        font-size: 1em;
+        color: #ddd;
+        border-radius: 0.2em;
 
-    // select {
-    //     margin: 0;
-    //     padding: 0;
-    //     background-color: transparent;
-    //     border: none;
-    //     font-family: "Open sans", sans-serif;
-    //     font-size: 1em;
-    //     color: #ddd;
-    //     border-radius: 0.2em;
+        &:focus {
+            outline: none;
+        }
 
-    //     &:focus {
-    //         outline: none;
-    //     }
+        &:focus-visible {
+            background-color: #333;
+        }
 
-    //     &:focus-visible {
-    //         background-color: #333;
-    //     }
-
-    //     option {
-    //         background-color: #222;
-    //     }
-    // }
+        option {
+            background-color: #222;
+        }
+    }
 </style>

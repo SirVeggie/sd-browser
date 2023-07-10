@@ -1,4 +1,5 @@
 import { syncMemory } from "$lib/tools/syncStorage";
+import type { SearchMode } from "$lib/types";
 import { writable } from "svelte/store";
 
 export const nsfwFilterDefault = 'NOT FOLDER nsfw AND NOT \\b(nude|sex|pussy|cum|fellatio|ahegao|lust|crotch|vagina|penis|blow ?job)\\b';
@@ -12,6 +13,7 @@ export const folderMode = writable(true);
 export const thumbMode = writable(true);
 export const compressedMode = writable(false);
 export const collapseMode = writable(false);
+export const matchingMode = writable<SearchMode>('regex');
 
 export function syncSearchWithLocalStorage() {
     syncMemory('nsfwFilter', nsfwFilter);
@@ -21,4 +23,5 @@ export function syncSearchWithLocalStorage() {
     syncMemory('webpMode', thumbMode);
     syncMemory('compressedMode', compressedMode);
     syncMemory('collapseMode', collapseMode);
+    syncMemory('matchingMode', matchingMode);
 }
