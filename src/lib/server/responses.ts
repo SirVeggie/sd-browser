@@ -20,14 +20,14 @@ export async function image(imageid: string | undefined, type?: string) {
 
     let buffer;
     try {
-        if (type === 'thumbnail') {
+        if (type === 'low') {
             const thumb = path.join(thumbnailPath, `${imageid}.webp`);
             buffer = await readFile(thumb).catch(async () => {
                 console.log(`Generating thumbnail for ${imageid}`);
                 await generateThumbnail(filepath, thumb);
                 return await readFile(thumb);
             });
-        } else if (type === 'compressed') {
+        } else if (type === 'medium') {
             const compressed = path.join(compressedPath, `${imageid}.webp`);
             buffer = await readFile(compressed).catch(async () => {
                 console.log(`Generating compressed image for ${imageid}`);

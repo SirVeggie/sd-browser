@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import { doGet, doPost, doServerGet, doServerPost, type FetchType } from './requests';
 import { page } from '$app/stores';
-import { isImageInfo, type ImageRequest, type ImageResponse, type ImageInfo } from '$lib/types';
+import { isImageInfo, type ImageRequest, type ImageResponse, type ImageInfo, type QualityMode } from '$lib/types';
 
 export async function searchImages(search: Partial<ImageRequest>, fetch?: FetchType): Promise<ImageResponse> {
     const def: ImageRequest = {
@@ -36,6 +36,17 @@ export async function searchImages(search: Partial<ImageRequest>, fetch?: FetchT
     }
 
     return res;
+}
+
+export function getQualityParam(mode: QualityMode) {
+    switch (mode) {
+        case 'original':
+            return 'quality=original';
+        case 'medium':
+            return 'quality=medium';
+        case 'low':
+            return 'quality=low';
+    }
 }
 
 export async function getImageInfo(imageid: string, fetch?: FetchType): Promise<ImageInfo | undefined> {

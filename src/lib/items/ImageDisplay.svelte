@@ -4,6 +4,7 @@
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
     import { compressedMode, thumbMode } from "$lib/stores/searchStore";
+    import { getQualityParam } from "$lib/tools/imageRequests";
 
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
@@ -11,13 +12,7 @@
 
     let hasLoaded = false;
 
-    $: src =
-        img.url +
-        ($thumbMode
-            ? "?type=thumbnail"
-            : $compressedMode
-            ? "?type=compressed"
-            : "");
+    $: src = `${img.url}?${getQualityParam($thumbMode)}`;
 </script>
 
 <div class={cx(onClick && "active")}>

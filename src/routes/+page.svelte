@@ -85,7 +85,7 @@
             info = res;
         });
 
-        if ($compressedMode) {
+        if ($compressedMode === 'medium') {
             const currentImages = $imageStore;
             const startIndex = Math.max(
                 0,
