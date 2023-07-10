@@ -60,10 +60,7 @@
             updateImages($searchFilter);
         }, 100);
 
-        updateTimer = setInterval(() => {
-            if (sorting === "random") return;
-            updateImages($searchFilter);
-        }, 5000);
+        startUpdate();
 
         setTimeout(() => {
             moreTriggerVisible = true;
@@ -147,16 +144,25 @@
     }
 
     function inputChange() {
-        clearTimeout(inputTimer);
-        inputTimer = setTimeout(() => {
-            applyInput();
-        }, 1000);
+        startUpdate();
+        applyInput();
     }
 
     function applyInput() {
-        if (!validRegex(input)) return;
-        currentAmount = increment;
-        updateImages(input);
+        clearTimeout(inputTimer);
+        inputTimer = setTimeout(() => {
+            currentAmount = increment;
+            updateImages(input);
+        }, 1000);
+    }
+
+    function startUpdate() {
+        clearInterval(updateTimer);
+        updateTimer = setInterval(() => {
+            if (sorting === "random") return;
+            console.log("Updating images");
+            updateImages($searchFilter);
+        }, 5000);
     }
 
     function selectChange() {

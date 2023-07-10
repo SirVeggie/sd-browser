@@ -8,7 +8,7 @@ import exifr from 'exifr';
 import { getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { XOR, selectRandom } from '$lib/tools/misc';
+import { XOR, selectRandom, validRegex } from '$lib/tools/misc';
 import _ from 'lodash';
 
 let imageList: ImageList = new Map();
@@ -157,6 +157,8 @@ export function getImage(imageid: string) {
 }
 
 export function searchImages(search: string, mode: SearchMode, collapse?: boolean) {
+    if (mode === 'regex' && !validRegex(search))
+        return [];
     const matcher = buildMatcher(search, mode);
     let list: ServerImage[] = [];
     for (const [, value] of imageList) {
