@@ -200,6 +200,7 @@
 
     function loadMore() {
         currentAmount += increment;
+        startTrigger(10);
     }
 
     function startSlideshow() {
