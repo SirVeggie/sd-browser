@@ -111,6 +111,8 @@ async function cleanTempImages() {
 
 let genCount = 0;
 const genLimit = 10;
+let indexTimer: any;
+
 function setupWatcher() {
     const options: WatcherOptions = {
         recursive: true,
@@ -166,11 +168,17 @@ function setupWatcher() {
     });
 
     watcher.on('addDir', () => {
-        indexFiles();
+        clearTimeout(indexTimer);
+        indexTimer = setTimeout(() => {
+            indexFiles();
+        }, 2000);
     });
 
     watcher.on('renameDir', () => {
-        indexFiles();
+        clearTimeout(indexTimer);
+        indexTimer = setTimeout(() => {
+            indexFiles();
+        }, 2000);
     });
 
     watcher.on('unlinkDir', dir => {
