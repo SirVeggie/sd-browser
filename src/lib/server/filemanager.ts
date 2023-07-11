@@ -109,6 +109,8 @@ async function cleanTempImages() {
     console.log(`Cleaned ${count} preview images`);
 }
 
+let genCount = 0;
+const genLimit = 10;
 function setupWatcher() {
     const options: WatcherOptions = {
         recursive: true,
@@ -125,8 +127,12 @@ function setupWatcher() {
     watcher.on('add', async file => {
         if (!file.endsWith('.png')) return;
         const hash = hashString(file);
-        await generateCompressedFromId(hash, file);
-        await generateThumbnailFromId(hash, file);
+        if (genCount < genLimit) {
+            genCount++;
+            await generateCompressedFromId(hash, file);
+            await generateThumbnailFromId(hash, file);
+            genCount--;
+        }
         console.log(`Added ${file}`);
         imageList.set(hash, {
             id: hash,
