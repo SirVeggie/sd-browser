@@ -150,6 +150,7 @@
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
             startTrigger(500);
+            document.body.scrollIntoView();
             currentAmount = increment;
             updateImages(input);
         }, 1000);
@@ -172,7 +173,15 @@
         }, delay);
     }
 
-    function selectChange() {
+    function selectChange(reset?: boolean) {
+        if (reset) {
+            document.body.scrollIntoView();
+            currentAmount = increment;
+        } else {
+            currentAmount = Math.min(currentAmount, 100);
+        }
+        
+        startTrigger(1000);
         updateImages($searchFilter);
     }
 
@@ -235,7 +244,7 @@
         <span>Images: {paginated.length} / {$imageAmountStore}</span>
         <label for="sorting">
             Sorting:
-            <select id="sorting" bind:value={sorting} on:change={selectChange}>
+            <select id="sorting" bind:value={sorting} on:change={() => selectChange(true)}>
                 {#each sortingMethods as method}
                     <option value={method}>{method}</option>
                 {/each}
@@ -248,7 +257,7 @@
                 type="checkbox"
                 id="collapse"
                 bind:checked={$collapseMode}
-                on:change={selectChange}
+                on:change={() => selectChange(true)}
             />
         </label>
 
@@ -258,7 +267,7 @@
                 type="checkbox"
                 id="nsfw"
                 bind:checked={$nsfwMode}
-                on:change={selectChange}
+                on:change={() => selectChange(false)}
             />
         </label>
 
@@ -268,7 +277,7 @@
                 type="checkbox"
                 id="folderFilter"
                 bind:checked={$folderMode}
-                on:change={selectChange}
+                on:change={() => selectChange(false)}
             />
         </label>
     </div>
