@@ -13,7 +13,7 @@
         nsfwFilter,
         thumbMode,
     } from "$lib/stores/searchStore";
-    import { qualityModes, searchModes } from "$lib/types";
+    import { qualityModes, searchKeywords, searchModes } from "$lib/types";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
@@ -53,10 +53,10 @@
     <div class="buttons">
         <Link to="/">Back</Link>
         <Button on:click={reset}>Reset</Button>
-        <Button
+        <!-- <Button
             class={cx(!$flyoutStore.enabled && "disabled")}
             on:click={toggleFlyout}>Flyout</Button
-        >
+        > -->
     </div>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->
@@ -64,14 +64,32 @@
         Set flyout address (webui url)
         <Input bind:value={address} on:input={onInput} />
     </label>
+    
+    <label class="checkbox">
+        Flyout enabled:
+        <input type="checkbox" bind:checked={$flyoutStore.enabled} />
+    </label>
+
+    <div class="gray">
+        Search keywords:<br /><span
+            >{searchKeywords.join(", ").replaceAll("|", " | ")}</span
+        >
+    </div>
+
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Folder filter
+        <span class="gray">
+            (Hides images in img2img, xxx-grids and extra folders by default)
+        </span>
         <Input bind:value={$folderFilter} />
     </label>
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         NSFW filter
+        <span class="gray">
+            (Added to the search when NSFW toggle is disabled)
+        </span>
         <Input bind:value={$nsfwFilter} />
     </label>
 
@@ -83,7 +101,18 @@
             {/each}
         </select>
     </label>
-    
+
+    <span class="gray">
+        Image quality settings:
+        <br />
+        When using locally, recommended to use original for both
+        <br />
+        When using remotely, recommended settings medium and low for faster loading
+        <br />
+        Lower quality settings generate thumbnail images on the fly but on local
+        is a waste of CPU cycles
+    </span>
+
     <label for="fullimage">
         Full size quality:
         <select id="fullimage" bind:value={$compressedMode}>
@@ -92,7 +121,7 @@
             {/each}
         </select>
     </label>
-    
+
     <label for="thumbnail">
         Thumbnail quality:
         <select id="thumbnail" bind:value={$thumbMode}>
@@ -116,50 +145,55 @@
         filter: grayscale(1);
     }
 
+    .gray {
+        font-size: 0.8em;
+        color: #aaa;
+    }
+
     label {
         cursor: pointer;
         user-select: none;
 
-        // &.checkbox {
-        //     display: flex;
-        //     align-items: center;
-        //     gap: 0.5em;
-        // }
+        &.checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
     }
 
-    // input[type="checkbox"] {
-    //     appearance: none;
-    //     background-color: #333;
-    //     border-radius: 0.2em;
-    //     font-size: 1em;
-    //     width: 13px;
-    //     height: 13px;
-    //     margin: 0;
-    //     padding: 0;
-    //     border: none;
-    //     cursor: pointer;
-    //     position: relative;
-    //     outline: 1px solid #aaa3;
+    input[type="checkbox"] {
+        appearance: none;
+        background-color: #333;
+        border-radius: 0.2em;
+        font-size: 1em;
+        width: 13px;
+        height: 13px;
+        margin: 0;
+        padding: 0;
+        border: none;
+        cursor: pointer;
+        position: relative;
+        outline: 1px solid #aaa3;
 
-    //     &::before {
-    //         content: "";
-    //         position: absolute;
-    //         background-color: rgb(63, 187, 236);
-    //         top: 2px;
-    //         left: 2px;
-    //         right: 2px;
-    //         bottom: 2px;
-    //         transform: scale(0);
-    //         opacity: 0;
-    //         transition: 120ms transform ease, 120ms opacity ease;
-    //         border-radius: 0.15em;
-    //     }
+        &::before {
+            content: "";
+            position: absolute;
+            background-color: rgb(63, 187, 236);
+            top: 2px;
+            left: 2px;
+            right: 2px;
+            bottom: 2px;
+            transform: scale(0);
+            opacity: 0;
+            transition: 120ms transform ease, 120ms opacity ease;
+            border-radius: 0.15em;
+        }
 
-    //     &:checked::before {
-    //         transform: scale(1);
-    //         opacity: 1;
-    //     }
-    // }
+        &:checked::before {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
 
     select {
         margin: 0;

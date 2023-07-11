@@ -244,7 +244,7 @@ function buildMatcher(search: string, matching: SearchMode): (image: ServerImage
             const text = getTextByType(image, x.type);
 
             if (matching === 'contains') {
-                return !XOR(x.not, text.includes(x.raw));
+                return !XOR(x.not, text.toLowerCase().includes(x.raw.toLowerCase()));
             } else if (matching === 'words') {
                 const words = x.raw.split(' ');
                 return !XOR(x.not, words.every(word => new RegExp(`\\b${word}\\b`, 'i').test(text)));

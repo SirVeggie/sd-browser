@@ -9,6 +9,7 @@
 		"stop:pm2": "pm2 delete ecosystem.config.cjs",
 		"dev": "vite dev",
 		"ddev": "npm run dev -- --host",
+		"setup": "npm i && npm run build",
 		"prod": "npm i && npm run build && npm start",
 		"deploy": "npm run fetch && npm run prod",
 		"fetch": "git fetch --all && git reset --hard origin/master",
