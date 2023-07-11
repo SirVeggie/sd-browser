@@ -378,6 +378,7 @@
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         grid-gap: 1em;
         padding: calc(var(--main-padding) / 2) var(--main-padding);
+        min-height: 100vh;
     }
 
     .slideshow {
