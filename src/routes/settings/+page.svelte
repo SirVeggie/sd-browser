@@ -105,12 +105,13 @@
     <span class="gray">
         Image quality settings:
         <br />
-        When using locally, recommended to use original for both
+        When using locally, recommended to use original and low
         <br />
-        When using remotely, recommended settings medium and low for faster loading
+        When using remotely, recommended to use medium and low for faster loading
         <br />
-        Lower quality settings generate thumbnail images on the fly but on local
-        is a waste of CPU cycles
+        Setting thumbnails to low allows for smoother scroller even locally
+        <br />
+        * medium and low are slightly slower when seeing an image for the first time
     </span>
 
     <label for="fullimage">
