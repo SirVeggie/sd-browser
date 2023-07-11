@@ -5,7 +5,10 @@
    import { cubicOut } from "svelte/easing";
    import Button from "./Button.svelte";
    import { notify } from "$lib/components/Notifier.svelte";
-   import { getPositivePrompt } from "$lib/tools/metadataInterpreter";
+   import {
+      getNegativePrompt,
+      getPositivePrompt,
+   } from "$lib/tools/metadataInterpreter";
    import { compressedMode } from "$lib/stores/searchStore";
    import { getQualityParam } from "$lib/tools/imageRequests";
 
@@ -16,6 +19,7 @@
 
    let promptElement: HTMLDivElement;
    let fallbackElement: HTMLDivElement;
+   let fallbackElementNeg: HTMLDivElement;
 
    $: imageUrl = imageId
       ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
@@ -23,6 +27,7 @@
    $: basicInfo = !data ? "" : formatMetadata(data);
    $: promptInfo = !data ? "" : data.prompt ?? "";
    $: positivePrompt = !data ? "" : getPositivePrompt(data.prompt);
+   $: negativePrompt = !data ? "" : getNegativePrompt(data.prompt);
 
    function formatMetadata(d: ImageInfo): string {
       const model = d.prompt?.match(/Model: (.*?),|$/)?.[1] ?? "Unknown";
@@ -85,6 +90,26 @@
          });
    }
 
+   function copyNegative() {
+      if (!imageId) return;
+      if (!data?.prompt) return notify("No negative to copy");
+      if (!navigator?.clipboard?.writeText) {
+         selectPrompt(fallbackElementNeg);
+         document.execCommand("copy");
+         deselect();
+      }
+
+      const negative = getNegativePrompt(data.prompt);
+      navigator.clipboard
+         .writeText(negative)
+         .then(() => {
+            notify("Copied negative prompt");
+         })
+         .catch(() => {
+            notify("Failed to copy negative prompt");
+         });
+   }
+
    function selectPrompt(element: HTMLDivElement) {
       if (!element) return;
       const range = document.createRange();
@@ -121,8 +146,11 @@
                      <div>
                         <p>{basicInfo}</p>
                         <div class="buttons">
-                           <Button on:click={copyPrompt}>Copy</Button>
-                           <Button on:click={copyPositive}>+</Button>
+                           <Button on:click={copyPrompt}>Copy all</Button>
+                           <Button on:click={copyPositive}>Copy positive</Button
+                           >
+                           <Button on:click={copyNegative}>Copy negative</Button
+                           >
                         </div>
                      </div>
                      <p bind:this={promptElement}>
@@ -135,6 +163,7 @@
       </div>
    </div>
    <div class="fallback" bind:this={fallbackElement}>{positivePrompt}</div>
+   <div class="fallback" bind:this={fallbackElementNeg}>{negativePrompt}</div>
 {/if}
 
 <style lang="scss">
