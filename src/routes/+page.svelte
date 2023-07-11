@@ -35,7 +35,7 @@
         matchingMode,
     } from "$lib/stores/searchStore";
 
-    const increment = 10;
+    const increment = 25;
     let currentAmount = increment;
     let id = "";
     let input = $searchFilter;
@@ -308,6 +308,8 @@
     </div>
 {/if}
 
+<div class="spacer2" />
+
 <ImageFull
     enabled={!!id || !!live}
     imageId={live ? latestId : id}
@@ -378,6 +380,10 @@
 
     .spacer {
         height: 100px;
+    }
+    
+    .spacer2 {
+        height: 60vh;
     }
 
     .loader {
