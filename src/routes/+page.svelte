@@ -13,7 +13,7 @@
         getImageInfo,
         searchImages,
     } from "$lib/tools/imageRequests";
-    import { mapImagesToClient, validRegex } from "$lib/tools/misc";
+    import { mapImagesToClient } from "$lib/tools/misc";
     import {
         sortingMethods,
         type ClientImage,
@@ -210,8 +210,11 @@
     }
 
     function loadMore() {
-        currentAmount = Math.min(currentAmount + increment, $imageStore.length);
-        startTrigger(250);
+        const max = $imageStore.length;
+        currentAmount = Math.min(currentAmount + increment, max);
+        if (currentAmount < max) {
+            startTrigger(250);
+        }
     }
 
     function startSlideshow() {
@@ -244,6 +247,7 @@
 <div class="topbar">
     <div class="quickbar">
         <span>Images: {paginated.length} / {$imageAmountStore}</span>
+        
         <label for="sorting">
             Sorting:
             <select
