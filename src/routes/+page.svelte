@@ -58,7 +58,7 @@
 
     onMount(() => {
         document.body.scrollIntoView();
-        
+
         setTimeout(() => {
             updateImages($searchFilter);
         }, 100);
@@ -182,7 +182,7 @@
         } else {
             currentAmount = Math.min(currentAmount, 100);
         }
-        
+
         startTrigger(1000);
         updateImages($searchFilter);
     }
@@ -210,7 +210,7 @@
     }
 
     function loadMore() {
-        currentAmount += increment;
+        currentAmount = Math.min(currentAmount + increment, $imageStore.length);
         startTrigger(250);
     }
 
@@ -246,7 +246,11 @@
         <span>Images: {paginated.length} / {$imageAmountStore}</span>
         <label for="sorting">
             Sorting:
-            <select id="sorting" bind:value={sorting} on:change={() => selectChange(true)}>
+            <select
+                id="sorting"
+                bind:value={sorting}
+                on:change={() => selectChange(true)}
+            >
                 {#each sortingMethods as method}
                     <option value={method}>{method}</option>
                 {/each}
@@ -393,7 +397,7 @@
     .spacer {
         height: 100px;
     }
-    
+
     .spacer2 {
         height: 60vh;
     }
