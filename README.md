@@ -90,7 +90,8 @@ You can change the url of the webui in the settings if necessary.
 Cycles through images in order every 4 seconds.
 
 ## Hotkeys
-You can use the arrow keys to cycle through images while in fullscreen.
+You can use the `arrow keys` to cycle through images while in fullscreen.  
+You can use `Space` to start and stop the slideshow.
 
 ## Mobile
 
