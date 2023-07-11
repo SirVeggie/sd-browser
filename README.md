@@ -25,6 +25,9 @@ Subfolders under `IMG_FOLDER` are scanned automatically, but setting multiple se
 ### ~ I'm open to feedback! ~
 
 # Usage
+## Collapse mode
+Hides duplicate images with the same prompt. Browsing old prompts is much easier with this mode. Combine with `random` sorting mode to maximize inspiration from old prompts.
+
 ## Searching
 
 Default search settings use Regex matching and keywords. All searching is case insensitive.
