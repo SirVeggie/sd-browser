@@ -57,6 +57,8 @@
     $: latestId = paginated[0]?.id;
 
     onMount(() => {
+        document.body.scrollIntoView();
+        
         setTimeout(() => {
             updateImages($searchFilter);
         }, 100);
