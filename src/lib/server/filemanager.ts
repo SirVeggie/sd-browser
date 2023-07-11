@@ -119,10 +119,6 @@ function setupWatcher() {
 
     if (watcher) watcher.close();
     watcher = new Watcher(IMG_FOLDER, options);
-    // watcher.on('all', async (event, file) => {
-    //     if (!event.includes('Dir') && !file.endsWith('.png')) return;
-    //     console.log(`${event}: ${file}`);
-    // });
 
     watcher.on('add', async file => {
         if (!file.endsWith('.png')) return;
@@ -219,13 +215,13 @@ function simplifyPrompt(prompt: string | undefined) {
         .replace(/(, )?([^,]*)version: [^,]*/ig, '');
 }
 
-const keywordRegex = `((${searchKeywords.join('|')})\\W?)*`;
+const keywordRegex = `((${searchKeywords.join('|')}) )*`;
 const removeRegex = new RegExp(`^${keywordRegex}`);
-const notRegex = new RegExp(`^${keywordRegex}NOT ?`);
-const allRegex = new RegExp(`^${keywordRegex}ALL ?`);
-const negativeRegex = new RegExp(`^${keywordRegex}(NEGATIVE|NEG) ?`);
-const folderRegex = new RegExp(`^${keywordRegex}(FOLDER|FD) ?`);
-const paramRegex = new RegExp(`^${keywordRegex}(PARAMS|PR) ?`);
+const notRegex = new RegExp(`^${keywordRegex}NOT `);
+const allRegex = new RegExp(`^${keywordRegex}ALL `);
+const negativeRegex = new RegExp(`^${keywordRegex}(NEGATIVE|NEG) `);
+const folderRegex = new RegExp(`^${keywordRegex}(FOLDER|FD) `);
+const paramRegex = new RegExp(`^${keywordRegex}(PARAMS|PR) `);
 function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
     const parts = search.split(' AND ');
     const regexes = parts.map(x => {
