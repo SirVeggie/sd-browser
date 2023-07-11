@@ -12,11 +12,17 @@ A standalone image browser (not a webui extension) made with Node and SvelteKit.
 6) Run command `npm start` to start the application
 7) Open `localhost:[PORT]` in your browser (default `PORT` is `4200`)
 
+When starting for the first time, the images will be indexed. Depending on the amount of images, this can take seconds (5,000 images), or couple minutes (200,000 images). After the indexing, following starts will only take a couple seconds.
+
 ## Notes
+
+The program only recognizes PNG images
 
 Authentication hasn't been fully implemented. Keep `PASS` env variable as the default value.
 
-Subfolders under `IMG_FOLDER` are supported, but setting multiple source folders is currently not supported.
+Subfolders under `IMG_FOLDER` are scanned automatically, but setting multiple separate source folders is currently not supported.
+
+### ~ I'm open to feedback! ~
 
 # Usage
 ## Searching
