@@ -2,6 +2,9 @@
 
 A standalone image browser (not a webui extension) made with Node and SvelteKit.
 
+![example1](https://i.imgur.com/hcVQDZx.png)
+![example2](https://i.imgur.com/963zv3L.png)
+
 ## Installation
 
 1) Install latest version of Node.js
@@ -42,10 +45,10 @@ The current version supports 3 matching modes:
 ### Examples (Regex)
 Search `red` matches `scarred` and `a red cap`  
 Search `\bred\b` matches `a red cap` and `(red)` but not `scarred` (\b is a word boundary character)  
-Search `PARAMS steps: (1|2)` matches images that used steps in the range of `1, 2, 10-29, 100-299`.
+Search `happy (girl|boy)` matches `a happy girl` and `a happy boy`.
 
 ### Examples (Words)
-Search `cute girl` matches `cute, girl` and `girl, ..., cute`, but does not match `cuteness`
+Search `cute girl` matches `cute, girl` and `girl, ..., cute`, but does not match `cuteness`  
 Search `red` matches `a red cap` and `(red) cap` but not `scarred`
 
 ### Examples (Contains)
@@ -74,10 +77,20 @@ Example: `FOLDER txt2img` or `landscape AND NOT FD img2img|grid`
 `ALL`: Condition matches whole prompt (and folder name) instead of only the positive  
 Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part of the prompt)
 
+## Live
+Opens a fullscreen image to always show the latest image. (The browser polls for new images every 5 seconds)  
+Works as a bigger preview view when used alongside the webui.
+
 ## Flyout sidebar
 
 You can use the flyout to embed the stable diffusion webui, so you can use it seamlessly without switching tabs/applications on mobile.
 You can change the url of the webui in the settings if necessary.
+
+## Slideshow
+Cycles through images in order every 4 seconds.
+
+## Hotkeys
+You can use the arrow keys to cycle through images while in fullscreen.
 
 ## Mobile
 
