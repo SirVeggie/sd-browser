@@ -14,6 +14,7 @@
     } from "$lib/stores/searchStore";
     import { qualityModes, searchKeywords, searchModes } from "$lib/types";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
+    import { seamlessStyle } from "$lib/stores/styleStore";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
@@ -125,6 +126,15 @@
     </label>
 
     <span class="gray">
+        Visual style settings
+    </span>
+
+    <label class="checkbox">
+        Seamless grid:
+        <input type="checkbox" bind:checked={$seamlessStyle} />
+    </label>
+
+    <span class="gray">
         PWA fullscreen:
         <br />
         Enable this setting before adding to homescreen to disable mobile UI elements
@@ -142,7 +152,7 @@
         padding: var(--main-padding);
         display: flex;
         flex-direction: column;
-        gap: 2em;
+        gap: 1.5em;
     }
 
     .buttons :global(.disabled) {

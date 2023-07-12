@@ -5,6 +5,7 @@
     import { SpinLine } from "svelte-loading-spinners";
     import { compressedMode, thumbMode } from "$lib/stores/searchStore";
     import { getQualityParam } from "$lib/tools/imageRequests";
+    import { seamlessStyle } from "$lib/stores/styleStore";
 
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
@@ -13,9 +14,11 @@
     let hasLoaded = false;
 
     $: src = `${img.url}?${getQualityParam($thumbMode)}`;
+    $: active = !!onClick;
+    $: seamless = $seamlessStyle;
 </script>
 
-<div class={cx(onClick && "active")}>
+<div class:active class:seamless>
     <Clickable up={onClick}>
         {#if !hasLoaded}
             <div class="loading">
@@ -58,11 +61,14 @@
 
         &.active:hover,
         &.active:has(:focus-visible) {
-            transform: translateY(-0.5em);
             outline: 1px solid #fffa;
+            
+            &:not(.seamless) {
+                transform: translateY(-0.5em);
+            }
 
             & img {
-                transform: scale(1.1);
+                transform: scale(1.1) translateY(-0.5em);
             }
         }
 
@@ -70,7 +76,7 @@
             cursor: pointer;
 
             &:hover {
-                transform: scale(1.1);
+                transform: scale(1.1) translateY(-0.5em);
             }
         }
     }

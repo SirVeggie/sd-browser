@@ -32,6 +32,7 @@
         compressedMode,
         matchingMode,
     } from "$lib/stores/searchStore";
+    import { seamlessStyle } from "$lib/stores/styleStore";
 
     const increment = 25;
     let currentAmount = increment;
@@ -53,6 +54,7 @@
     $: leftArrow = prevIndex >= 0;
     $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
     $: latestId = paginated[0]?.id;
+    $: seamless = $seamlessStyle
 
     onMount(() => {
         document.body.scrollIntoView();
@@ -375,7 +377,7 @@
     </div>
 </div>
 
-<div class="grid">
+<div class="grid" class:seamless>
     {#each paginated as img (img.id)}
         <div id={`img_${img.id}`}>
             <ImageDisplay {img} onClick={(e) => openImage(img, e)} />
@@ -431,6 +433,11 @@
         padding-inline: calc(var(--main-padding) / 1);
         padding-top: calc(var(--main-padding) / 4);
         box-shadow: 0 35px 10px -32px rgba(0, 0, 0, 0.5);
+        
+        @media (max-width: 500px) {
+            padding-inline: calc(var(--main-padding) / 2);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+        }
     }
 
     .quickbar {
@@ -459,9 +466,23 @@
     .grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        grid-gap: 1em;
+        gap: 0.8em;
         padding: calc(var(--main-padding) / 2) var(--main-padding);
         min-height: 100vh;
+        
+        &.seamless {
+            gap: 2px;
+        }
+        
+        @media (min-width: 1200px) {
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        }
+        
+        @media (max-width: 500px) {
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 0.2em;
+            padding: 5px;
+        }
     }
 
     .slideshow {

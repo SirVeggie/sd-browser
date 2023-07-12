@@ -7,11 +7,13 @@
     import { onMount } from "svelte";
     import { fullscreenState, syncFullscreenWithLocalStorage } from "$lib/stores/fullscreenStore";
     import { syncSearchWithLocalStorage } from "$lib/stores/searchStore";
+    import { syncStyleWithLocalStorage } from "$lib/stores/styleStore";
 
     onMount(() => {
         syncSearchWithLocalStorage();
         syncFlyoutWithLocalStorage();
         syncFullscreenWithLocalStorage();
+        syncStyleWithLocalStorage();
     });
 </script>
 
