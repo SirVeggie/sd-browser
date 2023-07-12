@@ -276,6 +276,7 @@
     }
 
     function loadMore() {
+        startUpdate();
         const max = $imageStore.length;
 
         if (currentAmount < max - increment * 4) {
