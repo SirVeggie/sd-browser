@@ -62,9 +62,11 @@
         &.active:hover,
         &.active:has(:focus-visible) {
             outline: 1px solid #fffa;
-            
+
             &:not(.seamless) {
-                transform: translateY(-0.5em);
+                @media (min-width: 501px) {
+                    transform: translateY(-0.5em);
+                }
             }
 
             & img {
