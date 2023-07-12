@@ -4,7 +4,6 @@
     import Link from "../../lib/items/Link.svelte";
     import { flyoutStore } from "$lib/stores/flyoutStore";
     import Button from "$lib/items/Button.svelte";
-    import { cx } from "$lib/tools/cx";
     import { notify } from "$lib/components/Notifier.svelte";
     import {
         compressedMode,
@@ -14,6 +13,7 @@
         thumbMode,
     } from "$lib/stores/searchStore";
     import { qualityModes, searchKeywords, searchModes } from "$lib/types";
+    import { fullscreenState } from "$lib/stores/fullscreenStore";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
@@ -37,10 +37,6 @@
         }, 2000);
     }
 
-    function toggleFlyout() {
-        flyoutStore.update((x) => ({ ...x, enabled: !x.enabled }));
-    }
-
     function reset() {
         notify(`LocalStorage was cleared`);
         localStorage.clear();
@@ -53,10 +49,6 @@
     <div class="buttons">
         <Link to="/">Back</Link>
         <Button on:click={reset}>Reset</Button>
-        <!-- <Button
-            class={cx(!$flyoutStore.enabled && "disabled")}
-            on:click={toggleFlyout}>Flyout</Button
-        > -->
     </div>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->
@@ -64,7 +56,7 @@
         Set flyout address (webui url)
         <Input bind:value={address} on:input={onInput} />
     </label>
-    
+
     <label class="checkbox">
         Flyout enabled:
         <input type="checkbox" bind:checked={$flyoutStore.enabled} />
@@ -109,7 +101,7 @@
         <br />
         When using remotely, recommended to use medium and low for faster loading
         <br />
-        Setting thumbnails to low allows for smoother scroller even locally
+        Setting thumbnails to low allows for smoother scrolling even locally
         <br />
         * medium and low are slightly slower when seeing an image for the first time
     </span>
@@ -130,6 +122,18 @@
                 <option value={quality}>{quality}</option>
             {/each}
         </select>
+    </label>
+
+    <span class="gray">
+        PWA fullscreen:
+        <br />
+        Enable this setting before adding to homescreen to disable mobile UI elements
+        (status bar, taskbar on tablets)
+    </span>
+
+    <label class="checkbox">
+        PWA fullscreen:
+        <input type="checkbox" bind:checked={$fullscreenState} />
     </label>
 </div>
 
