@@ -385,17 +385,17 @@
 
 {#if moreTriggerVisible}
     <div class="loader">
-        <Intersecter onVisible={loadMore}>
-            {#if paginated.length === $imageAmountStore}
-                <p>You've reached the end.</p>
-            {:else if triggerOverride}
-                <p>loading...</p>
-            {:else}
+        {#if triggerOverride}
+            <div><p>loading...</p></div>
+        {:else if paginated.length === $imageAmountStore}
+            <div><p>You've reached the end.</p></div>
+        {:else}
+            <Intersecter onVisible={loadMore}>
                 <button on:click={loadMore}>
                     (click here to load more images)
                 </button>
-            {/if}
-        </Intersecter>
+            </Intersecter>
+        {/if}
         <div class="spacer" />
     </div>
 {/if}
