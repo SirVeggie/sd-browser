@@ -1,9 +1,9 @@
 import { invalidAuth } from '$lib/server/auth.js';
 import { searchImages, sortImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
-import { isImageRequest, type ImageResponse } from '$lib/types.js';
+import { isImageRequest, type ImageResponse, type ServerImage } from '$lib/types.js';
 
-const imageLimit = 1000;
+const imageLimit = 100;
 
 export async function POST(e) {
     const err = invalidAuth(e);
@@ -16,16 +16,25 @@ export async function POST(e) {
     let images = searchImages(query.search, query.filters, query.matching, query.collapse);
     images = sortImages(images, query.sorting);
 
-    const firstIndex = !query.latestId ? 0 : images.findIndex(i => i.id === query.latestId);
-    const lastIndex = !query.oldestId ? 0 : images.findIndex(i => i.id === query.oldestId);
+    const firstIndex = !query.latestId ? undefined : images.findIndex(i => i.id === query.latestId);
+    const lastIndex = !query.oldestId ? undefined : images.findIndex(i => i.id === query.oldestId);
 
-    const result = images.slice(0, firstIndex);
-    if (lastIndex) {
-        result.push(...images.slice(lastIndex, lastIndex + (imageLimit - result.length)));
+    if (firstIndex === -1 || lastIndex === -1) {
+        return error('Invalid request', 400);
+    }
+
+    let result: ServerImage[] = [];
+    if (firstIndex != undefined || lastIndex != undefined) {
+        result = images.slice(0, firstIndex ?? 0);
+        if (lastIndex) {
+            result.push(...images.slice(lastIndex + 1, lastIndex + 1 + (imageLimit - result.length)));
+        }
+    } else {
+        result = images.slice(0, imageLimit);
     }
 
     return success({
-        imageIds: images.map(x => x.id),
+        imageIds: result.map(x => x.id),
         amount: images.length,
     } satisfies ImageResponse);
 }

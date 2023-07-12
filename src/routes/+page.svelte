@@ -19,8 +19,6 @@
         type ClientImage,
         type ImageInfo,
         type SortingMethod,
-        type SearchMode,
-        searchModes,
     } from "$lib/types";
     import { onMount } from "svelte";
     import { fade } from "svelte/transition";
@@ -38,7 +36,6 @@
     const increment = 25;
     let currentAmount = increment;
     let id = "";
-    let input = $searchFilter;
     let inputElement: HTMLInputElement;
     let inputTimer: any;
     let info: ImageInfo | undefined = undefined;
@@ -47,6 +44,7 @@
     let live = false;
     let sorting: SortingMethod = "date";
     let moreTriggerVisible = false;
+    let triggerOverride = false;
     let triggerTimer: any;
 
     $: paginated = $imageStore.slice(0, currentAmount);
@@ -60,7 +58,7 @@
         document.body.scrollIntoView();
 
         setTimeout(() => {
-            updateImages($searchFilter);
+            fetchImages();
         }, 100);
 
         startUpdate();
@@ -154,7 +152,7 @@
             startTrigger(500);
             document.body.scrollIntoView();
             currentAmount = increment;
-            updateImages(input);
+            fetchImages();
         }, 1000);
     }
 
@@ -162,8 +160,9 @@
         clearInterval(updateTimer);
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
+            if ($searchFilter) return;
             console.log("Updating images");
-            updateImages($searchFilter);
+            updateImages();
         }, 5000);
     }
 
@@ -184,18 +183,25 @@
         }
 
         startTrigger(1000);
-        updateImages($searchFilter);
+        fetchImages();
     }
 
-    function updateImages(search: string) {
-        searchFilter.set(search);
+    function buildSearch() {
         let filters = [];
         if (!$nsfwMode && $nsfwFilter) filters.push($nsfwFilter);
         if ($folderMode && $folderFilter) filters.push($folderFilter);
+        return {
+            input: $searchFilter,
+            filters,
+        };
+    }
+
+    function fetchImages() {
+        const search = buildSearch();
 
         searchImages({
-            search,
-            filters,
+            search: search.input,
+            filters: search.filters,
             sorting,
             matching: $matchingMode,
             collapse: $collapseMode,
@@ -209,17 +215,81 @@
             });
     }
 
+    function fetchNext() {
+        const search = buildSearch();
+        if ($imageStore.length === 0) return;
+        const lastImage = $imageStore[$imageStore.length - 1];
+
+        triggerOverride = true;
+
+        searchImages({
+            search: search.input,
+            filters: search.filters,
+            sorting,
+            matching: $matchingMode,
+            collapse: $collapseMode,
+            oldestId: lastImage.id,
+        })
+            .then((images) => {
+                if (images.amount === 0) return;
+                if ($imageStore.some((x) => x.id === images.imageIds[0])) {
+                    console.log("Duplicate image found");
+                    return;
+                }
+
+                const mapped = mapImagesToClient(images.imageIds);
+                imageStore.update((x) => [...x, ...mapped]);
+                imageAmountStore.set(images.amount);
+            })
+            .catch((err) => {
+                console.error(err);
+            })
+            .finally(() => {
+                triggerOverride = false;
+                // loadMore();
+            });
+    }
+
+    function updateImages() {
+        if ($imageStore.length === 0) return;
+        const firstImage = $imageStore[0];
+
+        const search = buildSearch();
+
+        searchImages({
+            search: search.input,
+            filters: search.filters,
+            sorting,
+            matching: $matchingMode,
+            collapse: $collapseMode,
+            latestId: firstImage.id,
+        })
+            .then((res) => {
+                if (res.amount === 0) return;
+                const mapped = mapImagesToClient(res.imageIds);
+                imageStore.update((res) => [...mapped, ...res]);
+                imageAmountStore.set(res.amount);
+            })
+            .catch((err) => {
+                console.error(err);
+            });
+    }
+
     function loadMore() {
         const max = $imageStore.length;
-        currentAmount = Math.min(currentAmount + increment, max);
-        if (currentAmount < max) {
+
+        if (currentAmount < max - increment * 4) {
+            startTrigger(250);
+        } else if (currentAmount < $imageAmountStore) {
+            fetchNext();
             startTrigger(250);
         }
+
+        currentAmount = Math.min(max, currentAmount + increment);
     }
 
     function startSlideshow() {
         slideshowTimer = setInterval(() => {
-            console.log("next image");
             goRight();
         }, 4000);
         notify("Slideshow started");
@@ -247,7 +317,7 @@
 <div class="topbar">
     <div class="quickbar">
         <span>Images: {paginated.length} / {$imageAmountStore}</span>
-        
+
         <label for="sorting">
             Sorting:
             <select
@@ -295,7 +365,7 @@
     <div class="nav">
         <Input
             bind:element={inputElement}
-            bind:value={input}
+            bind:value={$searchFilter}
             placeholder="Search"
             on:input={inputChange}
         />
@@ -315,8 +385,10 @@
 {#if moreTriggerVisible}
     <div class="loader">
         <Intersecter onVisible={loadMore}>
-            {#if paginated.length === $imageStore.length}
+            {#if paginated.length === $imageAmountStore}
                 <p>You've reached the end.</p>
+            {:else if triggerOverride}
+                <p>loading...</p>
             {:else}
                 <button on:click={loadMore}>
                     (click here to load more images)
