@@ -30,8 +30,8 @@
    $: negativePrompt = !data ? "" : getNegativePrompt(data.prompt);
 
    function formatMetadata(d: ImageInfo): string {
-      const model = d.prompt?.match(/Model: (.*?),|$/)?.[1] ?? "Unknown";
-      const sampler = d.prompt?.match(/Sampler: (.*?),|$/)?.[1] ?? "Unknown";
+      const model = d.prompt?.match(/Model: (.*?)(,|$)/)?.[1] ?? "Unknown";
+      const sampler = d.prompt?.match(/Sampler: (.*?)(,|$)/)?.[1] ?? "Unknown";
       let info = "";
       if (model) info += `Model: ${model}`;
       if (sampler) info += `\nSampler: ${sampler}`;
