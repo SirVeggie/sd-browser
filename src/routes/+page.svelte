@@ -54,7 +54,7 @@
     $: leftArrow = prevIndex >= 0;
     $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
     $: latestId = paginated[0]?.id;
-    $: seamless = $seamlessStyle
+    $: seamless = $seamlessStyle;
 
     onMount(() => {
         document.body.scrollIntoView();
@@ -159,13 +159,14 @@
     }
 
     function startUpdate() {
+        // return;
         clearInterval(updateTimer);
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
             if ($searchFilter) return;
             console.log("Updating images");
             updateImages();
-        }, 5000);
+        }, 1000);
     }
 
     function startTrigger(delay: number) {
@@ -270,7 +271,7 @@
                 if (res.amount === 0) return;
                 const mapped = mapImagesToClient(res.imageIds);
                 imageStore.update((res) => [...mapped, ...res]);
-                imageAmountStore.set(res.amount);
+                imageAmountStore.set($imageAmountStore + res.imageIds.length);
             })
             .catch((err) => {
                 console.error(err);
@@ -433,7 +434,7 @@
         padding-inline: calc(var(--main-padding) / 1);
         padding-top: calc(var(--main-padding) / 4);
         box-shadow: 0 35px 10px -32px rgba(0, 0, 0, 0.5);
-        
+
         @media (max-width: 500px) {
             padding-inline: calc(var(--main-padding) / 2);
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
@@ -469,15 +470,15 @@
         gap: 0.8em;
         padding: calc(var(--main-padding) / 2) var(--main-padding);
         min-height: 100vh;
-        
+
         &.seamless {
             gap: 2px;
         }
-        
+
         @media (min-width: 1200px) {
             grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
         }
-        
+
         @media (max-width: 500px) {
             grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
             gap: 0.2em;

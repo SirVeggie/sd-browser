@@ -12,7 +12,13 @@ import { XOR, selectRandom, validRegex } from '$lib/tools/misc';
 import _ from 'lodash';
 import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 
+type TimedImage = {
+    id: string;
+    time: number;
+};
+
 let imageList: ImageList = new Map();
+const freshList: TimedImage[] = [];
 export const datapath = './localData';
 export const thumbnailPath = path.join(datapath, 'thumbnails');
 export const compressedPath = path.join(datapath, 'compressed');
@@ -140,6 +146,14 @@ function setupWatcher() {
             createdDate: 0,
             ...await readMetadata(file),
         });
+
+        const amount = freshList.unshift({
+            id: hash,
+            time: Date.now(),
+        });
+
+        if (amount > 100) freshList.pop();
+
         // trigger frontend update?
     });
 
@@ -197,13 +211,21 @@ export function getImage(imageid: string) {
     return image;
 }
 
-export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean) {
+export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean, timestamp?: number) {
     if (mode === 'regex' && !validRegex(search))
         return [];
     const matcher = buildMatcher(search, mode);
     const filter = buildMatcher(filters.join(' AND '), 'regex');
     let list: ServerImage[] = [];
-    for (const [, value] of imageList) {
+    let source: ServerImage[] = [];
+    
+    if (timestamp) {
+        source = freshList.filter(x => x.time > timestamp).map(x => imageList.get(x.id)!);
+    } else {
+        source = [...imageList.values()];
+    }
+    
+    for (const value of source) {
         if (matcher(value) && filter(value)) {
             list.push(value);
         }
@@ -294,6 +316,11 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
         default:
             return [];
     }
+}
+
+export function getFreshImages(timestamp: number) {
+    // return [...imageList.values()].filter(x => x.modifiedDate > timestamp);
+    return freshList.filter(x => x.time > timestamp);
 }
 
 function createComparer<T>(selector: (a: T) => any, descending: boolean) {

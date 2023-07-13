@@ -1,5 +1,5 @@
 import { invalidAuth } from '$lib/server/auth.js';
-import { searchImages, sortImages } from '$lib/server/filemanager.js';
+import { getImage, searchImages, sortImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 import { isImageRequest, type ImageResponse, type ServerImage } from '$lib/types.js';
 
@@ -13,7 +13,9 @@ export async function POST(e) {
     if (!isImageRequest(query))
         return error('Invalid request', 400);
 
-    let images = searchImages(query.search, query.filters, query.matching, query.collapse);
+    const timestamp = getImage(query.latestId)?.modifiedDate ?? 0;
+    
+    let images = searchImages(query.search, query.filters, query.matching, query.collapse, timestamp);
     images = sortImages(images, query.sorting);
 
     const firstIndex = !query.latestId ? undefined : images.findIndex(i => i.id === query.latestId);
