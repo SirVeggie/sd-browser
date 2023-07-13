@@ -277,7 +277,6 @@
                         return;
                 }
 
-                console.log(JSON.stringify(res));
                 const mapped = mapImagesToClient(res.additions);
                 let deletions = 0;
                 imageStore.update((x) => {
