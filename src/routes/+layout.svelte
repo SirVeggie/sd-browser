@@ -1,16 +1,10 @@
 <script lang="ts">
     import "../global.css";
     import Webui from "$lib/components/Webui.svelte";
-    import { flyoutStore, syncFlyoutWithLocalStorage } from "$lib/stores/flyoutStore";
+    import { flyoutStore } from "$lib/stores/flyoutStore";
     import Notifier from "../lib/components/Notifier.svelte";
     import { assets } from "$app/paths";
-    import { onMount } from "svelte";
-    import { fullscreenState, syncFullscreenWithLocalStorage } from "$lib/stores/fullscreenStore";
-    import { syncSearchWithLocalStorage } from "$lib/stores/searchStore";
-    import { syncStyleWithLocalStorage } from "$lib/stores/styleStore";
-
-    onMount(() => {
-    });
+    import { fullscreenState } from "$lib/stores/fullscreenStore";
 </script>
 
 <svelte:head>
