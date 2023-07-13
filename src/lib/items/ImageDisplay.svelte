@@ -3,7 +3,7 @@
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
-    import { compressedMode, thumbMode } from "$lib/stores/searchStore";
+    import { thumbMode } from "$lib/stores/searchStore";
     import { getQualityParam } from "$lib/tools/imageRequests";
     import { seamlessStyle } from "$lib/stores/styleStore";
 

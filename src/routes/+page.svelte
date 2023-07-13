@@ -77,6 +77,8 @@
     });
 
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
+        // do nothing if not left click
+        if (e && e instanceof MouseEvent && e.button !== 0) return;
         inputElement.blur();
         id = img.id;
         getImageInfo(img.id).then((res) => {
@@ -267,9 +269,14 @@
 
                 if (!res.additions.length) {
                     if (!res.deletions.length) return;
-                    if (!res.deletions.some(x => $imageStore.some(z => z.id === x))) return;
+                    if (
+                        !res.deletions.some((x) =>
+                            $imageStore.some((z) => z.id === x)
+                        )
+                    )
+                        return;
                 }
-                
+
                 console.log(JSON.stringify(res));
                 const mapped = mapImagesToClient(res.additions);
                 let deletions = 0;
