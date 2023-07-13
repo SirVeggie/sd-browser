@@ -14,15 +14,18 @@ import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 
 type TimedImage = {
     id: string;
-    time: number;
+    timestamp: number;
 };
 
+let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
-const freshList: TimedImage[] = [];
+let freshList: TimedImage[] = [];
+const deletionList: TimedImage[] = [];
+const freshLimit = 1000;
+
 export const datapath = './localData';
 export const thumbnailPath = path.join(datapath, 'thumbnails');
 export const compressedPath = path.join(datapath, 'compressed');
-let watcher: Watcher | undefined;
 
 export async function startFileManager() {
     await indexFiles();
@@ -149,10 +152,9 @@ function setupWatcher() {
 
         const amount = freshList.unshift({
             id: hash,
-            time: Date.now(),
+            timestamp: Date.now(),
         });
-
-        if (amount > 100) freshList.pop();
+        if (amount > freshLimit) freshList.pop();
 
         // trigger frontend update?
     });
@@ -179,6 +181,12 @@ function setupWatcher() {
         if (!file.endsWith('.png')) return;
         const hash = hashString(file);
         imageList.delete(hash);
+        freshList = freshList.filter(x => x.id !== hash);
+        const size = deletionList.unshift({
+            id: hash,
+            timestamp: Date.now(),
+        });
+        if (size > freshLimit) deletionList.pop();
     });
 
     watcher.on('addDir', () => {
@@ -218,13 +226,13 @@ export function searchImages(search: string, filters: string[], mode: SearchMode
     const filter = buildMatcher(filters.join(' AND '), 'regex');
     let list: ServerImage[] = [];
     let source: ServerImage[] = [];
-    
+
     if (timestamp) {
-        source = freshList.filter(x => x.time > timestamp).map(x => imageList.get(x.id)!);
+        source = getFreshImages(timestamp);
     } else {
         source = [...imageList.values()];
     }
-    
+
     for (const value of source) {
         if (matcher(value) && filter(value)) {
             list.push(value);
@@ -306,6 +314,7 @@ function getTextByType(image: ServerImage, type: MatchType) {
 }
 
 export function sortImages(images: ServerImage[], sort: SortingMethod): ServerImage[] {
+    if (images.length === 0) return images;
     switch (sort) {
         case 'date':
             return [...images].sort(createComparer<ServerImage>(x => x.modifiedDate, true));
@@ -320,7 +329,36 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
 
 export function getFreshImages(timestamp: number) {
     // return [...imageList.values()].filter(x => x.modifiedDate > timestamp);
-    return freshList.filter(x => x.time > timestamp);
+    // return freshList.map(x => imageList.get(x)).filter(x => (x?.modifiedDate ?? 0) > timestamp) as ServerImage[];
+    const res: ServerImage[] = [];
+    for (const item of freshList) {
+        const img = imageList.get(item.id);
+        if (!img) continue;
+        if (item.timestamp <= timestamp) {
+            break;
+        }
+
+        res.push(img);
+    }
+    return res;
+}
+
+export function getFreshImageTimestamp(id: string) {
+    if (!id) return undefined;
+    const item = freshList.find(x => x.id === id);
+    return item?.timestamp;
+}
+
+export function getDeletedImageIds(timestamp: number) {
+    const res: string[] = [];
+    for (const deletion of deletionList) {
+        if (deletion.timestamp <= timestamp) {
+            break;
+        }
+
+        res.push(deletion.id);
+    }
+    return res;
 }
 
 function createComparer<T>(selector: (a: T) => any, descending: boolean) {

@@ -75,9 +75,30 @@ export function isImageRequest(object: any): object is ImageRequest {
 export type ImageResponse = {
     imageIds: string[];
     amount: number;
+    timestamp: number;
 };
 export function isImageResponse(object: any): object is ImageResponse {
     return testType(object, ['imageIds', 'amount']);
+}
+
+export type UpdateRequest = {
+    search: string;
+    filters: string[];
+    matching: SearchMode;
+    collapse: boolean;
+    timestamp: number;
+};
+export function isUpdateRequest(object: any): object is UpdateRequest {
+    return testType(object, ['search', 'filters', 'matching', 'collapse', 'timestamp']);
+}
+
+export type UpdateResponse = {
+    additions: string[];
+    deletions: string[];
+    timestamp: number;
+};
+export function isUpdateResponse(object: any): object is UpdateResponse {
+    return testType(object, ['additions', 'deletions', 'timestamp']);
 }
 
 export type ServerError = {

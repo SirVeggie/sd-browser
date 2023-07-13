@@ -12,6 +12,7 @@
         generateCompressedImages,
         getImageInfo,
         searchImages,
+        updateImages,
     } from "$lib/tools/imageRequests";
     import { mapImagesToClient } from "$lib/tools/misc";
     import {
@@ -47,6 +48,7 @@
     let moreTriggerVisible = false;
     let triggerOverride = false;
     let triggerTimer: any;
+    let updateTime = 0;
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
@@ -156,13 +158,12 @@
     }
 
     function startUpdate() {
-        // return;
         clearInterval(updateTimer);
         updateTimer = setInterval(() => {
             if (sorting === "random") return;
             if ($searchFilter) return;
             console.log("Updating images");
-            updateImages();
+            fetchUpdate();
         }, 1000);
     }
 
@@ -209,6 +210,7 @@
             .then((images) => {
                 imageStore.set(mapImagesToClient(images.imageIds));
                 imageAmountStore.set(images.amount);
+                updateTime = images.timestamp;
             })
             .catch((err) => {
                 console.error(err);
@@ -246,29 +248,41 @@
             })
             .finally(() => {
                 triggerOverride = false;
-                // loadMore();
             });
     }
 
-    function updateImages() {
+    function fetchUpdate() {
         if ($imageStore.length === 0) return;
-        const firstImage = $imageStore[0];
-
         const search = buildSearch();
 
-        searchImages({
+        updateImages({
             search: search.input,
             filters: search.filters,
-            sorting,
             matching: $matchingMode,
             collapse: $collapseMode,
-            latestId: firstImage.id,
+            timestamp: updateTime,
         })
             .then((res) => {
-                if (res.amount === 0) return;
-                const mapped = mapImagesToClient(res.imageIds);
-                imageStore.update((res) => [...mapped, ...res]);
-                imageAmountStore.set($imageAmountStore + res.imageIds.length);
+                updateTime = res.timestamp;
+
+                if (!res.additions.length) {
+                    if (!res.deletions.length) return;
+                    if (!res.deletions.some(x => $imageStore.some(z => z.id === x))) return;
+                }
+                
+                console.log(JSON.stringify(res));
+                const mapped = mapImagesToClient(res.additions);
+                let deletions = 0;
+                imageStore.update((x) => {
+                    const modified = x.filter(
+                        (z) => res.deletions.indexOf(z.id) === -1
+                    );
+                    deletions = x.length - modified.length;
+                    return [...mapped, ...modified];
+                });
+                imageAmountStore.set(
+                    $imageAmountStore + res.additions.length - deletions
+                );
             })
             .catch((err) => {
                 console.error(err);

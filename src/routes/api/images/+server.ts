@@ -1,5 +1,5 @@
 import { invalidAuth } from '$lib/server/auth.js';
-import { getImage, searchImages, sortImages } from '$lib/server/filemanager.js';
+import { searchImages, sortImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 import { isImageRequest, type ImageResponse, type ServerImage } from '$lib/types.js';
 
@@ -11,18 +11,16 @@ export async function POST(e) {
 
     const query = await e.request.json();
     if (!isImageRequest(query))
-        return error('Invalid request', 400);
+        return error('Invalid request body', 400);
 
-    const timestamp = getImage(query.latestId)?.modifiedDate ?? 0;
-    
-    let images = searchImages(query.search, query.filters, query.matching, query.collapse, timestamp);
+    let images = searchImages(query.search, query.filters, query.matching, query.collapse);
     images = sortImages(images, query.sorting);
 
     const firstIndex = !query.latestId ? undefined : images.findIndex(i => i.id === query.latestId);
     const lastIndex = !query.oldestId ? undefined : images.findIndex(i => i.id === query.oldestId);
 
     if (firstIndex === -1 || lastIndex === -1) {
-        return error('Invalid request', 400);
+        return error('Invalid request: image id not found', 400);
     }
 
     let result: ServerImage[] = [];
@@ -38,5 +36,6 @@ export async function POST(e) {
     return success({
         imageIds: result.map(x => x.id),
         amount: images.length,
+        timestamp: Date.now(),
     } satisfies ImageResponse);
 }
