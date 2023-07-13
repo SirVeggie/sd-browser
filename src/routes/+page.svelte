@@ -59,10 +59,7 @@
     onMount(() => {
         document.body.scrollIntoView();
 
-        setTimeout(() => {
-            fetchImages();
-        }, 100);
-
+        fetchImages();
         startUpdate();
         startTrigger(1000);
 

@@ -10,10 +10,6 @@
     import { syncStyleWithLocalStorage } from "$lib/stores/styleStore";
 
     onMount(() => {
-        syncSearchWithLocalStorage();
-        syncFlyoutWithLocalStorage();
-        syncFullscreenWithLocalStorage();
-        syncStyleWithLocalStorage();
     });
 </script>
 
