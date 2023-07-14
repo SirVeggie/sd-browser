@@ -1,249 +1,255 @@
 <script lang="ts">
-   import "../../scroll.css";
-   import type { ImageInfo } from "$lib/types";
-   import { fade } from "svelte/transition";
-   import { cubicOut } from "svelte/easing";
-   import Button from "./Button.svelte";
-   import { notify } from "$lib/components/Notifier.svelte";
-   import {
-      getNegativePrompt,
-      getPositivePrompt,
-   } from "$lib/tools/metadataInterpreter";
-   import { compressedMode } from "$lib/stores/searchStore";
-   import { getQualityParam } from "$lib/tools/imageRequests";
+  import "../../scroll.css";
+  import type { ImageInfo } from "$lib/types";
+  import { fade } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
+  import Button from "./Button.svelte";
+  import { notify } from "$lib/components/Notifier.svelte";
+  import {
+    getNegativePrompt,
+    getPositivePrompt,
+  } from "$lib/tools/metadataInterpreter";
+  import { compressedMode } from "$lib/stores/searchStore";
+  import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
 
-   export let cancel: () => void;
-   export let imageId: string | undefined;
-   export let data: ImageInfo | undefined;
-   export let enabled = true;
+  export let cancel: () => void;
+  export let imageId: string | undefined;
+  export let data: ImageInfo | undefined;
+  export let enabled = true;
 
-   let promptElement: HTMLDivElement;
-   let fallbackElement: HTMLDivElement;
-   let fallbackElementNeg: HTMLDivElement;
+  let promptElement: HTMLDivElement;
+  let fallbackElement: HTMLDivElement;
+  let fallbackElementNeg: HTMLDivElement;
 
-   $: imageUrl = imageId
-      ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
-      : "";
-   $: basicInfo = !data ? "" : formatMetadata(data);
-   $: promptInfo = !data ? "" : data.prompt ?? "";
-   $: positivePrompt = !data ? "" : getPositivePrompt(data.prompt);
-   $: negativePrompt = !data ? "" : getNegativePrompt(data.prompt);
+  $: imageUrl = imageId
+    ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
+    : "";
+  $: basicInfo = !data ? "" : formatMetadata(data);
+  $: promptInfo = !data ? "" : data.prompt ?? "";
+  $: positivePrompt = !data ? "" : getPositivePrompt(data.prompt);
+  $: negativePrompt = !data ? "" : getNegativePrompt(data.prompt);
 
-   function formatMetadata(d: ImageInfo): string {
-      const model = d.prompt?.match(/Model: (.*?)(,|$)/)?.[1] ?? "Unknown";
-      const sampler = d.prompt?.match(/Sampler: (.*?)(,|$)/)?.[1] ?? "Unknown";
-      let info = "";
-      if (model) info += `Model: ${model}`;
-      if (sampler) info += `\nSampler: ${sampler}`;
-      info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
-      info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
-      if (d.folder) info += `\nFolder: ${d.folder}`;
-      return info;
-   }
+  function formatMetadata(d: ImageInfo): string {
+    const model = d.prompt?.match(/Model: (.*?)(,|$)/)?.[1] ?? "Unknown";
+    const sampler = d.prompt?.match(/Sampler: (.*?)(,|$)/)?.[1] ?? "Unknown";
+    let info = "";
+    if (model) info += `Model: ${model}`;
+    if (sampler) info += `\nSampler: ${sampler}`;
+    info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
+    info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
+    if (d.folder) info += `\nFolder: ${d.folder}`;
+    return info;
+  }
 
-   function handleEsc(e: KeyboardEvent) {
-      if (e.key === "Escape") cancel();
-   }
+  function handleEsc(e: KeyboardEvent) {
+    if (e.key === "Escape") cancel();
+  }
 
-   function prevent(e: Event) {
-      e.stopPropagation();
-      e.preventDefault();
-   }
+  function prevent(e: Event) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
 
-   function copyPrompt() {
-      if (!imageId) return;
-      if (!data?.prompt) return notify("No prompt to copy");
-      if (!navigator?.clipboard?.writeText) {
-         selectPrompt(promptElement);
-         document.execCommand("copy");
-         deselect();
-         return;
-      }
+  function copyPrompt() {
+    if (!imageId) return;
+    if (!data?.prompt) return notify("No prompt to copy");
+    if (!navigator?.clipboard?.writeText) {
+      selectPrompt(promptElement);
+      document.execCommand("copy");
+      deselect();
+      return;
+    }
 
-      navigator.clipboard
-         .writeText(data.prompt)
-         .then(() => {
-            notify("Copied prompt to clipboard");
-         })
-         .catch(() => {
-            notify("Failed to copy prompt to clipboard");
-         });
-   }
+    navigator.clipboard
+      .writeText(data.prompt)
+      .then(() => {
+        notify("Copied prompt to clipboard");
+      })
+      .catch(() => {
+        notify("Failed to copy prompt to clipboard");
+      });
+  }
 
-   function copyPositive() {
-      if (!imageId) return;
-      if (!data?.prompt) return notify("No positive to copy");
-      if (!navigator?.clipboard?.writeText) {
-         selectPrompt(fallbackElement);
-         document.execCommand("copy");
-         deselect();
-      }
+  function copyPositive() {
+    if (!imageId) return;
+    if (!data?.prompt) return notify("No positive to copy");
+    if (!navigator?.clipboard?.writeText) {
+      selectPrompt(fallbackElement);
+      document.execCommand("copy");
+      deselect();
+    }
 
-      const positive = getPositivePrompt(data.prompt);
-      navigator.clipboard
-         .writeText(positive)
-         .then(() => {
-            notify("Copied positive prompt");
-         })
-         .catch(() => {
-            notify("Failed to copy positive prompt");
-         });
-   }
+    const positive = getPositivePrompt(data.prompt);
+    navigator.clipboard
+      .writeText(positive)
+      .then(() => {
+        notify("Copied positive prompt");
+      })
+      .catch(() => {
+        notify("Failed to copy positive prompt");
+      });
+  }
 
-   function copyNegative() {
-      if (!imageId) return;
-      if (!data?.prompt) return notify("No negative to copy");
-      if (!navigator?.clipboard?.writeText) {
-         selectPrompt(fallbackElementNeg);
-         document.execCommand("copy");
-         deselect();
-      }
+  function copyNegative() {
+    if (!imageId) return;
+    if (!data?.prompt) return notify("No negative to copy");
+    if (!navigator?.clipboard?.writeText) {
+      selectPrompt(fallbackElementNeg);
+      document.execCommand("copy");
+      deselect();
+    }
 
-      const negative = getNegativePrompt(data.prompt);
-      navigator.clipboard
-         .writeText(negative)
-         .then(() => {
-            notify("Copied negative prompt");
-         })
-         .catch(() => {
-            notify("Failed to copy negative prompt");
-         });
-   }
+    const negative = getNegativePrompt(data.prompt);
+    navigator.clipboard
+      .writeText(negative)
+      .then(() => {
+        notify("Copied negative prompt");
+      })
+      .catch(() => {
+        notify("Failed to copy negative prompt");
+      });
+  }
 
-   function selectPrompt(element: HTMLDivElement) {
-      if (!element) return;
-      const range = document.createRange();
-      range.selectNode(element);
-      const selection = window.getSelection();
-      if (!selection) return;
-      selection.removeAllRanges();
-      selection.addRange(range);
-   }
+  function deleteImage() {
+    if (!imageId) return;
+    imageAction(imageId, {
+      type: "delete",
+    }).then(cancel);
+  }
 
-   function deselect() {
-      const selection = window.getSelection();
-      if (!selection) return;
-      selection.removeAllRanges();
-   }
+  function selectPrompt(element: HTMLDivElement) {
+    if (!element) return;
+    const range = document.createRange();
+    range.selectNode(element);
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function deselect() {
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+  }
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if enabled && imageId}
-   <div
-      class="image_overlay"
-      on:click={cancel}
-      on:keydown={handleEsc}
-      transition:fade={{ duration: 300, easing: cubicOut }}
-   >
-      <div class="layout">
-         <div>
-            <div class="card">
-               <img src={imageUrl} alt={imageId} />
-               <!-- svelte-ignore a11y-click-events-have-key-events -->
-               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-               {#if data}
-                  <div class="info" on:click={prevent}>
-                     <div>
-                        <p>{basicInfo}</p>
-                        <div class="buttons">
-                           <Button on:click={copyPrompt}>Copy all</Button>
-                           <Button on:click={copyPositive}>Copy positive</Button
-                           >
-                           <Button on:click={copyNegative}>Copy negative</Button
-                           >
-                        </div>
-                     </div>
-                     <p bind:this={promptElement}>
-                        {promptInfo}
-                     </p>
-                  </div>
-               {/if}
+  <div
+    class="image_overlay"
+    on:click={cancel}
+    on:keydown={handleEsc}
+    transition:fade={{ duration: 300, easing: cubicOut }}
+  >
+    <div class="layout">
+      <div>
+        <div class="card">
+          <img src={imageUrl} alt={imageId} />
+          <!-- svelte-ignore a11y-click-events-have-key-events -->
+          <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+          {#if data}
+            <div class="info" on:click={prevent}>
+              <div>
+                <p>{basicInfo}</p>
+                <div class="buttons">
+                  <Button on:click={copyPrompt}>Copy all</Button>
+                  <Button on:click={copyPositive}>Copy positive</Button>
+                  <Button on:click={copyNegative}>Copy negative</Button>
+                  <Button on:click={deleteImage}>Delete</Button>
+                </div>
+              </div>
+              <p bind:this={promptElement}>
+                {promptInfo}
+              </p>
             </div>
-         </div>
+          {/if}
+        </div>
       </div>
-   </div>
-   <div class="fallback" bind:this={fallbackElement}>{positivePrompt}</div>
-   <div class="fallback" bind:this={fallbackElementNeg}>{negativePrompt}</div>
+    </div>
+  </div>
+  <div class="fallback" bind:this={fallbackElement}>{positivePrompt}</div>
+  <div class="fallback" bind:this={fallbackElementNeg}>{negativePrompt}</div>
 {/if}
 
 <style lang="scss">
-   .image_overlay {
-      position: fixed;
-      z-index: 2;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #000a;
-      --pad: min(5vh, 5vw);
-      padding: var(--pad);
-      backdrop-filter: blur(10px);
+  .image_overlay {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #000a;
+    --pad: min(5vh, 5vw);
+    padding: var(--pad);
+    backdrop-filter: blur(10px);
 
-      .layout {
-         display: flex;
-         justify-content: center;
-         height: 100%;
-         position: relative;
+    .layout {
+      display: flex;
+      justify-content: center;
+      height: 100%;
+      position: relative;
 
-         & > div {
-            max-height: 100%;
-            max-width: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-         }
-
-         .card {
-            background-color: #111b;
-            border-radius: 0.5em;
-            overflow-x: hidden;
-            overscroll-behavior-y: contain;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            color: #ddd;
-            font-family: "Open sans", sans-serif;
-            font-size: 2em;
-         }
+      & > div {
+        max-height: 100%;
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
 
-      img {
-         max-height: calc(100dvh - var(--pad) * 2);
-         max-width: 100%;
+      .card {
+        background-color: #111b;
+        border-radius: 0.5em;
+        overflow-x: hidden;
+        overscroll-behavior-y: contain;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        color: #ddd;
+        font-family: "Open sans", sans-serif;
+        font-size: 2em;
+      }
+    }
+
+    img {
+      max-height: calc(100dvh - var(--pad) * 2);
+      max-width: 100%;
+    }
+
+    .info {
+      font-size: 0.5em;
+      margin: 0;
+      width: 0;
+      min-width: calc(100% - 2em);
+
+      & > div {
+        display: flex;
       }
 
-      .info {
-         font-size: 0.5em;
-         margin: 0;
-         width: 0;
-         min-width: calc(100% - 2em);
-
-         & > div {
-            display: flex;
-         }
-
-         p {
-            white-space: pre-wrap;
-            flex-grow: 1;
-         }
-
-         .buttons {
-            display: flex;
-            flex-direction: column;
-            // width: 100%;
-            margin-top: 1em;
-            margin-bottom: 0.5em;
-
-            :global(button) {
-               margin-bottom: 0.5em;
-            }
-         }
+      p {
+        white-space: pre-wrap;
+        flex-grow: 1;
       }
-   }
 
-   .fallback {
-      pointer-events: none;
-      opacity: 0;
-      position: fixed;
-   }
+      .buttons {
+        display: flex;
+        flex-direction: column;
+        // width: 100%;
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+
+        :global(button) {
+          margin-bottom: 0.5em;
+        }
+      }
+    }
+  }
+
+  .fallback {
+    pointer-events: none;
+    opacity: 0;
+    position: fixed;
+  }
 </style>

@@ -20,6 +20,8 @@ type TimedImage = {
 let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
 let freshList: TimedImage[] = [];
+const nsfwList: string[] = [];
+const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
 const freshLimit = 1000;
 
@@ -321,7 +323,7 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
         case 'name':
             return [...images].sort(createComparer<ServerImage>(x => x.file, false));
         case 'random':
-            return selectRandom(images, 1000);
+            return selectRandom(images, images.length);
         default:
             return [];
     }
@@ -399,4 +401,28 @@ async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
         console.log(`Failed to read metadata for ${imagepath}`);
         return {};
     }
+}
+
+export function markNsfw(id: string, nsfw: boolean) {
+    const index = nsfwList.indexOf(id);
+    if (nsfw && index === -1) {
+        nsfwList.push(id);
+    } else if (!nsfw && index !== -1) {
+        nsfwList.splice(index, 1);
+    }
+}
+
+export function markFavorite(id: string, favorite: boolean) {
+    const index = favoriteList.indexOf(id);
+    if (favorite && index === -1) {
+        favoriteList.push(id);
+    } else if (!favorite && index !== -1) {
+        favoriteList.splice(index, 1);
+    }
+}
+
+export function deleteImage(id: string) {
+    const img = imageList.get(id);
+    if (!img) return;
+    fs.unlink(img.file);
 }

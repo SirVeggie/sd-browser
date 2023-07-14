@@ -29,8 +29,10 @@ export async function POST(e) {
         if (lastIndex) {
             result.push(...images.slice(lastIndex + 1, lastIndex + 1 + (imageLimit - result.length)));
         }
-    } else {
+    } else if (query.sorting !== 'random') {
         result = images.slice(0, imageLimit);
+    } else {
+        result = images;
     }
 
     return success({

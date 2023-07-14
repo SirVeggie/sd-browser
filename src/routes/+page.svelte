@@ -162,8 +162,8 @@
     function startUpdate() {
         clearInterval(updateTimer);
         updateTimer = setInterval(() => {
-            if (sorting === "random") return;
-            if ($searchFilter) return;
+            // if (sorting === "random") return;
+            // if ($searchFilter) return;
             console.log("Updating images");
             fetchUpdate();
         }, 1000);
@@ -208,6 +208,9 @@
             sorting,
             matching: $matchingMode,
             collapse: $collapseMode,
+            nsfw: $nsfwMode,
+            latestId: "",
+            oldestId: "",
         })
             .then((images) => {
                 imageStore.set(mapImagesToClient(images.imageIds));
@@ -219,80 +222,82 @@
             });
     }
 
-    function fetchNext() {
+    async function fetchNext() {
         const search = buildSearch();
         if ($imageStore.length === 0) return;
         const lastImage = $imageStore[$imageStore.length - 1];
 
         triggerOverride = true;
 
-        searchImages({
-            search: search.input,
-            filters: search.filters,
-            sorting,
-            matching: $matchingMode,
-            collapse: $collapseMode,
-            oldestId: lastImage.id,
-        })
-            .then((images) => {
-                if (images.amount === 0) return;
-                if ($imageStore.some((x) => x.id === images.imageIds[0])) {
-                    console.log("Duplicate image found");
-                    return;
-                }
-
-                const mapped = mapImagesToClient(images.imageIds);
-                imageStore.update((x) => [...x, ...mapped]);
-                imageAmountStore.set(images.amount);
-            })
-            .catch((err) => {
-                console.error(err);
-            })
-            .finally(() => {
-                triggerOverride = false;
+        try {
+            const images = await searchImages({
+                search: search.input,
+                filters: search.filters,
+                sorting,
+                matching: $matchingMode,
+                collapse: $collapseMode,
+                latestId: "",
+                oldestId: lastImage.id,
+                nsfw: $nsfwMode,
             });
+
+            if (images.amount === 0) return;
+            if ($imageStore.some((x) => x.id === images.imageIds[0])) {
+                console.log("Duplicate image found");
+                return;
+            }
+
+            const mapped = mapImagesToClient(images.imageIds);
+            imageStore.update((x) => [...x, ...mapped]);
+            imageAmountStore.set(images.amount);
+        } catch (e: any) {
+            console.error(e);
+        } finally {
+            triggerOverride = false;
+        }
     }
 
-    function fetchUpdate() {
+    async function fetchUpdate() {
         if ($imageStore.length === 0) return;
         const search = buildSearch();
 
-        updateImages({
-            search: search.input,
-            filters: search.filters,
-            matching: $matchingMode,
-            collapse: $collapseMode,
-            timestamp: updateTime,
-        })
-            .then((res) => {
-                updateTime = res.timestamp;
-
-                if (!res.additions.length) {
-                    if (!res.deletions.length) return;
-                    if (
-                        !res.deletions.some((x) =>
-                            $imageStore.some((z) => z.id === x)
-                        )
-                    )
-                        return;
-                }
-
-                const mapped = mapImagesToClient(res.additions);
-                let deletions = 0;
-                imageStore.update((x) => {
-                    const modified = x.filter(
-                        (z) => res.deletions.indexOf(z.id) === -1
-                    );
-                    deletions = x.length - modified.length;
-                    return [...mapped, ...modified];
-                });
-                imageAmountStore.set(
-                    $imageAmountStore + res.additions.length - deletions
-                );
-            })
-            .catch((err) => {
-                console.error(err);
+        try {
+            const res = await updateImages({
+                search: search.input,
+                filters: search.filters,
+                matching: $matchingMode,
+                collapse: $collapseMode,
+                timestamp: updateTime,
+                nsfw: $nsfwMode,
             });
+
+            updateTime = res.timestamp;
+
+            if (!res.additions.length) {
+                if (!res.deletions.length) return;
+                const dels = !res.deletions.some((x) =>
+                    $imageStore.some((z) => z.id === x)
+                );
+                if (dels) return;
+            }
+
+            const mapped = mapImagesToClient(res.additions);
+            let deletions = 0;
+            
+            imageStore.update((x) => {
+                const modified = x.filter(
+                    (z) => res.deletions.indexOf(z.id) === -1
+                );
+                deletions = x.length - modified.length;
+                return [...mapped, ...modified];
+            });
+            
+            imageAmountStore.set(
+                $imageAmountStore + res.additions.length - deletions
+            );
+        } catch (e: any) {
+            console.error(e);
+        }
     }
 
     function loadMore() {

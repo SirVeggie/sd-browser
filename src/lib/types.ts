@@ -67,6 +67,7 @@ export type ImageRequest = {
     matching: SearchMode;
     sorting: SortingMethod;
     collapse: boolean;
+    nsfw: boolean;
 };
 export function isImageRequest(object: any): object is ImageRequest {
     return testType(object, ['search', 'filters', 'latestId', 'oldestId', 'sorting', 'collapse']);
@@ -87,6 +88,7 @@ export type UpdateRequest = {
     matching: SearchMode;
     collapse: boolean;
     timestamp: number;
+    nsfw: boolean;
 };
 export function isUpdateRequest(object: any): object is UpdateRequest {
     return testType(object, ['search', 'filters', 'matching', 'collapse', 'timestamp']);
@@ -100,6 +102,25 @@ export type UpdateResponse = {
 export function isUpdateResponse(object: any): object is UpdateResponse {
     return testType(object, ['additions', 'deletions', 'timestamp']);
 }
+
+export type ActionRequest = NsfwAction | FavoriteAction | DeleteAction;
+export function isActionRequest(object: any): object is ActionRequest {
+    return testType(object, ['type']);
+}
+
+export type NsfwAction = {
+    type: 'nsfw';
+    state: boolean;
+};
+
+export type FavoriteAction = {
+    type: 'favorite';
+    state: boolean;
+};
+
+export type DeleteAction = {
+    type: 'delete';
+};
 
 export type ServerError = {
     error: string;
