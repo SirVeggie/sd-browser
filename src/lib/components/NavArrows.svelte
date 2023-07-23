@@ -6,7 +6,6 @@
     export let enabled = true;
 </script>
 
-<div></div>
 {#if left && enabled}
     <button class="left" on:click={onLeft}>{"<"}</button>
 {/if}
@@ -24,7 +23,7 @@
         border: none;
         color: #fffa;
     }
-    
+
     .left {
         position: fixed;
         top: 50%;
@@ -33,13 +32,18 @@
         z-index: 10;
         border-radius: 0 0.5em 0.5em 0;
     }
-    
+
     .right {
         position: fixed;
         top: 50%;
-        right: 0;
+        right: var(--flyout-width);
+        // right: 0;
         transform: translateY(-50%);
         z-index: 10;
         border-radius: 0.5em 0 0 0.5em;
+
+        :global(.flanimate) & {
+            transition: right 0.2s ease;
+        }
     }
 </style>

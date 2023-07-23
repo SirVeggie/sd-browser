@@ -283,7 +283,7 @@
 
             const mapped = mapImagesToClient(res.additions);
             let deletions = 0;
-            
+
             imageStore.update((x) => {
                 const modified = x.filter(
                     (z) => res.deletions.indexOf(z.id) === -1
@@ -291,7 +291,7 @@
                 deletions = x.length - modified.length;
                 return [...mapped, ...modified];
             });
-            
+
             imageAmountStore.set(
                 $imageAmountStore + res.additions.length - deletions
             );
@@ -457,7 +457,7 @@
         padding-top: calc(var(--main-padding) / 4);
         box-shadow: 0 35px 10px -32px rgba(0, 0, 0, 0.5);
 
-        @media (max-width: 500px) {
+        @media (width < 501px) {
             padding-inline: calc(var(--main-padding) / 2);
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
         }
@@ -497,11 +497,11 @@
             gap: 2px;
         }
 
-        @media (min-width: 1200px) {
+        @media (width > 1200px) {
             grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
         }
 
-        @media (max-width: 500px) {
+        @media (width < 501px) {
             grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
             gap: 0.2em;
             padding: 5px;
@@ -511,8 +511,13 @@
     .slideshow {
         position: fixed;
         top: 1.5em;
-        right: 2em;
+        right: calc(2em + var(--flyout-width));
+        // right: 2em;
         z-index: 5;
+
+        :global(.flanimate) & {
+            transition: right 0.2s ease;
+        }
     }
 
     .spacer {

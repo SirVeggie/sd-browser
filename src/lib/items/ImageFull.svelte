@@ -178,12 +178,17 @@
     z-index: 2;
     top: 0;
     left: 0;
-    right: 0;
+    right: var(--flyout-width);
+    // right: 0;
     bottom: 0;
     background-color: #000a;
     --pad: min(5vh, 5vw);
     padding: var(--pad);
     backdrop-filter: blur(10px);
+
+    :global(.flanimate) & {
+      transition: right 0.2s ease;
+    }
 
     .layout {
       display: flex;

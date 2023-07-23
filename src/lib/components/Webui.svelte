@@ -1,8 +1,6 @@
 <script lang="ts">
     import { cx } from "$lib/tools/cx";
-    import { flyoutStore } from "$lib/stores/flyoutStore";
-
-    export let enabled = false;
+    import { flyoutState, flyoutStore } from "$lib/stores/flyoutStore";
 
     let iframe: HTMLIFrameElement;
 
@@ -11,11 +9,11 @@
     }
 
     function toggle() {
-        enabled = !enabled;
+        flyoutState.set(!$flyoutState);
     }
 </script>
 
-<div class={cx(!enabled && "disabled")}>
+<div class={cx(!$flyoutState && "disabled")}>
     <iframe
         title="sd"
         bind:this={iframe}
@@ -24,13 +22,13 @@
         allow="fullscreen"
     />
 </div>
-<button on:click={toggle}>{enabled ? 'Close' : 'Open'}</button>
+<button on:click={toggle}>{$flyoutState ? 'Close' : 'Open'}</button>
 
 <style lang="scss">
     div {
         position: fixed;
         top: 0;
-        left: 0;
+        left: calc(100dvw - var(--flyout-width));
         right: 0;
         bottom: 0;
         z-index: 50;
@@ -41,6 +39,10 @@
             opacity: 0;
             pointer-events: none;
             transform: translateX(100%);
+        }
+        
+        @media (width < 650px) {
+            left: 0;
         }
     }
     

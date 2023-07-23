@@ -64,7 +64,7 @@
             outline: 1px solid #fffa;
 
             &:not(.seamless) {
-                @media (min-width: 501px) {
+                @media (width > 500px) {
                     transform: translateY(-0.5em);
                 }
             }
