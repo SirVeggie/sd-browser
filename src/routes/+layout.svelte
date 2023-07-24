@@ -64,8 +64,8 @@
         &.flvisible {
             --flyout-width: 500px;
             
-            @media (width < 800px) {
-                --flyout-width: 350px;
+            @media (width < 1000px) {
+                --flyout-width: 50dvw;
             }
             @media (width < 650px) {
                 --flyout-width: 0px;
