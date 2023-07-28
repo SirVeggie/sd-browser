@@ -41,7 +41,8 @@
     let inputElement: HTMLInputElement;
     let inputTimer: any;
     let info: ImageInfo | undefined = undefined;
-    let slideshowTimer: any;
+    let slideTimer: any;
+    let slideDir: "left" | "right" = "right";
     let updateTimer: any;
     let live = false;
     let sorting: SortingMethod = "date";
@@ -70,7 +71,7 @@
         return () => {
             clearTimeout(inputTimer);
             clearInterval(updateTimer);
-            clearInterval(slideshowTimer);
+            clearInterval(slideTimer);
             closeImage();
             window.removeEventListener("keydown", keylistener);
         };
@@ -107,11 +108,17 @@
         id = "";
         info = undefined;
         live = false;
-        if (slideshowTimer) {
-            clearInterval(slideshowTimer);
-            slideshowTimer = undefined;
+        if (slideTimer) {
+            clearInterval(slideTimer);
+            slideTimer = undefined;
             notify("Slideshow stopped");
         }
+    }
+
+    function openLive() {
+        if (live) return;
+        if (id) closeImage();
+        live = true;
     }
 
     function goLeft() {
@@ -121,11 +128,21 @@
             getImageInfo(id).then((res) => {
                 info = res;
             });
+
+            if (slideTimer && slideDir === "right") {
+                startSlideshow("left", false);
+                notify("Sliding left", undefined, "dir");
+            }
+        } else {
+            openLive();
         }
     }
 
     function goRight() {
-        if (rightArrow) {
+        if (live) {
+            closeImage();
+            openImage(paginated[0]);
+        } else if (rightArrow) {
             id = paginated[nextIndex].id;
             if (nextIndex == paginated.length - 1) {
                 loadMore();
@@ -134,6 +151,11 @@
             getImageInfo(id).then((res) => {
                 info = res;
             });
+
+            if (slideTimer && slideDir === "left") {
+                startSlideshow("right", false);
+                notify("Sliding right", undefined, "dir");
+            }
         }
     }
 
@@ -314,11 +336,25 @@
         currentAmount = Math.min(max, currentAmount + increment);
     }
 
-    function startSlideshow() {
-        slideshowTimer = setInterval(() => {
-            goRight();
+    function startSlideshow(dir: "left" | "right" = "right", ui = true) {
+        if (slideTimer) stopSlideshow(false);
+        slideDir = dir;
+        slideTimer = setInterval(() => {
+            if (dir === "right") {
+                goRight();
+            } else {
+                goLeft();
+            }
         }, 4000);
-        notify("Slideshow started");
+        if (ui) notify("Slideshow started");
+    }
+
+    function stopSlideshow(ui: boolean = true) {
+        if (slideTimer) {
+            clearInterval(slideTimer);
+            slideTimer = undefined;
+            if (ui) notify("Slideshow stopped");
+        }
     }
 
     function keylistener(e: KeyboardEvent) {
@@ -329,9 +365,9 @@
         } else if (e.key === " ") {
             if (!id) return;
             e.preventDefault();
-            if (slideshowTimer) {
-                clearInterval(slideshowTimer);
-                slideshowTimer = undefined;
+            if (slideTimer) {
+                clearInterval(slideTimer);
+                slideTimer = undefined;
                 notify("Slideshow stopped");
             } else {
                 startSlideshow();
@@ -395,7 +431,7 @@
             placeholder="Search"
             on:input={inputChange}
         />
-        <Button on:click={() => (live = true)}>Live</Button>
+        <Button on:click={openLive}>Live</Button>
         <Link to="/settings">Settings</Link>
     </div>
 </div>
@@ -441,9 +477,9 @@
     right={rightArrow}
 />
 
-{#if id && !slideshowTimer}
+{#if id && !slideTimer}
     <div class="slideshow" transition:fade={{ duration: 100 }}>
-        <Button on:click={startSlideshow}>Slideshow</Button>
+        <Button on:click={() => startSlideshow()}>Slideshow</Button>
     </div>
 {/if}
 
