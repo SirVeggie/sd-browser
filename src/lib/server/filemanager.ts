@@ -86,10 +86,12 @@ export async function indexFiles() {
         }
     }
 
-    console.log('Writing cache file...');
-    fs.writeFile(cachefile, JSON.stringify([...images], null, 2)).catch(e => console.log(e));
-
+    console.log('Writing cache file... do not interrupt!');
+    const cachePromise = fs.writeFile(cachefile, JSON.stringify([...images], null, 2)).catch(e => console.log(e));
+    
     imageList = images;
+
+    await cachePromise;
     console.log(`Indexed ${imageList.size} images`);
 
     cleanTempImages();

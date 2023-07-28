@@ -54,8 +54,8 @@
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
     $: nextIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) + 1;
-    $: leftArrow = prevIndex >= 0;
-    $: rightArrow = nextIndex >= 0 && nextIndex < paginated.length;
+    $: rightArrow = live || (nextIndex >= 0 && nextIndex < paginated.length);
+    $: leftArrow = rightArrow && !live;
     $: latestId = paginated[0]?.id;
     $: seamless = $seamlessStyle;
 
@@ -117,12 +117,15 @@
 
     function openLive() {
         if (live) return;
+        if (paginated.length === 0) return;
         if (id) closeImage();
         live = true;
     }
 
     function goLeft() {
-        if (leftArrow) {
+        if (leftArrow && prevIndex < 0) {
+            openLive();
+        } else if (leftArrow) {
             id = paginated[prevIndex].id;
             scrollToImage();
             getImageInfo(id).then((res) => {
@@ -133,8 +136,6 @@
                 startSlideshow("left", false);
                 notify("Sliding left", undefined, "dir");
             }
-        } else {
-            openLive();
         }
     }
 
@@ -475,6 +476,7 @@
     onRight={goRight}
     left={leftArrow}
     right={rightArrow}
+    hidden={live}
 />
 
 {#if id && !slideTimer}

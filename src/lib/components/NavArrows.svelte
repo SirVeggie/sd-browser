@@ -3,14 +3,15 @@
     export let onRight: () => void;
     export let left = true;
     export let right = true;
+    export let hidden = false;
     export let enabled = true;
 </script>
 
 {#if left && enabled}
-    <button class="left" on:click={onLeft}>{"<"}</button>
+    <button class="left" class:hidden on:click={onLeft} on:touchstart={onLeft}>{"<"}</button>
 {/if}
 {#if right && enabled}
-    <button class="right" on:click={onRight}>{">"}</button>
+    <button class="right" class:hidden on:click={onRight} on:touchstart={onRight}>{">"}</button>
 {/if}
 
 <style lang="scss">
@@ -45,5 +46,9 @@
         :global(.flanimate) & {
             transition: right 0.2s ease;
         }
+    }
+    
+    .hidden {
+        opacity: 0;
     }
 </style>
