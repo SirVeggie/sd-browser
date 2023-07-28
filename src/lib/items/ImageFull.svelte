@@ -199,6 +199,7 @@
       & > div {
         max-height: 100%;
         max-width: 100%;
+        min-width: min(500px, 100%);
         display: flex;
         flex-direction: column;
         justify-content: center;
