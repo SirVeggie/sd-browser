@@ -31,3 +31,9 @@
   border-right: 16px solid transparent;
   border-bottom: 16px solid transparent;
 }
+
+/* hide scrobar with class .no-scrollbar */
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

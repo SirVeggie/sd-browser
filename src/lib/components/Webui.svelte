@@ -3,6 +3,7 @@
     import { flyoutState, flyoutStore } from "$lib/stores/flyoutStore";
 
     let iframe: HTMLIFrameElement;
+    $: disabled = !$flyoutState;
 
     export function fullscreen() {
         iframe.requestFullscreen();
@@ -13,7 +14,7 @@
     }
 </script>
 
-<div class={cx(!$flyoutState && "disabled")}>
+<div class="no-scrollbar" class:disabled>
     <iframe
         title="sd"
         bind:this={iframe}
@@ -22,7 +23,7 @@
         allow="fullscreen"
     />
 </div>
-<button on:click={toggle}>{$flyoutState ? 'Close' : 'Open'}</button>
+<button on:click={toggle}>{$flyoutState ? "Close" : "Open"}</button>
 
 <style lang="scss">
     div {
@@ -32,6 +33,8 @@
         right: 0;
         bottom: 0;
         z-index: 50;
+        overflow-y: scroll;
+        overscroll-behavior-y: contain;
 
         transition: opacity 0.2s ease, transform 0.2s ease;
 
@@ -40,16 +43,16 @@
             pointer-events: none;
             transform: translateX(100%);
         }
-        
+
         @media (width < 650px) {
             left: 0;
         }
     }
-    
+
     iframe {
         display: block;
         width: 100%;
-        height: 100%;
+        height: calc(100% + 1px);
     }
 
     button {
