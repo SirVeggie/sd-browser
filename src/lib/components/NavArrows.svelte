@@ -5,10 +5,36 @@
     export let right = true;
     export let hidden = false;
     export let enabled = true;
+
+    function handleTouch(action: () => void) {
+        return (e: TouchEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            action();
+
+            continueTouch(action);
+        };
+    }
+
+    function continueTouch(action: () => void) {
+        let counter = 0;
+        const interval = setInterval(() => {
+            if (++counter < 3) return;
+            action();
+        }, 200);
+        const stop = () => clearInterval(interval);
+        window.addEventListener("touchend", stop, { once: true });
+        window.addEventListener("touchcancel", stop, { once: true });
+    }
 </script>
 
 {#if left && enabled}
-    <button class="left" class:hidden on:click={onLeft} on:touchstart={onLeft}>
+    <button
+        class="left"
+        class:hidden
+        on:click={onLeft}
+        on:touchstart={handleTouch(onLeft)}
+    >
         <div>{"<"}</div>
     </button>
 {/if}
@@ -18,7 +44,7 @@
         class="right"
         class:hidden
         on:click={onRight}
-        on:touchstart={onRight}
+        on:touchstart={handleTouch(onRight)}
     >
         <div>{">"}</div>
     </button>
