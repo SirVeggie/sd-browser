@@ -54,11 +54,12 @@
     button {
         text-decoration: none;
         appearance: none;
+        cursor: pointer;
         background-color: transparent;
         border: none;
         padding: 0;
         margin: 0;
-        cursor: pointer;
+        outline: none;
     }
 
     div {
