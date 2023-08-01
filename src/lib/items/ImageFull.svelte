@@ -31,9 +31,10 @@
 
   function formatMetadata(d: ImageInfo): string {
     const model = d.prompt?.match(/Model: (.*?)(,|$)/)?.[1] ?? "Unknown";
+    const hash = d.prompt?.match(/Model hash: (.*?)(,|$)/)?.[1] ?? "Unknown";
     const sampler = d.prompt?.match(/Sampler: (.*?)(,|$)/)?.[1] ?? "Unknown";
     let info = "";
-    if (model) info += `Model: ${model}`;
+    if (model) info += `Model: ${model} [${hash}]`;
     if (sampler) info += `\nSampler: ${sampler}`;
     info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
     info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
