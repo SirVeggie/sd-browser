@@ -108,6 +108,13 @@ export function isActionRequest(object: any): object is ActionRequest {
     return testType(object, ['type']);
 }
 
+export type MultiActionRequest = {
+    ids: string[];
+} & ActionRequest;
+export function isMultiActionRequest(object: any): object is MultiActionRequest {
+    return testType(object, ['ids', 'type']);
+}
+
 export type NsfwAction = {
     type: 'nsfw';
     state: boolean;

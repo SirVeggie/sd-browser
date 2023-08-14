@@ -88,7 +88,7 @@ export async function indexFiles() {
 
     console.log('Writing cache file... do not interrupt!');
     const cachePromise = fs.writeFile(cachefile, JSON.stringify([...images], null, 2)).catch(e => console.log(e));
-    
+
     imageList = images;
 
     await cachePromise;
@@ -405,26 +405,38 @@ async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
     }
 }
 
-export function markNsfw(id: string, nsfw: boolean) {
-    const index = nsfwList.indexOf(id);
-    if (nsfw && index === -1) {
-        nsfwList.push(id);
-    } else if (!nsfw && index !== -1) {
-        nsfwList.splice(index, 1);
+export function markNsfw(ids: string | string[], nsfw: boolean) {
+    if (typeof ids === 'string') ids = [ids];
+
+    for (const id of ids) {
+        const index = nsfwList.indexOf(id);
+        if (nsfw && index === -1) {
+            nsfwList.push(id);
+        } else if (!nsfw && index !== -1) {
+            nsfwList.splice(index, 1);
+        }
     }
 }
 
-export function markFavorite(id: string, favorite: boolean) {
-    const index = favoriteList.indexOf(id);
-    if (favorite && index === -1) {
-        favoriteList.push(id);
-    } else if (!favorite && index !== -1) {
-        favoriteList.splice(index, 1);
+export function markFavorite(ids: string | string[], favorite: boolean) {
+    if (typeof ids === 'string') ids = [ids];
+
+    for (const id of ids) {
+        const index = favoriteList.indexOf(id);
+        if (favorite && index === -1) {
+            favoriteList.push(id);
+        } else if (!favorite && index !== -1) {
+            favoriteList.splice(index, 1);
+        }
     }
 }
 
-export function deleteImage(id: string) {
-    const img = imageList.get(id);
-    if (!img) return;
-    fs.unlink(img.file);
+export function deleteImages(ids: string | string[]) {
+    if (typeof ids === 'string') ids = [ids];
+    
+    for (const id of ids) {
+        const img = imageList.get(id);
+        if (!img) return;
+        fs.unlink(img.file);
+    }
 }

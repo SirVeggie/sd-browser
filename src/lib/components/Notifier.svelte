@@ -4,7 +4,7 @@
 	export type Notification = {
 		id: string;
 		message: string;
-		type: 'message' | 'error' | 'warning' | 'success';
+		type: 'message' | 'error' | 'warn' | 'success';
 	};
 
 	let counter = 0;
@@ -107,7 +107,7 @@
 			color: #afa;
 		}
 
-		.warning {
+		.warn {
 			border-color: #ff55;
 			color: #ee7;
 		}

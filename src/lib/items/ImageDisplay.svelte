@@ -10,6 +10,7 @@
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
         undefined;
+    export let unselect = false;
 
     let hasLoaded = false;
 
@@ -18,7 +19,7 @@
     $: seamless = $seamlessStyle;
 </script>
 
-<div class:active class:seamless>
+<div class="base" class:active class:seamless class:unselect>
     <Clickable up={onClick}>
         {#if !hasLoaded}
             <div class="loading">
@@ -35,7 +36,7 @@
 </div>
 
 <style lang="scss">
-    div {
+    .base {
         font-family: "Open sans", sans-serif;
         position: relative;
         display: block;
@@ -47,6 +48,7 @@
         box-sizing: border-box;
         transition: transform 0.4s ease, outline 0.4s ease;
         outline: 1px solid transparent;
+        user-select: none;
 
         img {
             width: 100%;
@@ -81,6 +83,11 @@
                 transform: scale(1.1) translateY(-0.5em);
             }
         }
+    }
+    
+    .unselect {
+        filter: grayscale(0.8) opacity(0.5);
+        pointer-events: none;
     }
 
     .loading {

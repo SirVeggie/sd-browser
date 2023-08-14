@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import { doGet, doPost, doServerGet, doServerPost, type FetchType } from './requests';
 import { page } from '$app/stores';
-import { isImageInfo, type ImageRequest, type ImageResponse, type ImageInfo, type QualityMode, type UpdateRequest, type UpdateResponse, type ActionRequest } from '$lib/types';
+import { isImageInfo, type ImageRequest, type ImageResponse, type ImageInfo, type QualityMode, type UpdateRequest, type UpdateResponse, type MultiActionRequest, type ActionRequest } from '$lib/types';
 
 export async function searchImages(search: ImageRequest, fetch?: FetchType): Promise<ImageResponse> {
     let url = '/api/images';
@@ -71,11 +71,18 @@ export async function generateCompressedImages(ids: string[], fetch?: FetchType)
         return console.log(res.message);
 }
 
-export async function imageAction(id: string, action: ActionRequest, fetch?: FetchType): Promise<void> {
-    let url = `/api/images/${id}/action`;
+export async function imageAction(ids: string | string[], action: ActionRequest, fetch?: FetchType): Promise<void> {
+    if (typeof ids === 'string') ids = [ids];
+
+    const multiaction: MultiActionRequest = {
+        ids,
+        ...action
+    };
+
+    let url = "/api/images/action";
     if (!fetch)
         url = get(page).url.origin + url;
-    const res = await (fetch ? doPost(url, fetch, action) : doServerPost(url, action));
+    const res = await (fetch ? doPost(url, fetch, multiaction) : doServerPost(url, multiaction));
     if ('error' in res)
         return console.error(res.error);
     if ('message' in res)

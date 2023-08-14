@@ -43,6 +43,7 @@
   }
 
   function handleEsc(e: KeyboardEvent) {
+    if (!imageId) return;
     if (e.key === "Escape") cancel();
   }
 
@@ -136,11 +137,11 @@
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events -->
 {#if enabled && imageId}
   <div
     class="image_overlay"
     on:click={cancel}
-    on:keydown={handleEsc}
     transition:fade={{ duration: 300, easing: cubicOut }}
   >
     <div class="layout">
@@ -172,6 +173,8 @@
   <div class="fallback" bind:this={fallbackElement}>{positivePrompt}</div>
   <div class="fallback" bind:this={fallbackElementNeg}>{negativePrompt}</div>
 {/if}
+
+<svelte:window on:keydown={handleEsc} />
 
 <style lang="scss">
   .image_overlay {

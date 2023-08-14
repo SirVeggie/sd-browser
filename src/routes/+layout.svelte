@@ -5,6 +5,7 @@
     import Notifier from "../lib/components/Notifier.svelte";
     import { assets } from "$app/paths";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
+    import ContextMenu from "$lib/items/ContextMenu.svelte";
 
     let fltimeout: any;
     let flanimate = false;
@@ -37,6 +38,7 @@
     {#if $flyoutStore.enabled}
         <Webui />
     {/if}
+    <ContextMenu />
     <Notifier />
 </main>
 

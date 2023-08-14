@@ -11,6 +11,7 @@
     import {
         generateCompressedImages,
         getImageInfo,
+        imageAction,
         searchImages,
         updateImages,
     } from "$lib/tools/imageRequests";
@@ -34,6 +35,11 @@
         matchingMode,
     } from "$lib/stores/searchStore";
     import { seamlessStyle } from "$lib/stores/styleStore";
+    import {
+        closeAllContextMenus,
+        openContextMenu,
+    } from "$lib/items/ContextMenu.svelte";
+    import { createSelection } from "$lib/tools/selectManager";
 
     const increment = 25;
     let currentAmount = increment;
@@ -50,6 +56,8 @@
     let triggerOverride = false;
     let triggerTimer: any;
     let updateTime = 0;
+    let selecting = false;
+    const selection = createSelection();
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
@@ -58,6 +66,7 @@
     $: leftArrow = rightArrow && !live;
     $: latestId = paginated[0]?.id;
     $: seamless = $seamlessStyle;
+    $: selection.setObjects(paginated.map((x) => x.id));
 
     onMount(() => {
         document.body.scrollIntoView();
@@ -375,7 +384,78 @@
             }
         }
     }
+
+    function handleEsc(e: KeyboardEvent) {
+        if (e.key === "Escape" && selecting) {
+            selection.deselectAll();
+        }
+    }
+
+    function handleImgContext(id: string) {
+        return (e: MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const pos = {
+                x: e.clientX,
+                y: e.clientY,
+            };
+            const options: string[] = [];
+            if (!selecting) options.push("Select");
+            else options.push("Cancel selection", "Select row");
+            if (!selecting) options.push("Delete");
+            else options.push("Delete selected");
+
+            closeAllContextMenus();
+            openContextMenu(options, pos, (option) => {
+                if (option === "Select") {
+                    selection.select(id);
+                    selecting = true;
+                } else if (option === "Select row") {
+                    selection.selectRow(id);
+                    if ($selection.length === 0) selecting = false;
+                } else if (option === "Cancel selection") {
+                    cancelSelect();
+                } else if (option === "Delete") {
+                    if (!id) return;
+                    imageAction(id, { type: "delete" });
+                } else if (option === "Delete all") {
+                    deleteSelected();
+                } else {
+                    return "keep";
+                }
+            });
+        };
+    }
+
+    function selectImg(id: string) {
+        return (e: MouseEvent) => {
+            if (selecting) {
+                e.preventDefault();
+
+                if (e.shiftKey) {
+                    selection.selectRow(id);
+                } else {
+                    selection.select(id);
+                }
+
+                if ($selection.length === 0) selecting = false;
+            }
+        };
+    }
+
+    function deleteSelected() {
+        if ($selection.length === 0)
+            return notify("No images selected", "warn");
+        imageAction($selection, { type: "delete" });
+    }
+
+    function cancelSelect() {
+        selecting = false;
+        selection.deselectAll();
+    }
 </script>
+
+<svelte:window on:keydown={handleEsc} />
 
 <div class="topbar">
     <div class="quickbar">
@@ -425,22 +505,42 @@
         </label>
     </div>
 
-    <div class="nav">
-        <Input
-            bind:element={inputElement}
-            bind:value={$searchFilter}
-            placeholder="Search"
-            on:input={inputChange}
-        />
-        <Button on:click={openLive}>Live</Button>
-        <Link to="/settings">Settings</Link>
-    </div>
+    {#if !selecting}
+        <div class="nav">
+            <Input
+                bind:element={inputElement}
+                bind:value={$searchFilter}
+                placeholder="Search"
+                on:input={inputChange}
+            />
+            <Button on:click={() => (selecting = true)}>Select</Button>
+            <Button on:click={openLive}>Live</Button>
+            <Link to="/settings">Settings</Link>
+        </div>
+    {:else}
+        <div class="nav">
+            <Button on:click={deleteSelected}>Delete</Button>
+            <div class="flexspacer" />
+            <Button on:click={cancelSelect}>Cancel</Button>
+        </div>
+    {/if}
 </div>
 
 <div class="grid" class:seamless>
     {#each paginated as img (img.id)}
-        <div id={`img_${img.id}`}>
-            <ImageDisplay {img} onClick={(e) => openImage(img, e)} />
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <div
+            id={`img_${img.id}`}
+            class:selecting
+            on:contextmenu={handleImgContext(img.id)}
+            on:click={selectImg(img.id)}
+        >
+            <ImageDisplay
+                {img}
+                unselect={selecting && !$selection.includes(img.id)}
+                onClick={(e) => openImage(img, e)}
+            />
         </div>
     {/each}
 </div>
@@ -550,7 +650,6 @@
         position: fixed;
         top: 1.5em;
         right: calc(2em + var(--flyout-width));
-        // right: 2em;
         z-index: 5;
 
         :global(.flanimate) & {
@@ -564,6 +663,10 @@
 
     .spacer2 {
         height: 60vh;
+    }
+
+    .flexspacer {
+        flex-grow: 1;
     }
 
     .loader {
@@ -586,6 +689,12 @@
 
         button {
             cursor: pointer;
+        }
+    }
+
+    .selecting {
+        & > :global(*) {
+            pointer-events: none;
         }
     }
 
