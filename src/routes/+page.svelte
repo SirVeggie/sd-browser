@@ -418,7 +418,7 @@
                 } else if (option === "Delete") {
                     if (!id) return;
                     imageAction(id, { type: "delete" });
-                } else if (option === "Delete all") {
+                } else if (option === "Delete selected") {
                     deleteSelected();
                 } else {
                     return "keep";
