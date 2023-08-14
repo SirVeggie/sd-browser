@@ -388,6 +388,7 @@
     function handleEsc(e: KeyboardEvent) {
         if (e.key === "Escape" && selecting) {
             selection.deselectAll();
+            selecting = false;
         }
     }
 
