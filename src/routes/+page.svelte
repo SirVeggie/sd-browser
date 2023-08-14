@@ -40,6 +40,7 @@
         openContextMenu,
     } from "$lib/items/ContextMenu.svelte";
     import { createSelection } from "$lib/tools/selectManager";
+    import { askConfirmation } from "$lib/components/Confirm.svelte";
 
     const increment = 25;
     let currentAmount = increment;
@@ -417,8 +418,7 @@
                 } else if (option === "Cancel selection") {
                     cancelSelect();
                 } else if (option === "Delete") {
-                    if (!id) return;
-                    imageAction(id, { type: "delete" });
+                    deleteImg(id);
                 } else if (option === "Delete selected") {
                     deleteSelected();
                 } else {
@@ -444,10 +444,19 @@
         };
     }
 
-    function deleteSelected() {
+    async function deleteImg(id: string) {
+        if (!id) return;
+        if (await askConfirmation("Delete image")) {
+            imageAction(id, { type: "delete" });
+        }
+    }
+
+    async function deleteSelected() {
         if ($selection.length === 0)
             return notify("No images selected", "warn");
-        imageAction($selection, { type: "delete" });
+        if (await askConfirmation("Delete images", `Delete ${$selection.length} images?`)) {
+            imageAction($selection, { type: "delete" });
+        }
     }
 
     function cancelSelect() {

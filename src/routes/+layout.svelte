@@ -6,12 +6,12 @@
     import { assets } from "$app/paths";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import ContextMenu from "$lib/items/ContextMenu.svelte";
+    import Confirm from "$lib/components/Confirm.svelte";
 
     let fltimeout: any;
     let flanimate = false;
-    
+
     $: flvisible = $flyoutState;
-    // $: style = `--flyout-width: ${$flyoutState ? 500 : 0}px;`;
     $: {
         $flyoutState;
         clearTimeout(fltimeout);
@@ -38,6 +38,7 @@
     {#if $flyoutStore.enabled}
         <Webui />
     {/if}
+    <Confirm />
     <ContextMenu />
     <Notifier />
 </main>
@@ -62,10 +63,10 @@
             width: calc(100dvw - var(--flyout-width));
             // container-type: inline-size;
         }
-        
+
         &.flvisible {
             --flyout-width: 500px;
-            
+
             @media (width < 1000px) {
                 --flyout-width: 50dvw;
             }
