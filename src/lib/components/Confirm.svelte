@@ -3,7 +3,9 @@
     import Modal from "$lib/items/Modal.svelte";
     import { RePromise } from "$lib/tools/RePromise";
     import { uniqueId } from "lodash";
+    import { cubicOut } from "svelte/easing";
     import { writable } from "svelte/store";
+    import { fade } from "svelte/transition";
 
     export type IModal = {
         id: string;
@@ -90,7 +92,7 @@
 </script>
 
 {#each $modalStore as modal (modal.id)}
-    <Modal open close={() => closeConfirm(modal.id)}>
+    <Modal close={() => closeConfirm(modal.id)}>
         <h1>{modal.title}</h1>
         <p>{modal.content}</p>
         <div class="buttons">
@@ -105,7 +107,7 @@
     h1 {
         margin: 0;
     }
-    
+
     p {
         margin-top: 0;
         margin-bottom: 2em;

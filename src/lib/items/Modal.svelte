@@ -3,17 +3,14 @@
     import { outclick } from "../../actions/outclick";
     import { cubicOut } from "svelte/easing";
 
-    export let open = false;
     export let close = () => {};
 </script>
 
-{#if open}
-    <div class="modal" transition:fade={{ duration: 300, easing: cubicOut }}>
-        <div class="box" use:outclick on:outclick={close}>
-            <slot />
-        </div>
+<div class="modal" transition:fade={{ duration: 200, easing: cubicOut }}>
+    <div class="box" use:outclick on:outclick={close}>
+        <slot />
     </div>
-{/if}
+</div>
 
 <style lang="scss">
     .modal {
@@ -35,7 +32,11 @@
         padding: 1em 2em;
         border-radius: 0.5em;
         box-shadow: 0px 5px 5px #0005;
-        min-width: 200px;
-        min-height: 150px;
+        min-width: min(200px, 100vw);
+        min-height: min(150px, 100dvh);
+        max-width: 100vw;
+        max-height: 100dvh;
+        box-sizing: border-box;
+        overflow-y: auto;
     }
 </style>
