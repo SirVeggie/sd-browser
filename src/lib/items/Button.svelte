@@ -1,7 +1,10 @@
 <script lang="ts">
+    import { autofocus } from "../../actions/autofocus";
+
     export let down: (() => void) | undefined = undefined;
     export let up: (() => void) | undefined = undefined;
-    
+    export let focus = false;
+
     $: buttonProps = {
         class: $$restProps.class,
     };
@@ -18,6 +21,7 @@
 </script>
 
 <button
+    use:autofocus={focus}
     on:click
     on:focusout
     on:mousedown={handleDown}

@@ -6,6 +6,7 @@
     import { cubicOut } from "svelte/easing";
     import { writable } from "svelte/store";
     import { fade } from "svelte/transition";
+    import { autofocus } from "../../actions/autofocus";
 
     export type IModal = {
         id: string;
@@ -96,8 +97,10 @@
         <h1>{modal.title}</h1>
         <p>{modal.content}</p>
         <div class="buttons">
-            {#each modal.buttons as button (button)}
-                <Button on:click={() => modal.handler(button)}>{button}</Button>
+            {#each modal.buttons as button, i (button)}
+                <Button focus={i === 0} on:click={() => modal.handler(button)}>
+                    {button}
+                </Button>
             {/each}
         </div>
     </Modal>
