@@ -41,6 +41,7 @@
     } from "$lib/items/ContextMenu.svelte";
     import { createSelection } from "$lib/tools/selectManager";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
+    import { sleep } from "$lib/tools/sleep";
 
     const increment = 25;
     let currentAmount = increment;
@@ -452,6 +453,7 @@
     }
 
     async function deleteSelected() {
+        await sleep(25);
         if ($selection.length === 0)
             return notify("No images selected", "warn");
         if (await askConfirmation("Delete images", `Delete ${$selection.length} images?`)) {
