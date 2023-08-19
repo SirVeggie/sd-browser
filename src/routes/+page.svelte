@@ -449,6 +449,7 @@
         if (!id) return;
         if (await askConfirmation("Delete image")) {
             imageAction(id, { type: "delete" });
+            removeImagesFromUI([id]);
         }
     }
 
@@ -456,9 +457,29 @@
         await sleep(25);
         if ($selection.length === 0)
             return notify("No images selected", "warn");
-        if (await askConfirmation("Delete images", `Delete ${$selection.length} images?`)) {
+        if (
+            await askConfirmation(
+                "Delete images",
+                `Delete ${$selection.length} images?`
+            )
+        ) {
             imageAction($selection, { type: "delete" });
+            removeImagesFromUI($selection);
         }
+    }
+
+    function removeImagesFromUI(ids: string[]) {
+        let change = 0;
+        let current = 0;
+        imageStore.update((x) => {
+            const initial = x.length;
+            x = x.filter((z) => !ids.includes(z.id));
+            current = x.length;
+            change = initial - current;
+            return x;
+        });
+        imageAmountStore.update((x) => x - change);
+        currentAmount = Math.min(current, currentAmount);
     }
 
     function cancelSelect() {
