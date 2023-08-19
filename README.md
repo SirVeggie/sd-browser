@@ -77,6 +77,9 @@ Example: `FOLDER txt2img` or `landscape AND NOT FD img2img|grid`
 `ALL`: Condition matches whole prompt (and folder name) instead of only the positive  
 Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part of the prompt)
 
+## Image Management (new)
+Able to select and delete multiple images
+
 ## Live
 Opens a fullscreen image to always show the latest image. (The browser polls for new images every 5 seconds)  
 Works as a bigger preview view when used alongside the webui.
