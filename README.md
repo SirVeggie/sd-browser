@@ -81,7 +81,7 @@ Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part 
 Able to select and delete multiple images
 
 ## Live
-Opens a fullscreen image to always show the latest image. (The browser polls for new images every 5 seconds)  
+Opens a fullscreen image to always show the latest image. (The browser gets file updates so it updates in near real time)  
 Works as a bigger preview view when used alongside the webui.
 
 ## Flyout sidebar
