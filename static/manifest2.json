@@ -3,8 +3,8 @@
   "short_name": "SD Browser",
   "icons": [
     {
-      "src": "imagebrowser2.png",
-      "sizes": "477x477",
+      "src": "glass.png",
+      "sizes": "381x428",
       "type": "image/png"
     }
   ],
