@@ -1,7 +1,13 @@
 {
   "name": "SD Image Browser",
   "short_name": "SD Browser",
-  "icons": [],
+  "icons": [
+    {
+      "src": "imagebrowser2.png",
+      "sizes": "477x477",
+      "type": "image/png"
+    }
+  ],
   "start_url": "/",
   "display": "standalone",
   "background_color": "#242424",

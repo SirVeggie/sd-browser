@@ -43,6 +43,8 @@
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import { sleep } from "$lib/tools/sleep";
 
+    type ActionMode = "manual" | "auto";
+    
     const increment = 25;
     let currentAmount = increment;
     let id = "";
@@ -133,9 +135,11 @@
         live = true;
     }
 
-    function goLeft() {
+    function goLeft(mode?: ActionMode) {
         if (leftArrow && prevIndex < 0) {
-            openLive();
+            if (!mode || typeof mode !== "string" || mode === "manual") {
+                openLive();
+            }
         } else if (leftArrow) {
             id = paginated[prevIndex].id;
             scrollToImage();
@@ -355,7 +359,7 @@
             if (dir === "right") {
                 goRight();
             } else {
-                goLeft();
+                goLeft("auto");
             }
         }, 4000);
         if (ui) notify("Slideshow started");
