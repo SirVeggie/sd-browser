@@ -33,6 +33,8 @@
         collapseMode,
         compressedMode,
         matchingMode,
+        slideDelay,
+        initialImages,
     } from "$lib/stores/searchStore";
     import { seamlessStyle } from "$lib/stores/styleStore";
     import {
@@ -45,8 +47,9 @@
 
     type ActionMode = "manual" | "auto";
     
+    const initialAmount = Math.max($initialImages, 0);
     const increment = 25;
-    let currentAmount = increment;
+    let currentAmount = initialAmount;
     let id = "";
     let inputElement: HTMLInputElement;
     let inputTimer: any;
@@ -71,6 +74,7 @@
     $: latestId = paginated[0]?.id;
     $: seamless = $seamlessStyle;
     $: selection.setObjects(paginated.map((x) => x.id));
+    $: slideshowInterval = Math.max($slideDelay, 100);
 
     onMount(() => {
         document.body.scrollIntoView();
@@ -93,7 +97,7 @@
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         // do nothing if not left click
         if (e && e instanceof MouseEvent && e.button !== 0) return;
-        inputElement.blur();
+        inputElement.focus();
         id = img.id;
         getImageInfo(img.id).then((res) => {
             info = res;
@@ -192,7 +196,7 @@
         inputTimer = setTimeout(() => {
             startTrigger(500);
             document.body.scrollIntoView();
-            currentAmount = increment;
+            currentAmount = initialAmount;
             fetchImages();
         }, 1000);
     }
@@ -218,7 +222,7 @@
     function selectChange(reset?: boolean) {
         if (reset) {
             document.body.scrollIntoView();
-            currentAmount = increment;
+            currentAmount = initialAmount;
         } else {
             currentAmount = Math.min(currentAmount, 100);
         }
@@ -361,7 +365,7 @@
             } else {
                 goLeft("auto");
             }
-        }, 4000);
+        }, slideshowInterval);
         if (ui) notify("Slideshow started");
     }
 

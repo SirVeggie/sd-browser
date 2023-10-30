@@ -14,6 +14,8 @@ export const thumbMode = writable<QualityMode>('low');
 export const compressedMode = writable<QualityMode>('original');
 export const collapseMode = writable(false);
 export const matchingMode = writable<SearchMode>('regex');
+export const initialImages = writable(25);
+export const slideDelay = writable(4000);
 
 export function syncSearchWithLocalStorage() {
     syncMemory('nsfwFilter', nsfwFilter);
@@ -24,4 +26,6 @@ export function syncSearchWithLocalStorage() {
     syncMemory('compressedMode', compressedMode);
     syncMemory('collapseMode', collapseMode);
     syncMemory('matchingMode', matchingMode);
+    syncMemory('initialImages', initialImages);
+    syncMemory('slideDelay', slideDelay);
 }

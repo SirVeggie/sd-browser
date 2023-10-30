@@ -8,8 +8,10 @@
     import {
         compressedMode,
         folderFilter,
+        initialImages,
         matchingMode,
         nsfwFilter,
+        slideDelay,
         thumbMode,
     } from "$lib/stores/searchStore";
     import { qualityModes, searchKeywords, searchModes } from "$lib/types";
@@ -94,6 +96,12 @@
             {/each}
         </select>
     </label>
+    
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label>
+        Initial amount of images loaded (default: 25)
+        <Input numeric bind:value={$initialImages} />
+    </label>
 
     <span class="gray">
         Image quality settings:
@@ -123,6 +131,12 @@
                 <option value={quality}>{quality}</option>
             {/each}
         </select>
+    </label>
+    
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label>
+        Slideshow interval (milliseconds)
+        <Input numeric bind:value={$slideDelay} />
     </label>
 
     <span class="gray">

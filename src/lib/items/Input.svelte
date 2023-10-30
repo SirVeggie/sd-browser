@@ -1,7 +1,10 @@
 <script lang="ts">
+    import { sleep } from "$lib/tools/sleep";
+
     export let placeholder = "";
-    export let value = "";
+    export let value: string|number = "";
     export let element: HTMLInputElement | undefined = undefined;
+    export let numeric = false;
 
     async function clear() {
         value = "";
@@ -10,16 +13,25 @@
         element?.dispatchEvent(new Event("input"));
         element?.dispatchEvent(new Event("change"));
     }
+    
+    function onInput(event: Event) {
+        const input = (event.target as HTMLInputElement).value;
+        if (numeric) {
+            value = Number(input);
+        } else {
+            value = String(input);
+        }
+    }
 </script>
 
 <div class="input">
     <input
-        type="text"
+        type={numeric ? "number" : "text"}
         bind:this={element}
         {placeholder}
         on:change
-        on:input
-        bind:value
+        on:input={onInput}
+        value={value}
     />
     <button on:click={clear}>x</button>
 </div>
