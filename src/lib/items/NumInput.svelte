@@ -1,10 +1,10 @@
 <script lang="ts">
     export let placeholder = "";
-    export let value = "";
+    export let value = 0;
     export let element: HTMLInputElement | undefined = undefined;
 
     async function clear() {
-        value = "";
+        value = 0;
         element?.focus();
         await Promise.resolve();
         element?.dispatchEvent(new Event("input"));
@@ -14,7 +14,7 @@
 
 <div class="input">
     <input
-        type="text"
+        type="number"
         bind:this={element}
         {placeholder}
         on:change

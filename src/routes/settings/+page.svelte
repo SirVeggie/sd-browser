@@ -17,6 +17,7 @@
     import { qualityModes, searchKeywords, searchModes } from "$lib/types";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import { seamlessStyle } from "$lib/stores/styleStore";
+    import NumInput from "$lib/items/NumInput.svelte";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
@@ -100,7 +101,7 @@
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Initial amount of images loaded (default: 25)
-        <Input numeric bind:value={$initialImages} />
+        <NumInput bind:value={$initialImages} />
     </label>
 
     <span class="gray">
@@ -136,7 +137,7 @@
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Slideshow interval (milliseconds)
-        <Input numeric bind:value={$slideDelay} />
+        <NumInput bind:value={$slideDelay} />
     </label>
 
     <span class="gray">
