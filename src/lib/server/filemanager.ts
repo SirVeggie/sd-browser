@@ -434,9 +434,17 @@ export function markFavorite(ids: string | string[], favorite: boolean) {
 export function deleteImages(ids: string | string[]) {
     if (typeof ids === 'string') ids = [ids];
     
+    let failcount = 0;
     for (const id of ids) {
         const img = imageList.get(id);
         if (!img) return;
-        fs.unlink(img.file);
+        try {
+            fs.unlink(img.file);
+            imageList.delete(id);
+        } catch {
+            failcount++;
+        }
     }
+    
+    console.log(`Failed to delete ${failcount} images`);
 }
