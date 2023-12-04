@@ -64,7 +64,10 @@ export async function indexFiles() {
             const fullpath = path.join(dir, file);
             const hash = hashString(fullpath);
             if (imageCache && imageCache.has(hash)) {
-                images.set(hash, imageCache.get(hash)!);
+                images.set(hash, {
+                    ...(imageCache.get(hash)!),
+                    file: fullpath,
+                });
                 continue;
             }
 
@@ -377,8 +380,13 @@ function createComparer<T>(selector: (a: T) => any, descending: boolean) {
 
 function hashString(filepath: string) {
     const hash = crypto.createHash('sha256');
-    hash.update(filepath);
+    hash.update(removeBasePath(filepath));
     return hash.digest('hex');
+}
+
+function removeBasePath(filepath: string) {
+    filepath = filepath.replace(/(\/|\\)+$/, '');
+    return filepath.replace(IMG_FOLDER, '');
 }
 
 async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
