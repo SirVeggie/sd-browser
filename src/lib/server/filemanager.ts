@@ -60,7 +60,7 @@ export async function indexFiles() {
         console.log(`Indexing ${dir}`);
         const files = await readdir(dir);
 
-        for (const file of files.filter(x => x.endsWith('.png'))) {
+        for (const file of files.filter(x => isImage(x))) {
             const fullpath = path.join(dir, file);
             const hash = hashString(fullpath);
             if (imageCache && imageCache.has(hash)) {
@@ -82,7 +82,7 @@ export async function indexFiles() {
             });
         }
 
-        for (const file of files.filter(x => !x.endsWith('.png'))) {
+        for (const file of files.filter(x => !isImage(x))) {
             const fullpath = path.join(dir, file);
             const stats = await stat(fullpath);
             if (stats.isDirectory()) dirs.push(fullpath);
@@ -98,6 +98,10 @@ export async function indexFiles() {
     console.log(`Indexed ${imageList.size} images`);
 
     cleanTempImages();
+}
+
+function isImage(file: string) {
+    return file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.webp');
 }
 
 async function cleanTempImages() {
@@ -139,7 +143,7 @@ function setupWatcher() {
     watcher = new Watcher(IMG_FOLDER, options);
 
     watcher.on('add', async file => {
-        if (!file.endsWith('.png')) return;
+        if (!isImage(file)) return;
         const hash = hashString(file);
         if (genCount < genLimit) {
             genCount++;
@@ -167,12 +171,12 @@ function setupWatcher() {
     });
 
     watcher.on('rename', async (from, to) => {
-        if (from.endsWith('.png')) {
+        if (isImage(from)) {
             const oldhash = hashString(from);
             imageList.delete(oldhash);
         }
 
-        if (!to.endsWith('.png')) return;
+        if (!isImage(to)) return;
         const newhash = hashString(to);
         imageList.set(newhash, {
             id: newhash,
@@ -185,7 +189,7 @@ function setupWatcher() {
     });
 
     watcher.on('unlink', async file => {
-        if (!file.endsWith('.png')) return;
+        if (!isImage(file)) return;
         const hash = hashString(file);
         imageList.delete(hash);
         freshList = freshList.filter(x => x.id !== hash);
