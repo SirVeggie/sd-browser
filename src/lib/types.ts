@@ -103,7 +103,7 @@ export function isUpdateResponse(object: any): object is UpdateResponse {
     return testType(object, ['additions', 'deletions', 'timestamp']);
 }
 
-export type ActionRequest = NsfwAction | FavoriteAction | DeleteAction;
+export type ActionRequest = NsfwAction | FavoriteAction | DeleteAction | OpenAction;
 export function isActionRequest(object: any): object is ActionRequest {
     return testType(object, ['type']);
 }
@@ -127,6 +127,10 @@ export type FavoriteAction = {
 
 export type DeleteAction = {
     type: 'delete';
+};
+
+export type OpenAction = {
+    type: 'open';
 };
 
 export type ServerError = {

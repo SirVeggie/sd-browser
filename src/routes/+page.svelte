@@ -416,6 +416,7 @@
             const options: string[] = [];
             if (!selecting) options.push("Select");
             else options.push("Cancel selection", "Select row");
+            if (!selecting) options.push("Open folder");
             if (!selecting) options.push("Delete");
             else options.push("Delete selected");
 
@@ -433,6 +434,8 @@
                     deleteImg(id);
                 } else if (option === "Delete selected") {
                     deleteSelected();
+                } else if (option === "Open folder") {
+                    openFolder(id);
                 } else {
                     return "keep";
                 }
@@ -496,6 +499,10 @@
     function cancelSelect() {
         selecting = false;
         selection.deselectAll();
+    }
+    
+    function openFolder(id: string) {
+        imageAction(id, { type: "open" });
     }
 </script>
 

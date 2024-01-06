@@ -1,6 +1,8 @@
 import { IMG_FOLDER } from '$env/static/private';
 import { readdir, stat } from 'fs/promises';
 import path from 'path';
+import os from 'os';
+import cp from 'child_process';
 import crypto from 'crypto';
 import { searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
 import fs from 'fs/promises';
@@ -484,4 +486,35 @@ async function deleteTextFiles(imagepath: string) {
         const textfile = imagepath.replace(/\.(png|jpg|jpeg|webp)$/i, filetype);
         fs.unlink(textfile).catch(() => '');
     }
+}
+
+export function openExplorer(id: string) {
+    const filepath = imageList.get(id)?.file;
+    if (!filepath) return;
+    let folderpath = path.dirname(filepath);
+    let cmd = '';
+    switch (os.platform().toLowerCase().replace(/[0-9]/g, '').replace('darwin', 'macos')) {
+        case 'win':
+            folderpath = folderpath || '=';
+            cmd = 'explorer';
+            break;
+        case 'linux':
+            folderpath = folderpath || '/';
+            cmd = 'xdg-open';
+            break;
+        case 'macos':
+            folderpath = folderpath || '/';
+            cmd = 'open';
+            break;
+    }
+    const args = [];
+    if (cmd === 'explorer') {
+        args.push(`/select,${filepath}`);
+    } else {
+        args.push(folderpath);
+    }
+    const p = cp.spawn(cmd, args);
+    p.on('error', () => {
+        p.kill();
+    });
 }
