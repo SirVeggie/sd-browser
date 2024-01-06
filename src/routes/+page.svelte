@@ -51,6 +51,7 @@
     const increment = 25;
     let currentAmount = initialAmount;
     let id = "";
+    let bodyElement: HTMLBodyElement;
     let inputElement: HTMLInputElement;
     let inputTimer: any;
     let info: ImageInfo | undefined = undefined;
@@ -97,7 +98,7 @@
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         // do nothing if not left click
         if (e && e instanceof MouseEvent && e.button !== 0) return;
-        inputElement.focus();
+        //inputElement.focus();
         id = img.id;
         getImageInfo(img.id).then((res) => {
             info = res;
@@ -119,6 +120,8 @@
                 );
             }, 1000);
         }
+        
+        bodyElement.focus();
     }
 
     function closeImage() {
@@ -497,6 +500,7 @@
 </script>
 
 <svelte:window on:keydown={handleEsc} />
+<svelte:body bind:this={bodyElement} />
 
 <div class="topbar">
     <div class="quickbar">
