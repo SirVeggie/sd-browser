@@ -1,3 +1,11 @@
+<script lang="ts" context="module">
+  type PromptFragment = {
+    header: string;
+    content: string;
+    action: () => void;
+  }
+</script>
+
 <script lang="ts">
   import "../../scroll.css";
   import type { ImageInfo } from "$lib/types";
@@ -7,6 +15,7 @@
   import { notify } from "$lib/components/Notifier.svelte";
   import {
     getNegativePrompt,
+    getParams,
     getPositivePrompt,
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode } from "$lib/stores/searchStore";
@@ -17,29 +26,47 @@
   export let data: ImageInfo | undefined;
   export let enabled = true;
 
-  let promptElement: HTMLDivElement;
-  let fallbackElement: HTMLDivElement;
-  let fallbackElementNeg: HTMLDivElement;
+  let hiddenElementFull: HTMLDivElement;
+  let hiddenElementPos: HTMLDivElement;
+  let hiddenElementNeg: HTMLDivElement;
+  let hiddenElementParams: HTMLDivElement;
 
   $: imageUrl = imageId
     ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
     : "";
-  $: basicInfo = !data ? "" : formatMetadata(data);
-  $: promptInfo = !data ? "" : data.prompt ?? "";
+  $: basicInfo = !data ? "" : extractBasic(data);
+  $: promptInfo = !data ? [] : formatMetadata(data.prompt);
+  $: fullPrompt = !data ? "" : data.prompt;
   $: positivePrompt = !data ? "" : getPositivePrompt(data.prompt);
   $: negativePrompt = !data ? "" : getNegativePrompt(data.prompt);
+  $: paramsPrompt = !data ? "" : getParams(data.prompt);
 
-  function formatMetadata(d: ImageInfo): string {
+  function extractBasic(d: ImageInfo): string {
     const model = d.prompt?.match(/Model: (.*?)(,|$)/)?.[1] ?? "Unknown";
     const hash = d.prompt?.match(/Model hash: (.*?)(,|$)/)?.[1] ?? "Unknown";
-    const sampler = d.prompt?.match(/Sampler: (.*?)(,|$)/)?.[1] ?? "Unknown";
     let info = "";
     if (model) info += `Model: ${model} [${hash}]`;
-    if (sampler) info += `\nSampler: ${sampler}`;
     info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
     info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
     if (d.folder) info += `\nFolder: ${d.folder}`;
     return info;
+  }
+  
+  function formatMetadata(prompt: string | undefined): PromptFragment[] {
+    if (!prompt) return [];
+    const blocks: PromptFragment[] = [];
+    const pos = getPositivePrompt(prompt);
+    const neg = getNegativePrompt(prompt);
+    const params = getParams(prompt);
+    if (pos)
+      blocks.push({ header: "positive prompt", content: pos, action: copyPositive });
+    if (neg)
+      blocks.push({ header: "negative prompt", content: neg, action: copyNegative });
+    if (params)
+      blocks.push({ header: "parameters", content: params.split(", ").join("\n"), action: copyParams });
+    if (blocks.length === 0)
+      blocks.push({ header: "metadata", content: prompt, action: copyPrompt });
+    return blocks;
   }
 
   function handleEsc(e: KeyboardEvent) {
@@ -56,7 +83,7 @@
     if (!imageId) return;
     if (!data?.prompt) return notify("No prompt to copy");
     if (!navigator?.clipboard?.writeText) {
-      selectPrompt(promptElement);
+      selectPrompt(hiddenElementFull);
       document.execCommand("copy");
       deselect();
       return;
@@ -76,7 +103,7 @@
     if (!imageId) return;
     if (!data?.prompt) return notify("No positive to copy");
     if (!navigator?.clipboard?.writeText) {
-      selectPrompt(fallbackElement);
+      selectPrompt(hiddenElementPos);
       document.execCommand("copy");
       deselect();
     }
@@ -96,7 +123,7 @@
     if (!imageId) return;
     if (!data?.prompt) return notify("No negative to copy");
     if (!navigator?.clipboard?.writeText) {
-      selectPrompt(fallbackElementNeg);
+      selectPrompt(hiddenElementNeg);
       document.execCommand("copy");
       deselect();
     }
@@ -109,6 +136,26 @@
       })
       .catch(() => {
         notify("Failed to copy negative prompt");
+      });
+  }
+  
+  function copyParams() {
+    if (!imageId) return;
+    if (!data?.prompt) return notify("No parameters to copy");
+    if (!navigator?.clipboard?.writeText) {
+      selectPrompt(hiddenElementParams);
+      document.execCommand("copy");
+      deselect();
+    }
+
+    const negative = getParams(data.prompt);
+    navigator.clipboard
+      .writeText(negative)
+      .then(() => {
+        notify("Copied parameters");
+      })
+      .catch(() => {
+        notify("Failed to copy parameters");
       });
   }
 
@@ -152,26 +199,34 @@
           <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
           {#if data}
             <div class="info" on:click={prevent}>
-              <div>
+              <div class="basic">
                 <p>{basicInfo}</p>
                 <div class="buttons">
                   <Button on:click={copyPrompt}>Copy all</Button>
-                  <Button on:click={copyPositive}>Copy positive</Button>
-                  <Button on:click={copyNegative}>Copy negative</Button>
                   <Button on:click={deleteImage}>Delete</Button>
                 </div>
               </div>
-              <p bind:this={promptElement}>
-                {promptInfo}
-              </p>
+              {#each promptInfo as info}
+                <div class="extra">
+                  <h1 class="header">
+                    {info.header}
+                    <button on:click={info.action}>copy</button>
+                  </h1>
+                  <p>
+                    {info.content}
+                  </p>
+                </div>
+              {/each}
             </div>
           {/if}
         </div>
       </div>
     </div>
   </div>
-  <div class="fallback" bind:this={fallbackElement}>{positivePrompt}</div>
-  <div class="fallback" bind:this={fallbackElementNeg}>{negativePrompt}</div>
+  <div class="fallback" bind:this={hiddenElementFull}>{fullPrompt}</div>
+  <div class="fallback" bind:this={hiddenElementPos}>{positivePrompt}</div>
+  <div class="fallback" bind:this={hiddenElementNeg}>{negativePrompt}</div>
+  <div class="fallback" bind:this={hiddenElementParams}>{paramsPrompt}</div>
 {/if}
 
 <svelte:window on:keydown={handleEsc} />
@@ -233,25 +288,59 @@
       margin: 0;
       width: 0;
       min-width: calc(100% - 2em);
-
+      
       & > div {
-        display: flex;
+        // background-color: #123a;
+        background-color: #4444;
+        line-height: 1.3em;
+        border-radius: 0.5em;
+        margin: 1em 0;
+        overflow: hidden;
+        border: 1px solid #fff1;
       }
 
       p {
         white-space: pre-wrap;
         flex-grow: 1;
+        
+        margin: 0;
+      }
+
+      .basic {
+        display: flex;
+        padding: 0.7em 1em;
+        border-radius: 0.5em;
+        margin: 1em 0;
+      }
+      
+      .extra {
+        p {
+          padding: 0.5em 0.7em;
+        }
       }
 
       .buttons {
         display: flex;
         flex-direction: column;
-        // width: 100%;
-        margin-top: 1em;
-        margin-bottom: 0.5em;
-
-        :global(button) {
-          margin-bottom: 0.5em;
+        gap: 0.3em;
+      }
+      
+      .header {
+        margin: 0;
+        font-size: 0.8em;
+        font-weight: normal;
+        background-color: #112a;
+        padding: 0.2em 0.7em;
+        
+        button {
+          background-color: transparent;
+          border: none;
+          color: #aaa;
+          margin: 0;
+          padding: 0;
+          cursor: pointer;
+          transition: color 0.2s ease;
+          float: right;
         }
       }
     }

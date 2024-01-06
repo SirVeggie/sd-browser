@@ -77,6 +77,11 @@ Example: `FOLDER txt2img` or `landscape AND NOT FD img2img|grid`
 `ALL`: Condition matches whole prompt (and folder name) instead of only the positive  
 Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part of the prompt)
 
+## Sorting
+- Date: Sorts images based on file modification date
+- Name: Sorts images based on file name
+- Random: Sorts images randomly
+
 ## Image Management (new)
 Able to select and delete multiple images
 

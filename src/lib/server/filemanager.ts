@@ -44,6 +44,7 @@ export async function indexFiles() {
     let imageCache: ImageList | undefined;
     const images: ImageList = new Map();
     const cachefile = path.join(datapath, 'metadata.json');
+    const tempcachefile = path.join(datapath, 'metadata-temp.json');
     try {
         const cache = await fs.readFile(cachefile);
         imageCache = new Map(JSON.parse(cache.toString()));
@@ -90,11 +91,12 @@ export async function indexFiles() {
     }
 
     console.log('Writing cache file... do not interrupt!');
-    const cachePromise = fs.writeFile(cachefile, JSON.stringify([...images], null, 2)).catch(e => console.log(e));
+    const cachePromise = fs.writeFile(tempcachefile, JSON.stringify([...images], null, 2)).catch(e => console.log(e));
 
     imageList = images;
 
     await cachePromise;
+    await fs.rename(tempcachefile, cachefile).catch(e => console.log(e));
     console.log(`Indexed ${imageList.size} images`);
 
     cleanTempImages();
@@ -329,7 +331,11 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
     switch (sort) {
         case 'date':
             return [...images].sort(createComparer<ServerImage>(x => x.modifiedDate, true));
+        case 'date (asc)':
+            return [...images].sort(createComparer<ServerImage>(x => x.modifiedDate, false));
         case 'name':
+            return [...images].sort(createComparer<ServerImage>(x => x.file, true));
+        case 'name (desc)':
             return [...images].sort(createComparer<ServerImage>(x => x.file, false));
         case 'random':
             return selectRandom(images, images.length);
@@ -400,6 +406,13 @@ async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
             modifiedDate: stats.mtimeMs,
             createdDate: stats.birthtimeMs,
         };
+        
+        const textfile = imagepath.replace(/\.(png|jpg|jpeg|webp)$/i, '.txt');
+        if (await fs.stat(textfile).then(x => x.isFile()).catch(() => false)) {
+            const text = await fs.readFile(textfile, 'utf8');
+            res.prompt = text;
+            return res;
+        }
 
         const file = await fs.readFile(imagepath);
         let metadata = await exifr.parse(file);

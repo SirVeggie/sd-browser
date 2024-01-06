@@ -1,7 +1,7 @@
 
 export type ImageList = Map<string, ServerImage>;
 
-export const sortingMethods = ['date', 'name', 'random'] as const;
+export const sortingMethods = ['date', 'date (asc)', 'name', 'name (desc)', 'random'] as const;
 export type SortingMethod = typeof sortingMethods[number];
 
 export type ServerImage = {
