@@ -406,12 +406,15 @@ async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
             modifiedDate: stats.mtimeMs,
             createdDate: stats.birthtimeMs,
         };
-        
-        const textfile = imagepath.replace(/\.(png|jpg|jpeg|webp)$/i, '.txt');
-        if (await fs.stat(textfile).then(x => x.isFile()).catch(() => false)) {
-            const text = await fs.readFile(textfile, 'utf8');
-            res.prompt = text;
-            return res;
+
+        const filetypes = ['.txt', '.yaml', '.yml', '.json'];
+        for (const filetype of filetypes) {
+            const textfile = imagepath.replace(/\.(png|jpg|jpeg|webp)$/i, filetype);
+            if (await fs.stat(textfile).then(x => x.isFile()).catch(() => false)) {
+                const text = await fs.readFile(textfile, 'utf8');
+                res.prompt = text;
+                return res;
+            }
         }
 
         const file = await fs.readFile(imagepath);
@@ -458,7 +461,7 @@ export function markFavorite(ids: string | string[], favorite: boolean) {
 
 export function deleteImages(ids: string | string[]) {
     if (typeof ids === 'string') ids = [ids];
-    
+
     let failcount = 0;
     for (const id of ids) {
         const img = imageList.get(id);
@@ -466,10 +469,19 @@ export function deleteImages(ids: string | string[]) {
         try {
             fs.unlink(img.file);
             imageList.delete(id);
+            deleteTextFiles(img.file);
         } catch {
             failcount++;
         }
     }
-    
+
     console.log(`Failed to delete ${failcount} images`);
+}
+
+async function deleteTextFiles(imagepath: string) {
+    const filetypes = ['.txt', '.yaml', '.yml', '.json'];
+    for (const filetype of filetypes) {
+        const textfile = imagepath.replace(/\.(png|jpg|jpeg|webp)$/i, filetype);
+        fs.unlink(textfile).catch(() => '');
+    }
 }
