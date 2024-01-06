@@ -20,6 +20,7 @@
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode } from "$lib/stores/searchStore";
   import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
+    import { splitPromptParams } from "$lib/tools/misc";
 
   export let cancel: () => void;
   export let imageId: string | undefined;
@@ -63,7 +64,7 @@
     if (neg)
       blocks.push({ header: "negative prompt", content: neg, action: copyNegative });
     if (params)
-      blocks.push({ header: "parameters", content: params.split(", ").join("\n"), action: copyParams });
+      blocks.push({ header: "parameters", content: splitPromptParams(params).join("\n"), action: copyParams });
     if (blocks.length === 0)
       blocks.push({ header: "metadata", content: prompt, action: copyPrompt });
     return blocks;

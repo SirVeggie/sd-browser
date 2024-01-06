@@ -35,3 +35,19 @@ export function selectRandom<T>(array: T[], amount: number): T[] {
     }
     return res;
 }
+
+export function splitPromptParams(str: string): string[] {
+    const res: string[] = [];
+    let prev = 0;
+    let inQuotes = false;
+    for (let i = 0; i < str.length; i++) {
+        if (str[i] === '"' && str[i - 1] !== '\\') {
+            inQuotes = !inQuotes;
+        } else if (str[i] === ',' && !inQuotes) {
+            res.push(str.slice(prev, i).trim());
+            prev = i + 1;
+        }
+    }
+    res.push(str.slice(prev).trim());
+    return res;
+}
