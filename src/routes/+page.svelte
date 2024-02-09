@@ -51,7 +51,6 @@
     const increment = 25;
     let currentAmount = initialAmount;
     let id = "";
-    let bodyElement: HTMLBodyElement;
     let inputElement: HTMLInputElement;
     let inputTimer: any;
     let info: ImageInfo | undefined = undefined;
@@ -119,9 +118,6 @@
                 );
             }, 1000);
         }
-
-        if (!bodyElement) notify("No body element found", "error");
-        else bodyElement.focus();
     }
 
     function closeImage() {
@@ -534,7 +530,6 @@
 </script>
 
 <svelte:window on:keydown={handleEsc} />
-<svelte:body bind:this={bodyElement} />
 
 <div class="topbar">
     <div class="quickbar">

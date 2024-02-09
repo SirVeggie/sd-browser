@@ -1,5 +1,5 @@
 
-export function autofocus(node: HTMLElement, active: boolean) {
+export function autofocus(node: HTMLElement, active = true) {
     if (active) {
         node.focus();
     }

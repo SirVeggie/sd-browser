@@ -20,7 +20,8 @@
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode } from "$lib/stores/searchStore";
   import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
-    import { splitPromptParams } from "$lib/tools/misc";
+  import { splitPromptParams } from "$lib/tools/misc";
+  import { autofocus } from "../../actions/autofocus";
 
   export let cancel: () => void;
   export let imageId: string | undefined;
@@ -201,6 +202,7 @@
           {#if data}
             <div class="info" on:click={prevent}>
               <div class="basic">
+                <button class="focusButton" use:autofocus></button>
                 <p>{basicInfo}</p>
                 <div class="buttons">
                   <Button on:click={copyPrompt}>Copy all</Button>
@@ -345,6 +347,12 @@
         }
       }
     }
+  }
+  
+  .focusButton {
+    opacity: 0;
+    position: absolute;
+    pointer-events: none;
   }
 
   .fallback {
