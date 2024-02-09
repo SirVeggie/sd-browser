@@ -46,7 +46,7 @@
     import { sleep } from "$lib/tools/sleep";
 
     type ActionMode = "manual" | "auto";
-    
+
     const initialAmount = Math.max($initialImages, 0);
     const increment = 25;
     let currentAmount = initialAmount;
@@ -98,7 +98,6 @@
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         // do nothing if not left click
         if (e && e instanceof MouseEvent && e.button !== 0) return;
-        //inputElement.focus();
         id = img.id;
         getImageInfo(img.id).then((res) => {
             info = res;
@@ -108,20 +107,21 @@
             const currentImages = $imageStore;
             const startIndex = Math.max(
                 0,
-                currentImages.findIndex((img) => img.id === id) - 10
+                currentImages.findIndex((img) => img.id === id) - 10,
             );
             const endIndex = Math.min(currentImages.length, startIndex + 50);
             setTimeout(() => {
                 console.log(
-                    `Generating compressed images ${startIndex} - ${endIndex}`
+                    `Generating compressed images ${startIndex} - ${endIndex}`,
                 );
                 generateCompressedImages(
-                    currentImages.map((x) => x.id).slice(startIndex, endIndex)
+                    currentImages.map((x) => x.id).slice(startIndex, endIndex),
                 );
             }, 1000);
         }
-        
-        bodyElement.focus();
+
+        if (!bodyElement) notify("No body element found", "error");
+        else bodyElement.focus();
     }
 
     function closeImage() {
@@ -146,6 +146,8 @@
         if (leftArrow && prevIndex < 0) {
             if (!mode || typeof mode !== "string" || mode === "manual") {
                 openLive();
+            } else {
+                return false;
             }
         } else if (leftArrow) {
             id = paginated[prevIndex].id;
@@ -159,6 +161,8 @@
                 notify("Sliding left", undefined, "dir");
             }
         }
+
+        return true;
     }
 
     function goRight() {
@@ -201,16 +205,6 @@
             document.body.scrollIntoView();
             currentAmount = initialAmount;
             fetchImages();
-        }, 1000);
-    }
-
-    function startUpdate() {
-        clearInterval(updateTimer);
-        updateTimer = setInterval(() => {
-            // if (sorting === "random") return;
-            // if ($searchFilter) return;
-            console.log("Updating images");
-            fetchUpdate();
         }, 1000);
     }
 
@@ -287,6 +281,7 @@
             });
 
             if (images.amount === 0) return;
+            // TODO: is this check even useful?
             if ($imageStore.some((x) => x.id === images.imageIds[0])) {
                 console.log("Duplicate image found");
                 return;
@@ -300,6 +295,17 @@
         } finally {
             triggerOverride = false;
         }
+    }
+
+    function startUpdate() {
+        clearInterval(updateTimer);
+        updateTimer = setTimeout(updateLoop, 1000);
+    }
+
+    async function updateLoop() {
+        console.log("Updating images");
+        await fetchUpdate();
+        updateTimer = setTimeout(updateLoop, 1000);
     }
 
     async function fetchUpdate() {
@@ -318,27 +324,33 @@
 
             updateTime = res.timestamp;
 
+            // if there are no additions and no deletions, do nothing
             if (!res.additions.length) {
                 if (!res.deletions.length) return;
-                const dels = !res.deletions.some((x) =>
-                    $imageStore.some((z) => z.id === x)
+                const nothingToDelete = !res.deletions.some((x) =>
+                    $imageStore.some((z) => z.id === x),
                 );
-                if (dels) return;
+                if (nothingToDelete) return;
             }
+
+            // ensure no duplicates
+            res.additions = res.additions.filter(
+                (x) => !$imageStore.some((z) => z.id === x),
+            );
 
             const mapped = mapImagesToClient(res.additions);
             let deletions = 0;
 
             imageStore.update((x) => {
                 const modified = x.filter(
-                    (z) => res.deletions.indexOf(z.id) === -1
+                    (z) => res.deletions.indexOf(z.id) === -1,
                 );
                 deletions = x.length - modified.length;
                 return [...mapped, ...modified];
             });
 
             imageAmountStore.set(
-                $imageAmountStore + res.additions.length - deletions
+                $imageAmountStore + res.additions.length - deletions,
             );
         } catch (e: any) {
             console.error(e);
@@ -359,16 +371,31 @@
         currentAmount = Math.min(max, currentAmount + increment);
     }
 
+    function slideshowLoop(dir: string) {
+        if (dir === "right") {
+            goRight();
+        } else {
+            const success = goLeft("auto");
+
+            if (!success) {
+                clearInterval(slideTimer);
+                slideTimer = setInterval(slideshowWait, 100);
+            }
+        }
+    }
+
+    function slideshowWait() {
+        if (prevIndex >= 0) {
+            clearInterval(slideTimer);
+            slideTimer = setInterval(slideshowLoop, slideshowInterval);
+            goLeft("auto");
+        }
+    }
+
     function startSlideshow(dir: "left" | "right" = "right", ui = true) {
         if (slideTimer) stopSlideshow(false);
         slideDir = dir;
-        slideTimer = setInterval(() => {
-            if (dir === "right") {
-                goRight();
-            } else {
-                goLeft("auto");
-            }
-        }, slideshowInterval);
+        slideTimer = setInterval(() => slideshowLoop(dir), slideshowInterval);
         if (ui) notify("Slideshow started");
     }
 
@@ -474,7 +501,7 @@
         if (
             await askConfirmation(
                 "Delete images",
-                `Delete ${$selection.length} images?`
+                `Delete ${$selection.length} images?`,
             )
         ) {
             imageAction($selection, { type: "delete" });
@@ -500,7 +527,7 @@
         selecting = false;
         selection.deselectAll();
     }
-    
+
     function openFolder(id: string) {
         imageAction(id, { type: "open" });
     }
@@ -804,7 +831,9 @@
             bottom: 2px;
             transform: scale(0);
             opacity: 0;
-            transition: 120ms transform ease, 120ms opacity ease;
+            transition:
+                120ms transform ease,
+                120ms opacity ease;
             border-radius: 0.15em;
         }
 
