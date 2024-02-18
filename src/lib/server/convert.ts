@@ -95,7 +95,7 @@ export async function generateCompressedFromId(id: string, file?: string) {
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;
     console.log(`Generating preview for ${id}`);
-    await generateCompressed(imagepath, output);
+    await generateCompressed(imagepath, output).catch(console.error);
 }
 
 export async function generateThumbnailFromId(id: string, file?: string) {
@@ -105,5 +105,5 @@ export async function generateThumbnailFromId(id: string, file?: string) {
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;
     console.log(`Generating thumbnail for ${id}`);
-    await generateThumbnail(imagepath, output);
+    await generateThumbnail(imagepath, output).catch(console.error);
 }
