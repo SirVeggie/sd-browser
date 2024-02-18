@@ -509,10 +509,12 @@ export function openExplorer(id: string) {
     }
     const args = [];
     if (cmd === 'explorer') {
-        args.push(`/select,${filepath}`);
+        args.push(`/select,`);
+        args.push(filepath);
     } else {
         args.push(folderpath);
     }
+    console.log(`Opening folder with args ${args.join(' ')}`);
     const p = cp.spawn(cmd, args);
     p.on('error', () => {
         p.kill();
