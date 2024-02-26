@@ -19,9 +19,15 @@ type TimedImage = {
     timestamp: number;
 };
 
+type UniqueImage = {
+    id: string;
+    prompt: string;
+};
+
 let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
 let freshList: TimedImage[] = [];
+let uniqueList: Map<string, UniqueImage> = new Map();
 const nsfwList: string[] = [];
 const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
@@ -102,6 +108,10 @@ export async function indexFiles() {
     console.log(`Indexed ${imageList.size} images`);
 
     cleanTempImages();
+
+    setTimeout(() => {
+        createUniqueList();
+    }, 1000);
 }
 
 function isImage(file: string) {
@@ -171,13 +181,14 @@ function setupWatcher() {
         });
         if (amount > freshLimit) freshList.pop();
 
-        // trigger frontend update?
+        addUniqueImage(imageList.get(hash)!);
     });
 
     watcher.on('rename', async (from, to) => {
         if (isImage(from)) {
             const oldhash = hashString(from);
             imageList.delete(oldhash);
+            removeUniqueImage(oldhash);
         }
 
         if (!isImage(to)) return;
@@ -190,12 +201,15 @@ function setupWatcher() {
             createdDate: 0,
             ...await readMetadata(to),
         });
+
+        addUniqueImage(imageList.get(newhash)!);
     });
 
     watcher.on('unlink', async file => {
         if (!isImage(file)) return;
         const hash = hashString(file);
         imageList.delete(hash);
+        removeUniqueImage(hash);
         freshList = freshList.filter(x => x.id !== hash);
         const size = deletionList.unshift({
             id: hash,
@@ -222,6 +236,7 @@ function setupWatcher() {
         for (const [key, value] of imageList) {
             if (value.file.startsWith(dir)) {
                 imageList.delete(key);
+                removeUniqueImage(key);
             }
         }
     });
@@ -255,7 +270,7 @@ export function searchImages(search: string, filters: string[], mode: SearchMode
     }
 
     if (collapse) {
-        list = _.uniqBy(list, x => simplifyPrompt(x.prompt));
+        list = list.filter(x => uniqueList.has(x.id));
     }
 
     return list;
@@ -266,6 +281,32 @@ function simplifyPrompt(prompt: string | undefined) {
     return prompt
         .replace(/(, )?seed: \d+/i, '')
         .replace(/(, )?([^,]*)version: [^,]*/ig, '');
+}
+
+function createUniqueList() {
+    let list: UniqueImage[] = [...imageList.values()].map(x => ({
+        id: x.id,
+        prompt: simplifyPrompt(x.prompt),
+    }));
+
+    list = _.uniqBy(list, x => x.prompt);
+    uniqueList = new Map(list.map(x => [x.id, x]));
+    console.log(`Unique list created with ${list.length} items`);
+}
+
+function addUniqueImage(image: ServerImage) {
+    const prompt = simplifyPrompt(image.prompt);
+    const unique = [...uniqueList.values()].find(x => x.prompt === prompt);
+    if (unique)
+        uniqueList.delete(unique.id);
+    uniqueList.set(image.id, {
+        id: image.id,
+        prompt,
+    });
+}
+
+function removeUniqueImage(id: string) {
+    uniqueList.delete(id);
 }
 
 const keywordRegex = `((${searchKeywords.join('|')}) )*`;
@@ -471,13 +512,15 @@ export function deleteImages(ids: string | string[]) {
         try {
             fs.unlink(img.file);
             imageList.delete(id);
+            removeUniqueImage(id);
             deleteTextFiles(img.file);
         } catch {
             failcount++;
         }
     }
 
-    console.log(`Failed to delete ${failcount} images`);
+    if (failcount > 0)
+        console.log(`Failed to delete ${failcount} images`);
 }
 
 async function deleteTextFiles(imagepath: string) {
