@@ -14,13 +14,15 @@
         slideDelay,
         thumbMode,
     } from "$lib/stores/searchStore";
-    import { qualityModes, searchKeywords, searchModes } from "$lib/types";
+    import { flyoutModes, qualityModes, searchKeywords, searchModes } from "$lib/types";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import { seamlessStyle } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
+    import { authLogout, authStore } from "$lib/stores/authStore";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
+    let flyoutMode = $flyoutStore.mode;
 
     $: setInput($flyoutStore.url);
 
@@ -40,11 +42,20 @@
             notify(`Flyout address set to '${address}'`);
         }, 2000);
     }
+    
+    function onFlyoutModeChange() {
+        flyoutStore.update((x) => ({ ...x, mode: flyoutMode }));
+    }
 
     function reset() {
         notify(`LocalStorage was cleared`);
         localStorage.clear();
         window.location.reload();
+    }
+    
+    function logout() {
+        notify(`Logging out`);
+        authLogout();
     }
 </script>
 
@@ -53,12 +64,24 @@
     <div class="buttons">
         <Link to="/">Back</Link>
         <Button on:click={reset}>Reset</Button>
+        {#if $authStore.password}
+            <Button on:click={logout}>Logout</Button>
+        {/if}
     </div>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Set flyout address (webui url)
         <Input bind:value={address} on:input={onInput} />
+    </label>
+    
+    <label for="matching">
+        Flyout styling:
+        <select id="matching" bind:value={flyoutMode} on:change={onFlyoutModeChange}>
+            {#each flyoutModes as mode}
+                <option value={mode}>{mode}</option>
+            {/each}
+        </select>
     </label>
 
     <label class="checkbox">

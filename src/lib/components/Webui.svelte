@@ -20,7 +20,7 @@
         bind:this={iframe}
         src={$flyoutStore.url}
         frameborder="0"
-        allow="fullscreen"
+        allow="fullscreen; clipboard-write"
     />
 </div>
 <button on:click={toggle}>{$flyoutState ? "Close" : "Open"}</button>
@@ -42,10 +42,6 @@
             opacity: 0;
             pointer-events: none;
             transform: translateX(100%);
-        }
-
-        @media (width < 650px) {
-            left: 0;
         }
     }
 

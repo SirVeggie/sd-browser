@@ -11,9 +11,10 @@ export type ServerImage = {
     modifiedDate: number;
     createdDate: number;
     prompt?: string;
+    workflow?: string;
 };
 export function isServerImage(object: any): object is ServerImage {
-    return testType(object, ['id', 'file', 'metadata']);
+    return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate']);
 }
 
 export type ClientImage = {
@@ -30,6 +31,7 @@ export type ImageInfo = {
     modifiedDate: number;
     createdDate: number;
     prompt?: string;
+    workflow?: string;
 };
 export function isImageInfo(object: any): object is ImageInfo {
     return testType(object, ['id', 'folder', 'modifiedDate', 'createdDate']);
@@ -39,6 +41,12 @@ export const searchModes = ['regex', 'words', 'contains'] as const;
 export type SearchMode = typeof searchModes[number];
 export function isSearchMode(object: any): object is SearchMode {
     return searchModes.includes(object);
+}
+
+export const flyoutModes = ['normal', 'wide', 'half', 'fullscreen'] as const;
+export type FlyoutMode = typeof flyoutModes[number];
+export function isFlyoutMode(object: any): object is FlyoutMode {
+    return flyoutModes.includes(object);
 }
 
 export const qualityModes = ['original', 'medium', 'low'] as const;

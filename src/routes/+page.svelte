@@ -723,7 +723,7 @@
     .slideshow {
         position: fixed;
         top: 1.5em;
-        right: calc(2em + var(--flyout-width));
+        right: calc(2em + (100dvw - var(--content-width)));
         z-index: 5;
 
         :global(.flanimate) & {

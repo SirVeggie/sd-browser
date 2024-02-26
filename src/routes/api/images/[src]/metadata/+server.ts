@@ -13,5 +13,6 @@ export async function GET(e) {
         modifiedDate: image.modifiedDate,
         createdDate: image.createdDate,
         prompt: image.prompt,
+        workflow: image.workflow,
     } satisfies ImageInfo);
 }

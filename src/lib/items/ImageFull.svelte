@@ -3,7 +3,7 @@
     header: string;
     content: string;
     action: () => void;
-  }
+  };
 </script>
 
 <script lang="ts">
@@ -32,16 +32,18 @@
   let hiddenElementPos: HTMLDivElement;
   let hiddenElementNeg: HTMLDivElement;
   let hiddenElementParams: HTMLDivElement;
+  let hiddenElementWorkflow: HTMLDivElement;
 
   $: imageUrl = imageId
     ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
     : "";
   $: basicInfo = !data ? "" : extractBasic(data);
-  $: promptInfo = !data ? [] : formatMetadata(data.prompt);
+  $: promptInfo = !data ? [] : formatMetadata(data.prompt, data.workflow);
   $: fullPrompt = !data ? "" : data.prompt;
   $: positivePrompt = !data ? "" : getPositivePrompt(data.prompt);
   $: negativePrompt = !data ? "" : getNegativePrompt(data.prompt);
   $: paramsPrompt = !data ? "" : getParams(data.prompt);
+  $: workflowPrompt = !data ? "" : data.workflow;
 
   function extractBasic(d: ImageInfo): string {
     const model = d.prompt?.match(/Model: (.*?)(,|$)/)?.[1] ?? "Unknown";
@@ -53,21 +55,42 @@
     if (d.folder) info += `\nFolder: ${d.folder}`;
     return info;
   }
-  
-  function formatMetadata(prompt: string | undefined): PromptFragment[] {
+
+  function formatMetadata(
+    prompt: string | undefined,
+    workflow?: string,
+  ): PromptFragment[] {
     if (!prompt) return [];
     const blocks: PromptFragment[] = [];
     const pos = getPositivePrompt(prompt);
     const neg = getNegativePrompt(prompt);
     const params = getParams(prompt);
     if (pos)
-      blocks.push({ header: "positive prompt", content: pos, action: copyPositive });
+      blocks.push({
+        header: "positive prompt",
+        content: pos,
+        action: copyPositive,
+      });
     if (neg)
-      blocks.push({ header: "negative prompt", content: neg, action: copyNegative });
+      blocks.push({
+        header: "negative prompt",
+        content: neg,
+        action: copyNegative,
+      });
     if (params)
-      blocks.push({ header: "parameters", content: splitPromptParams(params).join("\n"), action: copyParams });
+      blocks.push({
+        header: "parameters",
+        content: splitPromptParams(params).join("\n"),
+        action: copyParams,
+      });
     if (blocks.length === 0)
       blocks.push({ header: "metadata", content: prompt, action: copyPrompt });
+    if (workflow)
+      blocks.push({
+        header: "workflow",
+        content: workflow,
+        action: copyWorkflow,
+      });
     return blocks;
   }
 
@@ -81,84 +104,49 @@
     e.preventDefault();
   }
 
-  function copyPrompt() {
+  function copyInfo(
+    element: HTMLDivElement,
+    content: string | undefined,
+    name: string,
+  ) {
     if (!imageId) return;
-    if (!data?.prompt) return notify("No prompt to copy");
+    if (!element) return;
+    if (!content) return notify(`No ${name} to copy`);
     if (!navigator?.clipboard?.writeText) {
-      selectPrompt(hiddenElementFull);
+      selectPrompt(element);
       document.execCommand("copy");
       deselect();
       return;
     }
 
     navigator.clipboard
-      .writeText(data.prompt)
+      .writeText(content)
       .then(() => {
-        notify("Copied prompt to clipboard");
+        notify(`Copied ${name} to clipboard`);
       })
       .catch(() => {
-        notify("Failed to copy prompt to clipboard");
+        notify(`Failed to copy ${name} to clipboard`);
       });
+  }
+
+  function copyPrompt() {
+    copyInfo(hiddenElementFull, data?.prompt, "prompt");
   }
 
   function copyPositive() {
-    if (!imageId) return;
-    if (!data?.prompt) return notify("No positive to copy");
-    if (!navigator?.clipboard?.writeText) {
-      selectPrompt(hiddenElementPos);
-      document.execCommand("copy");
-      deselect();
-    }
-
-    const positive = getPositivePrompt(data.prompt);
-    navigator.clipboard
-      .writeText(positive)
-      .then(() => {
-        notify("Copied positive prompt");
-      })
-      .catch(() => {
-        notify("Failed to copy positive prompt");
-      });
+    copyInfo(hiddenElementPos, getPositivePrompt(data?.prompt), "positive");
   }
 
   function copyNegative() {
-    if (!imageId) return;
-    if (!data?.prompt) return notify("No negative to copy");
-    if (!navigator?.clipboard?.writeText) {
-      selectPrompt(hiddenElementNeg);
-      document.execCommand("copy");
-      deselect();
-    }
-
-    const negative = getNegativePrompt(data.prompt);
-    navigator.clipboard
-      .writeText(negative)
-      .then(() => {
-        notify("Copied negative prompt");
-      })
-      .catch(() => {
-        notify("Failed to copy negative prompt");
-      });
+    copyInfo(hiddenElementNeg, getNegativePrompt(data?.prompt), "negative");
   }
-  
-  function copyParams() {
-    if (!imageId) return;
-    if (!data?.prompt) return notify("No parameters to copy");
-    if (!navigator?.clipboard?.writeText) {
-      selectPrompt(hiddenElementParams);
-      document.execCommand("copy");
-      deselect();
-    }
 
-    const negative = getParams(data.prompt);
-    navigator.clipboard
-      .writeText(negative)
-      .then(() => {
-        notify("Copied parameters");
-      })
-      .catch(() => {
-        notify("Failed to copy parameters");
-      });
+  function copyParams() {
+    copyInfo(hiddenElementParams, getParams(data?.prompt), "parameters");
+  }
+
+  function copyWorkflow() {
+    copyInfo(hiddenElementWorkflow, data?.workflow, "workflow");
   }
 
   function deleteImage() {
@@ -205,7 +193,11 @@
                 <button class="focusButton" use:autofocus></button>
                 <p>{basicInfo}</p>
                 <div class="buttons">
-                  <Button on:click={copyPrompt}>Copy all</Button>
+                  {#if data.workflow}
+                    <Button on:click={copyWorkflow}>Copy workflow</Button>
+                  {:else if data.prompt}
+                    <Button on:click={copyPrompt}>Copy all</Button>
+                  {/if}
                   <Button on:click={deleteImage}>Delete</Button>
                 </div>
               </div>
@@ -230,6 +222,7 @@
   <div class="fallback" bind:this={hiddenElementPos}>{positivePrompt}</div>
   <div class="fallback" bind:this={hiddenElementNeg}>{negativePrompt}</div>
   <div class="fallback" bind:this={hiddenElementParams}>{paramsPrompt}</div>
+  <div class="fallback" bind:this={hiddenElementWorkflow}>{workflowPrompt}</div>
 {/if}
 
 <svelte:window on:keydown={handleEsc} />
@@ -291,7 +284,7 @@
       margin: 0;
       width: 0;
       min-width: calc(100% - 2em);
-      
+
       & > div {
         // background-color: #123a;
         background-color: #4444;
@@ -305,7 +298,7 @@
       p {
         white-space: pre-wrap;
         flex-grow: 1;
-        
+
         margin: 0;
       }
 
@@ -315,7 +308,7 @@
         border-radius: 0.5em;
         margin: 1em 0;
       }
-      
+
       .extra {
         p {
           padding: 0.5em 0.7em;
@@ -327,14 +320,14 @@
         flex-direction: column;
         gap: 0.3em;
       }
-      
+
       .header {
         margin: 0;
         font-size: 0.8em;
         font-weight: normal;
         background-color: #112a;
         padding: 0.2em 0.7em;
-        
+
         button {
           background-color: transparent;
           border: none;
@@ -348,7 +341,7 @@
       }
     }
   }
-  
+
   .focusButton {
     opacity: 0;
     position: absolute;

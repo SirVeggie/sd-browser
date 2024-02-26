@@ -466,8 +466,13 @@ async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
             return {};
         metadata = {
             ...res,
-            prompt: metadata.parameters ?? undefined
+            prompt: metadata.parameters ?? metadata.prompt ?? undefined,
+            workflow: metadata.workflow ?? undefined,
         } satisfies Partial<ServerImage>;
+
+        if (metadata.prompt === undefined && metadata.workflow === undefined) {
+            metadata.prompt = JSON.stringify(metadata);
+        }
 
         return metadata;
     } catch {

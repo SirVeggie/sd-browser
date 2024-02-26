@@ -94,7 +94,7 @@
         position: fixed;
         top: 0;
         bottom: 0;
-        right: var(--flyout-width);
+        right: calc(100dvw - var(--content-width));
         z-index: 5;
         width: max(5vw, 5vh);
         display: flex;

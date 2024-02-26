@@ -7,19 +7,38 @@
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import ContextMenu from "$lib/items/ContextMenu.svelte";
     import Confirm from "$lib/components/Confirm.svelte";
+    import { authStore } from "$lib/stores/authStore";
+    import Login from "$lib/components/Login.svelte";
+    import { onMount } from "svelte";
+    import { attemptLogin } from "$lib/tools/authRequests";
 
+    let timestamp = Date.now();
     let fltimeout: any;
     let flanimate = false;
+    $: flwide = $flyoutStore.mode === "wide";
+    $: flhalf = $flyoutStore.mode === "half";
+    $: flfull = $flyoutStore.mode === "fullscreen";
 
     $: flvisible = $flyoutState;
     $: {
         $flyoutState;
         clearTimeout(fltimeout);
-        flanimate = true;
+        if (timestamp + 1000 < Date.now()) {
+            flanimate = true;
+        }
         fltimeout = setTimeout(() => {
             flanimate = false;
         }, 250);
     }
+
+    onMount(async () => {
+        if (!(await attemptLogin())) {
+            authStore.set({
+                password: "",
+                valid: false,
+            });
+        }
+    });
 </script>
 
 <svelte:head>
@@ -31,9 +50,13 @@
     {/if}
 </svelte:head>
 
-<main class:flvisible class:flanimate>
+<main class:flvisible class:flanimate class:flwide class:flhalf class:flfull>
     <div class="content">
-        <slot />
+        {#if $authStore.valid}
+            <slot />
+        {:else}
+            <Login />
+        {/if}
     </div>
     {#if $flyoutStore.enabled}
         <Webui />
@@ -56,22 +79,51 @@
 
         --main-padding: 2em;
         --flyout-width: 0px;
+        --content-width: calc(100dvw - var(--flyout-width));
 
         .content {
             flex-grow: 1;
             position: relative;
-            width: calc(100dvw - var(--flyout-width));
-            // container-type: inline-size;
+            width: var(--content-width);
         }
 
         &.flvisible {
             --flyout-width: 500px;
 
-            @media (width < 1000px) {
-                --flyout-width: 50dvw;
+            &:not(.flwide, .flfull) {
+                @media (width < 1000px) {
+                    --flyout-width: 50dvw;
+                }
+                @media (width < 650px) {
+                    --flyout-width: 100dvw;
+                    --content-width: 100dvw;
+                }
             }
-            @media (width < 650px) {
-                --flyout-width: 0px;
+
+            &.flwide {
+                --flyout-width: 1000px;
+
+                @media (width < 2000px) {
+                    --flyout-width: 50dvw;
+                }
+                @media (width < 1000px) {
+                    --flyout-width: 100dvw;
+                    --content-width: 100dvw;
+                }
+            }
+            
+            &.flhalf {
+                --flyout-width: 50dvw;
+                
+                @media (width < 1000px) {
+                    --flyout-width: 100dvw;
+                    --content-width: 100dvw;
+                }
+            }
+
+            &.flfull {
+                --flyout-width: 100dvw;
+                --content-width: 100dvw;
             }
         }
 

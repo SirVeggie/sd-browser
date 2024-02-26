@@ -1,4 +1,5 @@
 <script lang="ts">
+    export let password = false;
     export let placeholder = "";
     export let value = "";
     export let element: HTMLInputElement | undefined = undefined;
@@ -13,14 +14,25 @@
 </script>
 
 <div class="input">
-    <input
-        type="text"
-        bind:this={element}
-        {placeholder}
-        on:change
-        on:input
-        bind:value={value}
-    />
+    {#if password}
+        <input
+            type="password"
+            bind:this={element}
+            {placeholder}
+            on:change
+            on:input
+            bind:value={value}
+        />
+    {:else}
+        <input
+            type="text"
+            bind:this={element}
+            {placeholder}
+            on:change
+            on:input
+            bind:value={value}
+        />
+    {/if}
     <button on:click={clear}>x</button>
 </div>
 
