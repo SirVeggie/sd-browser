@@ -15,7 +15,7 @@ A standalone image browser (not a webui extension) made with Node and SvelteKit.
 6) Run command `npm start` to start the application
 7) Open `localhost:[PORT]` in your browser (default `PORT` is `4200`)
 
-When starting for the first time, the images will be indexed. Depending on the amount of images, this can take seconds (5,000 images), or couple minutes (200,000 images). After the indexing, following starts will only take a couple seconds.
+When starting for the first time, the images will be indexed. Depending on the amount of images, this can take seconds (5,000 images), or a couple of minutes (200,000 images). After the indexing, the following starts will only take a couple of seconds.
 
 ## Authentication
 
