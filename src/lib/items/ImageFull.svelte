@@ -17,6 +17,8 @@
     getNegativePrompt,
     getParams,
     getPositivePrompt,
+    getSvNegativePrompt,
+    getSvPositivePrompt,
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode } from "$lib/stores/searchStore";
   import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
@@ -31,6 +33,8 @@
   let hiddenElementFull: HTMLDivElement;
   let hiddenElementPos: HTMLDivElement;
   let hiddenElementNeg: HTMLDivElement;
+  let hiddenElementSvPos: HTMLDivElement;
+  let hiddenElementSvNeg: HTMLDivElement;
   let hiddenElementParams: HTMLDivElement;
   let hiddenElementWorkflow: HTMLDivElement;
 
@@ -42,6 +46,8 @@
   $: fullPrompt = !data ? "" : data.prompt;
   $: positivePrompt = !data ? "" : getPositivePrompt(data.prompt);
   $: negativePrompt = !data ? "" : getNegativePrompt(data.prompt);
+  $: svPositivePrompt = !data ? "" : getSvPositivePrompt(data.prompt);
+  $: svNegativePrompt = !data ? "" : getSvNegativePrompt(data.prompt);
   $: paramsPrompt = !data ? "" : getParams(data.prompt);
   $: workflowPrompt = !data ? "" : data.workflow;
 
@@ -64,6 +70,8 @@
     const blocks: PromptFragment[] = [];
     const pos = getPositivePrompt(prompt);
     const neg = getNegativePrompt(prompt);
+    const sv_pos = getSvPositivePrompt(prompt);
+    const sv_neg = getSvNegativePrompt(prompt);
     const params = getParams(prompt);
     if (pos)
       blocks.push({
@@ -76,6 +84,18 @@
         header: "negative prompt",
         content: neg,
         action: copyNegative,
+      });
+    if (sv_pos && pos !== sv_pos)
+      blocks.push({
+        header: "original positive prompt",
+        content: sv_pos,
+        action: copySvPositive,
+      });
+    if (sv_neg && neg !== sv_neg)
+      blocks.push({
+        header: "original negative prompt",
+        content: sv_neg,
+        action: copySvNegative,
       });
     if (params)
       blocks.push({
@@ -139,6 +159,14 @@
 
   function copyNegative() {
     copyInfo(hiddenElementNeg, getNegativePrompt(data?.prompt), "negative");
+  }
+  
+  function copySvPositive() {
+    copyInfo(hiddenElementSvPos, getSvPositivePrompt(data?.prompt), "sv_positive");
+  }
+  
+  function copySvNegative() {
+    copyInfo(hiddenElementSvNeg, getSvNegativePrompt(data?.prompt), "sv_negative");
   }
 
   function copyParams() {
@@ -221,6 +249,8 @@
   <div class="fallback" bind:this={hiddenElementFull}>{fullPrompt}</div>
   <div class="fallback" bind:this={hiddenElementPos}>{positivePrompt}</div>
   <div class="fallback" bind:this={hiddenElementNeg}>{negativePrompt}</div>
+  <div class="fallback" bind:this={hiddenElementSvPos}>{svPositivePrompt}</div>
+  <div class="fallback" bind:this={hiddenElementSvNeg}>{svNegativePrompt}</div>
   <div class="fallback" bind:this={hiddenElementParams}>{paramsPrompt}</div>
   <div class="fallback" bind:this={hiddenElementWorkflow}>{workflowPrompt}</div>
 {/if}

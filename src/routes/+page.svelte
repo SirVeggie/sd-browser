@@ -708,6 +708,7 @@
 
         &.seamless {
             gap: 2px;
+            padding: 5px;
         }
 
         @media (width > 1200px) {

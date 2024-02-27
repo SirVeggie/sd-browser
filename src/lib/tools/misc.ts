@@ -49,5 +49,6 @@ export function splitPromptParams(str: string): string[] {
         }
     }
     res.push(str.slice(prev).trim());
-    return res;
+    const hiddenParams = ["sv_prompt", "sv_negative"];
+    return res.filter(s => !hiddenParams.includes(s.split(":")[0].trim()));
 }
