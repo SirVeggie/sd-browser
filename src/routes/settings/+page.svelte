@@ -16,7 +16,7 @@
     } from "$lib/stores/searchStore";
     import { flyoutModes, qualityModes, searchKeywords, searchModes } from "$lib/types";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
-    import { seamlessStyle } from "$lib/stores/styleStore";
+    import { imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
     import { authLogout, authStore } from "$lib/stores/authStore";
 
@@ -162,10 +162,16 @@
         Slideshow interval (milliseconds)
         <NumInput bind:value={$slideDelay} />
     </label>
-
+    
     <span class="gray">
         Visual style settings
     </span>
+    
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label>
+        Image size offset:
+        <NumInput bind:value={$imageSize} />
+    </label>
 
     <label class="checkbox">
         Seamless grid:

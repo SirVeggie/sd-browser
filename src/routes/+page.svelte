@@ -36,7 +36,7 @@
         slideDelay,
         initialImages,
     } from "$lib/stores/searchStore";
-    import { seamlessStyle } from "$lib/stores/styleStore";
+    import { imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import {
         closeAllContextMenus,
         openContextMenu,
@@ -75,6 +75,7 @@
     $: seamless = $seamlessStyle;
     $: selection.setObjects(paginated.map((x) => x.id));
     $: slideshowInterval = Math.max($slideDelay, 100);
+    $: gridStyle = `--size-offset:${$imageSize}px`;
 
     onMount(() => {
         document.body.scrollIntoView();
@@ -600,7 +601,7 @@
     {/if}
 </div>
 
-<div class="grid" class:seamless>
+<div class="grid" class:seamless style={gridStyle}>
     {#each paginated as img (img.id)}
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -700,7 +701,7 @@
 
     .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(calc(200px + var(--size-offset)), 1fr));
         gap: 0.8em;
         padding: calc(var(--main-padding) / 2) var(--main-padding);
         min-height: 100vh;
@@ -710,11 +711,11 @@
         }
 
         @media (width > 1200px) {
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(calc(250px + var(--size-offset)), 1fr));
         }
 
         @media (width < 501px) {
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(calc(130px + var(--size-offset)), 1fr));
             gap: 0.2em;
             padding: 5px;
         }
