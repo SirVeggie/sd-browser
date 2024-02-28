@@ -475,8 +475,9 @@ async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
             }
         }
 
-        const file = await fs.readFile(imagepath);
-        let metadata = await exifr.parse(file);
+        let metadata = await exifr.parse(imagepath, {
+            ifd0: false,
+        } as any);
         if (!metadata)
             return {};
         metadata = {
