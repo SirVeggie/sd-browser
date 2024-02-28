@@ -84,27 +84,25 @@ Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part 
 - Name: Sorts images based on file name
 - Random: Sorts images randomly
 
-## Image Management (new)
-Able to select and delete multiple images
+## Image Management
+Able to select and delete multiple images.
 
 ## Live
 Opens a fullscreen image to always show the latest image. (The browser gets file updates so it updates in near real time)  
 Works as a bigger preview view when used alongside the webui.
 
 ## Flyout sidebar
-
-You can use the flyout to embed the stable diffusion webui, so you can use it seamlessly without switching tabs/applications on mobile.
+You can use the flyout to embed the stable diffusion or comfy webui, so you can use it seamlessly without switching tabs/applications on mobile.
 You can change the url of the webui in the settings if necessary.
 
 ## Slideshow
-Cycles through images in order every 4 seconds.
+Cycles through images in order every 4 seconds. The delay can be modified in the settings.
 
 ## Hotkeys
 You can use the `arrow keys` to cycle through images while in fullscreen.  
 You can use `Space` to start and stop the slideshow.
 
 ## Mobile
-
 Optimized for both desktop and mobile use.
 
 The image browser has been setup as PWA compatible, so you can set it on your homescreen on mobile to open it in fullscreen (without a url bar).
