@@ -44,6 +44,8 @@ export async function startFileManager() {
 
 export async function indexFiles() {
     console.log('Indexing files...');
+    const startTimestamp = Date.now();
+    
     fs.mkdir(datapath).catch(() => '');
     fs.mkdir(thumbnailPath).catch(() => '');
     fs.mkdir(compressedPath).catch(() => '');
@@ -65,7 +67,7 @@ export async function indexFiles() {
     while (dirs.length > 0) {
         const dir = dirs.pop();
         if (!dir) continue;
-        const dirShort = path.basename(dir);
+        const dirShort = removeBasePath(dir);
         console.log(`Indexing ${dir}`);
         const files = await readdir(dir);
 
@@ -93,8 +95,12 @@ export async function indexFiles() {
 
         for (const file of files.filter(x => !isImage(x))) {
             const fullpath = path.join(dir, file);
-            const stats = await stat(fullpath);
-            if (stats.isDirectory()) dirs.push(fullpath);
+            try {
+                const stats = await stat(fullpath);
+                if (stats.isDirectory()) dirs.push(fullpath);
+            } catch {
+                console.log(`Failed to read ${fullpath}`);
+            }
         }
     }
 
@@ -105,13 +111,10 @@ export async function indexFiles() {
 
     await cachePromise;
     await fs.rename(tempcachefile, cachefile).catch(e => console.log(e));
-    console.log(`Indexed ${imageList.size} images`);
+    console.log(`Indexed ${imageList.size} images in ${Math.round((Date.now() - startTimestamp) / 1000)}s`);
 
     cleanTempImages();
-
-    setTimeout(() => {
-        createUniqueList();
-    }, 1000);
+    createUniqueList();
 }
 
 function isImage(file: string) {
