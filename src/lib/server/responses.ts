@@ -3,6 +3,19 @@ import { readFile } from "fs/promises";
 import { generateCompressed, generateThumbnail } from "./convert";
 import { compressedPath, getImage, thumbnailPath } from "./filemanager";
 import path from "path";
+import util from 'util';
+import { exec } from 'child_process'
+
+const promisifiedExec = util.promisify(exec);
+
+async function runPythonScript(path: string): Promise<string> {
+    try {
+        await promisifiedExec(`python ${'src/lib/server/stealth_pnginfo.py'} "${path}"`);
+    } catch (error) {
+        console.error('Error:', error);
+    }
+    return ''
+}
 
 export function error(message: string | ServerError, status = 500) {
     if (typeof message === 'string') message = { error: message };
@@ -15,9 +28,10 @@ export function success(message?: unknown, status = 200) {
     return new Response(JSON.stringify(message), { status });
 }
 
-export async function image(imageid: string | undefined, type?: string) {
+export async function image(imageid: string | undefined, type?: string, stealth?: boolean) {
     const filepath = getImage(imageid ?? '')?.file;
     if (!filepath) return error('Image not found', 404);
+    if (stealth) await runPythonScript(filepath)
 
     let buffer;
     try {

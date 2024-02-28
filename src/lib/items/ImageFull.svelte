@@ -24,6 +24,7 @@
   import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
   import { splitPromptParams } from "$lib/tools/misc";
   import { autofocus } from "../../actions/autofocus";
+  import { stealthInfo } from "$lib/stores/imageStore";
 
   export let cancel: () => void;
   export let imageId: string | undefined;
@@ -37,9 +38,8 @@
   let hiddenElementSvNeg: HTMLDivElement;
   let hiddenElementParams: HTMLDivElement;
   let hiddenElementWorkflow: HTMLDivElement;
-
   $: imageUrl = imageId
-    ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
+    ? `/api/images/${imageId}${$stealthInfo ? '/stealth' : ''}?${getQualityParam($compressedMode)}`
     : "";
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : formatMetadata(data.prompt, data.workflow);
