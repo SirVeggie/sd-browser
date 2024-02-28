@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 import { doGet, doPost, doServerGet, doServerPost, type FetchType } from './requests';
 import { page } from '$app/stores';
 import { isImageInfo, type ImageRequest, type ImageResponse, type ImageInfo, type QualityMode, type UpdateRequest, type UpdateResponse, type MultiActionRequest, type ActionRequest } from '$lib/types';
+import { stealthInfo } from "$lib/stores/imageStore";
 
 export async function searchImages(search: ImageRequest, fetch?: FetchType): Promise<ImageResponse> {
     let url = '/api/images';
@@ -50,6 +51,7 @@ export function getQualityParam(mode: QualityMode) {
 
 export async function getImageInfo(imageid: string, fetch?: FetchType): Promise<ImageInfo | undefined> {
     let url = `/api/images/${imageid}/metadata`;
+    stealthInfo.subscribe(stealthInfo => url = url + (stealthInfo ? '/stealth' : ''))
     if (!fetch)
         url = get(page).url.origin + url;
     const res = await (fetch ? doGet(url, fetch) : doServerGet(url));

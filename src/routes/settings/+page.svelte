@@ -16,6 +16,7 @@
     } from "$lib/stores/searchStore";
     import { flyoutModes, qualityModes, searchKeywords, searchModes } from "$lib/types";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
+    import { stealthInfo } from "$lib/stores/imageStore";
     import { imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
     import { authLogout, authStore } from "$lib/stores/authStore";
@@ -188,6 +189,11 @@
     <label class="checkbox">
         PWA fullscreen:
         <input type="checkbox" bind:checked={$fullscreenState} />
+    </label>
+
+    <label class="checkbox">
+        Use stealth info:
+        <input type="checkbox" bind:checked={$stealthInfo} />
     </label>
 </div>
 
