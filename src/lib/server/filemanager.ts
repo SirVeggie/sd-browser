@@ -67,7 +67,7 @@ export async function indexFiles() {
     while (dirs.length > 0) {
         const dir = dirs.pop();
         if (!dir) continue;
-        const dirShort = removeBasePath(dir);
+        const dirShort = removeBasePath(dir).replace(/^(\/|\\)/, '');
         console.log(`Indexing ${dir}`);
         const files = await readdir(dir);
 
@@ -111,10 +111,22 @@ export async function indexFiles() {
 
     await cachePromise;
     await fs.rename(tempcachefile, cachefile).catch(e => console.log(e));
-    console.log(`Indexed ${imageList.size} images in ${Math.round((Date.now() - startTimestamp) / 1000)}s`);
+    console.log(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}`);
 
     cleanTempImages();
     createUniqueList();
+}
+
+function calcTimeSpent(start: number) {
+    const ms = Date.now() - start;
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor(ms / 1000 % 60);
+    const smin = minutes !== 1 ? 's' : '';
+    const ssec = seconds !== 1 ? 's' : '';
+    let res = minutes ? `${minutes} minute${smin}` : '';
+    res += seconds ? `${res ? ' ' : ''}${seconds} second${ssec}` : '';
+    res += res ? '' : `${ms} ms`;
+    return res;
 }
 
 function isImage(file: string) {
