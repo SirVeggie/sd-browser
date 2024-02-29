@@ -17,6 +17,12 @@ A standalone image browser (not a webui extension) made with Node and SvelteKit.
 
 When starting for the first time, the images will be indexed. Depending on the amount of images, this can take seconds (5,000 images), or a tens of minutes (200,000+ images). After the indexing, the following starts will only take a couple of seconds.
 
+## Updating
+
+1) Pull latest changes with `git pull` in the project root folder (if you used git to download)
+2) Run command `npm run setup`
+3) Start the application with `npm start` like normal
+
 ## Authentication
 
 Simple password authentication is supported to prevent third parties from browsing images (when port forwarded for example).
