@@ -29,6 +29,7 @@
 		"socket.io": "^4.7.1",
 		"socket.io-client": "^4.7.1",
 		"svelte-loading-spinners": "^0.3.4",
+		"uuid": "^9.0.1",
 		"watcher": "^2.2.2"
 	},
 	"devDependencies": {
@@ -39,6 +40,7 @@
 		"@types/fluent-ffmpeg": "^2.1.21",
 		"@types/lodash": "^4.14.195",
 		"@types/node": "^20.3.2",
+		"@types/uuid": "^9.0.8",
 		"@typescript-eslint/eslint-plugin": "^5.45.0",
 		"@typescript-eslint/parser": "^5.45.0",
 		"eslint": "^8.28.0",

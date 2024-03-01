@@ -1,4 +1,5 @@
 import type { ClientImage } from "$lib/types";
+import { RePromise, RePromisify } from "./RePromise";
 
 export function XOR(a: any, b: any): boolean {
     return !a !== !b;
@@ -51,4 +52,34 @@ export function splitPromptParams(str: string): string[] {
     res.push(str.slice(prev).trim());
     const hiddenParams = ["sv_prompt", "sv_negative"];
     return res.filter(s => !hiddenParams.includes(s.split(":")[0].trim()));
+}
+
+export async function limitedParallelMap<T, U>(
+    array: T[],
+    callback: (item: T) => Promise<U>,
+    limit: number
+): Promise<U[]> {
+    const res: U[] = [];
+    const promises: RePromise<U>[] = [];
+    
+    for (const item of [...array]) {
+        promises.push(RePromisify(callback(item)));
+        if (promises.length === limit) {
+            await Promise.race(promises);
+            for (let i = promises.length - 1; i >= 0; i--) {
+                if (promises[i].state === 'resolved') {
+                    res.push(promises[i].value!);
+                    promises.splice(i, 1);
+                } else if (promises[i].state === 'rejected') {
+                    throw promises[i].reason;
+                }
+            }
+        }
+    }
+    
+    for (const promise of promises) {
+        res.push(await promise);
+    }
+    
+    return res;
 }

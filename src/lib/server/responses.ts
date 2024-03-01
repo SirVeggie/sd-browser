@@ -1,6 +1,6 @@
 import type { ServerError } from "$lib/types";
 import { readFile } from "fs/promises";
-import { generateCompressed, generateThumbnail } from "./convert";
+import { generateCompressed, generateCompressedTask, generateThumbnail, generateThumbnailTask } from "./convert";
 import { compressedPath, getImage, thumbnailPath } from "./filemanager";
 import path from "path";
 
@@ -15,7 +15,7 @@ export function success(message?: unknown, status = 200) {
     return new Response(JSON.stringify(message), { status });
 }
 
-export async function image(imageid: string | undefined, type?: string) {
+export async function image(imageid: string | undefined, type?: string, defer?: boolean) {
     const filepath = getImage(imageid ?? '')?.file;
     if (!filepath) return error('Image not found', 404);
 
@@ -24,15 +24,25 @@ export async function image(imageid: string | undefined, type?: string) {
         if (type === 'low') {
             const thumb = path.join(thumbnailPath, `${imageid}.webp`);
             buffer = await readFile(thumb).catch(async () => {
-                console.log(`Generating thumbnail for ${imageid}`);
-                await generateThumbnail(filepath, thumb);
+                if (defer) {
+                    await generateThumbnailTask(filepath, thumb);
+                    console.log(`Generated thumbnail for ${imageid} in the background`);
+                } else {
+                    console.log(`Generating thumbnail for ${imageid}`);
+                    await generateThumbnail(filepath, thumb);
+                }
                 return await readFile(thumb);
             });
         } else if (type === 'medium') {
             const compressed = path.join(compressedPath, `${imageid}.webp`);
             buffer = await readFile(compressed).catch(async () => {
-                console.log(`Generating compressed image for ${imageid}`);
-                await generateCompressed(filepath, compressed);
+                if (defer) {
+                    await generateCompressedTask(filepath, compressed);
+                    console.log(`Generated compressed image for ${imageid} in the background`);
+                } else {
+                    console.log(`Generating compressed image for ${imageid}`);
+                    await generateCompressed(filepath, compressed);
+                }
                 return await readFile(compressed);
             });
         } else {

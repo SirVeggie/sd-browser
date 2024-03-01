@@ -1,4 +1,4 @@
-import { generateCompressedFromId } from '$lib/server/convert.js';
+import { backgroundTasks, generateCompressedFromId } from '$lib/server/convert.js';
 import { error, success } from '$lib/server/responses.js';
 
 export async function POST(e) {
@@ -8,17 +8,7 @@ export async function POST(e) {
         return error('Invalid request', 400);
     }
 
-    await batchGenerate(ids);
+    await Promise.all(ids.map(id => backgroundTasks.addWork(() => generateCompressedFromId(id))));
+    // await limitedParallelMap(ids as string[], id => generateCompressedFromId(id), 5);
     return success('Success');
-}
-
-async function batchGenerate(ids: string[]) {
-    const batchSize = 10;
-    for (let i = 0; i < ids.length; i += batchSize) {
-        await processBatch(ids.slice(i, i + batchSize));
-    }
-}
-
-async function processBatch(ids: string[]) {
-    await Promise.all(ids.map(x => generateCompressedFromId(x)));
 }

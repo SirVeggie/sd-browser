@@ -14,7 +14,7 @@
 
     let hasLoaded = false;
 
-    $: src = `${img.url}?${getQualityParam($thumbMode)}`;
+    $: src = `${img.url}?${getQualityParam($thumbMode)}&defer=true`;
     $: active = !!onClick;
     $: seamless = $seamlessStyle;
 </script>
