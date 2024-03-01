@@ -34,3 +34,18 @@ export function getParams(prompt: string | undefined) {
     if (!prompt) return '';
     return paramsRegex.exec(prompt)?.[1] ?? '';
 }
+
+const autoModelRegex = /Model: (.*?)(,|$)/;
+const comfyModelRegex = /{"ckpt_name": (".*?")}/;
+export function getModel(prompt: string | undefined) {
+    if (!prompt) return 'Unknown';
+    return prompt.match(autoModelRegex)?.[1]
+        || JSON.parse(prompt.match(comfyModelRegex)?.[1] ?? '""')
+        || 'Unknown';
+}
+
+const autoHashRegex = /Model hash: (.*?)(,|$)/;
+export function getModelHash(prompt: string | undefined) {
+    if (!prompt) return '';
+    return prompt.match(autoHashRegex)?.[1] || '';
+}

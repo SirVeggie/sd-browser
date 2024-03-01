@@ -157,6 +157,12 @@ export function isServerMessage(object: any): object is ServerMessage {
     return testType(object, ['message']);
 }
 
+export type ComfyNode = {
+    inputs: (string|number|boolean|object)[];
+    class_type: string;
+}
+export type ComfyPrompt = Record<string, ComfyNode>;
+
 export function testType(object: any, keylist: (string | ((o: any) => boolean))[]) {
     for (const key of keylist) {
         if (typeof key === 'string' && !(key in object))

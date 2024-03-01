@@ -2,18 +2,20 @@
   type PromptFragment = {
     header: string;
     content: string;
-    action: () => void;
+    action?: () => void;
   };
 </script>
 
 <script lang="ts">
   import "../../scroll.css";
-  import type { ImageInfo } from "$lib/types";
+  import type { ComfyPrompt, ImageInfo } from "$lib/types";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Button from "./Button.svelte";
   import { notify } from "$lib/components/Notifier.svelte";
   import {
+    getModel,
+    getModelHash,
     getNegativePrompt,
     getParams,
     getPositivePrompt,
@@ -52,10 +54,11 @@
   $: workflowPrompt = !data ? "" : data.workflow;
 
   function extractBasic(d: ImageInfo): string {
-    const model = d.prompt?.match(/Model: (.*?)(,|$)/)?.[1] ?? "Unknown";
-    const hash = d.prompt?.match(/Model hash: (.*?)(,|$)/)?.[1] ?? "Unknown";
+    const model = getModel(d.prompt);
+    const hash = getModelHash(d.prompt);
     let info = "";
-    if (model) info += `Model: ${model} [${hash}]`;
+    if (model) info += `Model: ${model}`;
+    if (hash) info += ` [${hash}]`;
     info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
     info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
     if (d.folder) info += `\nFolder: ${d.folder}`;
@@ -67,12 +70,13 @@
     workflow?: string,
   ): PromptFragment[] {
     if (!prompt) return [];
-    const blocks: PromptFragment[] = [];
+    let blocks: PromptFragment[] = [];
     const pos = getPositivePrompt(prompt);
     const neg = getNegativePrompt(prompt);
     const sv_pos = getSvPositivePrompt(prompt);
     const sv_neg = getSvNegativePrompt(prompt);
     const params = getParams(prompt);
+    const isComfy = prompt.includes('"ckpt_name": "');
     if (pos)
       blocks.push({
         header: "positive prompt",
@@ -103,7 +107,8 @@
         content: splitPromptParams(params).join("\n"),
         action: copyParams,
       });
-    if (blocks.length === 0)
+    if (isComfy) blocks = blocks.concat(formatComfy(prompt));
+    if (blocks.length === 0 || isComfy)
       blocks.push({ header: "metadata", content: prompt, action: copyPrompt });
     if (workflow)
       blocks.push({
@@ -111,6 +116,29 @@
         content: workflow,
         action: copyWorkflow,
       });
+    return blocks;
+  }
+
+  function formatComfy(prompt: string): PromptFragment[] {
+    const data: ComfyPrompt = JSON.parse(prompt);
+    const blocks: PromptFragment[] = [];
+
+    for (const [key, value] of Object.entries(data)) {
+      let content = "";
+      for (const [k, v] of Object.entries(value.inputs)) {
+        if (["string", "number", "boolean"].includes(typeof v))
+          content += `${k}: ${v}\n`;
+      }
+      content = content.trim();
+
+      if (content) {
+        blocks.push({
+          header: `${key} [${value.class_type}]`,
+          content,
+        });
+      }
+    }
+
     return blocks;
   }
 
@@ -160,13 +188,21 @@
   function copyNegative() {
     copyInfo(hiddenElementNeg, getNegativePrompt(data?.prompt), "negative");
   }
-  
+
   function copySvPositive() {
-    copyInfo(hiddenElementSvPos, getSvPositivePrompt(data?.prompt), "sv_positive");
+    copyInfo(
+      hiddenElementSvPos,
+      getSvPositivePrompt(data?.prompt),
+      "sv_positive",
+    );
   }
-  
+
   function copySvNegative() {
-    copyInfo(hiddenElementSvNeg, getSvNegativePrompt(data?.prompt), "sv_negative");
+    copyInfo(
+      hiddenElementSvNeg,
+      getSvNegativePrompt(data?.prompt),
+      "sv_negative",
+    );
   }
 
   function copyParams() {
@@ -233,7 +269,9 @@
                 <div class="extra">
                   <h1 class="header">
                     {info.header}
-                    <button on:click={info.action}>copy</button>
+                    {#if info.action}
+                      <button on:click={info.action}>copy</button>
+                    {/if}
                   </h1>
                   <p>
                     {info.content}
