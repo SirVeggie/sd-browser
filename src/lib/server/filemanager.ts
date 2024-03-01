@@ -20,8 +20,6 @@ type TimedImage = {
 
 const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
 const parallelBasicReads = 10;
-const parallelTxtReads = 10;
-const parallelExifReads = 5;
 
 let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
@@ -209,23 +207,36 @@ export async function indexFiles2() {
     // Read metadata from txt files
     if (templist.length !== 0) {
         console.log(`Indexing ${templist.length} images from txt files...`);
-        templist = await limitedParallelMap(templist, async x => {
-            try {
-                return await readMetadataFromTxtFile(x);
-            } catch {
-                failedFiles.push(x.file);
-                return x;
+        let count = 0;
+        const batchsize = 1000;
+        const newtemplist: ServerImage[] = [];
+        
+        for (let i = 0; i < templist.length; i += batchsize) {
+            const chunk = templist.slice(i, i + batchsize);
+            const batchResult = await limitedParallelMap(chunk, async x => {
+                try {
+                    return await backgroundTasks.addWork(() => readMetadataFromTxtFile(x)) as ServerImage;
+                } catch {
+                    failedFiles.push(x.file);
+                    return x;
+                }
+            }, 5);
+
+            for (const image of batchResult) {
+                if (image.prompt || image.workflow) {
+                    imageList.set(image.id, image);
+                    addUniqueImage(image);
+                    count++;
+                } else {
+                    newtemplist.push(image);
+                }
             }
-        }, parallelTxtReads);
-        const before = templist.length;
-        for (let i = templist.length - 1; i >= 0; i--) {
-            if (templist[i].prompt) {
-                imageList.set(templist[i].id, templist[i]);
-                addUniqueImage(templist[i]);
-                templist.splice(i, 1);
-            }
+
+            if (i + batchsize < templist.length)
+                console.log(`Progress: ${i + batchsize}/${templist.length} images`);
         }
-        console.log(`Found metadata for ${before - templist.length} images`);
+        console.log(`Found metadata for ${count}/${templist.length} images`);
+        templist = newtemplist;
     }
 
     // Read metadata from exif
@@ -238,14 +249,6 @@ export async function indexFiles2() {
         const batchsize = 1000;
         for (let i = 0; i < templist.length; i += batchsize) {
             const chunk = templist.slice(i, i + batchsize);
-            // const batchResult = await Promise.all(chunk.map(async x => {
-            //     try {
-            //         return await backgroundTasks.addWork(() => readMetadataFromExif(x)) as ServerImage;
-            //     } catch {
-            //         failedFiles.push(x.file);
-            //         return x;
-            //     }
-            // }));
             const batchResult = await limitedParallelMap(chunk, async x => {
                 try {
                     return await backgroundTasks.addWork(() => readMetadataFromExif(x)) as ServerImage;
@@ -253,7 +256,7 @@ export async function indexFiles2() {
                     failedFiles.push(x.file);
                     return x;
                 }
-            }, parallelExifReads);
+            }, 5);
 
             for (const image of batchResult) {
                 imageList.set(image.id, image);

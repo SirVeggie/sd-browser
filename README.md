@@ -33,6 +33,8 @@ The browser will remember the password, but it can be cleared by pressing `logou
 
 Subfolders under `IMG_FOLDER` are scanned automatically, but setting multiple separate source folders is currently not supported.
 
+Symlinks work, but currently do not support file watching, so the images only update during startup. However switching the direction of the symlink so that the original folder is inside the main image browser, and the link is outside does work.
+
 ### ~ I'm open to feedback! ~
 
 # Usage
