@@ -280,6 +280,7 @@ async function readMetadataFromFile(image: ServerImage, file: string): Promise<S
 async function readMetadataFromExif(image: ServerImage): Promise<ServerImage> {
     const metadata = await exifr.parse(image.file, {
         ifd0: false,
+        chunked: false,
     } as any);
     if (!metadata)
         return image;

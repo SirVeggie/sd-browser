@@ -22,7 +22,7 @@ A standalone image browser (not a webui extension) made with Node and SvelteKit.
 6) Run command `npm start` to start the application
 7) Open `localhost:[PORT]` in your browser (default `PORT` is `4200`)
 
-When starting for the first time, the images will be indexed. Depending on the amount of images, this can take seconds (5,000 images), or a tens of minutes (200,000+ images). Indexing speed will also depend on if you're using txt files or embedded image metadata, as well as the speed of your drive. My SSD takes about 3 minutes for 230,000 pngs with exif metadata.
+When starting for the first time, the images will be indexed. Depending on the amount of images, this can take seconds (5,000 images), or a tens of minutes (200,000+ images). Indexing speed will also depend on if you're using txt files or embedded image metadata, as well as the speed of your drive. My SSD takes about 4 minutes for 230,000 pngs with exif metadata.
 
 During indexing, images will gradually become available for viewing in order from newest to oldest (by file modification date).
 
