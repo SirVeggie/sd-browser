@@ -4,11 +4,9 @@ import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import { compressedPath, getImage, thumbnailPath } from './filemanager';
 import path from 'path';
 import fs from 'fs/promises';
-import { TaskManager } from '$lib/tools/task';
+import { backgroundTasks } from './background';
 
 ffmpeg.setFfmpegPath(ffmpegPath.path);
-export const backgroundTasks = new TaskManager<any>(5, 10);
-
 export function convertImage(image: Readable, outputFormat: string): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
@@ -70,7 +68,7 @@ export function bufferToStream(buffer: Buffer): Readable {
 // }
 
 export function generateThumbnailTask(imagepath: string, outputpath: string): Promise<string> {
-    return backgroundTasks.addWork(() => generateThumbnail(imagepath, outputpath));
+    return backgroundTasks.addWork(() => generateThumbnail(imagepath, outputpath), true);
 }
 
 export function generateThumbnail(imagepath: string, outputpath: string): Promise<string> {
@@ -85,7 +83,7 @@ export function generateThumbnail(imagepath: string, outputpath: string): Promis
 }
 
 export function generateCompressedTask(imagepath: string, outputpath: string): Promise<string> {
-    return backgroundTasks.addWork(() => generateCompressed(imagepath, outputpath));
+    return backgroundTasks.addWork(() => generateCompressed(imagepath, outputpath), true);
 }
 
 export function generateCompressed(imagepath: string, outputpath: string): Promise<string> {

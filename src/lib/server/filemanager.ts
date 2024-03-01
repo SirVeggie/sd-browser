@@ -10,8 +10,11 @@ import exifr from 'exifr';
 import { getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { XOR, limitedParallelMap, selectRandom, validRegex } from '$lib/tools/misc';
-import { backgroundTasks, generateCompressedFromId, generateThumbnailFromId } from './convert';
+import { XOR, limitedParallelMap, print, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
+import { generateCompressedFromId, generateThumbnailFromId } from './convert';
+import { Task } from '$lib/tools/task';
+import { sleep } from '$lib/tools/sleep';
+import { backgroundTasks } from './background';
 
 type TimedImage = {
     id: string;
@@ -19,7 +22,6 @@ type TimedImage = {
 };
 
 const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
-const parallelBasicReads = 10;
 
 let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
@@ -34,105 +36,79 @@ const freshLimit = 1000;
 export const datapath = './localData';
 export const thumbnailPath = path.join(datapath, 'thumbnails');
 export const compressedPath = path.join(datapath, 'compressed');
+export let generationDisabled = false;
 
 export async function startFileManager() {
-    await indexFiles2();
+    await indexFiles();
     setupWatcher();
 }
 
 export async function indexFiles() {
-    console.log('Indexing files...');
+    console.log(`Indexing files in ${IMG_FOLDER}`);
     const startTimestamp = Date.now();
 
     fs.mkdir(datapath).catch(() => '');
     fs.mkdir(thumbnailPath).catch(() => '');
     fs.mkdir(compressedPath).catch(() => '');
 
-    // Read cached data
-    let imageCache: ImageList | undefined;
-    const images: ImageList = new Map();
     const cachefile = path.join(datapath, 'metadata.json');
     const tempcachefile = path.join(datapath, 'metadata-temp.json');
-    try {
-        const cache = await fs.readFile(cachefile);
-        imageCache = new Map(JSON.parse(cache.toString()));
-    } catch {
-        imageCache = undefined;
+
+    // Read cached data
+    // eslint-disable-next-line prefer-const
+    let [templist, txtmap] = await indexCachedFiles(cachefile);
+
+    // Initialize existing cache
+    if (imageList.size) {
+        print(`Building unique list for ${imageList.size} images...`);
+        await createUniqueListChunked();
+        updateLine(`Unique list created with ${uniqueList.size} items\n`);
     }
 
-    const dirs: string[] = [IMG_FOLDER];
-
-    while (dirs.length > 0) {
-        const dir = dirs.pop();
-        if (!dir) continue;
-        const dirShort = removeBasePath(dir).replace(/^(\/|\\)/, '');
-        console.log(`Indexing ${dir}`);
-        const files = await readdir(dir);
-
-        for (const file of files.filter(x => isImage(x))) {
-            const fullpath = path.join(dir, file);
-            const hash = hashString(fullpath);
-            if (imageCache && imageCache.has(hash)) {
-                images.set(hash, {
-                    ...(imageCache.get(hash)!),
-                    file: fullpath,
-                });
-                continue;
-            }
-
-            const metadata = await readMetadata(fullpath);
-            images.set(hash, {
-                id: hash,
-                folder: dirShort,
-                file: fullpath,
-                modifiedDate: 0,
-                createdDate: 0,
-                ...metadata,
-            });
-        }
-
-        for (const file of files.filter(x => !isImage(x))) {
-            const fullpath = path.join(dir, file);
-            try {
-                const stats = await stat(fullpath);
-                if (stats.isDirectory()) dirs.push(fullpath);
-            } catch {
-                console.log(`Failed to read ${fullpath}`);
-            }
-        }
+    // Read modified and created dates
+    if (templist.length !== 0) {
+        templist = await indexBasicFileData(templist);
     }
 
-    console.log('Writing cache file... do not interrupt!');
-    const cachePromise = fs.writeFile(tempcachefile, JSON.stringify([...images], null, 2)).catch(e => console.log(e));
+    if (templist.length !== 0) {
+        // sort
+        print('Sorting remaining images by modified date...');
+        templist.sort((a, b) => b.modifiedDate - a.modifiedDate);
+        generationDisabled = true;
+    
+        // Read metadata from txt files
+        templist = await indexTxtFilesNew(templist, txtmap);
+    }
 
-    imageList = images;
+    // Read metadata from exif
+    if (templist.length !== 0) {
+        const originalLimit = backgroundTasks.limit;
+        backgroundTasks.limit = 5;
+        await indexExifFilesNew(templist);
+        backgroundTasks.limit = originalLimit;
+    }
 
-    await cachePromise;
+    generationDisabled = false;
+
+    // finish up
+    print('Writing cache file...');
+    await fs.writeFile(tempcachefile, JSON.stringify([...imageList], null, 2)).catch(e => console.log(e));
     await fs.rename(tempcachefile, cachefile).catch(e => console.log(e));
-    console.log(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}`);
+    updateLine(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}\n`);
 
     cleanTempImages();
-    createUniqueList();
-
     console.log(`Found ${[...imageList].filter(x => x[1].prompt).length} images with metadata`);
 }
 
-export async function indexFiles2() {
-    console.log('Indexing files...');
-    const startTimestamp = Date.now();
-
-    fs.mkdir(datapath).catch(() => '');
-    fs.mkdir(thumbnailPath).catch(() => '');
-    fs.mkdir(compressedPath).catch(() => '');
-
-    // Read cached data
+async function indexCachedFiles(cachefile: string): Promise<[ServerImage[], Map<string, string>]> {
     let imageCache: ImageList | undefined;
-    let templist: ServerImage[] = [];
+    const templist: ServerImage[] = [];
     const images: ImageList = new Map();
-    const cachefile = path.join(datapath, 'metadata.json');
-    const tempcachefile = path.join(datapath, 'metadata-temp.json');
     const dirs: string[] = [IMG_FOLDER];
-    const failedFiles: string[] = [];
+    const set = new Set<string>();
+    const txtmap: Map<string, string> = new Map();
+    let found = 0;
+    let foundtxt = 0;
 
     try {
         const cache = await fs.readFile(cachefile);
@@ -150,6 +126,7 @@ export async function indexFiles2() {
         const files = await readdir(dir);
 
         for (const file of files.filter(x => isImage(x))) {
+            found++;
             const fullpath = path.join(dir, file);
             const hash = hashString(fullpath);
             if (imageCache && imageCache.has(hash)) {
@@ -160,6 +137,8 @@ export async function indexFiles2() {
                 continue;
             }
 
+            set.add(removeExtension(fullpath));
+
             templist.push({
                 id: hash,
                 folder: dirShort,
@@ -169,128 +148,132 @@ export async function indexFiles2() {
             });
         }
 
-        for (const file of files.filter(x => !isImage(x))) {
+        for (const file of files.filter(x => isTxt(x))) {
+            foundtxt++;
+            const fullpath = path.join(dir, file);
+            const partial = removeExtension(fullpath);
+            if (set.has(partial)) {
+                txtmap.set(partial, fullpath);
+            }
+        }
+
+        for (const file of files.filter(x => !isImage(x) && !isTxt(x))) {
             const fullpath = path.join(dir, file);
             try {
                 const stats = await stat(fullpath);
                 if (stats.isDirectory()) dirs.push(fullpath);
             } catch {
-                failedFiles.push(fullpath);
+                // failed
             }
         }
+
+        updateLine(`Found ${found} images and ${foundtxt} txt files`);
     }
 
-    // Initialize existing cache
+    updateLine(`Found ${found} images and ${foundtxt} txt files\n`);
+
     imageList = images;
-    if (images.size > 50000)
-        console.log(`Building unique list for ${images.size} images...`);
-    createUniqueList();
-    if (uniqueList.size > 1)
-        console.log(`Unique list created with ${uniqueList.size} items`);
-
-    // Read modified and created dates
-    if (templist.length !== 0) {
-        console.log(`Reading basic data for ${templist.length} images...`);
-        templist = await limitedParallelMap(templist, async x => {
-            try {
-                const stats = await stat(x.file);
-                x.modifiedDate = stats.mtimeMs;
-                x.createdDate = stats.birthtimeMs;
-                return x;
-            } catch {
-                failedFiles.push(x.file);
-                return undefined;
-            }
-        }, parallelBasicReads).then(x => x.filter(x => !!x) as ServerImage[]);
-    }
-
-    // Read metadata from txt files
-    if (templist.length !== 0) {
-        console.log(`Indexing ${templist.length} images from txt files...`);
-        const startTimestamp = Date.now();
-        let count = 0;
-        const batchsize = 1000;
-        const newtemplist: ServerImage[] = [];
-        
-        for (let i = 0; i < templist.length; i += batchsize) {
-            const chunk = templist.slice(i, i + batchsize);
-            const batchResult = await limitedParallelMap(chunk, async x => {
-                try {
-                    return await backgroundTasks.addWork(() => readMetadataFromTxtFile(x)) as ServerImage;
-                } catch {
-                    failedFiles.push(x.file);
-                    return x;
-                }
-            }, 5);
-
-            for (const image of batchResult) {
-                if (image.prompt || image.workflow) {
-                    imageList.set(image.id, image);
-                    addUniqueImage(image);
-                    count++;
-                } else {
-                    newtemplist.push(image);
-                }
-            }
-
-            if (i + batchsize < templist.length)
-                console.log(`Progress: ${i + batchsize}/${templist.length} images`);
-        }
-        console.log(`Found metadata for ${count}/${templist.length} images in ${calcTimeSpent(startTimestamp)}`);
-        templist = newtemplist;
-    }
-
-    // Read metadata from exif
-    if (templist.length !== 0) {
-        console.log('Sorting remaining images by modified date...');
-        const startTimestamp = Date.now();
-        templist.sort((a, b) => b.modifiedDate - a.modifiedDate);
-
-        console.log(`Indexing ${templist.length} images from exif...`);
-        let count = 0;
-        const batchsize = 1000;
-        for (let i = 0; i < templist.length; i += batchsize) {
-            const chunk = templist.slice(i, i + batchsize);
-            const batchResult = await limitedParallelMap(chunk, async x => {
-                try {
-                    return await backgroundTasks.addWork(() => readMetadataFromExif(x)) as ServerImage;
-                } catch {
-                    failedFiles.push(x.file);
-                    return x;
-                }
-            }, 5);
-
-            for (const image of batchResult) {
-                imageList.set(image.id, image);
-                addUniqueImage(image);
-                if (image.prompt || image.workflow) count++;
-            }
-
-            if (i + batchsize < templist.length)
-                console.log(`Progress: ${i + batchsize}/${templist.length} images`);
-        }
-        console.log(`Found metadata for ${count}/${templist.length} images in ${calcTimeSpent(startTimestamp)}`);
-    }
-
-    // finish up
-    console.log('Writing cache file... do not interrupt!');
-    await fs.writeFile(tempcachefile, JSON.stringify([...imageList], null, 2)).catch(e => console.log(e));
-    await fs.rename(tempcachefile, cachefile).catch(e => console.log(e));
-    console.log(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)} with ${failedFiles.length} failed files`);
-
-    cleanTempImages();
-    console.log(`Found ${[...imageList].filter(x => x[1].prompt).length} images with metadata`);
+    return [templist, txtmap];
 }
 
-async function readMetadataFromTxtFile(image: ServerImage): Promise<ServerImage> {
-    for (const filetype of txtFiletypes) {
-        const textfile = image.file!.replace(/\.(png|jpg|jpeg|webp)$/i, `.${filetype}`);
-        if (await fs.stat(textfile).then(x => x.isFile()).catch(() => false)) {
-            const text = await fs.readFile(textfile, 'utf8');
-            image.prompt = text;
-            return image;
+async function indexBasicFileData(templist: ServerImage[]): Promise<ServerImage[]> {
+    const log = `Reading dates for ${templist.length} images...`;
+    print(log);
+    let progress = 0;
+    let count = 0;
+    const startTimestamp = Date.now();
+    const parallelBasicReads = 10;
+
+    templist = await limitedParallelMap(templist, async x => {
+        try {
+            const stats = await stat(x.file);
+            x.modifiedDate = stats.mtimeMs;
+            x.createdDate = stats.birthtimeMs;
+            if (x.modifiedDate > 0) count++;
+            return x;
+        } catch {
+            return x;
+        } finally {
+            progress++;
+            if (progress % 1000 === 0) updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
         }
+    }, parallelBasicReads);
+
+    updateLine(`Found dates for ${count} images in ${calcTimeSpent(startTimestamp)}\n`);
+    return templist;
+}
+
+async function indexTxtFilesNew(templist: ServerImage[], txtmap: Map<string, string>): Promise<ServerImage[]> {
+    const log = `Indexing ${txtmap.size} images from txt files...`;
+    updateLine(log);
+
+    const startTimestamp = Date.now();
+    let progress = 0;
+    let found = 0;
+    const newlist: ServerImage[] = [];
+
+    for (const image of templist) {
+        const partial = removeExtension(image.file);
+        if (!txtmap.has(partial)) {
+            newlist.push(image);
+            continue;
+        }
+
+        backgroundTasks.addWork(async () => {
+            const res = await readMetadataFromFile(image, txtmap.get(partial)!).catch(() => image);
+            if (res.prompt || res.workflow) {
+                imageList.set(res.id, res);
+                addUniqueImage(res);
+                found++;
+            } else {
+                newlist.push(res);
+            }
+
+            progress++;
+            if (progress % 1000 === 0)
+                updateLine(log + ` ${(progress / txtmap.size * 100).toFixed(1)}%`);
+        });
     }
+
+    while (progress < txtmap.size) {
+        await sleep(100);
+    }
+
+    updateLine(`Found txt metadata for ${found} images in ${calcTimeSpent(startTimestamp)}\n`);
+    return newlist;
+}
+
+async function indexExifFilesNew(templist: ServerImage[]): Promise<void> {
+    const log = `Indexing ${templist.length} images from exif...`;
+    updateLine(log);
+
+    const startTimestamp = Date.now();
+    let progress = 0;
+    let found = 0;
+
+    for (const image of templist) {
+        backgroundTasks.addWork(async () => {
+            const res = await readMetadataFromExif(image).catch(() => image);
+            imageList.set(res.id, res);
+            addUniqueImage(res);
+            if (res.prompt || res.workflow)
+                found++;
+            progress++;
+            if (progress % 1000 === 0)
+                updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
+        });
+    }
+
+    while (progress < templist.length) {
+        await sleep(100);
+    }
+
+    updateLine(`Found exif metadata for ${found} images in ${calcTimeSpent(startTimestamp)}\n`);
+}
+
+async function readMetadataFromFile(image: ServerImage, file: string): Promise<ServerImage> {
+    const text = await fs.readFile(file, 'utf8');
+    image.prompt = text;
     return image;
 }
 
@@ -303,7 +286,7 @@ async function readMetadataFromExif(image: ServerImage): Promise<ServerImage> {
     image.prompt = metadata.parameters ?? metadata.prompt ?? undefined;
     image.workflow = metadata.workflow ?? undefined;
 
-    if (metadata.prompt === undefined && metadata.workflow === undefined) {
+    if (image.prompt === undefined && image.workflow === undefined) {
         image.prompt = JSON.stringify(metadata);
     }
 
@@ -326,6 +309,14 @@ function isImage(file: string) {
     return file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.webp');
 }
 
+function isTxt(file: string) {
+    return txtFiletypes.some(x => file.endsWith(`.${x}`));
+}
+
+function removeExtension(file: string) {
+    return file.replace(/\.[^\\/.]+$/, '');
+}
+
 async function cleanTempImages() {
     let count = 0;
     await fs.readdir(thumbnailPath).then(files => {
@@ -337,7 +328,8 @@ async function cleanTempImages() {
             }
         }
     });
-    console.log(`Cleaned ${count} thumbnails`);
+    if (count)
+        console.log(`Cleaned ${count} thumbnails`);
     count = 0;
     await fs.readdir(compressedPath).then(files => {
         for (const file of files) {
@@ -348,7 +340,8 @@ async function cleanTempImages() {
             }
         }
     });
-    console.log(`Cleaned ${count} preview images`);
+    if (count)
+        console.log(`Cleaned ${count} preview images`);
 }
 
 let genCount = 0;
@@ -496,19 +489,56 @@ function isUnique(id: string) {
     return uniqueList.has(id);
 }
 
-function createUniqueList() {
+// function createUniqueList() {
+//     uniqueList = new Map();
+//     uniqueListReverse = new Map();
+
+//     for (const image of imageList) {
+//         if (!image[1].prompt)
+//             continue;
+//         const prompt = simplifyPrompt(image[1].prompt, image[1].folder);
+//         uniqueListReverse.set(prompt, image[1].id);
+//     }
+//     for (const image of uniqueListReverse) {
+//         uniqueList.set(image[1], image[0]);
+//     }
+// }
+
+async function createUniqueListChunked() {
     uniqueList = new Map();
     uniqueListReverse = new Map();
 
-    for (const image of imageList) {
-        if (!image[1].prompt)
-            continue;
-        const prompt = simplifyPrompt(image[1].prompt, image[1].folder);
-        uniqueListReverse.set(prompt, image[1].id);
+    const chunksize = 1000;
+    const templist = [...imageList.values()];
+    let tasks: Task<void>[] = [];
+    for (let i = 0; i < templist.length; i += chunksize) {
+        tasks.push(new Task(async () => {
+            const chunk = templist.slice(i, i + chunksize);
+            for (const image of chunk) {
+                if (!image.prompt)
+                    continue;
+                const prompt = simplifyPrompt(image.prompt, image.folder);
+                uniqueListReverse.set(prompt, image.id);
+            }
+            await sleep(1);
+        }));
     }
-    for (const image of uniqueListReverse) {
-        uniqueList.set(image[1], image[0]);
+
+    await limitedParallelMap(tasks, x => x.start(), 1);
+
+    tasks = [];
+    const templist2 = [...uniqueListReverse];
+    for (let i = 0; i < templist2.length; i += chunksize) {
+        tasks.push(new Task(async () => {
+            const chunk = templist2.slice(i, i + chunksize);
+            for (const data of chunk) {
+                uniqueList.set(data[1], data[0]);
+            }
+            await sleep(1);
+        }));
     }
+
+    await limitedParallelMap(tasks, x => x.start(), 1);
 }
 
 function addUniqueImage(image: ServerImage) {

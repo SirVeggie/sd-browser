@@ -1,14 +1,15 @@
-import { backgroundTasks, generateCompressedFromId } from '$lib/server/convert.js';
+import { backgroundTasks } from '$lib/server/background.js';
+import { generateCompressedFromId } from '$lib/server/convert.js';
+import { generationDisabled } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 
 export async function POST(e) {
-    console.log('Pre-generating compressed images');
     const ids = await e.request.json();
     if (!Array.isArray(ids) || ids.some((x: any) => typeof x !== 'string')) {
         return error('Invalid request', 400);
     }
 
-    await Promise.all(ids.map(id => backgroundTasks.addWork(() => generateCompressedFromId(id))));
-    // await limitedParallelMap(ids as string[], id => generateCompressedFromId(id), 5);
+    if (!generationDisabled)
+        await Promise.all(ids.map(id => backgroundTasks.addWork(() => generateCompressedFromId(id))));
     return success('Success');
 }

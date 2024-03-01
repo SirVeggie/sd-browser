@@ -1,5 +1,6 @@
 import type { ClientImage } from "$lib/types";
 import { RePromise, RePromisify } from "./RePromise";
+import rl from "readline";
 
 export function XOR(a: any, b: any): boolean {
     return !a !== !b;
@@ -82,4 +83,18 @@ export async function limitedParallelMap<T, U>(
     }
     
     return res;
+}
+
+export function print(str: string) {
+    process.stdout.write(str);
+}
+
+export function printLine(str: string) {
+    process.stdout.write(str + "\n");
+}
+
+export function updateLine(str: string) {
+    rl.cursorTo(process.stdout, 0);
+    rl.clearLine(process.stdout, 0);
+    process.stdout.write(str);
 }

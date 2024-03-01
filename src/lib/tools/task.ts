@@ -21,7 +21,7 @@ export class Task<T> {
             throw new Error('Task already started');
         }
         this.state = 'running';
-        
+
         this.work().then(res => {
             this.result = res;
             this.state = 'finished';
@@ -31,7 +31,7 @@ export class Task<T> {
             this.state = 'failed';
             this.promise.reject(err);
         });
-        
+
         return this.promise;
     }
 
@@ -42,75 +42,95 @@ export class Task<T> {
 
 export class TaskManager<T> {
     private tasks: Task<T>[] = [];
-    private limit = 10;
+    private priority: Task<T>[] = [];
     private idleDelay = 10;
     private donePromise: RePromise<void>;
     private startPromise: RePromise<void>;
+    private running: Task<T>[] = [];
     
-    running = 0;
+    limit = 10;
     looping = false;
-    
-    constructor(concurrentLimit: number, idleDelay: number) {
+    isStack: boolean;
+
+    constructor(concurrentLimit: number, idleDelay: number, isStack = false) {
         this.limit = concurrentLimit;
         this.idleDelay = idleDelay;
         this.donePromise = RePromise();
         this.donePromise.resolve();
         this.startPromise = RePromise();
+        this.isStack = isStack;
     }
 
-    async startTaskLoop() {
+    private async startTaskLoop() {
         this.looping = true;
-        
+
         if (this.donePromise.state !== 'pending') {
             this.donePromise = RePromise();
         }
-        
+
         this.startPromise.resolve();
-        
+
         while (this.looping) {
-            if (this.running >= this.limit) {
-                await sleep(this.idleDelay);
+            if (this.running.length >= this.limit) {
+                await this.waitOne();
                 continue;
             }
-            
-            const task = this.tasks.shift();
+
+            let task: Task<T> | undefined;
+            if (this.priority.length > 0) {
+                task = this.isStack ? this.priority.pop() : this.priority.shift();
+            } else {
+                task = this.isStack ? this.tasks.pop() : this.tasks.shift();
+            }
+
             if (task) {
-                this.running++;
-                task.start().then(() => {
-                    this.running--;
-                }).catch(() => {
-                    this.running--;
-                });
-            } else if (this.running > 0) {
+                this.running.push(task);
+                task.start().finally(() => this.removeRunning(task!));
+            } else if (this.running.length > 0) {
                 await sleep(this.idleDelay);
             } else {
                 break;
             }
         }
-        
+
         this.startPromise = RePromise();
         this.donePromise.resolve();
         this.looping = false;
     }
 
-    addTask(task: Task<T>) {
-        this.tasks.push(task);
-        
+    private removeRunning(task: Task<T>) {
+        const index = this.running.indexOf(task);
+        if (index >= 0) {
+            this.running.splice(index, 1);
+        }
+    }
+
+    addTask(task: Task<T>, priority = false) {
+        if (priority) {
+            this.priority.push(task);
+        } else {
+            this.tasks.push(task);
+        }
+
         if (!this.looping) {
             this.startTaskLoop();
         }
-        
-        return task.wait()
+
+        return task.wait();
     }
-    
-    addWork(work: () => Promise<T>) {
-        return this.addTask(new Task(work));
+
+    addWork(work: () => Promise<T>, priority = false) {
+        return this.addTask(new Task(work), priority);
     }
-    
+
     wait() {
         return this.donePromise;
     }
-    
+
+    waitOne() {
+        return Promise.race(this.running.map(task => task.wait()));
+    }
+
     waitForStart() {
         return this.startPromise;
     }
