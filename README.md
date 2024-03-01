@@ -2,8 +2,15 @@
 
 A standalone image browser (not a webui extension) made with Node and SvelteKit.
 
-![example1](https://i.imgur.com/hcVQDZx.png)
-![example2](https://i.imgur.com/963zv3L.png)
+<details>
+<summary>Preview images</summary>
+
+![sd-browser-preview](https://github.com/SirVeggie/sd-browser/assets/32365239/bcdcc0c2-4a2f-4e4c-98af-6709086ca0b6)
+![sd-browser-preview-full](https://github.com/SirVeggie/sd-browser/assets/32365239/e8481be4-3333-410c-ad1c-b621b1b462b2)
+![sd-browser-preview-metadata](https://github.com/SirVeggie/sd-browser/assets/32365239/680b6a6b-6c90-49f3-9e82-fd8d812caa94)
+![sd-browser-preview-webui](https://github.com/SirVeggie/sd-browser/assets/32365239/df246a90-ba4a-4d5f-85c8-f7b0987fa4a0)
+![sd-browser-preview-comfy](https://github.com/SirVeggie/sd-browser/assets/32365239/623983a7-2771-4afa-a7d9-8b4d7abb5348)
+</details>
 
 ## Installation
 
