@@ -17,9 +17,9 @@ A standalone image browser (not a webui extension) made with Node and SvelteKit.
 
 When starting for the first time, the images will be indexed. Depending on the amount of images, this can take seconds (5,000 images), or a tens of minutes (200,000+ images). Indexing speed will also depend on if you're using txt files or embedded image metadata, as well as the speed of your drive. My SSD takes about 3 minutes for 230,000 pngs with exif metadata.
 
-After the indexing, the following starts will only take a couple of seconds.
+During indexing, images will gradually become available for viewing in order from newest to oldest (by file modification date).
 
-During indexing, images will become available for viewing in order from newest to oldest (by file modification date).
+After the indexing, the following starts will only take a couple of seconds.
 
 ## Updating
 
