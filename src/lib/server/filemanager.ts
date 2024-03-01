@@ -207,6 +207,7 @@ export async function indexFiles2() {
     // Read metadata from txt files
     if (templist.length !== 0) {
         console.log(`Indexing ${templist.length} images from txt files...`);
+        const startTimestamp = Date.now();
         let count = 0;
         const batchsize = 1000;
         const newtemplist: ServerImage[] = [];
@@ -235,13 +236,14 @@ export async function indexFiles2() {
             if (i + batchsize < templist.length)
                 console.log(`Progress: ${i + batchsize}/${templist.length} images`);
         }
-        console.log(`Found metadata for ${count}/${templist.length} images`);
+        console.log(`Found metadata for ${count}/${templist.length} images in ${calcTimeSpent(startTimestamp)}`);
         templist = newtemplist;
     }
 
     // Read metadata from exif
     if (templist.length !== 0) {
         console.log('Sorting remaining images by modified date...');
+        const startTimestamp = Date.now();
         templist.sort((a, b) => b.modifiedDate - a.modifiedDate);
 
         console.log(`Indexing ${templist.length} images from exif...`);
@@ -267,14 +269,14 @@ export async function indexFiles2() {
             if (i + batchsize < templist.length)
                 console.log(`Progress: ${i + batchsize}/${templist.length} images`);
         }
-        console.log(`Found metadata for ${count}/${templist.length} images with ${failedFiles.length} errors`);
+        console.log(`Found metadata for ${count}/${templist.length} images in ${calcTimeSpent(startTimestamp)}`);
     }
 
     // finish up
     console.log('Writing cache file... do not interrupt!');
     await fs.writeFile(tempcachefile, JSON.stringify([...imageList], null, 2)).catch(e => console.log(e));
     await fs.rename(tempcachefile, cachefile).catch(e => console.log(e));
-    console.log(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}`);
+    console.log(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)} with ${failedFiles.length} failed files`);
 
     cleanTempImages();
     console.log(`Found ${[...imageList].filter(x => x[1].prompt).length} images with metadata`);
