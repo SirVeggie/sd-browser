@@ -10,9 +10,8 @@ import exifr from 'exifr';
 import { getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { XOR, limitedParallelMap, print, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
+import { XOR, calcTimeSpent, limitedParallelMap, print, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
 import { generateCompressedFromId, generateThumbnailFromId } from './convert';
-import { Task } from '$lib/tools/task';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
 
@@ -75,7 +74,7 @@ export async function indexFiles() {
         print('Sorting remaining images by modified date...');
         templist.sort((a, b) => b.modifiedDate - a.modifiedDate);
         generationDisabled = true;
-    
+
         // Read metadata from txt files
         templist = await indexTxtFilesNew(templist, txtmap);
     }
@@ -294,18 +293,6 @@ async function readMetadataFromExif(image: ServerImage): Promise<ServerImage> {
     return image;
 }
 
-function calcTimeSpent(start: number) {
-    const ms = Date.now() - start;
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.floor(ms / 1000 % 60);
-    const smin = minutes !== 1 ? 's' : '';
-    const ssec = seconds !== 1 ? 's' : '';
-    let res = minutes ? `${minutes} minute${smin}` : '';
-    res += seconds ? `${res ? ' ' : ''}${seconds} second${ssec}` : '';
-    res += res ? '' : `${ms} ms`;
-    return res;
-}
-
 function isImage(file: string) {
     return file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.webp');
 }
@@ -511,35 +498,20 @@ async function createUniqueListChunked() {
 
     const chunksize = 1000;
     const templist = [...imageList.values()];
-    let tasks: Task<void>[] = [];
     for (let i = 0; i < templist.length; i += chunksize) {
-        tasks.push(new Task(async () => {
-            const chunk = templist.slice(i, i + chunksize);
-            for (const image of chunk) {
-                if (!image.prompt)
-                    continue;
-                const prompt = simplifyPrompt(image.prompt, image.folder);
-                uniqueListReverse.set(prompt, image.id);
-            }
-            await sleep(1);
-        }));
+        const chunk = templist.slice(i, i + chunksize);
+        for (const image of chunk) {
+            if (!image.prompt)
+                continue;
+            const prompt = simplifyPrompt(image.prompt, image.folder);
+            uniqueListReverse.set(prompt, image.id);
+        }
+        await sleep(1);
     }
-
-    await limitedParallelMap(tasks, x => x.start(), 1);
-
-    tasks = [];
-    const templist2 = [...uniqueListReverse];
-    for (let i = 0; i < templist2.length; i += chunksize) {
-        tasks.push(new Task(async () => {
-            const chunk = templist2.slice(i, i + chunksize);
-            for (const data of chunk) {
-                uniqueList.set(data[1], data[0]);
-            }
-            await sleep(1);
-        }));
+    
+    for (const data of [...uniqueListReverse]) {
+        uniqueList.set(data[1], data[0]);
     }
-
-    await limitedParallelMap(tasks, x => x.start(), 1);
 }
 
 function addUniqueImage(image: ServerImage) {

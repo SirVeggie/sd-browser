@@ -27,15 +27,9 @@ export function randomIndex(array: any[]) {
 }
 
 export function selectRandom<T>(array: T[], amount: number): T[] {
-    const res: T[] = [];
     const copy = [...array];
-    amount = Math.min(amount, copy.length);
-    for (let i = 0; i < amount; i++) {
-        const index = randomIndex(copy);
-        res.push(copy[index]);
-        copy.splice(index, 1);
-    }
-    return res;
+    copy.sort(() => Math.random() - 0.5);
+    return copy.slice(0, amount);
 }
 
 export function splitPromptParams(str: string): string[] {
@@ -97,4 +91,16 @@ export function updateLine(str: string) {
     rl.cursorTo(process.stdout, 0);
     rl.clearLine(process.stdout, 0);
     process.stdout.write(str);
+}
+
+export function calcTimeSpent(start: number) {
+    const ms = Date.now() - start;
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor(ms / 1000 % 60);
+    const smin = minutes !== 1 ? 's' : '';
+    const ssec = seconds !== 1 ? 's' : '';
+    let res = minutes ? `${minutes} minute${smin}` : '';
+    res += seconds ? `${res ? ' ' : ''}${seconds} second${ssec}` : '';
+    res += res ? '' : `${ms} ms`;
+    return res;
 }
