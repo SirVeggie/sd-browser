@@ -108,6 +108,7 @@ async function indexCachedFiles(cachefile: string): Promise<[ServerImage[], Map<
     const txtmap: Map<string, string> = new Map();
     let found = 0;
     let foundtxt = 0;
+    let foundtxtnew = 0;
 
     try {
         const cache = await fs.readFile(cachefile);
@@ -152,6 +153,7 @@ async function indexCachedFiles(cachefile: string): Promise<[ServerImage[], Map<
             const fullpath = path.join(dir, file);
             const partial = removeExtension(fullpath);
             if (set.has(partial)) {
+                foundtxtnew++;
                 txtmap.set(partial, fullpath);
             }
         }
@@ -165,11 +167,11 @@ async function indexCachedFiles(cachefile: string): Promise<[ServerImage[], Map<
                 // failed
             }
         }
-
-        updateLine(`Found ${found} images and ${foundtxt} txt files`);
+        
+        updateLine(`Searching ${found} images` + (foundtxt ? ` and ${foundtxt} txt files` : ''));
     }
-
-    updateLine(`Found ${found} images and ${foundtxt} txt files\n`);
+    
+    updateLine(`Found ${found - images.size} new images` + (foundtxt ? ` and ${foundtxtnew} txt files` : '') + '\n');
 
     imageList = images;
     return [templist, txtmap];
