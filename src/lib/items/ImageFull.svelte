@@ -76,7 +76,7 @@
     const sv_pos = getSvPositivePrompt(prompt);
     const sv_neg = getSvNegativePrompt(prompt);
     const params = getParams(prompt);
-    const isComfy = prompt.includes('"ckpt_name": "');
+    const isComfy = /^{"\d+":/.test(prompt);
     if (pos)
       blocks.push({
         header: "positive prompt",
