@@ -16,7 +16,7 @@
     } from "$lib/stores/searchStore";
     import { flyoutModes, qualityModes, searchKeywords, searchModes } from "$lib/types";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
-    import { imageSize, seamlessStyle } from "$lib/stores/styleStore";
+    import { fullscreenStyle, imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
     import { authLogout, authStore } from "$lib/stores/authStore";
 
@@ -166,10 +166,15 @@
     <span class="gray">
         Visual style settings
     </span>
+
+    <label class="checkbox">
+        Maximize fullscreen image size:
+        <input type="checkbox" bind:checked={$fullscreenStyle} />
+    </label>
     
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
-        Image size offset:
+        Image grid size offset:
         <NumInput bind:value={$imageSize} />
     </label>
 
@@ -182,6 +187,8 @@
         PWA fullscreen:
         <br />
         Enable this setting before adding to homescreen to disable mobile UI elements
+        <br />
+        Results depend on browser support
         (status bar, taskbar on tablets)
     </span>
 

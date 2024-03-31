@@ -26,6 +26,7 @@
   import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
   import { splitPromptParams } from "$lib/tools/misc";
   import { autofocus } from "../../actions/autofocus";
+    import { fullscreenStyle } from "$lib/stores/styleStore";
 
   export let cancel: () => void;
   export let imageId: string | undefined;
@@ -40,6 +41,7 @@
   let hiddenElementParams: HTMLDivElement;
   let hiddenElementWorkflow: HTMLDivElement;
 
+  $: full = $fullscreenStyle
   $: imageUrl = imageId
     ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
     : "";
@@ -245,7 +247,7 @@
     on:click={cancel}
     transition:fade={{ duration: 300, easing: cubicOut }}
   >
-    <div class="layout">
+    <div class="layout" class:full>
       <div>
         <div class="card">
           <img src={imageUrl} alt={imageId} />
@@ -339,6 +341,42 @@
         color: #ddd;
         font-family: "Open sans", sans-serif;
         font-size: 2em;
+      }
+      
+      &.full {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        
+        & > div {
+          height: 100%;
+          width: 100%;
+        }
+        
+        .card {
+          width: 100%;
+          border-radius: 0;
+          background-color: transparent;
+        }
+        
+        .info {
+          min-width: auto;
+          max-width: auto;
+          width: min(calc(100% - 2em), 1200px);
+          padding-inline: 1em;
+          background-color: #111b;
+          box-shadow: 0 0 1em 1em #111b;
+        }
+        
+        img {
+          height: 100dvh;
+          max-height: 100dvh;
+          min-height: 100dvh;
+          object-fit: contain;
+          z-index: 100;
+        }
       }
     }
 
