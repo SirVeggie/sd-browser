@@ -107,7 +107,7 @@ export async function generateCompressedFromId(id: string, file?: string) {
     await generateCompressed(imagepath, output).catch(async () => {
         console.log("Failed to generate preview, retrying...");
         await sleep(200);
-        await generateCompressed(imagepath, output).catch(console.error);
+        await generateCompressed(imagepath, output).catch(handleGenerationError(output));
     });
 }
 
@@ -121,6 +121,14 @@ export async function generateThumbnailFromId(id: string, file?: string) {
     await generateThumbnail(imagepath, output).catch(async () => {
         console.log("Failed to generate thumbnail, retrying...");
         await sleep(200);
-        await generateThumbnail(imagepath, output).catch(console.error);
+        await generateThumbnail(imagepath, output).catch(handleGenerationError(output));
     });
+}
+
+function handleGenerationError(output: string) {
+    return async (error: any) => {
+        console.error(error);
+        await sleep(200);
+        await fs.unlink(output).catch(() => undefined);
+    }
 }
