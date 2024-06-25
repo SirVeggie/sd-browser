@@ -5,6 +5,7 @@ import { compressedPath, getImage, thumbnailPath } from './filemanager';
 import path from 'path';
 import fs from 'fs/promises';
 import { backgroundTasks } from './background';
+import { sleep } from '$lib/tools/sleep';
 
 ffmpeg.setFfmpegPath(ffmpegPath.path);
 export function convertImage(image: Readable, outputFormat: string): Promise<Buffer> {
@@ -103,7 +104,11 @@ export async function generateCompressedFromId(id: string, file?: string) {
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;
     console.log(`Generating preview for ${id}`);
-    await generateCompressed(imagepath, output).catch(console.error);
+    await generateCompressed(imagepath, output).catch(async () => {
+        console.log("Failed to generate preview, retrying...");
+        await sleep(200);
+        await generateCompressed(imagepath, output).catch(console.error);
+    });
 }
 
 export async function generateThumbnailFromId(id: string, file?: string) {
@@ -113,5 +118,9 @@ export async function generateThumbnailFromId(id: string, file?: string) {
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;
     console.log(`Generating thumbnail for ${id}`);
-    await generateThumbnail(imagepath, output).catch(console.error);
+    await generateThumbnail(imagepath, output).catch(async () => {
+        console.log("Failed to generate thumbnail, retrying...");
+        await sleep(200);
+        await generateThumbnail(imagepath, output).catch(console.error);
+    });
 }
