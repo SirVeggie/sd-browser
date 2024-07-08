@@ -1,5 +1,4 @@
 import { IMG_FOLDER } from '$env/static/private';
-import { readdir, stat } from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import cp from 'child_process';
@@ -10,10 +9,11 @@ import exifr from 'exifr';
 import { getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { XOR, calcTimeSpent, limitedParallelMap, print, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
+import { XOR, calcTimeSpent, limitedParallelMap, print, printLine, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
 import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
+import { MetaDB, loadUniqueList, saveUniqueList } from './db';
 
 type TimedImage = {
     id: string;
@@ -25,8 +25,8 @@ const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
 let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
 let freshList: TimedImage[] = [];
-let uniqueList: Map<string, string> = new Map();
-let uniqueListReverse: Map<string, string> = new Map();
+let uniqueSet: Set<string> = new Set();
+let uniqueReverse: Map<string, string> = new Map();
 const nsfwList: string[] = [];
 const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
@@ -50,18 +50,15 @@ export async function indexFiles() {
     fs.mkdir(thumbnailPath).catch(() => '');
     fs.mkdir(compressedPath).catch(() => '');
 
-    const cachefile = path.join(datapath, 'metadata.json');
-    const tempcachefile = path.join(datapath, 'metadata-temp.json');
-
     // Read cached data
     // eslint-disable-next-line prefer-const
-    let [templist, txtmap] = await indexCachedFiles(cachefile);
+    let [templist, txtmap, cache] = await indexCachedFiles();
 
     // Initialize existing cache
     if (imageList.size) {
         print(`Building unique list for ${imageList.size} images...`);
-        await createUniqueListChunked();
-        updateLine(`Unique list created with ${uniqueList.size} items\n`);
+        await createUniqueListChunked(cache);
+        updateLine(`Unique list created with ${uniqueSet.size} items\n`);
     }
 
     // Read modified and created dates
@@ -76,30 +73,84 @@ export async function indexFiles() {
         generationDisabled = true;
 
         // Read metadata from txt files
-        templist = await indexTxtFilesNew(templist, txtmap);
+        templist = await indexTxtFiles(templist, txtmap);
     }
 
     // Read metadata from exif
     if (templist.length !== 0) {
         const originalLimit = backgroundTasks.limit;
         backgroundTasks.limit = 5;
-        await indexExifFilesNew(templist);
+        await indexExifFiles(templist);
         backgroundTasks.limit = originalLimit;
     }
 
     generationDisabled = false;
 
     // finish up
-    print('Writing cache file...');
-    await fs.writeFile(tempcachefile, JSON.stringify([...imageList], null, 2)).catch(e => console.log(e));
-    await fs.rename(tempcachefile, cachefile).catch(e => console.log(e));
+    print('Writing cache files...');
+    saveUniqueList(uniqueReverse);
+    serializeImageList([...imageList].map(x => x[1]), cache);
     updateLine(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}\n`);
+    await renameLegacyFile();
 
     cleanTempImages();
     console.log(`Found ${[...imageList].filter(x => x[1].prompt).length} images with metadata`);
 }
 
-async function indexCachedFiles(cachefile: string): Promise<[ServerImage[], Map<string, string>]> {
+async function renameLegacyFile() {
+    try {
+        const cachefile = path.join(datapath, 'metadata.json');
+        if ((await fs.stat(cachefile)).isFile()) {
+            const newfile = path.join(datapath, 'metadata-deprecated-delete-this.json');
+            await fs.rename(cachefile, newfile).catch(console.log);
+            console.log('\nDELETE OLD METADATA JSON - old json file has been preserved just in case, you can delete it to save space\n');
+        }
+    } catch { undefined; }
+}
+
+function serializeImageList(images: ServerImage[], cache: ImageList | undefined) {
+    const db = new MetaDB();
+    if (!cache) {
+        db.setAll(images);
+        db.close();
+        return;
+    }
+
+    const deletions: string[] = [];
+    const additions: ServerImage[] = [];
+    const updates: ServerImage[] = [];
+
+    for (const image of images) {
+        const cached = cache.get(image.id);
+        if (!cached) {
+            additions.push(image);
+        } else {
+            if (image.file !== cached.file
+                || image.folder !== cached.folder
+                || image.modifiedDate !== cached.modifiedDate
+                || image.createdDate !== cached.createdDate
+                || image.prompt != cached.prompt
+                || image.workflow != cached.workflow) {
+                updates.push(image);
+            }
+        }
+
+        cache.delete(image.id);
+    }
+
+    for (const [key] of cache) {
+        deletions.push(key);
+    }
+
+    db.setAndDeleteAll(additions.concat(updates), deletions);
+    updateLine(`Updated ${additions.length + updates.length} images, deleted ${deletions.length} images in cache\n`);
+    db.close();
+}
+
+async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, ImageList | undefined]> {
+    const db = new MetaDB();
+
+    const cachefile = path.join(datapath, 'metadata.json');
     let imageCache: ImageList | undefined;
     const templist: ServerImage[] = [];
     const images: ImageList = new Map();
@@ -109,21 +160,38 @@ async function indexCachedFiles(cachefile: string): Promise<[ServerImage[], Map<
     let found = 0;
     let foundtxt = 0;
     let foundtxtnew = 0;
+    let useLegacy = false;
+
+    const dbCount = db.count();
 
     try {
         const cache = await fs.readFile(cachefile);
         imageCache = new Map(JSON.parse(cache.toString()));
-        console.log(`Found cache file with ${imageCache.size} images`);
+        if (imageCache.size > dbCount) {
+            useLegacy = true;
+            console.log('Using legacy cache file instead of database');
+        }
     } catch {
         imageCache = undefined;
-        console.log('No cache file found');
+    }
+
+    if (!useLegacy) {
+        const dbImages = db.getAll();
+        imageCache = dbImages.size ? dbImages : undefined;
+    }
+
+    if (!imageCache) {
+        console.log('No cache file, or failed to read it');
+        console.log('Building index from scratch...');
+    } else {
+        console.log(`Found cache file with ${imageCache.size} images`);
     }
 
     while (dirs.length > 0) {
         const dir = dirs.pop();
         if (!dir) continue;
         const dirShort = removeBasePath(dir).replace(/^(\/|\\)/, '');
-        const files = await readdir(dir);
+        const files = await fs.readdir(dir);
 
         for (const file of files.filter(x => isImage(x))) {
             found++;
@@ -161,20 +229,26 @@ async function indexCachedFiles(cachefile: string): Promise<[ServerImage[], Map<
         for (const file of files.filter(x => !isImage(x) && !isTxt(x))) {
             const fullpath = path.join(dir, file);
             try {
-                const stats = await stat(fullpath);
+                const stats = await fs.stat(fullpath);
                 if (stats.isDirectory()) dirs.push(fullpath);
             } catch {
                 // failed
             }
         }
-        
+
         updateLine(`Searching ${found} images` + (foundtxt ? ` and ${foundtxt} txt files` : ''));
     }
-    
+
     updateLine(`Found ${found - images.size} new images` + (foundtxt ? ` and ${foundtxtnew} txt files` : '') + '\n');
 
+    if (imageCache) {
+        const deletions = [...imageCache.keys()].filter(x => !images.has(x));
+        deletions.forEach(x => imageCache.delete(x));
+    }
+
+    db.close();
     imageList = images;
-    return [templist, txtmap];
+    return [templist, txtmap, useLegacy ? undefined : imageCache];
 }
 
 async function indexBasicFileData(templist: ServerImage[]): Promise<ServerImage[]> {
@@ -187,7 +261,7 @@ async function indexBasicFileData(templist: ServerImage[]): Promise<ServerImage[
 
     templist = await limitedParallelMap(templist, async x => {
         try {
-            const stats = await stat(x.file);
+            const stats = await fs.stat(x.file);
             x.modifiedDate = stats.mtimeMs;
             x.createdDate = stats.birthtimeMs;
             if (x.modifiedDate > 0) count++;
@@ -204,7 +278,7 @@ async function indexBasicFileData(templist: ServerImage[]): Promise<ServerImage[
     return templist;
 }
 
-async function indexTxtFilesNew(templist: ServerImage[], txtmap: Map<string, string>): Promise<ServerImage[]> {
+async function indexTxtFiles(templist: ServerImage[], txtmap: Map<string, string>): Promise<ServerImage[]> {
     const log = `Indexing ${txtmap.size} images from txt files...`;
     updateLine(log);
 
@@ -244,7 +318,7 @@ async function indexTxtFilesNew(templist: ServerImage[], txtmap: Map<string, str
     return newlist;
 }
 
-async function indexExifFilesNew(templist: ServerImage[]): Promise<void> {
+async function indexExifFiles(templist: ServerImage[]): Promise<void> {
     const log = `Indexing ${templist.length} images from exif...`;
     updateLine(log);
 
@@ -334,6 +408,13 @@ async function cleanTempImages() {
         console.log(`Cleaned ${count} preview images`);
 }
 
+async function deleteTempImage(id: string) {
+    const thumbfile = path.join(thumbnailPath, `${id}.webp`);
+    const compfile = path.join(compressedPath, `${id}.webp`);
+    await fs.unlink(thumbfile).catch(() => '');
+    await fs.unlink(compfile).catch(() => '');
+}
+
 let genCount = 0;
 const genLimit = 10;
 let indexTimer: any;
@@ -356,15 +437,18 @@ function setupWatcher() {
             await generateThumbnailFromId(hash, file);
             genCount--;
         }
+
         console.log(`Added ${file}`);
-        imageList.set(hash, {
+        const image: ServerImage = {
             id: hash,
             folder: path.basename(path.dirname(file)),
             file,
             modifiedDate: 0,
             createdDate: 0,
             ...await readMetadata(file),
-        });
+        };
+
+        imageList.set(hash, image);
 
         const amount = freshList.unshift({
             id: hash,
@@ -378,20 +462,23 @@ function setupWatcher() {
     watcher.on('rename', async (from, to) => {
         if (isImage(from)) {
             const oldhash = hashString(from);
+            removeUniqueImage(imageList.get(oldhash));
             imageList.delete(oldhash);
-            removeUniqueImage(oldhash);
+            deleteTempImage(oldhash);
         }
 
         if (!isImage(to)) return;
         const newhash = hashString(to);
-        imageList.set(newhash, {
+        const image: ServerImage = {
             id: newhash,
             folder: path.basename(path.dirname(to)),
             file: to,
             modifiedDate: 0,
             createdDate: 0,
             ...await readMetadata(to),
-        });
+        };
+
+        imageList.set(newhash, image);
 
         addUniqueImage(imageList.get(newhash)!);
     });
@@ -399,14 +486,15 @@ function setupWatcher() {
     watcher.on('unlink', async file => {
         if (!isImage(file)) return;
         const hash = hashString(file);
+        removeUniqueImage(imageList.get(hash));
         imageList.delete(hash);
-        removeUniqueImage(hash);
         freshList = freshList.filter(x => x.id !== hash);
         const size = deletionList.unshift({
             id: hash,
             timestamp: Date.now(),
         });
         if (size > freshLimit) deletionList.pop();
+        deleteTempImage(hash);
     });
 
     watcher.on('addDir', () => {
@@ -426,8 +514,9 @@ function setupWatcher() {
     watcher.on('unlinkDir', dir => {
         for (const [key, value] of imageList) {
             if (value.file.startsWith(dir)) {
+                removeUniqueImage(value);
                 imageList.delete(key);
-                removeUniqueImage(key);
+                deleteTempImage(key);
             }
         }
     });
@@ -467,7 +556,7 @@ export function searchImages(search: string, filters: string[], mode: SearchMode
     return list;
 }
 
-function simplifyPrompt(prompt: string | undefined, location?: string) {
+export function simplifyPrompt(prompt: string | undefined, location?: string) {
     if (prompt === undefined) return '';
     return prompt
         .replace(/(, )?seed: \d+/i, '')
@@ -476,27 +565,20 @@ function simplifyPrompt(prompt: string | undefined, location?: string) {
 }
 
 function isUnique(id: string) {
-    return uniqueList.has(id);
+    return uniqueSet.has(id);
 }
 
-// function createUniqueList() {
-//     uniqueList = new Map();
-//     uniqueListReverse = new Map();
+async function createUniqueListChunked(cache: ImageList | undefined) {
+    const [cachedList, cachedReverse] = loadUniqueList(cache);
 
-//     for (const image of imageList) {
-//         if (!image[1].prompt)
-//             continue;
-//         const prompt = simplifyPrompt(image[1].prompt, image[1].folder);
-//         uniqueListReverse.set(prompt, image[1].id);
-//     }
-//     for (const image of uniqueListReverse) {
-//         uniqueList.set(image[1], image[0]);
-//     }
-// }
+    if (cachedList.size && cachedList.size === cachedReverse.size) {
+        uniqueSet = cachedList;
+        uniqueReverse = cachedReverse;
+        return;
+    }
 
-async function createUniqueListChunked() {
-    uniqueList = new Map();
-    uniqueListReverse = new Map();
+    uniqueSet = new Set();
+    uniqueReverse = new Map();
 
     const chunksize = 1000;
     const templist = [...imageList.values()];
@@ -506,30 +588,46 @@ async function createUniqueListChunked() {
             if (!image.prompt)
                 continue;
             const prompt = simplifyPrompt(image.prompt, image.folder);
-            uniqueListReverse.set(prompt, image.id);
+            uniqueReverse.set(prompt, image.id);
         }
         await sleep(1);
     }
-    
-    for (const data of [...uniqueListReverse]) {
-        uniqueList.set(data[1], data[0]);
+
+    for (const id of [...uniqueReverse.values()]) {
+        uniqueSet.add(id);
     }
 }
 
 function addUniqueImage(image: ServerImage) {
     const prompt = simplifyPrompt(image.prompt, image.folder);
-    const existing = uniqueListReverse.get(prompt);
+    const existing = uniqueReverse.get(prompt);
     if (existing)
-        uniqueList.delete(existing);
-    uniqueList.set(image.id, prompt);
-    uniqueListReverse.set(prompt, image.id);
+        uniqueSet.delete(existing);
+    uniqueSet.add(image.id);
+    uniqueReverse.set(prompt, image.id);
 }
 
-function removeUniqueImage(id: string) {
-    const prompt = uniqueList.get(id);
+let uniqueTimeout: NodeJS.Timeout | undefined;
+function removeUniqueImage(image: ServerImage | undefined) {
+    if (!image) return;
+    const id = image.id;
+    const prompt = simplifyPrompt(image.prompt, image.folder);
+
     if (prompt) {
-        uniqueListReverse.delete(prompt);
-        uniqueList.delete(id);
+        uniqueReverse.delete(prompt);
+        uniqueSet.delete(id);
+
+        if (uniqueSet.size !== uniqueReverse.size) {
+            printLine('uniqueSet and uniqueReverse are out of sync');
+            clearTimeout(uniqueTimeout);
+            uniqueTimeout = setTimeout(() => {
+                print('Attempting to rebuild unique list...');
+                createUniqueListChunked(undefined);
+                updateLine('Unique list rebuilt');
+                saveUniqueList(uniqueReverse);
+                updateLine('Unique list saved to cache\n');
+            }, 5000);
+        }
     }
 }
 
@@ -612,8 +710,6 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
 }
 
 export function getFreshImages(timestamp: number) {
-    // return [...imageList.values()].filter(x => x.modifiedDate > timestamp);
-    // return freshList.map(x => imageList.get(x)).filter(x => (x?.modifiedDate ?? 0) > timestamp) as ServerImage[];
     const res: ServerImage[] = [];
     for (const item of freshList) {
         const img = imageList.get(item.id);
@@ -668,7 +764,7 @@ function removeBasePath(filepath: string) {
 
 async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
     try {
-        const stats = await stat(imagepath);
+        const stats = await fs.stat(imagepath);
         const res: Partial<ServerImage> = {
             modifiedDate: stats.mtimeMs,
             createdDate: stats.birthtimeMs,
@@ -741,9 +837,10 @@ export function deleteImages(ids: string | string[]) {
         if (!img) return;
         try {
             fs.unlink(img.file);
+            removeUniqueImage(img);
             imageList.delete(id);
-            removeUniqueImage(id);
             deleteTextFiles(img.file);
+            deleteTempImage(id);
         } catch {
             failcount++;
         }
