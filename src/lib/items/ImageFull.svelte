@@ -8,12 +8,19 @@
 
 <script lang="ts">
   import "../../scroll.css";
-  import type { ComfyPrompt, ImageInfo } from "$lib/types";
+  import type { ComfyPrompt, ComfyWorkflowNode, ImageInfo } from "$lib/types";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Button from "./Button.svelte";
   import { notify } from "$lib/components/Notifier.svelte";
   import {
+    getComfyModel,
+    getComfyNegative,
+    getComfyPositive,
+    getComfyPrompt,
+    getComfySeed,
+    getComfyWorkflow,
+    getComfyWorkflowNodes,
     getModel,
     getModelHash,
     getNegativePrompt,
@@ -26,7 +33,7 @@
   import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
   import { splitPromptParams } from "$lib/tools/misc";
   import { autofocus } from "../../actions/autofocus";
-    import { fullscreenStyle } from "$lib/stores/styleStore";
+  import { fullscreenStyle } from "$lib/stores/styleStore";
 
   export let cancel: () => void;
   export let imageId: string | undefined;
@@ -41,7 +48,7 @@
   let hiddenElementParams: HTMLDivElement;
   let hiddenElementWorkflow: HTMLDivElement;
 
-  $: full = $fullscreenStyle
+  $: full = $fullscreenStyle;
   $: imageUrl = imageId
     ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
     : "";
@@ -56,7 +63,7 @@
   $: workflowPrompt = !data ? "" : data.workflow;
 
   function extractBasic(d: ImageInfo): string {
-    const model = getModel(d.prompt);
+    const model = getModel(d.prompt, d.workflow);
     const hash = getModelHash(d.prompt);
     let info = "";
     if (model) info += `Model: ${model}`;
@@ -109,7 +116,7 @@
         content: splitPromptParams(params).join("\n"),
         action: copyParams,
       });
-    if (isComfy) blocks = blocks.concat(formatComfy(prompt));
+    if (isComfy) blocks = blocks.concat(formatComfy(prompt, workflow));
     if (blocks.length === 0 || isComfy)
       blocks.push({ header: "metadata", content: prompt, action: copyPrompt });
     if (workflow)
@@ -121,27 +128,76 @@
     return blocks;
   }
 
-  function formatComfy(prompt: string): PromptFragment[] {
-    const data: ComfyPrompt = JSON.parse(prompt);
-    const blocks: PromptFragment[] = [];
+  function formatComfy(prompt: string, workflow?: string): PromptFragment[] {
+    if (!workflow) return [];
+    
+    try {
+      const workflowData = getComfyWorkflow(workflow);
+      const nodes = getComfyWorkflowNodes(workflowData);
+      const data = getComfyPrompt(prompt);
+      const blocks: PromptFragment[] = [];
+      
+      if (!nodes || !data)
+        return [];
 
-    for (const [key, value] of Object.entries(data)) {
-      let content = "";
-      for (const [k, v] of Object.entries(value.inputs)) {
-        if (["string", "number", "boolean"].includes(typeof v))
-          content += `${k}: ${v}\n`;
-      }
-      content = content.trim();
+      const positive = getComfyPositive(data, nodes);
+      const negative = getComfyNegative(data, nodes);
+      const seed = getComfySeed(data, nodes);
+      const model = getComfyModel(data, nodes);
 
-      if (content) {
+      if (positive)
         blocks.push({
-          header: `${key} [${value.class_type}]`,
-          content,
+          header: "positive prompt",
+          content: negative ? positive : positive.split("\n---\n")[0],
+          action: copyPositive,
         });
-      }
-    }
+      if (negative)
+        blocks.push({
+          header: "negative prompt",
+          content: negative,
+          action: copyNegative,
+        });
+      else if (positive.split("\n---\n").length > 1)
+        blocks.push({
+          header: "negative prompt",
+          content: positive.split("\n---\n")[1],
+          action: copyNegative,
+        });
+      if (seed)
+        blocks.push({
+          header: "seed",
+          content: seed,
+        });
+      if (model)
+        blocks.push({
+          header: "model",
+          content: model,
+        });
 
-    return blocks;
+      for (const [key, value] of Object.entries(data)) {
+        let content = "";
+        for (const [k, v] of Object.entries(value.inputs)) {
+          if (["string", "number", "boolean"].includes(typeof v))
+            content += `${k}: ${v}\n`;
+        }
+        content = content.trim();
+
+        if (content) {
+          const node = nodes[Number(key)];
+          const header = `${key} | ${node?.title ?? value.class_type}`;
+          blocks.push({
+            header,
+            content,
+          });
+        }
+      }
+
+      return blocks;
+    } catch (e) {
+      console.error(e);
+      notify("Failed to parse comfy metadata", "error", "comfy_parse_error");
+      return [];
+    }
   }
 
   function handleEsc(e: KeyboardEvent) {
@@ -342,25 +398,25 @@
         font-family: "Open sans", sans-serif;
         font-size: 2em;
       }
-      
+
       &.full {
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
-        
+
         & > div {
           height: 100%;
           width: 100%;
         }
-        
+
         .card {
           width: 100%;
           border-radius: 0;
           background-color: transparent;
         }
-        
+
         .info {
           min-width: auto;
           max-width: auto;
@@ -369,7 +425,7 @@
           background-color: #111b;
           box-shadow: 0 0 1em 1em #111b;
         }
-        
+
         img {
           height: 100dvh;
           max-height: 100dvh;

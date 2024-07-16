@@ -158,10 +158,53 @@ export function isServerMessage(object: any): object is ServerMessage {
 }
 
 export type ComfyNode = {
-    inputs: (string|number|boolean|object)[];
+    inputs: Record<string, (string|number|boolean|[string, number]|object)>;
     class_type: string;
 }
 export type ComfyPrompt = Record<string, ComfyNode>;
+
+export type ComfyWorkflow = {
+    nodes: ComfyWorkflowNode[];
+    links: [number, number, number, number, number, string][];
+    groups: any[];
+    config: any;
+    version: number;
+}
+
+export type ComfyWorkflowNode = {
+    id: number;
+    type: string;
+    title?: string;
+    pos: [number, number];
+    size: { "0": number, "1": number; };
+    flags: Record<string, boolean>;
+    order: number;
+    mode: number;
+    inputs: {
+        name: string;
+        type: string;
+        link: number;
+        widget?: { name: string; };
+        dir?: number;
+        has_old_label?: boolean;
+        label?: string;
+        old_label?: string;
+    }[];
+    outputs: {
+        name: string;
+        type: string;
+        links: number[];
+        shape?: number;
+        dir?: number;
+        has_old_label?: boolean;
+        label?: string;
+        old_label?: string;
+        slot_index?: number;
+    }[];
+    widgets_values: (string|number|boolean)[];
+    properties: Record<string, string>;
+    shape: number;
+}
 
 export function testType(object: any, keylist: (string | ((o: any) => boolean))[]) {
     for (const key of keylist) {

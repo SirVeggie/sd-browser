@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
 import fs from 'fs/promises';
 import exifr from 'exifr';
-import { getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
+import { getComfyNegative, getComfyPositive, getComfyPrompt, getComfyWorkflowNodes, getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { XOR, calcTimeSpent, limitedParallelMap, print, printLine, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
@@ -31,6 +31,7 @@ const nsfwList: string[] = [];
 const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
 const freshLimit = 1000;
+const comfyPromptCache = new Map<string, [string, string]>();
 
 export const datapath = './localData';
 export const thumbnailPath = path.join(datapath, 'thumbnails');
@@ -83,6 +84,10 @@ export async function indexFiles() {
         await indexExifFiles(templist);
         backgroundTasks.limit = originalLimit;
     }
+
+    print('Building comfy prompt cache...');
+    buildComfyPromptCache();
+    updateLine(`Comfy prompt cache created with ${comfyPromptCache.size} items\n`);
 
     generationDisabled = false;
 
@@ -631,6 +636,23 @@ function removeUniqueImage(image: ServerImage | undefined) {
     }
 }
 
+function buildComfyPromptCache() {
+    for (const image of imageList.values()) {
+        if (!image.prompt || !image.workflow) continue;
+        const prompt = getComfyPrompt(image.prompt);
+        const nodes = getComfyWorkflowNodes(image.workflow);
+        if (!prompt || !nodes) continue;
+        const pos = getComfyPositive(prompt, nodes);
+        const neg = getComfyNegative(prompt, nodes);
+        const split = pos.split('\n---\n');
+        const positive = neg ? pos : split[0];
+        const negative = neg ? neg : split.length > 1 ? split[1] : '';
+        if (!positive)
+            continue;
+        comfyPromptCache.set(image.id, [positive, negative]);
+    }
+}
+
 const keywordRegex = `((${searchKeywords.join('|')}) )*`;
 const removeRegex = new RegExp(`^${keywordRegex}`);
 const notRegex = new RegExp(`^${keywordRegex}NOT `);
@@ -673,21 +695,39 @@ function buildMatcher(search: string, matching: SearchMode): (image: ServerImage
     };
 }
 
-function getTextByType(image: ServerImage, type: MatchType) {
+function getTextByType(image: ServerImage, type: MatchType): string {
     if (!image) return '';
+
     switch (type) {
         case 'all':
             return `${image.prompt}, Folder: ${image.folder}`;
-        case 'positive':
-            return getPositivePrompt(image.prompt);
-        case 'negative':
-            return getNegativePrompt(image.prompt);
-        case 'params':
-            return getParams(image.prompt);
         case 'folder':
             return image.folder;
-        default:
-            return '';
+    }
+
+    if (comfyPromptCache.has(image.id)) {
+        // assume comfy metadata
+        const [positive, negative] = comfyPromptCache.get(image.id)!;
+        switch (type) {
+            case 'positive':
+                return positive;
+            case 'negative':
+                return negative;
+            case 'params':
+                return image.prompt!;
+        }
+    } else {
+        // assume automatic1111 metadata
+        switch (type) {
+            case 'positive':
+                return getPositivePrompt(image.prompt) || image.prompt || '';
+            case 'negative':
+                return getNegativePrompt(image.prompt);
+            case 'params':
+                return getParams(image.prompt);
+            default:
+                return '';
+        }
     }
 }
 
