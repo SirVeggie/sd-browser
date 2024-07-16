@@ -125,3 +125,19 @@ You can use `Space` to start and stop the slideshow.
 Optimized for both desktop and mobile use.
 
 The image browser has been setup as PWA compatible, so you can set it on your homescreen on mobile to open it in fullscreen (without a url bar).
+
+# ComfyUI support
+
+Due to the nature of ComfyUI it can be difficult to parse information out of the workflow. Currently the image browser will try to detect and show the following information:
+- Positive prompt
+- Negative prompt
+- Model
+- Seed
+
+For the app to succesfully find this information, consider renaming the nodes' titles with the following
+- Positive prompt -> has to have "positive" or "prompt" in the title
+- Negative prompt -> has to have "negative" in the title
+- Model -> has to have "model" or "checkpoint" in the title
+- Seed -> has to have "seed" in the title
+
+The first two are the most important, since the latter two should already work out of the box.
