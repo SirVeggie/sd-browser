@@ -141,3 +141,5 @@ For the app to succesfully find this information, consider renaming the nodes' t
 - Seed -> has to have "seed" in the title
 
 The first two are the most important, since the latter two should already work out of the box.
+
+In addition to these, all of the nodes are formatted and shown, so you can still find all relevant information. It can get pretty unreadable though if you have a lot of nodes.
