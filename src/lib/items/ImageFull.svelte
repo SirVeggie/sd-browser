@@ -8,16 +8,15 @@
 
 <script lang="ts">
   import "../../scroll.css";
-  import type { ComfyPrompt, ComfyWorkflowNode, ImageInfo } from "$lib/types";
+  import type { ImageInfo } from "$lib/types";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Button from "./Button.svelte";
   import { notify } from "$lib/components/Notifier.svelte";
   import {
     getComfyModel,
-    getComfyNegative,
-    getComfyPositive,
     getComfyPrompt,
+    getComfyPrompts,
     getComfySeed,
     getComfyWorkflow,
     getComfyWorkflowNodes,
@@ -26,6 +25,7 @@
     getNegativePrompt,
     getParams,
     getPositivePrompt,
+    getPrompts,
     getSvNegativePrompt,
     getSvPositivePrompt,
   } from "$lib/tools/metadataInterpreter";
@@ -55,8 +55,7 @@
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : formatMetadata(data.prompt, data.workflow);
   $: fullPrompt = !data ? "" : data.prompt;
-  $: positivePrompt = !data ? "" : getPositivePrompt(data.prompt);
-  $: negativePrompt = !data ? "" : getNegativePrompt(data.prompt);
+  $: prompts = !data ? undefined : getPrompts(data.prompt, data.workflow);
   $: svPositivePrompt = !data ? "" : getSvPositivePrompt(data.prompt);
   $: svNegativePrompt = !data ? "" : getSvNegativePrompt(data.prompt);
   $: paramsPrompt = !data ? "" : getParams(data.prompt);
@@ -130,37 +129,29 @@
 
   function formatComfy(prompt: string, workflow?: string): PromptFragment[] {
     if (!workflow) return [];
-    
+
     try {
       const workflowData = getComfyWorkflow(workflow);
       const nodes = getComfyWorkflowNodes(workflowData);
       const data = getComfyPrompt(prompt);
       const blocks: PromptFragment[] = [];
-      
-      if (!nodes || !data)
-        return [];
 
-      const positive = getComfyPositive(data, nodes);
-      const negative = getComfyNegative(data, nodes);
+      if (!nodes || !data) return [];
+
+      const prompts = getComfyPrompts(data, nodes);
       const seed = getComfySeed(data, nodes);
       const model = getComfyModel(data, nodes);
 
-      if (positive)
+      if (prompts?.pos)
         blocks.push({
           header: "positive prompt",
-          content: negative ? positive : positive.split("\n---\n")[0],
+          content: prompts.pos,
           action: copyPositive,
         });
-      if (negative)
+      if (prompts?.neg)
         blocks.push({
           header: "negative prompt",
-          content: negative,
-          action: copyNegative,
-        });
-      else if (positive.split("\n---\n").length > 1)
-        blocks.push({
-          header: "negative prompt",
-          content: positive.split("\n---\n")[1],
+          content: prompts.neg,
           action: copyNegative,
         });
       if (seed)
@@ -343,8 +334,8 @@
     </div>
   </div>
   <div class="fallback" bind:this={hiddenElementFull}>{fullPrompt}</div>
-  <div class="fallback" bind:this={hiddenElementPos}>{positivePrompt}</div>
-  <div class="fallback" bind:this={hiddenElementNeg}>{negativePrompt}</div>
+  <div class="fallback" bind:this={hiddenElementPos}>{prompts?.pos ?? ''}</div>
+  <div class="fallback" bind:this={hiddenElementNeg}>{prompts?.neg ?? ''}</div>
   <div class="fallback" bind:this={hiddenElementSvPos}>{svPositivePrompt}</div>
   <div class="fallback" bind:this={hiddenElementSvNeg}>{svNegativePrompt}</div>
   <div class="fallback" bind:this={hiddenElementParams}>{paramsPrompt}</div>

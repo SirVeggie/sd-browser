@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
 import fs from 'fs/promises';
 import exifr from 'exifr';
-import { getComfyNegative, getComfyPositive, getComfyPrompt, getComfyWorkflowNodes, getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
+import { getComfyPrompts, getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { XOR, calcTimeSpent, limitedParallelMap, print, printLine, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
@@ -462,12 +462,14 @@ function setupWatcher() {
         if (amount > freshLimit) freshList.pop();
 
         addUniqueImage(imageList.get(hash)!);
+        addComfyPromptToCache(image);
     });
 
     watcher.on('rename', async (from, to) => {
         if (isImage(from)) {
             const oldhash = hashString(from);
             removeUniqueImage(imageList.get(oldhash));
+            removeComfyPromptFromCache(oldhash);
             imageList.delete(oldhash);
             deleteTempImage(oldhash);
         }
@@ -486,12 +488,14 @@ function setupWatcher() {
         imageList.set(newhash, image);
 
         addUniqueImage(imageList.get(newhash)!);
+        addComfyPromptToCache(image);
     });
 
     watcher.on('unlink', async file => {
         if (!isImage(file)) return;
         const hash = hashString(file);
         removeUniqueImage(imageList.get(hash));
+        removeComfyPromptFromCache(hash);
         imageList.delete(hash);
         freshList = freshList.filter(x => x.id !== hash);
         const size = deletionList.unshift({
@@ -520,6 +524,7 @@ function setupWatcher() {
         for (const [key, value] of imageList) {
             if (value.file.startsWith(dir)) {
                 removeUniqueImage(value);
+                removeComfyPromptFromCache(key);
                 imageList.delete(key);
                 deleteTempImage(key);
             }
@@ -638,19 +643,19 @@ function removeUniqueImage(image: ServerImage | undefined) {
 
 function buildComfyPromptCache() {
     for (const image of imageList.values()) {
-        if (!image.prompt || !image.workflow) continue;
-        const prompt = getComfyPrompt(image.prompt);
-        const nodes = getComfyWorkflowNodes(image.workflow);
-        if (!prompt || !nodes) continue;
-        const pos = getComfyPositive(prompt, nodes);
-        const neg = getComfyNegative(prompt, nodes);
-        const split = pos.split('\n---\n');
-        const positive = neg ? pos : split[0];
-        const negative = neg ? neg : split.length > 1 ? split[1] : '';
-        if (!positive)
-            continue;
-        comfyPromptCache.set(image.id, [positive, negative]);
+        addComfyPromptToCache(image);
     }
+}
+
+function addComfyPromptToCache(image: ServerImage) {
+    const prompts = getComfyPrompts(image.prompt, image.workflow);
+    if (!prompts)
+        return;
+    comfyPromptCache.set(image.id, [prompts.pos, prompts.neg]);
+}
+
+function removeComfyPromptFromCache(id: string) {
+    comfyPromptCache.delete(id);
 }
 
 const keywordRegex = `((${searchKeywords.join('|')}) )*`;
@@ -822,6 +827,7 @@ async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
 
         let metadata = await exifr.parse(imagepath, {
             ifd0: false,
+            chunked: false,
         } as any);
         if (!metadata)
             return {};

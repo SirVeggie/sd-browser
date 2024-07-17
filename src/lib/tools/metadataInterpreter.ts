@@ -1,5 +1,11 @@
 import { ComfyNode, ComfyPrompt, ComfyWorkflow, ComfyWorkflowNode } from "$lib/types";
 
+export function getPrompts(prompt: string | undefined, workflow: string | undefined): { pos: string, neg: string; } | undefined {
+    if (workflow)
+        return getComfyPrompts(prompt, workflow);
+    return { pos: getPositivePrompt(prompt), neg: getNegativePrompt(prompt) };
+}
+
 const positiveRegex = /^([\s\S]*?)\n\r?(Negative prompt:|.*$)/;
 export function getPositivePrompt(prompt: string | undefined) {
     if (!prompt) return '';
@@ -153,9 +159,27 @@ export function getComfyNegative(prompt: ComfyPrompt, nodes: Record<string, Comf
     return !ids.length ? '' : prompts.join('\n----------\n');
 }
 
+export function getComfyPrompts(prompt: string | ComfyPrompt | undefined, workflow: string | Record<string, ComfyWorkflowNode> | undefined): { pos: string, neg: string; } | undefined {
+    if (!prompt || !workflow)
+        return undefined;
+    if (typeof prompt === 'string')
+        prompt = getComfyPrompt(prompt);
+    if (typeof workflow === 'string')
+        workflow = getComfyWorkflowNodes(workflow);
+    if (!prompt || !workflow)
+        return undefined;
+    const pos = getComfyPositive(prompt, workflow);
+    const neg = getComfyNegative(prompt, workflow);
+    const split = pos.split('\n---\n');
+    const positive = neg ? pos : split[0];
+    const negative = neg ? neg : split.length > 1 ? split[1] : '';
+    if (!positive)
+        return undefined;
+    return { pos: positive, neg: negative };
+}
+
 export function getComfySeed(prompt: ComfyPrompt, nodes: Record<string, ComfyWorkflowNode>) {
     const ids = getComfyIds(prompt, nodes, /seed/i);
-    console.log(ids);
     const seeds = ids.reduce((acc, id) => {
         const seed = String(getComfyValue(prompt[id], ['seed', 'number', 'int'], 'number'));
         if (seed)
