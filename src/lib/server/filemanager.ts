@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
 import fs from 'fs/promises';
 import exifr from 'exifr';
-import { getComfyPrompts, getNegativePrompt, getParams, getPositivePrompt } from '$lib/tools/metadataInterpreter';
+import { getComfyPrompts, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { XOR, calcTimeSpent, limitedParallelMap, print, printLine, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
@@ -720,6 +720,19 @@ function getTextByType(image: ServerImage, type: MatchType): string {
                 return negative;
             case 'params':
                 return image.prompt!;
+        }
+    } else if (getMetadataVersion(image.prompt) === 'swarm') {
+        // assume swarm metadata
+        const prompts = getSwarmPrompts(image.prompt);
+        switch (type) {
+            case 'positive':
+                return prompts?.pos || image.prompt || '';
+            case 'negative':
+                return prompts?.neg || '';
+            case 'params':
+                return getParams(image.prompt);
+            default:
+                return '';
         }
     } else {
         // assume automatic1111 metadata

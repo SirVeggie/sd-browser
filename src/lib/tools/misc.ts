@@ -32,23 +32,6 @@ export function selectRandom<T>(array: T[], amount: number): T[] {
     return copy.slice(0, amount);
 }
 
-export function splitPromptParams(str: string): string[] {
-    const res: string[] = [];
-    let prev = 0;
-    let inQuotes = false;
-    for (let i = 0; i < str.length; i++) {
-        if (str[i] === '"' && str[i - 1] !== '\\') {
-            inQuotes = !inQuotes;
-        } else if (str[i] === ',' && !inQuotes) {
-            res.push(str.slice(prev, i).trim());
-            prev = i + 1;
-        }
-    }
-    res.push(str.slice(prev).trim());
-    const hiddenParams = ["sv_prompt", "sv_negative"];
-    return res.filter(s => !hiddenParams.includes(s.split(":")[0].trim()));
-}
-
 export async function limitedParallelMap<T, U>(
     array: T[],
     callback: (item: T) => Promise<U>,

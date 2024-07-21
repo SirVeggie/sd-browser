@@ -1,9 +1,34 @@
 import { ComfyNode, ComfyPrompt, ComfyWorkflow, ComfyWorkflowNode } from "$lib/types";
 
+export function getMetadataVersion(prompt: string | undefined) {
+    if (/^{"\d+":/.test(prompt ?? ''))
+        return 'comfy';
+    if (/^{\s+"sui_image_params"/.test(prompt ?? ''))
+        return 'swarm';
+    return 'a1111';
+}
+
 export function getPrompts(prompt: string | undefined, workflow: string | undefined): { pos: string, neg: string; } | undefined {
+    const version = getMetadataVersion(prompt);
     if (workflow)
         return getComfyPrompts(prompt, workflow);
+    if (version === 'swarm')
+        return getSwarmPrompts(prompt);
     return { pos: getPositivePrompt(prompt), neg: getNegativePrompt(prompt) };
+}
+
+export function getSwarmPrompts(prompt: string | undefined) {
+    if (!prompt)
+        return undefined;
+    const data = JSON.parse(prompt);
+    return { pos: data.sui_image_params.prompt, neg: data.sui_image_params.negativeprompt };
+}
+
+export function getSwarmSeed(prompt: string | undefined) {
+    if (!prompt)
+        return '';
+    const data = JSON.parse(prompt);
+    return data.sui_image_params.seed;
 }
 
 const positiveRegex = /^([\s\S]*?)\n\r?(Negative prompt:|.*$)/;
@@ -38,12 +63,38 @@ export function getSvNegativePrompt(prompt: string | undefined) {
 
 const paramsRegex = /\n\r?(Steps: \d+[\s\S]*)$/;
 export function getParams(prompt: string | undefined) {
+    const version = getMetadataVersion(prompt);
+    if (version === 'swarm' && prompt)
+        return Object.entries(JSON.parse(prompt).sui_image_params).map(([key, value]) => `${key}: ${value}`).join('\n');
     if (!prompt) return '';
-    return paramsRegex.exec(prompt)?.[1] ?? '';
+    const params = paramsRegex.exec(prompt)?.[1] ?? '';
+    if (params)
+        return splitPromptParams(params).join("\n")
+    return '';
+}
+
+export function splitPromptParams(str: string): string[] {
+    const res: string[] = [];
+    let prev = 0;
+    let inQuotes = false;
+    for (let i = 0; i < str.length; i++) {
+        if (str[i] === '"' && str[i - 1] !== '\\') {
+            inQuotes = !inQuotes;
+        } else if (str[i] === ',' && !inQuotes) {
+            res.push(str.slice(prev, i).trim());
+            prev = i + 1;
+        }
+    }
+    res.push(str.slice(prev).trim());
+    const hiddenParams = ["sv_prompt", "sv_negative"];
+    return res.filter(s => !hiddenParams.includes(s.split(":")[0].trim()));
 }
 
 const autoModelRegex = /Model: (.*?)(,|$)/;
 export function getModel(prompt: string | undefined, workflow: string | undefined) {
+    const version = getMetadataVersion(prompt);
+    if (version === 'swarm' && prompt)
+        return JSON.parse(prompt).sui_image_params.model;
     if (!prompt) return 'Unknown';
     let model = prompt.match(autoModelRegex)?.[1];
     if (model)
@@ -56,6 +107,19 @@ export function getModel(prompt: string | undefined, workflow: string | undefine
     if (model.includes('\n'))
         return "Multiple models";
     return model || 'Unknown';
+}
+
+export function getSeed(prompt: string | undefined, workflow: string | undefined) {
+    const version = getMetadataVersion(prompt);
+    if (!prompt)
+        return '';
+    if (version === 'swarm')
+        return getSwarmSeed(prompt);
+    if (version === 'a1111')
+        return /seed: (\d+)/i.exec(prompt)?.[1] || '';
+    if (!workflow)
+        return '';
+    return getComfySeed(prompt, workflow) || '';
 }
 
 const autoHashRegex = /Model hash: (.*?)(,|$)/;
@@ -178,7 +242,13 @@ export function getComfyPrompts(prompt: string | ComfyPrompt | undefined, workfl
     return { pos: positive, neg: negative };
 }
 
-export function getComfySeed(prompt: ComfyPrompt, nodes: Record<string, ComfyWorkflowNode>) {
+export function getComfySeed(prompt: string | ComfyPrompt, nodes: string | Record<string, ComfyWorkflowNode>) {
+    if (!prompt || !nodes)
+        return '';
+    if (typeof prompt === 'string')
+        prompt = getComfyPrompt(prompt)!;
+    if (typeof nodes === 'string')
+        nodes = getComfyWorkflowNodes(nodes)!;
     const ids = getComfyIds(prompt, nodes, /seed/i);
     const seeds = ids.reduce((acc, id) => {
         const seed = String(getComfyValue(prompt[id], ['seed', 'number', 'int'], 'number'));

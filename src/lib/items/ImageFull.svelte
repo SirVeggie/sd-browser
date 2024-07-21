@@ -14,24 +14,22 @@
   import Button from "./Button.svelte";
   import { notify } from "$lib/components/Notifier.svelte";
   import {
-    getComfyModel,
     getComfyPrompt,
-    getComfyPrompts,
-    getComfySeed,
     getComfyWorkflow,
     getComfyWorkflowNodes,
+    getMetadataVersion,
     getModel,
     getModelHash,
     getNegativePrompt,
     getParams,
     getPositivePrompt,
     getPrompts,
+    getSeed,
     getSvNegativePrompt,
     getSvPositivePrompt,
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode } from "$lib/stores/searchStore";
   import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
-  import { splitPromptParams } from "$lib/tools/misc";
   import { autofocus } from "../../actions/autofocus";
   import { fullscreenStyle } from "$lib/stores/styleStore";
 
@@ -79,44 +77,50 @@
   ): PromptFragment[] {
     if (!prompt) return [];
     let blocks: PromptFragment[] = [];
-    const pos = getPositivePrompt(prompt);
-    const neg = getNegativePrompt(prompt);
+    const prompts = getPrompts(prompt, workflow);
+    const seed = getSeed(prompt, workflow);
     const sv_pos = getSvPositivePrompt(prompt);
     const sv_neg = getSvNegativePrompt(prompt);
     const params = getParams(prompt);
-    const isComfy = /^{"\d+":/.test(prompt);
-    if (pos)
+    const version = getMetadataVersion(prompt);
+    
+    if (prompts?.pos)
       blocks.push({
         header: "positive prompt",
-        content: pos,
+        content: prompts.pos,
         action: copyPositive,
       });
-    if (neg)
+    if (prompts?.neg)
       blocks.push({
         header: "negative prompt",
-        content: neg,
+        content: prompts.neg,
         action: copyNegative,
       });
-    if (sv_pos && pos !== sv_pos)
+    if (sv_pos && prompts?.pos !== sv_pos)
       blocks.push({
         header: "original positive prompt",
         content: sv_pos,
         action: copySvPositive,
       });
-    if (sv_neg && neg !== sv_neg)
+    if (sv_neg && prompts?.neg !== sv_neg)
       blocks.push({
         header: "original negative prompt",
         content: sv_neg,
         action: copySvNegative,
       });
+    if (seed)
+      blocks.push({
+        header: "seed",
+        content: seed,
+      });
     if (params)
       blocks.push({
         header: "parameters",
-        content: splitPromptParams(params).join("\n"),
+        content: params,
         action: copyParams,
       });
-    if (isComfy) blocks = blocks.concat(formatComfy(prompt, workflow));
-    if (blocks.length === 0 || isComfy)
+    if (version === 'comfy') blocks = blocks.concat(formatComfy(prompt, workflow));
+    if (blocks.length === 0 || version === 'comfy')
       blocks.push({ header: "metadata", content: prompt, action: copyPrompt });
     if (workflow)
       blocks.push({
@@ -136,34 +140,7 @@
       const data = getComfyPrompt(prompt);
       const blocks: PromptFragment[] = [];
 
-      if (!nodes || !data) return [];
-
-      const prompts = getComfyPrompts(data, nodes);
-      const seed = getComfySeed(data, nodes);
-      const model = getComfyModel(data, nodes);
-
-      if (prompts?.pos)
-        blocks.push({
-          header: "positive prompt",
-          content: prompts.pos,
-          action: copyPositive,
-        });
-      if (prompts?.neg)
-        blocks.push({
-          header: "negative prompt",
-          content: prompts.neg,
-          action: copyNegative,
-        });
-      if (seed)
-        blocks.push({
-          header: "seed",
-          content: seed,
-        });
-      if (model)
-        blocks.push({
-          header: "model",
-          content: model,
-        });
+      if (!nodes || !data) return []
 
       for (const [key, value] of Object.entries(data)) {
         let content = "";
