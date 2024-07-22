@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import { ImageExtraData, searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
 import fs from 'fs/promises';
 import exifr from 'exifr';
-import { getComfyPrompts, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
+import { getComfyPrompt, getComfyPrompts, getComfyWorkflowNodes, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { XOR, calcTimeSpent, limitedParallelMap, print, printLine, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
@@ -56,7 +56,7 @@ export async function indexFiles() {
     // Read cached data
     // eslint-disable-next-line prefer-const
     let [templist, txtmap, cache] = await indexCachedFiles();
-    
+
     // Initialize existing cache
     if (imageList.size) {
         print(`Building unique list for ${imageList.size} images...`);
@@ -645,21 +645,27 @@ export function searchImages(search: string, filters: string[], mode: SearchMode
     return list;
 }
 
-export function simplifyPrompt(prompt: string | undefined, location?: string) {
+export function simplifyPrompt(prompt: string | undefined, location?: string, workflow?: string) {
     if (!prompt)
         return '';
-    if (getMetadataVersion(prompt) === 'comfy')
-        return simplifyComfyPrompt(prompt, location);
+    if (getMetadataVersion(prompt) === 'comfy' && workflow)
+        return simplifyComfyPrompt(prompt, workflow, location);
     return prompt
         .replace(/(, )?seed: \d+/i, '')
         .replace(/(, )?([^,]*)version: [^,]*/ig, '')
         + (location ?? '');
 }
 
-function simplifyComfyPrompt(prompt: string | undefined, location?: string) {
-    if (!prompt)
+function simplifyComfyPrompt(prompt: string | undefined, workflow: string | undefined, location?: string) {
+    if (!prompt || !workflow)
         return '';
-    return prompt + (location ?? '');
+    const comfy = getComfyPrompt(prompt);
+    const wf = getComfyWorkflowNodes(workflow);
+    if (!comfy || !wf)
+        return '';
+    const regex = /seed/i;
+    const processed = Object.keys(comfy).filter(x => wf[x] && !regex.test(wf[x].title ?? "") && !regex.test(comfy[x].class_type)).map(x => Number(x)).sort((a, b) => a - b).map(x => comfy[x]).map(x => ({ ...x, is_cached: undefined }));
+    return JSON.stringify(processed) + (location ?? '');
 }
 
 function isUnique(id: string) {
@@ -685,7 +691,7 @@ async function createUniqueListChunked(cache: ImageList | undefined) {
         for (const image of chunk) {
             if (!image.prompt)
                 continue;
-            const prompt = simplifyPrompt(image.prompt, image.folder);
+            const prompt = simplifyPrompt(image.prompt, image.folder, image.workflow);
             if (uniqueReverse.has(prompt)) {
                 const ids = uniqueReverse.get(prompt)!;
                 ids.unshift(image.id);
@@ -703,7 +709,7 @@ async function createUniqueListChunked(cache: ImageList | undefined) {
 }
 
 function addUniqueImage(image: ServerImage) {
-    const prompt = simplifyPrompt(image.prompt, image.folder);
+    const prompt = simplifyPrompt(image.prompt, image.folder, image.workflow);
     const existing = uniqueReverse.get(prompt);
     if (existing) {
         uniqueSet.delete(existing[0]);
@@ -719,7 +725,7 @@ let uniqueTimeout: NodeJS.Timeout | undefined;
 function removeUniqueImage(image: ServerImage | undefined) {
     if (!image) return;
     const id = image.id;
-    const prompt = simplifyPrompt(image.prompt, image.folder);
+    const prompt = simplifyPrompt(image.prompt, image.folder, image.workflow);
 
     if (prompt) {
         uniqueSet.delete(id);
@@ -750,12 +756,12 @@ function removeUniqueImage(image: ServerImage | undefined) {
 function buildComfyPromptCache() {
     const db = new MetaCalcDB();
     const all = db.getAllComfy();
-    
+
     for (const item of all) {
         if (imageList.has(item.id))
             comfyPromptCache.set(item.id, [item.comfyPositive!, item.comfyNegative!]);
     }
-    
+
     const items = [] as ImageExtraData[];
     for (const image of imageList.values()) {
         if (comfyPromptCache.has(image.id))
