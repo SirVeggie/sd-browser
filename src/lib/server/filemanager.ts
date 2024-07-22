@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import cp from 'child_process';
 import crypto from 'crypto';
-import { searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
+import { ImageExtraData, searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
 import fs from 'fs/promises';
 import exifr from 'exifr';
 import { getComfyPrompts, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
@@ -14,7 +14,7 @@ import { XOR, calcTimeSpent, limitedParallelMap, print, printLine, selectRandom,
 import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
-import { MetaDB, loadUniqueList, saveUniqueList } from './db';
+import { MetaCalcDB, MetaDB, loadUniqueList, saveUniqueList } from './db';
 
 type TimedImage = {
     id: string;
@@ -28,7 +28,7 @@ let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
 let freshList: TimedImage[] = [];
 let uniqueSet: Set<string> = new Set();
-let uniqueReverse: Map<string, string> = new Map();
+let uniqueReverse: Map<string, string[]> = new Map();
 const nsfwList: string[] = [];
 const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
@@ -56,7 +56,7 @@ export async function indexFiles() {
     // Read cached data
     // eslint-disable-next-line prefer-const
     let [templist, txtmap, cache] = await indexCachedFiles();
-
+    
     // Initialize existing cache
     if (imageList.size) {
         print(`Building unique list for ${imageList.size} images...`);
@@ -97,6 +97,7 @@ export async function indexFiles() {
     print('Writing cache files...');
     saveUniqueList(uniqueReverse);
     serializeImageList([...imageList].map(x => x[1]), cache);
+    cleanCalcDB();
     updateLine(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}\n`);
     await renameLegacyFile();
 
@@ -415,6 +416,14 @@ async function cleanTempImages() {
         console.log(`Cleaned ${count} preview images`);
 }
 
+function cleanCalcDB() {
+    const db = new MetaCalcDB();
+    const ids = db.getAllIds();
+    const deletions = ids.filter(x => !imageList.has(x));
+    db.deleteAll(deletions);
+    db.close();
+}
+
 async function deleteTempImage(id: string) {
     const thumbfile = path.join(thumbnailPath, `${id}.webp`);
     const compfile = path.join(compressedPath, `${id}.webp`);
@@ -598,7 +607,7 @@ async function checkFiles() {
             }
         }
     }
-    
+
     for (const id of images) {
         deleteFile(imageList.get(id)!.file);
     }
@@ -637,11 +646,20 @@ export function searchImages(search: string, filters: string[], mode: SearchMode
 }
 
 export function simplifyPrompt(prompt: string | undefined, location?: string) {
-    if (prompt === undefined) return '';
+    if (!prompt)
+        return '';
+    if (getMetadataVersion(prompt) === 'comfy')
+        return simplifyComfyPrompt(prompt, location);
     return prompt
         .replace(/(, )?seed: \d+/i, '')
         .replace(/(, )?([^,]*)version: [^,]*/ig, '')
         + (location ?? '');
+}
+
+function simplifyComfyPrompt(prompt: string | undefined, location?: string) {
+    if (!prompt)
+        return '';
+    return prompt + (location ?? '');
 }
 
 function isUnique(id: string) {
@@ -668,23 +686,33 @@ async function createUniqueListChunked(cache: ImageList | undefined) {
             if (!image.prompt)
                 continue;
             const prompt = simplifyPrompt(image.prompt, image.folder);
-            uniqueReverse.set(prompt, image.id);
+            if (uniqueReverse.has(prompt)) {
+                const ids = uniqueReverse.get(prompt)!;
+                ids.unshift(image.id);
+                uniqueReverse.set(prompt, ids);
+            } else {
+                uniqueReverse.set(prompt, [image.id]);
+            }
         }
         await sleep(1);
     }
 
-    for (const id of [...uniqueReverse.values()]) {
-        uniqueSet.add(id);
+    for (const ids of [...uniqueReverse.values()]) {
+        uniqueSet.add(ids[0]);
     }
 }
 
 function addUniqueImage(image: ServerImage) {
     const prompt = simplifyPrompt(image.prompt, image.folder);
     const existing = uniqueReverse.get(prompt);
-    if (existing)
-        uniqueSet.delete(existing);
+    if (existing) {
+        uniqueSet.delete(existing[0]);
+        existing.unshift(image.id);
+        uniqueReverse.set(prompt, existing);
+    } else {
+        uniqueReverse.set(prompt, [image.id]);
+    }
     uniqueSet.add(image.id);
-    uniqueReverse.set(prompt, image.id);
 }
 
 let uniqueTimeout: NodeJS.Timeout | undefined;
@@ -694,8 +722,16 @@ function removeUniqueImage(image: ServerImage | undefined) {
     const prompt = simplifyPrompt(image.prompt, image.folder);
 
     if (prompt) {
-        uniqueReverse.delete(prompt);
         uniqueSet.delete(id);
+        if (!uniqueReverse.has(prompt))
+            return;
+        const ids = uniqueReverse.get(prompt)!.filter(x => x !== id);
+        if (!ids.length) {
+            uniqueReverse.delete(prompt);
+        } else {
+            uniqueReverse.set(prompt, ids);
+            uniqueSet.add(ids[0]);
+        }
 
         if (uniqueSet.size !== uniqueReverse.size) {
             printLine('uniqueSet and uniqueReverse are out of sync');
@@ -712,9 +748,30 @@ function removeUniqueImage(image: ServerImage | undefined) {
 }
 
 function buildComfyPromptCache() {
-    for (const image of imageList.values()) {
-        addComfyPromptToCache(image);
+    const db = new MetaCalcDB();
+    const all = db.getAllComfy();
+    
+    for (const item of all) {
+        if (imageList.has(item.id))
+            comfyPromptCache.set(item.id, [item.comfyPositive!, item.comfyNegative!]);
     }
+    
+    const items = [] as ImageExtraData[];
+    for (const image of imageList.values()) {
+        if (comfyPromptCache.has(image.id))
+            continue;
+        const prompts = addComfyPromptToCache(image);
+        if (!prompts)
+            continue;
+        items.push({
+            id: image.id,
+            comfyPositive: prompts?.pos,
+            comfyNegative: prompts?.neg,
+        });
+    }
+
+    db.setAllComfy(items);
+    db.close();
 }
 
 function addComfyPromptToCache(image: ServerImage) {
@@ -722,6 +779,7 @@ function addComfyPromptToCache(image: ServerImage) {
     if (!prompts)
         return;
     comfyPromptCache.set(image.id, [prompts.pos, prompts.neg]);
+    return prompts;
 }
 
 function removeComfyPromptFromCache(id: string) {

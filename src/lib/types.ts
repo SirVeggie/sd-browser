@@ -206,6 +206,13 @@ export type ComfyWorkflowNode = {
     shape: number;
 }
 
+export type ImageExtraData = {
+    id: string;
+    simplifiedPrompt?: string;
+    comfyPositive?: string;
+    comfyNegative?: string;
+}
+
 export function testType(object: any, keylist: (string | ((o: any) => boolean))[]) {
     for (const key of keylist) {
         if (typeof key === 'string' && !(key in object))

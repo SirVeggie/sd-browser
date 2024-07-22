@@ -1,17 +1,31 @@
-import type { ImageList, ServerImage } from '$lib/types';
+import type { ImageExtraData, ImageList, ServerImage } from '$lib/types';
 import Database from 'better-sqlite3';
 import type { Database as BetterSqlite3 } from 'better-sqlite3';
 import path from 'path';
-import { datapath, simplifyPrompt } from './filemanager';
+import { datapath } from './filemanager';
+import { updateLine } from '$lib/tools/misc';
 
 //#region unique list
-export function saveUniqueList(reverse: Map<string, string>) {
+export function saveUniqueList(reverse: Map<string, string[]>) {
     const db = new MiscDB();
-    db.set('uniqueList', [...reverse.values()].join('\n'));
+    db.set('uniqueList', [...reverse.values()].map(x => x.join('|')).join('\n'));
     db.close();
+
+    const db2 = new MetaCalcDB();
+    const items = [] as ImageExtraData[];
+    for (const item of reverse.entries()) {
+        for (const id of item[1]) {
+            items.push({
+                id,
+                simplifiedPrompt: item[0]
+            });
+        }
+    }
+    db2.setAllSimplified(items);
+    db2.close();
 }
 
-export function loadUniqueList(cache: ImageList | undefined): [Set<string>, Map<string, string>] {
+export function loadUniqueList(cache: ImageList | undefined): [Set<string>, Map<string, string[]>] {
     if (!cache)
         return [new Set(), new Map()];
     const db = new MiscDB();
@@ -19,9 +33,21 @@ export function loadUniqueList(cache: ImageList | undefined): [Set<string>, Map<
     db.close();
     if (!raw)
         return [new Set(), new Map()];
-    const ids = raw.split('\n').filter(id => cache.has(id) && cache.get(id)!.prompt);
-    const reverse = new Map(ids.map(id => [simplifyPrompt(cache.get(id)!.prompt!, cache.get(id)!.folder), id]));
-    const set = new Set(ids);
+
+    updateLine('Loading unique list ids from cache');
+
+    const db2 = new MetaCalcDB();
+    const ids = raw.split('\n').map(x => x.split('|').filter(x => cache.has(x) && cache.get(x)!.prompt)).filter(idlist => idlist.length);
+    const reverse: Map<string, string[]> = new Map();
+    for (const idlist of ids) {
+        const id = idlist[0];
+        const prompt = db2.getSimplified(id);
+        if (!prompt)
+            continue;
+        reverse.set(prompt, idlist);
+    }
+    db2.close();
+    const set = new Set(ids.map(idlist => idlist[0]));
     return [set, reverse];
 }
 //#endregion
@@ -136,6 +162,168 @@ export class MetaDB {
         if (this.closed)
             throw new Error('Database already closed');
         return Number(this.db.prepare('SELECT COUNT(*) FROM metadata').pluck().get());
+    }
+}
+
+export class MetaCalcDB {
+    private static file = 'data.sqlite3';
+    private static table = 'extradata';
+    private static sql_create = `
+    CREATE TABLE IF NOT EXISTS ${MetaCalcDB.table} (
+        id TEXT PRIMARY KEY,
+        simplifiedPrompt TEXT,
+        comfyPositive TEXT,
+        comfyNegative TEXT
+    )`;
+
+    static connections = 0;
+
+    private db: BetterSqlite3;
+    private closed = false;
+
+    constructor() {
+        if (MetaDB.connections > 0)
+            throw new Error('Database already open');
+        MetaDB.connections++;
+        const fullpath = path.join(datapath, MetaCalcDB.file);
+        this.db = new Database(fullpath);
+        this.db.exec(MetaCalcDB.sql_create);
+    }
+
+    close() {
+        if (this.closed)
+            throw new Error('Database already closed');
+        this.db.close();
+        MetaDB.connections--;
+    }
+
+    get(id: string): ImageExtraData | undefined {
+        if (this.closed)
+            throw new Error('Database already closed');
+        return this.db.prepare(`SELECT id, simplifiedPrompt, comfyPositive, comfyNegative FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as ImageExtraData | undefined;
+    }
+
+    getSimplified(id: string): string | undefined {
+        if (this.closed)
+            throw new Error('Database already closed');
+        return this.db.prepare(`SELECT simplifiedPrompt FROM ${MetaCalcDB.table} WHERE id = ?`).pluck().get(id) as string | undefined;
+    }
+
+    getComfy(id: string): [string, string] | undefined {
+        if (this.closed)
+            throw new Error('Database already closed');
+        const comfy = this.db.prepare(`SELECT id, comfyPositive, comfyNegative FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as ImageExtraData | undefined;
+        return comfy?.comfyPositive ? [comfy.comfyPositive!, comfy.comfyNegative!] : undefined;
+    }
+
+    getAll(): ImageExtraData[] {
+        if (this.closed)
+            throw new Error('Database already closed');
+        return this.db.prepare(`SELECT id, simplifiedPrompt, comfyPositive, comfyNegative FROM ${MetaCalcDB.table}`).all() as ImageExtraData[];
+    }
+
+    getAllIds(): string[] {
+        if (this.closed)
+            throw new Error('Database already closed');
+        return this.db.prepare(`SELECT id FROM ${MetaCalcDB.table}`).all().map(x => (x as ImageExtraData).id) as string[];
+    }
+
+    getAllComfy(): ImageExtraData[] {
+        if (this.closed)
+            throw new Error('Database already closed');
+        return this.db.prepare(`SELECT id, comfyPositive, comfyNegative FROM ${MetaCalcDB.table} WHERE comfyPositive IS NOT NULL AND comfyPositive != ''`)
+            .all() as ImageExtraData[];
+    }
+
+    set(data: ImageExtraData) {
+        if (this.closed)
+            throw new Error('Database already closed');
+        const stmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, simplifiedPrompt, comfyPositive, comfyNegative) VALUES (?, ?, ?, ?)`);
+        stmt.run(data.id, data.simplifiedPrompt, data.comfyPositive, data.comfyNegative);
+    }
+
+    setAll(data: ImageExtraData[]) {
+        if (this.closed)
+            throw new Error('Database already closed');
+        const stmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, simplifiedPrompt, comfyPositive, comfyNegative) VALUES (?, ?, ?, ?)`);
+        this.db.transaction(data => {
+            for (const image of data)
+                stmt.run(image.id, image.simplifiedPrompt, image.comfyPositive, image.comfyNegative);
+        })(data);
+    }
+
+    setAllSimplified(data: ImageExtraData[]) {
+        if (this.closed)
+            throw new Error('Database already closed');
+        const stmtUpdate = this.db.prepare(`UPDATE ${MetaCalcDB.table} SET simplifiedPrompt = ? WHERE id = ?`);
+        const stmtInsert = this.db.prepare(`INSERT OR IGNORE INTO ${MetaCalcDB.table} (id, simplifiedPrompt) VALUES (?, ?)`);
+        this.db.transaction(data => {
+            for (const image of data) {
+                stmtUpdate.run(image.simplifiedPrompt, image.id);
+                stmtInsert.run(image.id, image.simplifiedPrompt);
+            }
+        })(data);
+    }
+
+    setAllComfy(data: ImageExtraData[]) {
+        if (this.closed)
+            throw new Error('Database already closed');
+        const stmtUpdate = this.db.prepare(`UPDATE ${MetaCalcDB.table} SET comfyPositive = ?, comfyNegative = ? WHERE id = ?`);
+        const stmtInsert = this.db.prepare(`INSERT OR IGNORE INTO ${MetaCalcDB.table} (id, comfyPositive, comfyNegative) VALUES (?, ?, ?)`);
+        this.db.transaction(data => {
+            for (const image of data) {
+                stmtUpdate.run(image.comfyPositive, image.comfyNegative, image.id);
+                stmtInsert.run(image.id, image.comfyPositive, image.comfyNegative);
+            }
+        })(data);
+    }
+
+    delete(id: string) {
+        if (this.closed)
+            throw new Error('Database already closed');
+        const stmt = this.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
+        stmt.run(id);
+    }
+
+    deleteAll(ids: string[]) {
+        if (this.closed)
+            throw new Error('Database already closed');
+        const stmt = this.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
+        this.db.transaction(ids => {
+            for (const id of ids)
+                stmt.run(id);
+        })(ids);
+    }
+
+    setAndDeleteAll(data: ImageExtraData[], deletions: string[]) {
+        if (this.closed)
+            throw new Error('Database already closed');
+        if (!data || !deletions)
+            throw new Error('Images and deletions must be defined');
+        if (data.find(x => deletions.includes(x.id)))
+            throw new Error('Cannot set and delete the same image');
+        if (!data.length && !deletions.length)
+            return;
+        const delstmt = this.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
+        const addstmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, simplifiedPrompt, comfyPositive, comfyNegative) VALUES (?, ?, ?, ?)`);
+        this.db.transaction((deletions, images) => {
+            for (const id of deletions)
+                delstmt.run(id);
+            for (const image of images)
+                addstmt.run(image.id, image.simplifiedPrompt, image.comfyPositive, image.comfyNegative);
+        })(deletions, data);
+    }
+
+    clearAll() {
+        if (this.closed)
+            throw new Error('Database already closed');
+        this.db.exec(`DELETE FROM ${MetaCalcDB.table}`);
+    }
+
+    count(): number {
+        if (this.closed)
+            throw new Error('Database already closed');
+        return Number(this.db.prepare(`SELECT COUNT(*) FROM ${MetaCalcDB.table}`).pluck().get());
     }
 }
 
