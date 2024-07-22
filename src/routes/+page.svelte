@@ -65,6 +65,7 @@
     let updateTime = 0;
     let selecting = false;
     const selection = createSelection();
+    let anchorElement: HTMLDivElement;
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
@@ -78,8 +79,7 @@
     $: gridStyle = `--size-offset:${$imageSize}px`;
 
     onMount(() => {
-        document.body.scrollIntoView();
-
+        scrollToTop();
         fetchImages();
         startUpdate();
         startTrigger(1000);
@@ -189,6 +189,10 @@
             el.scrollIntoView({ behavior: "auto", block: "center" });
         }
     }
+    
+    function scrollToTop() {
+        anchorElement.scrollIntoView();
+    }
 
     function inputChange() {
         startUpdate();
@@ -199,7 +203,7 @@
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
             startTrigger(500);
-            document.body.scrollIntoView();
+            scrollToTop();
             currentAmount = initialAmount;
             fetchImages();
         }, 1000);
@@ -215,7 +219,7 @@
 
     function selectChange(reset?: boolean) {
         if (reset) {
-            document.body.scrollIntoView();
+            scrollToTop();
             currentAmount = initialAmount;
         } else {
             currentAmount = Math.min(currentAmount, 100);
@@ -532,6 +536,7 @@
 
 <svelte:window on:keydown={handleEsc} />
 
+<div class="anchor" bind:this={anchorElement} />
 <div class="topbar">
     <div class="quickbar">
         <span>Images: {paginated.length} / {$imageAmountStore}</span>
