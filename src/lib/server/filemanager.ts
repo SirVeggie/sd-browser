@@ -1,4 +1,4 @@
-import { IMG_FOLDER } from '$env/static/private';
+import { IMG_FOLDER, POLLING_SECONDS } from '$env/static/private';
 import path from 'path';
 import os from 'os';
 import cp from 'child_process';
@@ -21,6 +21,7 @@ type TimedImage = {
 };
 
 const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
+const pollingInterval = Number(POLLING_SECONDS) * 1000;
 
 let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
@@ -420,8 +421,6 @@ async function deleteTempImage(id: string) {
     await fs.unlink(compfile).catch(() => '');
 }
 
-let genCount = 0;
-const genLimit = 10;
 let indexTimer: any;
 
 function setupWatcher() {
@@ -434,41 +433,7 @@ function setupWatcher() {
     watcher = new Watcher(IMG_FOLDER, options);
 
     watcher.on('add', async file => {
-        if (!isImage(file)) return;
-        const hash = hashString(file);
-        
-        try {
-            if (genCount < genLimit) {
-                genCount++;
-                await generateCompressedFromId(hash, file);
-                await generateThumbnailFromId(hash, file);
-                genCount--;
-            }
-        } catch (e) {
-            console.log(`Failed to generate preview for ${path.basename(file)} (this shouldn't appear)`);
-            console.error(e);
-        }
-
-        console.log(`Added ${file}`);
-        const image: ServerImage = {
-            id: hash,
-            folder: path.basename(path.dirname(file)),
-            file,
-            modifiedDate: 0,
-            createdDate: 0,
-            ...await readMetadata(file),
-        };
-
-        imageList.set(hash, image);
-
-        const amount = freshList.unshift({
-            id: hash,
-            timestamp: Date.now(),
-        });
-        if (amount > freshLimit) freshList.pop();
-
-        addUniqueImage(imageList.get(hash)!);
-        addComfyPromptToCache(image);
+        addFile(file);
     });
 
     watcher.on('rename', async (from, to) => {
@@ -482,7 +447,7 @@ function setupWatcher() {
 
         if (!isImage(to)) return;
         console.log(`Renamed ${from} to ${to}`);
-        
+
         const newhash = hashString(to);
         const image: ServerImage = {
             id: newhash,
@@ -539,7 +504,89 @@ function setupWatcher() {
         }
     });
 
+    if (pollingInterval) {
+        console.log(`Polling enabled with interval of ${pollingInterval / 1000} seconds`);
+        pollFiles();
+    }
     console.log('Listening to file changes...');
+}
+
+let genCount = 0;
+const genLimit = 10;
+
+async function addFile(file: string, hash?: string) {
+    if (!isImage(file)) return;
+    if (!hash)
+        hash = hashString(file);
+    try {
+        if (genCount < genLimit) {
+            genCount++;
+            await generateCompressedFromId(hash, file);
+            await generateThumbnailFromId(hash, file);
+            genCount--;
+        }
+    } catch (e) {
+        console.log(`Failed to generate preview for ${path.basename(file)} (this shouldn't appear)`);
+        console.error(e);
+    }
+
+    console.log(`Added ${file}`);
+    const image: ServerImage = {
+        id: hash,
+        folder: path.basename(path.dirname(file)),
+        file,
+        modifiedDate: 0,
+        createdDate: 0,
+        ...await readMetadata(file),
+    };
+
+    imageList.set(hash, image);
+
+    const amount = freshList.unshift({
+        id: hash,
+        timestamp: Date.now(),
+    });
+    if (amount > freshLimit) freshList.pop();
+
+    addUniqueImage(imageList.get(hash)!);
+    addComfyPromptToCache(image);
+}
+
+async function pollFiles() {
+    await checkFiles();
+    setTimeout(() => {
+        pollFiles();
+    }, pollingInterval);
+}
+
+async function checkFiles() {
+    const dirs: string[] = [IMG_FOLDER];
+
+    while (dirs.length > 0) {
+        const dir = dirs.pop();
+        if (!dir) continue;
+        const files = await fs.readdir(dir);
+
+        for (const file of files.filter(x => isImage(x))) {
+            const fullpath = path.join(dir, file);
+            const hash = hashString(fullpath);
+            if (imageList.has(hash)) {
+                continue;
+            }
+
+            addFile(fullpath, hash);
+        }
+
+        for (const file of files.filter(x => !isImage(x) && !isTxt(x))) {
+            const fullpath = path.join(dir, file);
+            try {
+                const stats = await fs.stat(fullpath);
+                if (stats.isDirectory()) dirs.push(fullpath);
+            } catch {
+                // failed
+            }
+        }
+    }
 }
 
 export function getImage(imageid: string) {
