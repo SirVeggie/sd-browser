@@ -1,4 +1,5 @@
-import { IMG_FOLDER, POLLING_SECONDS } from '$env/static/private';
+import { IMG_FOLDER } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import path from 'path';
 import os from 'os';
 import cp from 'child_process';
@@ -21,7 +22,7 @@ type TimedImage = {
 };
 
 const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
-const pollingInterval = Number(POLLING_SECONDS) * 1000;
+const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
 let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
@@ -504,7 +505,7 @@ function setupWatcher() {
         }
     });
 
-    if (pollingInterval) {
+    if (pollingInterval > 0) {
         console.log(`Polling enabled with interval of ${pollingInterval / 1000} seconds`);
         pollFiles();
     }
