@@ -436,11 +436,17 @@ function setupWatcher() {
     watcher.on('add', async file => {
         if (!isImage(file)) return;
         const hash = hashString(file);
-        if (genCount < genLimit) {
-            genCount++;
-            await generateCompressedFromId(hash, file);
-            await generateThumbnailFromId(hash, file);
-            genCount--;
+        
+        try {
+            if (genCount < genLimit) {
+                genCount++;
+                await generateCompressedFromId(hash, file);
+                await generateThumbnailFromId(hash, file);
+                genCount--;
+            }
+        } catch (e) {
+            console.log(`Failed to generate preview for ${path.basename(file)} (this shouldn't appear)`);
+            console.error(e);
         }
 
         console.log(`Added ${file}`);
@@ -475,6 +481,8 @@ function setupWatcher() {
         }
 
         if (!isImage(to)) return;
+        console.log(`Renamed ${from} to ${to}`);
+        
         const newhash = hashString(to);
         const image: ServerImage = {
             id: newhash,
