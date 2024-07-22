@@ -438,46 +438,11 @@ function setupWatcher() {
     });
 
     watcher.on('rename', async (from, to) => {
-        if (isImage(from)) {
-            const oldhash = hashString(from);
-            removeUniqueImage(imageList.get(oldhash));
-            removeComfyPromptFromCache(oldhash);
-            imageList.delete(oldhash);
-            deleteTempImage(oldhash);
-        }
-
-        if (!isImage(to)) return;
-        console.log(`Renamed ${from} to ${to}`);
-
-        const newhash = hashString(to);
-        const image: ServerImage = {
-            id: newhash,
-            folder: path.basename(path.dirname(to)),
-            file: to,
-            modifiedDate: 0,
-            createdDate: 0,
-            ...await readMetadata(to),
-        };
-
-        imageList.set(newhash, image);
-
-        addUniqueImage(imageList.get(newhash)!);
-        addComfyPromptToCache(image);
+        renameFile(from, to);
     });
 
     watcher.on('unlink', async file => {
-        if (!isImage(file)) return;
-        const hash = hashString(file);
-        removeUniqueImage(imageList.get(hash));
-        removeComfyPromptFromCache(hash);
-        imageList.delete(hash);
-        freshList = freshList.filter(x => x.id !== hash);
-        const size = deletionList.unshift({
-            id: hash,
-            timestamp: Date.now(),
-        });
-        if (size > freshLimit) deletionList.pop();
-        deleteTempImage(hash);
+        deleteFile(file);
     });
 
     watcher.on('addDir', () => {
@@ -553,6 +518,49 @@ async function addFile(file: string, hash?: string) {
     addComfyPromptToCache(image);
 }
 
+async function deleteFile(file: string) {
+    if (!isImage(file)) return;
+    const hash = hashString(file);
+    removeUniqueImage(imageList.get(hash));
+    removeComfyPromptFromCache(hash);
+    imageList.delete(hash);
+    freshList = freshList.filter(x => x.id !== hash);
+    const size = deletionList.unshift({
+        id: hash,
+        timestamp: Date.now(),
+    });
+    if (size > freshLimit) deletionList.pop();
+    deleteTempImage(hash);
+}
+
+async function renameFile(from: string, to: string) {
+    if (isImage(from)) {
+        const oldhash = hashString(from);
+        removeUniqueImage(imageList.get(oldhash));
+        removeComfyPromptFromCache(oldhash);
+        imageList.delete(oldhash);
+        deleteTempImage(oldhash);
+    }
+
+    if (!isImage(to)) return;
+    console.log(`Renamed ${from} to ${to}`);
+
+    const newhash = hashString(to);
+    const image: ServerImage = {
+        id: newhash,
+        folder: path.basename(path.dirname(to)),
+        file: to,
+        modifiedDate: 0,
+        createdDate: 0,
+        ...await readMetadata(to),
+    };
+
+    imageList.set(newhash, image);
+
+    addUniqueImage(imageList.get(newhash)!);
+    addComfyPromptToCache(image);
+}
+
 async function pollFiles() {
     await checkFiles();
     setTimeout(() => {
@@ -562,6 +570,7 @@ async function pollFiles() {
 
 async function checkFiles() {
     const dirs: string[] = [IMG_FOLDER];
+    const images = new Set([...imageList.keys()]);
 
     while (dirs.length > 0) {
         const dir = dirs.pop();
@@ -572,6 +581,7 @@ async function checkFiles() {
             const fullpath = path.join(dir, file);
             const hash = hashString(fullpath);
             if (imageList.has(hash)) {
+                images.delete(hash);
                 continue;
             }
 
@@ -587,6 +597,10 @@ async function checkFiles() {
                 // failed
             }
         }
+    }
+    
+    for (const id of images) {
+        deleteFile(imageList.get(id)!.file);
     }
 }
 
