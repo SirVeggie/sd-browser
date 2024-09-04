@@ -83,7 +83,7 @@
     const sv_neg = getSvNegativePrompt(prompt);
     const params = getParams(prompt);
     const version = getMetadataVersion(prompt);
-    
+
     if (prompts?.pos)
       blocks.push({
         header: "positive prompt",
@@ -119,8 +119,9 @@
         content: params,
         action: copyParams,
       });
-    if (version === 'comfy') blocks = blocks.concat(formatComfy(prompt, workflow));
-    if (blocks.length === 0 || version === 'comfy')
+    if (version === "comfy")
+      blocks = blocks.concat(formatComfy(prompt, workflow));
+    if (blocks.length === 0 || version === "comfy")
       blocks.push({ header: "metadata", content: prompt, action: copyPrompt });
     if (workflow)
       blocks.push({
@@ -140,7 +141,7 @@
       const data = getComfyPrompt(prompt);
       const blocks: PromptFragment[] = [];
 
-      if (!nodes || !data) return []
+      if (!nodes || !data) return [];
 
       for (const [key, value] of Object.entries(data)) {
         let content = "";
@@ -204,39 +205,31 @@
   }
 
   function copyPrompt() {
-    copyInfo(hiddenElementFull, data?.prompt, "prompt");
+    copyInfo(hiddenElementFull, fullPrompt, "prompt");
   }
 
   function copyPositive() {
-    copyInfo(hiddenElementPos, getPositivePrompt(data?.prompt), "positive");
+    copyInfo(hiddenElementPos, prompts?.pos, "positive");
   }
 
   function copyNegative() {
-    copyInfo(hiddenElementNeg, getNegativePrompt(data?.prompt), "negative");
+    copyInfo(hiddenElementNeg, prompts?.neg, "negative");
   }
 
   function copySvPositive() {
-    copyInfo(
-      hiddenElementSvPos,
-      getSvPositivePrompt(data?.prompt),
-      "sv_positive",
-    );
+    copyInfo(hiddenElementSvPos, svPositivePrompt, "sv_positive");
   }
 
   function copySvNegative() {
-    copyInfo(
-      hiddenElementSvNeg,
-      getSvNegativePrompt(data?.prompt),
-      "sv_negative",
-    );
+    copyInfo(hiddenElementSvNeg, svNegativePrompt, "sv_negative");
   }
 
   function copyParams() {
-    copyInfo(hiddenElementParams, getParams(data?.prompt), "parameters");
+    copyInfo(hiddenElementParams, paramsPrompt, "parameters");
   }
 
   function copyWorkflow() {
-    copyInfo(hiddenElementWorkflow, data?.workflow, "workflow");
+    copyInfo(hiddenElementWorkflow, workflowPrompt, "workflow");
   }
 
   function deleteImage() {
@@ -311,8 +304,8 @@
     </div>
   </div>
   <div class="fallback" bind:this={hiddenElementFull}>{fullPrompt}</div>
-  <div class="fallback" bind:this={hiddenElementPos}>{prompts?.pos ?? ''}</div>
-  <div class="fallback" bind:this={hiddenElementNeg}>{prompts?.neg ?? ''}</div>
+  <div class="fallback" bind:this={hiddenElementPos}>{prompts?.pos ?? ""}</div>
+  <div class="fallback" bind:this={hiddenElementNeg}>{prompts?.neg ?? ""}</div>
   <div class="fallback" bind:this={hiddenElementSvPos}>{svPositivePrompt}</div>
   <div class="fallback" bind:this={hiddenElementSvNeg}>{svNegativePrompt}</div>
   <div class="fallback" bind:this={hiddenElementParams}>{paramsPrompt}</div>
