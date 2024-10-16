@@ -10,7 +10,7 @@ import exifr from 'exifr';
 import { getComfyPrompt, getComfyPrompts, getComfyWorkflowNodes, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { XOR, calcTimeSpent, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, printLine, removeExtension, selectRandom, updateLine, validRegex, videoFiletypes } from '$lib/tools/misc';
+import { XOR, calcTimeSpent, formatHasMetadata as isMetadataFiletype, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, printLine, removeExtension, selectRandom, updateLine, validRegex, videoFiletypes } from '$lib/tools/misc';
 import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
@@ -234,7 +234,7 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
             const partial = removeExtension(fullpath);
             const hash = hashPath(fullpath);
 
-            if (videomap.has(partial)) {
+            if (videomap.has(partial) && fullpath.endsWith('.png')) {
                 videomap.set(partial, fullpath);
                 continue;
             }
@@ -397,6 +397,9 @@ async function readMetadataFromFile(image: ServerImage, file: string): Promise<S
 }
 
 async function readMetadataFromExif(image: ServerImage, altSource?: string): Promise<ServerImage> {
+    const validSource = isMetadataFiletype(image.file) || isMetadataFiletype(altSource ?? "");
+    if (!validSource)
+        return image;
     const metadata = await exifr.parse(altSource || image.file, {
         ifd0: false,
         chunked: false,
@@ -1029,13 +1032,13 @@ async function readMetadata(image: ServerImage, source?: string): Promise<Server
         image.createdDate = stats.birthtimeMs;
 
         if (source) {
-            return await readMetadataFromExif(image, source);
+            return await readMetadataFromExif(image, source).catch(() => image);
         }
 
         if (isVideo(image.file)) {
             const candidate = image.file.replace(/\.\w+$/i, '.png');
             if (await fs.stat(candidate).then(x => x.isFile()).catch(() => false)) {
-                return await readMetadataFromExif(image, candidate);
+                return await readMetadataFromExif(image, candidate).catch(() => image);
             }
 
             return image;

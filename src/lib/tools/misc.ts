@@ -126,6 +126,10 @@ export function isTxt(file: string) {
     return txtFiletypes.some(x => file.endsWith(`.${x}`));
 }
 
+export function formatHasMetadata(file: string) {
+    return file.endsWith(".png");
+}
+
 export function skipGeneration(file: string) {
     return file.endsWith(".webp") || isVideo(file);
 }
