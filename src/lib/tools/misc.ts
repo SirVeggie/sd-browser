@@ -1,7 +1,10 @@
-import { isVideo } from "$lib/server/filemanager";
 import type { ClientImage, ServerImage } from "$lib/types";
 import { RePromise, RePromisify } from "./RePromise";
 import rl from "readline";
+
+export const imageFiletypes = ['png', 'jpg', 'jpeg', 'webp'] as const;
+export const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
+export const videoFiletypes = ['mp4'] as const;
 
 export function XOR(a: any, b: any): boolean {
     return !a !== !b;
@@ -105,4 +108,28 @@ export function* reverseYield<T>(array: T[]): Generator<T> {
     for (let i = array.length - 1; i >= 0; i--) {
         yield array[i];
     }
+}
+
+export function isMedia(file: string) {
+    return isImage(file) || isVideo(file);
+}
+
+export function isImage(file: string) {
+    return imageFiletypes.some(x => file.endsWith(`.${x}`));
+}
+
+export function isVideo(file: string) {
+    return videoFiletypes.some(x => file.endsWith(`.${x}`));
+}
+
+export function isTxt(file: string) {
+    return txtFiletypes.some(x => file.endsWith(`.${x}`));
+}
+
+export function skipGeneration(file: string) {
+    return file.endsWith(".webp") || isVideo(file);
+}
+
+export function removeExtension(file: string) {
+    return file.replace(/\.[^\\/.]+$/, '');
 }

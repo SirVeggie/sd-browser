@@ -10,7 +10,7 @@ import exifr from 'exifr';
 import { getComfyPrompt, getComfyPrompts, getComfyWorkflowNodes, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { XOR, calcTimeSpent, limitedParallelMap, print, printLine, selectRandom, updateLine, validRegex } from '$lib/tools/misc';
+import { XOR, calcTimeSpent, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, printLine, removeExtension, selectRandom, updateLine, validRegex, videoFiletypes } from '$lib/tools/misc';
 import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
@@ -21,9 +21,6 @@ type TimedImage = {
     timestamp: number;
 };
 
-const imageFiletypes = ['png', 'jpg', 'jpeg', 'webp'] as const;
-const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
-const videoFiletypes = ['mp4'] as const;
 const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
 let watcher: Watcher | undefined;
@@ -416,30 +413,6 @@ async function readMetadataFromExif(image: ServerImage, altSource?: string): Pro
     return image;
 }
 
-export function isMedia(file: string) {
-    return isImage(file) || isVideo(file);
-}
-
-export function isImage(file: string) {
-    return imageFiletypes.some(x => file.endsWith(`.${x}`));
-}
-
-export function isVideo(file: string) {
-    return videoFiletypes.some(x => file.endsWith(`.${x}`));
-}
-
-export function isTxt(file: string) {
-    return txtFiletypes.some(x => file.endsWith(`.${x}`));
-}
-
-export function skipGeneration(file: string) {
-    return file.endsWith(".webp") || isVideo(file);
-}
-
-function removeExtension(file: string) {
-    return file.replace(/\.[^\\/.]+$/, '');
-}
-
 async function cleanTempImages() {
     let count = 0;
     await fs.readdir(thumbnailPath).then(files => {
@@ -545,7 +518,7 @@ async function addFile(file: string, hash?: string) {
     if (!hash)
         hash = hashPath(file);
 
-    if (isImage(file)) {
+    if (file.endsWith('.png')) {
         const video = videoExists(file);
         if (video) {
             updateImageMetadata(video, file);
@@ -616,11 +589,9 @@ function videoExists(imagefile: string): ServerImage | undefined {
 
 function videoPreviewExists(videofile: string): ServerImage | undefined {
     const partial = removeExtension(videofile);
-    for (const filetype of imageFiletypes) {
-        const hash = hashPath(`${partial}.${filetype}`);
-        if (imageList.has(hash)) {
-            return imageList.get(hash);
-        }
+    const hash = hashPath(`${partial}.png`);
+    if (imageList.has(hash)) {
+        return imageList.get(hash);
     }
     return undefined;
 }
@@ -1062,12 +1033,9 @@ async function readMetadata(image: ServerImage, source?: string): Promise<Server
         }
 
         if (isVideo(image.file)) {
-            const imagetypes = imageFiletypes;
-            for (const filetype of imagetypes) {
-                const candidate = image.file.replace(/\.\w+$/i, filetype);
-                if (await fs.stat(candidate).then(x => x.isFile()).catch(() => false)) {
-                    return await readMetadataFromExif(image, candidate);
-                }
+            const candidate = image.file.replace(/\.\w+$/i, '.png');
+            if (await fs.stat(candidate).then(x => x.isFile()).catch(() => false)) {
+                return await readMetadataFromExif(image, candidate);
             }
 
             return image;

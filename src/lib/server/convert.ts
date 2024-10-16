@@ -1,11 +1,12 @@
 import { Readable, PassThrough } from 'stream';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
-import { compressedPath, getImage, skipGeneration, thumbnailPath } from './filemanager';
+import { compressedPath, getImage, thumbnailPath } from './filemanager';
 import path from 'path';
 import fs from 'fs/promises';
 import { backgroundTasks } from './background';
 import { sleep } from '$lib/tools/sleep';
+import { skipGeneration } from '$lib/tools/misc';
 
 ffmpeg.setFfmpegPath(ffmpegPath.path);
 export function convertImage(image: Readable, outputFormat: string): Promise<Buffer> {
@@ -20,7 +21,7 @@ export function convertImage(image: Readable, outputFormat: string): Promise<Buf
         passthrough.on('data', data => chunks.push(data));
         passthrough.on('error', reject);
         passthrough.on('end', () => {
-            const originalImage = Buffer.concat(chunks);
+            const originalImage = Buffer.concat(chunks as any);
             const editedImage = originalImage
                 // copy everything after the last 4 bytes into the 4th position
                 .copyWithin(4, -4)
@@ -42,7 +43,7 @@ export function readCompressedImage(imagepath: string): Promise<Buffer> {
         passthrough.on('error', reject);
         passthrough.on('data', data => chunks.push(data));
         passthrough.on('end', () => {
-            const originalImage = Buffer.concat(chunks);
+            const originalImage = Buffer.concat(chunks as any);
             const editedImage = originalImage
                 // copy everything after the last 4 bytes into the 4th position
                 .copyWithin(4, -4)

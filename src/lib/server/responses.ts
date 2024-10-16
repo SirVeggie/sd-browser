@@ -1,9 +1,9 @@
 import type { ServerError } from "$lib/types";
 import { readFile, unlink } from "fs/promises";
 import { generateCompressed, generateCompressedTask, generateThumbnail, generateThumbnailTask } from "./convert";
-import { compressedPath, generationDisabled, getImage, skipGeneration, thumbnailPath } from "./filemanager";
+import { compressedPath, generationDisabled, getImage, thumbnailPath } from "./filemanager";
 import path from "path";
-import { getImageType } from "$lib/tools/misc";
+import { getImageType, skipGeneration } from "$lib/tools/misc";
 
 export function error(message: string | ServerError, status = 500) {
     if (typeof message === 'string') message = { error: message };
