@@ -15,7 +15,7 @@
         searchImages,
         updateImages,
     } from "$lib/tools/imageRequests";
-    import { mapImagesToClient } from "$lib/tools/misc";
+    import { expandClientImages } from "$lib/tools/misc";
     import {
         sortingMethods,
         type ClientImage,
@@ -50,7 +50,7 @@
     const initialAmount = Math.max($initialImages, 0);
     const increment = 25;
     let currentAmount = initialAmount;
-    let id = "";
+    let currentImage: ClientImage | undefined = undefined;
     let inputElement: HTMLInputElement;
     let inputTimer: any;
     let info: ImageInfo | undefined = undefined;
@@ -68,11 +68,15 @@
     let anchorElement: HTMLDivElement;
 
     $: paginated = $imageStore.slice(0, currentAmount);
-    $: prevIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) - 1;
-    $: nextIndex = !id ? -1 : paginated.findIndex((img) => img.id === id) + 1;
+    $: prevIndex = !currentImage
+        ? -1
+        : paginated.findIndex((img) => img.id === currentImage?.id) - 1;
+    $: nextIndex = !currentImage
+        ? -1
+        : paginated.findIndex((img) => img.id === currentImage?.id) + 1;
     $: rightArrow = live || (nextIndex >= 0 && nextIndex < paginated.length);
     $: leftArrow = rightArrow && !live;
-    $: latestId = paginated[0]?.id;
+    $: newestImage = paginated[0];
     $: seamless = $seamlessStyle;
     $: selection.setObjects(paginated.map((x) => x.id));
     $: slideshowInterval = Math.max($slideDelay, 100);
@@ -98,7 +102,7 @@
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         // do nothing if not left click
         if (e && e instanceof MouseEvent && e.button !== 0) return;
-        id = img.id;
+        currentImage = img;
         getImageInfo(img.id).then((res) => {
             info = res;
         });
@@ -107,7 +111,8 @@
             const currentImages = $imageStore;
             const startIndex = Math.max(
                 0,
-                currentImages.findIndex((img) => img.id === id) - 10,
+                currentImages.findIndex((img) => img.id === currentImage?.id) -
+                    10,
             );
             const endIndex = Math.min(currentImages.length, startIndex + 50);
             setTimeout(() => {
@@ -122,7 +127,7 @@
     }
 
     function closeImage() {
-        id = "";
+        currentImage = undefined;
         info = undefined;
         live = false;
         if (slideTimer) {
@@ -135,7 +140,7 @@
     function openLive() {
         if (live) return;
         if (paginated.length === 0) return;
-        if (id) closeImage();
+        if (currentImage) closeImage();
         live = true;
     }
 
@@ -147,9 +152,9 @@
                 return false;
             }
         } else if (leftArrow) {
-            id = paginated[prevIndex].id;
+            currentImage = paginated[prevIndex];
             scrollToImage();
-            getImageInfo(id).then((res) => {
+            getImageInfo(currentImage.id).then((res) => {
                 info = res;
             });
 
@@ -167,12 +172,12 @@
             closeImage();
             openImage(paginated[0]);
         } else if (rightArrow) {
-            id = paginated[nextIndex].id;
+            currentImage = paginated[nextIndex];
             if (nextIndex == paginated.length - 1) {
                 loadMore();
             }
             scrollToImage();
-            getImageInfo(id).then((res) => {
+            getImageInfo(currentImage.id).then((res) => {
                 info = res;
             });
 
@@ -184,12 +189,13 @@
     }
 
     function scrollToImage() {
-        const el = document.getElementById(`img_${id}`);
+        if (!currentImage) return;
+        const el = document.getElementById(`img_${currentImage.id}`);
         if (el) {
             el.scrollIntoView({ behavior: "auto", block: "center" });
         }
     }
-    
+
     function scrollToTop() {
         anchorElement.scrollIntoView();
     }
@@ -253,7 +259,7 @@
             oldestId: "",
         })
             .then((images) => {
-                imageStore.set(mapImagesToClient(images.imageIds));
+                imageStore.set(expandClientImages(images.images));
                 imageAmountStore.set(images.amount);
                 updateTime = images.timestamp;
             })
@@ -283,12 +289,12 @@
 
             if (images.amount === 0) return;
             // TODO: is this check even useful?
-            if ($imageStore.some((x) => x.id === images.imageIds[0])) {
+            if ($imageStore.some((x) => x.id === images.images[0].id)) {
                 console.log("Duplicate image found");
                 return;
             }
 
-            const mapped = mapImagesToClient(images.imageIds);
+            const mapped = expandClientImages(images.images);
             imageStore.update((x) => [...x, ...mapped]);
             imageAmountStore.set(images.amount);
         } catch (e: any) {
@@ -336,10 +342,10 @@
 
             // ensure no duplicates
             res.additions = res.additions.filter(
-                (x) => !$imageStore.some((z) => z.id === x),
+                (x) => !$imageStore.some((z) => z.id === x.id),
             );
 
-            const mapped = mapImagesToClient(res.additions);
+            const mapped = expandClientImages(res.additions);
             let deletions = 0;
 
             imageStore.update((x) => {
@@ -414,7 +420,7 @@
         } else if (e.key === "ArrowRight") {
             goRight();
         } else if (e.key === " ") {
-            if (!id) return;
+            if (!currentImage) return;
             e.preventDefault();
             if (slideTimer) {
                 clearInterval(slideTimer);
@@ -645,8 +651,8 @@
 <div class="spacer2" />
 
 <ImageFull
-    enabled={!!id || !!live}
-    imageId={live ? latestId : id}
+    enabled={!!currentImage || !!live}
+    image={live ? newestImage : currentImage}
     data={info}
     cancel={closeImage}
 />
@@ -659,7 +665,7 @@
     hidden={live}
 />
 
-{#if id && !slideTimer}
+{#if currentImage && !slideTimer}
     <div class="slideshow" transition:fade={{ duration: 100 }}>
         <Button on:click={() => startSlideshow()}>Slideshow</Button>
     </div>
@@ -706,7 +712,10 @@
 
     .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(calc(200px + var(--size-offset)), 1fr));
+        grid-template-columns: repeat(
+            auto-fill,
+            minmax(calc(200px + var(--size-offset)), 1fr)
+        );
         gap: 0.8em;
         padding: calc(var(--main-padding) / 2) var(--main-padding);
         min-height: 100vh;
@@ -717,11 +726,17 @@
         }
 
         @media (width > 1200px) {
-            grid-template-columns: repeat(auto-fill, minmax(calc(250px + var(--size-offset)), 1fr));
+            grid-template-columns: repeat(
+                auto-fill,
+                minmax(calc(250px + var(--size-offset)), 1fr)
+            );
         }
 
         @media (width < 501px) {
-            grid-template-columns: repeat(auto-fill, minmax(calc(130px + var(--size-offset)), 1fr));
+            grid-template-columns: repeat(
+                auto-fill,
+                minmax(calc(130px + var(--size-offset)), 1fr)
+            );
             gap: 0.2em;
             padding: 5px;
         }

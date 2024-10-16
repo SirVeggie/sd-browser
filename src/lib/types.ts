@@ -20,6 +20,7 @@ export function isServerImage(object: any): object is ServerImage {
 export type ClientImage = {
     id: string;
     url: string;
+    type?: 'image' | 'video';
 };
 export function isClientImage(object: any): object is ClientImage {
     return testType(object, ['id', 'url']);
@@ -82,7 +83,7 @@ export function isImageRequest(object: any): object is ImageRequest {
 }
 
 export type ImageResponse = {
-    imageIds: string[];
+    images: Omit<ClientImage, 'url'>[];
     amount: number;
     timestamp: number;
 };
@@ -103,7 +104,7 @@ export function isUpdateRequest(object: any): object is UpdateRequest {
 }
 
 export type UpdateResponse = {
-    additions: string[];
+    additions: Omit<ClientImage, 'url'>[];
     deletions: string[];
     timestamp: number;
 };

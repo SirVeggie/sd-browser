@@ -26,12 +26,25 @@
                 <SpinLine color="#444" />
             </div>
         {/if}
-        <img
-            class={cx(!hasLoaded && "hidden")}
-            {src}
-            alt={img.id}
-            on:load={() => (hasLoaded = true)}
-        />
+        {#if img.type === "video"}
+            <!-- svelte-ignore a11y-media-has-caption -->
+            <video
+                autoplay
+                loop
+                muted
+                class={cx(!hasLoaded && "hidden")}
+                on:canplay={() => (hasLoaded = true)}
+            >
+                <source {src} type="video/mp4" />
+            </video>
+        {:else}
+            <img
+                class={cx(!hasLoaded && "hidden")}
+                {src}
+                alt={img.id}
+                on:load={() => (hasLoaded = true)}
+            />
+        {/if}
     </Clickable>
 </div>
 
@@ -46,14 +59,19 @@
         box-shadow: 0px 3px 5px #0005;
         overflow: hidden;
         box-sizing: border-box;
-        transition: transform 0.4s ease, outline 0.4s ease;
+        transition:
+            transform 0.4s ease,
+            outline 0.4s ease;
         outline: 1px solid transparent;
         user-select: none;
 
-        img {
+        img,
+        video {
             width: 100%;
             display: block;
-            transition: transform 0.4s ease, opacity 0.4s ease;
+            transition:
+                transform 0.4s ease,
+                opacity 0.4s ease;
 
             &.hidden {
                 opacity: 0;
@@ -71,12 +89,12 @@
                 }
             }
 
-            & img {
+            & img, & video {
                 transform: scale(1.1) translateY(-0.5em);
             }
         }
 
-        &.active img {
+        &.active img, &.active video {
             cursor: pointer;
 
             &:hover {
@@ -84,7 +102,7 @@
             }
         }
     }
-    
+
     .unselect {
         filter: grayscale(0.8) opacity(0.5);
         pointer-events: none;

@@ -21,7 +21,9 @@ type TimedImage = {
     timestamp: number;
 };
 
+const imageFiletypes = ['png', 'jpg', 'jpeg', 'webp'] as const;
 const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
+const videoFiletypes = ['mp4'] as const;
 const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
 let watcher: Watcher | undefined;
@@ -55,7 +57,7 @@ export async function indexFiles() {
 
     // Read cached data
     // eslint-disable-next-line prefer-const
-    let [templist, txtmap, cache] = await indexCachedFiles();
+    let [templist, txtmap, cache, videomap] = await indexCachedFiles();
 
     // Initialize existing cache
     if (imageList.size) {
@@ -83,7 +85,7 @@ export async function indexFiles() {
     if (templist.length !== 0) {
         const originalLimit = backgroundTasks.limit;
         backgroundTasks.limit = 5;
-        await indexExifFiles(templist);
+        await indexExifFiles(templist, videomap);
         backgroundTasks.limit = originalLimit;
     }
 
@@ -155,7 +157,7 @@ function serializeImageList(images: ServerImage[], cache: ImageList | undefined)
     db.close();
 }
 
-async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, ImageList | undefined]> {
+async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, ImageList | undefined, Map<string, string>]> {
     const db = new MetaDB();
 
     const cachefile = path.join(datapath, 'metadata.json');
@@ -164,6 +166,7 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
     const images: ImageList = new Map();
     const dirs: string[] = [IMG_FOLDER];
     const set = new Set<string>();
+    const videomap: Map<string, string> = new Map();
     const txtmap: Map<string, string> = new Map();
     let found = 0;
     let foundtxt = 0;
@@ -201,10 +204,14 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
         const dirShort = removeBasePath(dir).replace(/^(\/|\\)/, '');
         const files = await fs.readdir(dir);
 
-        for (const file of files.filter(x => isImage(x))) {
+        for (const file of files.filter(x => isVideo(x))) {
             found++;
             const fullpath = path.join(dir, file);
-            const hash = hashString(fullpath);
+            const partial = removeExtension(fullpath);
+            const hash = hashPath(fullpath);
+
+            videomap.set(partial, "");
+
             if (imageCache && imageCache.has(hash)) {
                 images.set(hash, {
                     ...(imageCache.get(hash)!),
@@ -213,7 +220,37 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
                 continue;
             }
 
-            set.add(removeExtension(fullpath));
+            set.add(partial);
+
+            templist.push({
+                id: hash,
+                folder: dirShort,
+                file: fullpath,
+                modifiedDate: 0,
+                createdDate: 0,
+            });
+        }
+
+        for (const file of files.filter(x => isImage(x))) {
+            found++;
+            const fullpath = path.join(dir, file);
+            const partial = removeExtension(fullpath);
+            const hash = hashPath(fullpath);
+
+            if (videomap.has(partial)) {
+                videomap.set(partial, fullpath);
+                continue;
+            }
+
+            if (imageCache && imageCache.has(hash)) {
+                images.set(hash, {
+                    ...(imageCache.get(hash)!),
+                    file: fullpath,
+                });
+                continue;
+            }
+
+            set.add(partial);
 
             templist.push({
                 id: hash,
@@ -234,7 +271,7 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
             }
         }
 
-        for (const file of files.filter(x => !isImage(x) && !isTxt(x))) {
+        for (const file of files.filter(x => !isMedia(x) && !isTxt(x))) {
             const fullpath = path.join(dir, file);
             try {
                 const stats = await fs.stat(fullpath);
@@ -256,7 +293,7 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
 
     db.close();
     imageList = images;
-    return [templist, txtmap, useLegacy ? undefined : imageCache];
+    return [templist, txtmap, useLegacy ? undefined : imageCache, videomap];
 }
 
 async function indexBasicFileData(templist: ServerImage[]): Promise<ServerImage[]> {
@@ -326,7 +363,7 @@ async function indexTxtFiles(templist: ServerImage[], txtmap: Map<string, string
     return newlist;
 }
 
-async function indexExifFiles(templist: ServerImage[]): Promise<void> {
+async function indexExifFiles(templist: ServerImage[], videomap: Map<string, string>): Promise<void> {
     const log = `Indexing ${templist.length} images from exif...`;
     updateLine(log);
 
@@ -336,7 +373,9 @@ async function indexExifFiles(templist: ServerImage[]): Promise<void> {
 
     for (const image of templist) {
         backgroundTasks.addWork(async () => {
-            const res = await readMetadataFromExif(image).catch(() => image);
+            const partial = removeExtension(image.file);
+            const source = videomap.get(partial);
+            const res = await readMetadataFromExif(image, source).catch(() => image);
             imageList.set(res.id, res);
             addUniqueImage(res);
             if (res.prompt || res.workflow)
@@ -360,8 +399,8 @@ async function readMetadataFromFile(image: ServerImage, file: string): Promise<S
     return image;
 }
 
-async function readMetadataFromExif(image: ServerImage): Promise<ServerImage> {
-    const metadata = await exifr.parse(image.file, {
+async function readMetadataFromExif(image: ServerImage, altSource?: string): Promise<ServerImage> {
+    const metadata = await exifr.parse(altSource || image.file, {
         ifd0: false,
         chunked: false,
     } as any);
@@ -377,12 +416,24 @@ async function readMetadataFromExif(image: ServerImage): Promise<ServerImage> {
     return image;
 }
 
-function isImage(file: string) {
-    return file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg') || file.endsWith('.webp');
+export function isMedia(file: string) {
+    return isImage(file) || isVideo(file);
 }
 
-function isTxt(file: string) {
+export function isImage(file: string) {
+    return imageFiletypes.some(x => file.endsWith(`.${x}`));
+}
+
+export function isVideo(file: string) {
+    return videoFiletypes.some(x => file.endsWith(`.${x}`));
+}
+
+export function isTxt(file: string) {
     return txtFiletypes.some(x => file.endsWith(`.${x}`));
+}
+
+export function skipGeneration(file: string) {
+    return file.endsWith(".webp") || isVideo(file);
 }
 
 function removeExtension(file: string) {
@@ -490,9 +541,18 @@ let genCount = 0;
 const genLimit = 10;
 
 async function addFile(file: string, hash?: string) {
-    if (!isImage(file)) return;
+    if (!isMedia(file)) return;
     if (!hash)
-        hash = hashString(file);
+        hash = hashPath(file);
+
+    if (isImage(file)) {
+        const video = videoExists(file);
+        if (video) {
+            updateImageMetadata(video, file);
+            return;
+        }
+    }
+
     try {
         if (genCount < genLimit) {
             genCount++;
@@ -506,14 +566,13 @@ async function addFile(file: string, hash?: string) {
     }
 
     console.log(`Added ${file}`);
-    const image: ServerImage = {
+    const image = await readMetadata({
         id: hash,
         folder: path.basename(path.dirname(file)),
         file,
         modifiedDate: 0,
         createdDate: 0,
-        ...await readMetadata(file),
-    };
+    });
 
     imageList.set(hash, image);
 
@@ -525,11 +584,50 @@ async function addFile(file: string, hash?: string) {
 
     addUniqueImage(imageList.get(hash)!);
     addComfyPromptToCache(image);
+
+    if (isVideo(file)) {
+        setTimeout(() => {
+            const image = videoPreviewExists(file);
+            if (!image)
+                return;
+            deleteFile(image.file);
+        }, 500);
+    }
+}
+
+async function updateImageMetadata(image: ServerImage, source: string) {
+    await readMetadata(image, source);
+    removeUniqueImage(image);
+    addUniqueImage(image);
+    removeComfyPromptFromCache(image.id);
+    addComfyPromptToCache(image);
+}
+
+function videoExists(imagefile: string): ServerImage | undefined {
+    const partial = removeExtension(imagefile);
+    for (const filetype of videoFiletypes) {
+        const hash = hashPath(`${partial}.${filetype}`);
+        if (imageList.has(hash)) {
+            return imageList.get(hash);
+        }
+    }
+    return undefined;
+}
+
+function videoPreviewExists(videofile: string): ServerImage | undefined {
+    const partial = removeExtension(videofile);
+    for (const filetype of imageFiletypes) {
+        const hash = hashPath(`${partial}.${filetype}`);
+        if (imageList.has(hash)) {
+            return imageList.get(hash);
+        }
+    }
+    return undefined;
 }
 
 async function deleteFile(file: string) {
-    if (!isImage(file)) return;
-    const hash = hashString(file);
+    if (!isMedia(file)) return;
+    const hash = hashPath(file);
     removeUniqueImage(imageList.get(hash));
     removeComfyPromptFromCache(hash);
     imageList.delete(hash);
@@ -543,26 +641,25 @@ async function deleteFile(file: string) {
 }
 
 async function renameFile(from: string, to: string) {
-    if (isImage(from)) {
-        const oldhash = hashString(from);
+    if (isMedia(from)) {
+        const oldhash = hashPath(from);
         removeUniqueImage(imageList.get(oldhash));
         removeComfyPromptFromCache(oldhash);
         imageList.delete(oldhash);
         deleteTempImage(oldhash);
     }
 
-    if (!isImage(to)) return;
+    if (!isMedia(to)) return;
     console.log(`Renamed ${from} to ${to}`);
 
-    const newhash = hashString(to);
-    const image: ServerImage = {
+    const newhash = hashPath(to);
+    const image = await readMetadata({
         id: newhash,
         folder: path.basename(path.dirname(to)),
         file: to,
         modifiedDate: 0,
         createdDate: 0,
-        ...await readMetadata(to),
-    };
+    });
 
     imageList.set(newhash, image);
 
@@ -586,9 +683,9 @@ async function checkFiles() {
         if (!dir) continue;
         const files = await fs.readdir(dir);
 
-        for (const file of files.filter(x => isImage(x))) {
+        for (const file of files.filter(x => isMedia(x))) {
             const fullpath = path.join(dir, file);
-            const hash = hashString(fullpath);
+            const hash = hashPath(fullpath);
             if (imageList.has(hash)) {
                 images.delete(hash);
                 continue;
@@ -597,7 +694,7 @@ async function checkFiles() {
             addFile(fullpath, hash);
         }
 
-        for (const file of files.filter(x => !isImage(x) && !isTxt(x))) {
+        for (const file of files.filter(x => !isMedia(x) && !isTxt(x))) {
             const fullpath = path.join(dir, file);
             try {
                 const stats = await fs.stat(fullpath);
@@ -943,7 +1040,7 @@ function createComparer<T>(selector: (a: T) => any, descending: boolean) {
     };
 }
 
-function hashString(filepath: string) {
+function hashPath(filepath: string) {
     const hash = crypto.createHash('sha256');
     hash.update(removeBasePath(filepath));
     return hash.digest('hex');
@@ -954,44 +1051,42 @@ function removeBasePath(filepath: string) {
     return filepath.replace(IMG_FOLDER, '');
 }
 
-async function readMetadata(imagepath: string): Promise<Partial<ServerImage>> {
+async function readMetadata(image: ServerImage, source?: string): Promise<ServerImage> {
     try {
-        const stats = await fs.stat(imagepath);
-        const res: Partial<ServerImage> = {
-            modifiedDate: stats.mtimeMs,
-            createdDate: stats.birthtimeMs,
-        };
+        const stats = await fs.stat(image.file);
+        image.modifiedDate = stats.mtimeMs;
+        image.createdDate = stats.birthtimeMs;
+
+        if (source) {
+            return await readMetadataFromExif(image, source);
+        }
+
+        if (isVideo(image.file)) {
+            const imagetypes = imageFiletypes;
+            for (const filetype of imagetypes) {
+                const candidate = image.file.replace(/\.\w+$/i, filetype);
+                if (await fs.stat(candidate).then(x => x.isFile()).catch(() => false)) {
+                    return await readMetadataFromExif(image, candidate);
+                }
+            }
+
+            return image;
+        }
 
         const filetypes = ['.txt', '.yaml', '.yml', '.json'];
         for (const filetype of filetypes) {
-            const textfile = imagepath.replace(/\.(png|jpg|jpeg|webp)$/i, filetype);
-            if (await fs.stat(textfile).then(x => x.isFile()).catch(() => false)) {
-                const text = await fs.readFile(textfile, 'utf8');
-                res.prompt = text;
-                return res;
+            const candidate = image.file.replace(/\.\w+$/i, filetype);
+            if (await fs.stat(candidate).then(x => x.isFile()).catch(() => false)) {
+                const text = await fs.readFile(candidate, 'utf8');
+                image.prompt = text;
+                return image;
             }
         }
 
-        let metadata = await exifr.parse(imagepath, {
-            ifd0: false,
-            chunked: false,
-        } as any);
-        if (!metadata)
-            return {};
-        metadata = {
-            ...res,
-            prompt: metadata.parameters ?? metadata.prompt ?? undefined,
-            workflow: metadata.workflow ?? undefined,
-        } satisfies Partial<ServerImage>;
-
-        if (metadata.prompt === undefined && metadata.workflow === undefined) {
-            metadata.prompt = JSON.stringify(metadata);
-        }
-
-        return metadata;
+        return readMetadataFromExif(image);
     } catch {
-        console.log(`Failed to read metadata for ${imagepath}`);
-        return {};
+        console.log(`Failed to read metadata for ${image.file}`);
+        return image;
     }
 }
 

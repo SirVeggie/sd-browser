@@ -1,7 +1,7 @@
 import { Readable, PassThrough } from 'stream';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
-import { compressedPath, getImage, thumbnailPath } from './filemanager';
+import { compressedPath, getImage, skipGeneration, thumbnailPath } from './filemanager';
 import path from 'path';
 import fs from 'fs/promises';
 import { backgroundTasks } from './background';
@@ -100,6 +100,7 @@ export function generateCompressed(imagepath: string, outputpath: string): Promi
 export async function generateCompressedFromId(id: string, file?: string) {
     const imagepath = file ?? getImage(id)?.file;
     if (!imagepath) return;
+    if (skipGeneration(imagepath)) return;
     const output = path.join(compressedPath, `${id}.webp`);
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;
@@ -114,6 +115,7 @@ export async function generateCompressedFromId(id: string, file?: string) {
 export async function generateThumbnailFromId(id: string, file?: string) {
     const imagepath = file ?? getImage(id)?.file;
     if (!imagepath) return;
+    if (skipGeneration(imagepath)) return;
     const output = path.join(thumbnailPath, `${id}.webp`);
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;

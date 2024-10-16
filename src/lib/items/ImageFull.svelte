@@ -8,7 +8,7 @@
 
 <script lang="ts">
   import "../../scroll.css";
-  import type { ImageInfo } from "$lib/types";
+  import type { ClientImage, ImageInfo } from "$lib/types";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Button from "./Button.svelte";
@@ -20,9 +20,7 @@
     getMetadataVersion,
     getModel,
     getModelHash,
-    getNegativePrompt,
     getParams,
-    getPositivePrompt,
     getPrompts,
     getSeed,
     getSvNegativePrompt,
@@ -34,7 +32,7 @@
   import { fullscreenStyle } from "$lib/stores/styleStore";
 
   export let cancel: () => void;
-  export let imageId: string | undefined;
+  export let image: ClientImage | undefined;
   export let data: ImageInfo | undefined;
   export let enabled = true;
 
@@ -47,8 +45,8 @@
   let hiddenElementWorkflow: HTMLDivElement;
 
   $: full = $fullscreenStyle;
-  $: imageUrl = imageId
-    ? `/api/images/${imageId}?${getQualityParam($compressedMode)}`
+  $: imageUrl = image?.id
+    ? `/api/images/${image.id}?${getQualityParam($compressedMode)}`
     : "";
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : formatMetadata(data.prompt, data.workflow);
@@ -170,7 +168,7 @@
   }
 
   function handleEsc(e: KeyboardEvent) {
-    if (!imageId) return;
+    if (!image?.id) return;
     if (e.key === "Escape") cancel();
   }
 
@@ -184,7 +182,7 @@
     content: string | undefined,
     name: string,
   ) {
-    if (!imageId) return;
+    if (!image?.id) return;
     if (!element) return;
     if (!content) return notify(`No ${name} to copy`);
     if (!navigator?.clipboard?.writeText) {
@@ -233,8 +231,8 @@
   }
 
   function deleteImage() {
-    if (!imageId) return;
-    imageAction(imageId, {
+    if (!image?.id) return;
+    imageAction(image.id, {
       type: "delete",
     }).then(cancel);
   }
@@ -258,7 +256,7 @@
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <!-- svelte-ignore a11y-click-events-have-key-events -->
-{#if enabled && imageId}
+{#if enabled && image?.id}
   <div
     class="image_overlay"
     on:click={cancel}
@@ -267,7 +265,14 @@
     <div class="layout" class:full>
       <div>
         <div class="card">
-          <img src={imageUrl} alt={imageId} />
+          {#if image.type === "video"}
+            <!-- svelte-ignore a11y-media-has-caption -->
+            <video autoplay loop muted preload="metadata" src={imageUrl}>
+              <source src={imageUrl} type="video/mp4" />
+            </video>
+          {:else}
+            <img src={imageUrl} alt={image.id} />
+          {/if}
           <!-- svelte-ignore a11y-click-events-have-key-events -->
           <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
           {#if data}
@@ -387,7 +392,7 @@
           box-shadow: 0 0 1em 1em #111b;
         }
 
-        img {
+        img, video {
           height: 100dvh;
           max-height: 100dvh;
           min-height: 100dvh;
@@ -397,7 +402,7 @@
       }
     }
 
-    img {
+    img, video {
       max-height: calc(100dvh - var(--pad) * 2);
       max-width: 100%;
     }

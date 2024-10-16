@@ -1,4 +1,5 @@
-import type { ClientImage } from "$lib/types";
+import { isVideo } from "$lib/server/filemanager";
+import type { ClientImage, ServerImage } from "$lib/types";
 import { RePromise, RePromisify } from "./RePromise";
 import rl from "readline";
 
@@ -6,11 +7,23 @@ export function XOR(a: any, b: any): boolean {
     return !a !== !b;
 }
 
-export function mapImagesToClient(ids: string[]): ClientImage[] {
-    return ids.map(id => ({
-        id,
-        url: `/api/images/${id}`,
+export function expandClientImages(images: Omit<ClientImage, 'url'>[]): ClientImage[] {
+    return images.map(img => ({
+        id: img.id,
+        url: `/api/images/${img.id}`,
+        type: img.type,
     }));
+}
+
+export function mapServerImageToClient(images: ServerImage[]): Omit<ClientImage, 'url'>[] {
+    return images.map(img => ({
+        id: img.id,
+        type: getImageType(img),
+    }));
+}
+
+export function getImageType(image: ServerImage): undefined | 'video' {
+    return isVideo(image.file) ? 'video' : undefined;
 }
 
 export function validRegex(str: string): boolean {
@@ -39,7 +52,7 @@ export async function limitedParallelMap<T, U>(
 ): Promise<U[]> {
     const res: U[] = [];
     const promises: RePromise<U>[] = [];
-    
+
     for (const item of [...array]) {
         promises.push(RePromisify(callback(item)));
         if (promises.length === limit) {
@@ -54,11 +67,11 @@ export async function limitedParallelMap<T, U>(
             }
         }
     }
-    
+
     for (const promise of promises) {
         res.push(await promise);
     }
-    
+
     return res;
 }
 

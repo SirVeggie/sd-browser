@@ -1,6 +1,7 @@
 import { invalidAuth } from '$lib/server/auth';
 import { getDeletedImageIds, getFreshImageTimestamp, searchImages, sortImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses';
+import { mapServerImageToClient } from '$lib/tools/misc.js';
 import { isUpdateRequest, type UpdateResponse } from '$lib/types';
 
 export async function POST(e) {
@@ -21,7 +22,7 @@ export async function POST(e) {
     const timestamp = getFreshImageTimestamp(images[0]?.id) ?? query.timestamp;
 
     return success({
-        additions: images.map(x => x.id),
+        additions: mapServerImageToClient(images),
         deletions: getDeletedImageIds(query.timestamp),
         timestamp,
     } satisfies UpdateResponse);
