@@ -527,6 +527,11 @@ async function addFile(file: string, hash?: string) {
             updateImageMetadata(video, file);
             return;
         }
+        await sleep(100);
+        if (await videoExistsOnDisk(file)) {
+            console.log(`Skipping image since a video for it exists: ${file}`);
+            return;
+        }
     }
 
     try {
@@ -539,6 +544,19 @@ async function addFile(file: string, hash?: string) {
     } catch (e) {
         console.log(`Failed to generate preview for ${path.basename(file)} (this shouldn't appear)`);
         console.error(e);
+    }
+
+    if (isVideo(file)) {
+        let size = 0;
+        let newsize = (await fs.stat(file)).size;
+        while (size != newsize) {
+            await sleep(500);
+            size = newsize;
+            newsize = (await fs.stat(file)).size;
+        }
+        const image = videoPreviewExists(file);
+        if (image)
+            deleteFile(image.file);
     }
 
     console.log(`Added ${file}`);
@@ -560,15 +578,6 @@ async function addFile(file: string, hash?: string) {
 
     addUniqueImage(imageList.get(hash)!);
     addComfyPromptToCache(image);
-
-    if (isVideo(file)) {
-        setTimeout(() => {
-            const image = videoPreviewExists(file);
-            if (!image)
-                return;
-            deleteFile(image.file);
-        }, 500);
-    }
 }
 
 async function updateImageMetadata(image: ServerImage, source: string) {
@@ -585,6 +594,17 @@ function videoExists(imagefile: string): ServerImage | undefined {
         const hash = hashPath(`${partial}.${filetype}`);
         if (imageList.has(hash)) {
             return imageList.get(hash);
+        }
+    }
+    return undefined;
+}
+
+async function videoExistsOnDisk(imagefile: string): Promise<string | undefined> {
+    const partial = removeExtension(imagefile);
+    for (const filetype of videoFiletypes) {
+        const file = `${partial}.${filetype}`;
+        if (await fileExists(file)) {
+            return file;
         }
     }
     return undefined;
@@ -1020,6 +1040,10 @@ function hashPath(filepath: string) {
     return hash.digest('hex');
 }
 
+async function fileExists(file: string) {
+    return await fs.stat(file).then(x => x.isFile()).catch(() => false)
+}
+
 function removeBasePath(filepath: string) {
     filepath = filepath.replace(/(\/|\\)+$/, '');
     return filepath.replace(IMG_FOLDER, '');
@@ -1037,7 +1061,7 @@ async function readMetadata(image: ServerImage, source?: string): Promise<Server
 
         if (isVideo(image.file)) {
             const candidate = image.file.replace(/\.\w+$/i, '.png');
-            if (await fs.stat(candidate).then(x => x.isFile()).catch(() => false)) {
+            if (await fileExists(candidate)) {
                 return await readMetadataFromExif(image, candidate).catch(() => image);
             }
 
@@ -1047,7 +1071,7 @@ async function readMetadata(image: ServerImage, source?: string): Promise<Server
         const filetypes = ['.txt', '.yaml', '.yml', '.json'];
         for (const filetype of filetypes) {
             const candidate = image.file.replace(/\.\w+$/i, filetype);
-            if (await fs.stat(candidate).then(x => x.isFile()).catch(() => false)) {
+            if (await fileExists(candidate)) {
                 const text = await fs.readFile(candidate, 'utf8');
                 image.prompt = text;
                 return image;
