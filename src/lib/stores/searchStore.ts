@@ -12,6 +12,7 @@ export const folderFilter = writable(folderFilterDefault);
 export const folderMode = writable(true);
 export const thumbMode = writable<QualityMode>('low');
 export const compressedMode = writable<QualityMode>('original');
+export const animatedThumb = writable<boolean>(true);
 export const collapseMode = writable(false);
 export const matchingMode = writable<SearchMode>('regex');
 export const initialImages = writable(25);
@@ -24,6 +25,7 @@ export function syncSearchWithLocalStorage() {
     syncMemory('folderMode', folderMode);
     syncMemory('webpMode', thumbMode);
     syncMemory('compressedMode', compressedMode);
+    syncMemory('animatedThumb', animatedThumb);
     syncMemory('collapseMode', collapseMode);
     syncMemory('matchingMode', matchingMode);
     syncMemory('initialImages', initialImages);

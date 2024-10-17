@@ -3,7 +3,7 @@
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
-    import { thumbMode } from "$lib/stores/searchStore";
+    import { animatedThumb, thumbMode } from "$lib/stores/searchStore";
     import { getQualityParam } from "$lib/tools/imageRequests";
     import { seamlessStyle } from "$lib/stores/styleStore";
 
@@ -29,9 +29,10 @@
         {#if img.type === "video"}
             <!-- svelte-ignore a11y-media-has-caption -->
             <video
-                autoplay
+                autoplay={$animatedThumb}
                 loop
                 muted
+                preload="metadata"
                 class={cx(!hasLoaded && "hidden")}
                 on:canplay={() => (hasLoaded = true)}
             >

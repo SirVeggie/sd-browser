@@ -6,6 +6,7 @@
     import Button from "$lib/items/Button.svelte";
     import { notify } from "$lib/components/Notifier.svelte";
     import {
+    animatedThumb,
         compressedMode,
         folderFilter,
         initialImages,
@@ -155,6 +156,11 @@
                 <option value={quality}>{quality}</option>
             {/each}
         </select>
+    </label>
+    
+    <label class="checkbox">
+        Animate thumbnail for videos:
+        <input type="checkbox" bind:checked={$animatedThumb} />
     </label>
     
     <!-- svelte-ignore a11y-label-has-associated-control -->
