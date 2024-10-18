@@ -53,6 +53,7 @@ export function loadUniqueList(cache: ImageList | undefined): [Set<string>, Map<
 //#endregion
 
 export class MetaDB {
+    private static setup = false;
     private static file = 'metadata.sqlite3';
     private static sql_create = `
     CREATE TABLE IF NOT EXISTS metadata (
@@ -62,7 +63,8 @@ export class MetaDB {
         modifiedDate INTEGER NOT NULL,
         createdDate INTEGER NOT NULL,
         prompt TEXT,
-        workflow TEXT
+        workflow TEXT,
+        preview TEXT
     )`;
 
     static connections = 0;
@@ -77,6 +79,19 @@ export class MetaDB {
         const fullpath = path.join(datapath, MetaDB.file);
         this.db = new Database(fullpath);
         this.db.exec(MetaDB.sql_create);
+        
+        if (!MetaDB.setup) {
+            MetaDB.setup = true;
+            this.ensureColumn('preview', 'TEXT');
+        }
+    }
+    
+    ensureColumn(column: string, definition: string) {
+        const result = this.db.prepare("select count(*) as count from pragma_table_info('metadata') where name='preview'").get() as { count: number; };
+        if (!result.count) {
+            console.log(`Adding column '${column} ${definition}' to the metadata database`);
+            this.db.prepare(`ALTER TABLE metadata ADD ${column} ${definition}`).run();
+        }
     }
 
     close() {
@@ -102,25 +117,24 @@ export class MetaDB {
     set(image: ServerImage) {
         if (this.closed)
             throw new Error('Database already closed');
-        const stmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        stmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow);
+        const stmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        stmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow, image.preview);
     }
 
     setAll(images: ServerImage[]) {
         if (this.closed)
             throw new Error('Database already closed');
-        const stmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        this.db.transaction(images => {
+        const stmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        this.db.transaction((images: ServerImage[]) => {
             for (const image of images)
-                stmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow);
+                stmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow, image.preview);
         })(images);
     }
 
     delete(id: string) {
         if (this.closed)
             throw new Error('Database already closed');
-        const stmt = this.db.prepare('DELETE FROM metadata WHERE id = ?');
-        stmt.run(id);
+        this.db.prepare('DELETE FROM metadata WHERE id = ?').run(id);
     }
 
     deleteAll(ids: string[]) {
@@ -143,12 +157,12 @@ export class MetaDB {
         if (!images.length && !deletions.length)
             return;
         const delstmt = this.db.prepare('DELETE FROM metadata WHERE id = ?');
-        const addstmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        this.db.transaction((deletions, images) => {
+        const addstmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        this.db.transaction((deletions: string[], images: ServerImage[]) => {
             for (const id of deletions)
                 delstmt.run(id);
             for (const image of images)
-                addstmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow);
+                addstmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow, image.preview);
         })(deletions, images);
     }
 

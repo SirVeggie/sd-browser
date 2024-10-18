@@ -12,6 +12,7 @@ export type ServerImage = {
     createdDate: number;
     prompt?: string;
     workflow?: string;
+    preview?: string;
 };
 export function isServerImage(object: any): object is ServerImage {
     return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate']);

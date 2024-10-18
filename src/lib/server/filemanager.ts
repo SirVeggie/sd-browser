@@ -413,6 +413,8 @@ async function readMetadataFromExif(image: ServerImage, altSource?: string): Pro
         image.prompt = JSON.stringify(metadata);
     }
 
+    if (altSource)
+        image.preview = altSource;
     return image;
 }
 
@@ -582,6 +584,7 @@ async function addFile(file: string, hash?: string) {
 
 async function updateImageMetadata(image: ServerImage, source: string) {
     await readMetadata(image, source);
+    image.preview = source;
     removeUniqueImage(image);
     addUniqueImage(image);
     removeComfyPromptFromCache(image.id);
@@ -1034,14 +1037,14 @@ function createComparer<T>(selector: (a: T) => any, descending: boolean) {
     };
 }
 
-function hashPath(filepath: string) {
+export function hashPath(filepath: string) {
     const hash = crypto.createHash('sha256');
     hash.update(removeBasePath(filepath));
     return hash.digest('hex');
 }
 
 async function fileExists(file: string) {
-    return await fs.stat(file).then(x => x.isFile()).catch(() => false)
+    return await fs.stat(file).then(x => x.isFile()).catch(() => false);
 }
 
 function removeBasePath(filepath: string) {
@@ -1126,6 +1129,14 @@ export function deleteImages(ids: string | string[]) {
             deleteTempImage(id);
         } catch {
             failcount++;
+        }
+
+        if (img.preview) {
+            try {
+                fs.unlink(img.preview);
+            } catch {
+                console.log(`Failed to delete preview file ${img.preview}`);
+            }
         }
     }
 

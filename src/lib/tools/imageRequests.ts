@@ -48,6 +48,10 @@ export function getQualityParam(mode: QualityMode) {
     }
 }
 
+export function getPreviewParam(type: 'image' | 'video' | undefined, animated: boolean) {
+    return `preview=${type === 'video' && !animated}`;
+}
+
 export async function getImageInfo(imageid: string, fetch?: FetchType): Promise<ImageInfo | undefined> {
     let url = `/api/images/${imageid}/metadata`;
     if (!fetch)

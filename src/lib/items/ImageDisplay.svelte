@@ -4,7 +4,7 @@
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
     import { animatedThumb, thumbMode } from "$lib/stores/searchStore";
-    import { getQualityParam } from "$lib/tools/imageRequests";
+    import { getPreviewParam, getQualityParam } from "$lib/tools/imageRequests";
     import { seamlessStyle } from "$lib/stores/styleStore";
 
     export let img: ClientImage;
@@ -14,7 +14,7 @@
 
     let hasLoaded = false;
 
-    $: src = `${img.url}?${getQualityParam($thumbMode)}&defer=true`;
+    $: src = `${img.url}?${getQualityParam($thumbMode)}&defer=true&${getPreviewParam(img.type, $animatedThumb)}`;
     $: active = !!onClick;
     $: seamless = $seamlessStyle;
 </script>
@@ -26,10 +26,10 @@
                 <SpinLine color="#444" />
             </div>
         {/if}
-        {#if img.type === "video"}
+        {#if img.type === "video" && $animatedThumb}
             <!-- svelte-ignore a11y-media-has-caption -->
             <video
-                autoplay={$animatedThumb}
+                autoplay
                 loop
                 muted
                 preload="metadata"
@@ -90,12 +90,14 @@
                 }
             }
 
-            & img, & video {
+            & img,
+            & video {
                 transform: scale(1.1) translateY(-0.5em);
             }
         }
 
-        &.active img, &.active video {
+        &.active img,
+        &.active video {
             cursor: pointer;
 
             &:hover {

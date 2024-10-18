@@ -1,7 +1,7 @@
 import type { ServerError } from "$lib/types";
 import { readFile, unlink } from "fs/promises";
 import { generateCompressed, generateCompressedTask, generateThumbnail, generateThumbnailTask } from "./convert";
-import { compressedPath, generationDisabled, getImage, thumbnailPath } from "./filemanager";
+import { compressedPath, generationDisabled, getImage, hashPath, thumbnailPath } from "./filemanager";
 import path from "path";
 import { getImageType, skipGeneration } from "$lib/tools/misc";
 
@@ -16,11 +16,17 @@ export function success(message?: unknown, status = 200) {
     return new Response(JSON.stringify(message), { status });
 }
 
-export async function image(imageid: string | undefined, type?: string, defer?: boolean) {
+export async function image(imageid: string | undefined, type?: string, defer?: boolean, preview?: boolean) {
     const img = getImage(imageid ?? '');
     if (!img) return error('Image not found', 404);
-    
-    const skip = skipGeneration(img.file);
+    let file = img.file;
+
+    if (preview && img.preview) {
+        file = img.preview;
+        imageid = hashPath(file);
+    }
+
+    const skip = skipGeneration(file);
 
     let buffer;
     try {
@@ -35,18 +41,18 @@ export async function image(imageid: string | undefined, type?: string, defer?: 
                 return x;
             }).catch(async () => {
                 if (generationDisabled)
-                    return await readFile(img.file);
+                    return await readFile(file);
                 if (defer) {
-                    await generateThumbnailTask(img.file, thumb);
+                    await generateThumbnailTask(file, thumb);
                     console.log(`Generated thumbnail for ${imageid}`);
                 } else {
                     console.log(`Generating thumbnail for ${imageid}`);
-                    await generateThumbnail(img.file, thumb);
+                    await generateThumbnail(file, thumb);
                 }
                 return await readFile(thumb);
             }).catch(async () => {
                 console.log(`Failed to fix image thumbnail for ${imageid}, sending full image`);
-                return await readFile(img.file);
+                return await readFile(file);
             });
         } else if (!skip && type === 'medium') {
             const compressed = path.join(compressedPath, `${imageid}.webp`);
@@ -59,31 +65,35 @@ export async function image(imageid: string | undefined, type?: string, defer?: 
                 return x;
             }).catch(async () => {
                 if (generationDisabled)
-                    return await readFile(img.file);
+                    return await readFile(file);
                 if (defer) {
-                    await generateCompressedTask(img.file, compressed);
+                    await generateCompressedTask(file, compressed);
                     console.log(`Generated preview for ${imageid}`);
                 } else {
                     console.log(`Generating preview for ${imageid}`);
-                    await generateCompressed(img.file, compressed);
+                    await generateCompressed(file, compressed);
                 }
                 return await readFile(compressed);
             }).catch(async () => {
                 console.log(`Failed to fix image preview for ${imageid}, sending full image`);
-                return await readFile(img.file);
+                return await readFile(file);
             });
         } else {
-            buffer = await readFile(img.file);
+            buffer = await readFile(file);
         }
     } catch {
-        console.log(`Failed to read file: ${img.file}`);
+        console.log(`Failed to read file: ${file}`);
         return error('Failed to read file', 500);
     }
 
+    return imageResponse(buffer, getImageType(img));
+}
+
+function imageResponse(buffer: Buffer, type?: 'image' | 'video') {
     return new Response(buffer, {
         status: 200,
         headers: {
-            'Content-Type': getImageType(img) == 'video' ? 'video/mp4' : 'image/png',
+            'Content-Type': type === 'video' ? 'video/mp4' : 'image/png',
         }
     });
 }
