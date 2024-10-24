@@ -2,7 +2,7 @@
     import Button from "$lib/items/Button.svelte";
     import Modal from "$lib/items/Modal.svelte";
     import { RePromise } from "$lib/tools/RePromise";
-    import { uniqueId } from "lodash";
+    import _ from "lodash";
     import { cubicOut } from "svelte/easing";
     import { writable } from "svelte/store";
     import { fade } from "svelte/transition";
@@ -24,7 +24,7 @@
         handler: (button: string) => void
     ) {
         window.addEventListener("keydown", handleEsc);
-        const id = uniqueId("confirm_");
+        const id = _.uniqueId("confirm_");
         modalStore.update((modals) => {
             modals.push({ id, ...modal, handler });
             return modals;

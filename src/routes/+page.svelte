@@ -17,6 +17,7 @@
     } from "$lib/tools/imageRequests";
     import { expandClientImages } from "$lib/tools/misc";
     import {
+        inputEvent,
         sortingMethods,
         type ClientImage,
         type ImageInfo,
@@ -440,13 +441,8 @@
     }
 
     function handleImgContext(id: string) {
-        return (e: MouseEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const pos = {
-                x: e.clientX,
-                y: e.clientY,
-            };
+        return (e: inputEvent) => {
+            const pos = getEventCoords(e);
             const options: string[] = [];
             if (!selecting) options.push("Select");
             else options.push("Cancel selection", "Select row");
@@ -474,6 +470,34 @@
                     return "keep";
                 }
             });
+        };
+    }
+
+    function getEventCoords(e: inputEvent) {
+        if (e instanceof MouseEvent) {
+            return {
+                x: e.clientX,
+                y: e.clientY,
+            };
+        }
+        if (e instanceof TouchEvent) {
+            return {
+                x: e.touches[0].clientX,
+                y: e.touches[0].clientY,
+            };
+        }
+        
+        const rect = (e.target as Element)?.getBoundingClientRect();
+        if (rect) {
+            return {
+                x: rect.left,
+                y: rect.top,
+            };
+        }
+
+        return {
+            x: 0,
+            y: 0,
         };
     }
 
@@ -616,16 +640,12 @@
     {#each paginated as img (img.id)}
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <div
-            id={`img_${img.id}`}
-            class:selecting
-            on:contextmenu={handleImgContext(img.id)}
-            on:click={selectImg(img.id)}
-        >
+        <div id={`img_${img.id}`} class:selecting on:click={selectImg(img.id)}>
             <ImageDisplay
                 {img}
                 unselect={selecting && !$selection.includes(img.id)}
                 onClick={(e) => openImage(img, e)}
+                onContext={handleImgContext(img.id)}
             />
         </div>
     {/each}

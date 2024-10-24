@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { ClientImage } from "$lib/types";
+    import type { ClientImage, inputEvent } from "$lib/types";
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
@@ -10,6 +10,7 @@
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
         undefined;
+    export let onContext: ((e: inputEvent) => void) | undefined = undefined;
     export let unselect = false;
 
     let hasLoaded = false;
@@ -20,7 +21,7 @@
 </script>
 
 <div class="base" class:active class:seamless class:unselect>
-    <Clickable up={onClick}>
+    <Clickable up={onClick} contextMenu={onContext}>
         {#if !hasLoaded}
             <div class="loading">
                 <SpinLine color="#444" />

@@ -1,16 +1,18 @@
 <script lang="ts">
     import { cx } from "$lib/tools/cx";
+    import { inputEvent, pcEvent } from "$lib/types";
 
-    export let down: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
-        undefined;
-    export let up: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
-        undefined;
+    export let down: ((e: pcEvent) => void) | undefined = undefined;
+    export let up: ((e: pcEvent) => void) | undefined = undefined;
+    export let contextMenu: ((e: inputEvent) => void) | undefined = undefined;
     export let enter: ((e: FocusEvent) => void) | undefined = undefined;
     export let leave: ((e: FocusEvent) => void) | undefined = undefined;
     export let anyClick = false;
-
+    
     let isDown = false;
     let _class = cx($$restProps.class, "clickable", isDown && "isDown");
+    let contextTimeout: any = undefined;
+    let contextDelay = 600;
 
     function handleDown(e: MouseEvent | KeyboardEvent) {
         if (e instanceof KeyboardEvent && e.key !== " ") return;
@@ -36,6 +38,35 @@
         isDown = false;
         leave?.(e);
     }
+
+    function handleTouchStart(e: TouchEvent) {
+        contextTimeout = setTimeout(() => {
+            contextMenu?.(e);
+        }, contextDelay);
+    }
+
+    function handleTouchEnd(e: TouchEvent) {
+        clearTimeout(contextTimeout);
+    }
+
+    function handTouchMove(e: TouchEvent) {
+        clearTimeout(contextTimeout);
+    }
+
+    function handleTouchCancel(e: TouchEvent) {
+        clearTimeout(contextTimeout);
+    }
+
+    function handleContextMenu(e: MouseEvent | KeyboardEvent | TouchEvent) {
+        if (contextMenu) {
+            e.preventDefault();
+            e.stopPropagation();
+            clearTimeout(contextTimeout);
+
+            if (e instanceof TouchEvent) return;
+            contextMenu(e);
+        }
+    }
 </script>
 
 <div
@@ -49,6 +80,11 @@
     on:keyup={handleUp}
     on:focusout={handleFocusIn}
     on:focusout={handleFocusOut}
+    on:touchstart={handleTouchStart}
+    on:touchend={handleTouchEnd}
+    on:touchmove={handTouchMove}
+    on:touchcancel={handleTouchCancel}
+    on:contextmenu={handleContextMenu}
 >
     <slot />
 </div>

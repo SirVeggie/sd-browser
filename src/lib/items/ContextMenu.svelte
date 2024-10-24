@@ -1,5 +1,5 @@
 <script lang="ts" context="module">
-    import { uniqueId } from "lodash";
+    import _ from "lodash";
     import { writable } from "svelte/store";
     import { outclick } from "../../actions/outclick";
 
@@ -19,7 +19,7 @@
         handler: (option: string) => ContextReturn
     ) {
         window.addEventListener("keydown", handleEsc);
-        const id = uniqueId("contextmenu_");
+        const id = _.uniqueId("contextmenu_");
         menuStore.update((menus) => {
             menus.push({ id, options, handler, position });
             return menus;

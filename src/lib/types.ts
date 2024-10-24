@@ -215,6 +215,9 @@ export type ImageExtraData = {
     comfyNegative?: string;
 }
 
+export type inputEvent = MouseEvent | KeyboardEvent | TouchEvent;
+export type pcEvent = MouseEvent | KeyboardEvent;
+
 export function testType(object: any, keylist: (string | ((o: any) => boolean))[]) {
     for (const key of keylist) {
         if (typeof key === 'string' && !(key in object))
