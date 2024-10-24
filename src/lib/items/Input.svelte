@@ -14,9 +14,12 @@
 </script>
 
 <div class="input">
+    <form>
     {#if password}
         <input
             type="password"
+            autocomplete="new-password"
+            id="pwd"
             bind:this={element}
             {placeholder}
             on:change
@@ -33,6 +36,7 @@
             bind:value={value}
         />
     {/if}
+    </form>
     <button on:click={clear}>x</button>
 </div>
 
