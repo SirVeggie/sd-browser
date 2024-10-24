@@ -15,27 +15,27 @@
 
 <div class="input">
     <form>
-    {#if password}
-        <input
-            type="password"
-            autocomplete="new-password"
-            id="pwd"
-            bind:this={element}
-            {placeholder}
-            on:change
-            on:input
-            bind:value={value}
-        />
-    {:else}
-        <input
-            type="text"
-            bind:this={element}
-            {placeholder}
-            on:change
-            on:input
-            bind:value={value}
-        />
-    {/if}
+        {#if password}
+            <input
+                type="password"
+                autocomplete="new-password"
+                id="pwd"
+                bind:this={element}
+                {placeholder}
+                on:change
+                on:input
+                bind:value
+            />
+        {:else}
+            <input
+                type="text"
+                bind:this={element}
+                {placeholder}
+                on:change
+                on:input
+                bind:value
+            />
+        {/if}
     </form>
     <button on:click={clear}>x</button>
 </div>
@@ -65,6 +65,10 @@
             outline: none;
             border: 1px solid #aaad;
         }
+    }
+
+    form {
+        width: 100%;
     }
 
     button {
