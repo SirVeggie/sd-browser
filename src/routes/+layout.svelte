@@ -10,7 +10,7 @@
     import { authStore } from "$lib/stores/authStore";
     import Login from "$lib/components/Login.svelte";
     import { onMount } from "svelte";
-    import { attemptLogin } from "$lib/tools/authRequests";
+    import { attemptLogin } from "$lib/requests/authRequests";
 
     let timestamp = Date.now();
     let fltimeout: any;

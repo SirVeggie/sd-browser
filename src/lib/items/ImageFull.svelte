@@ -26,7 +26,7 @@
     getSvPositivePrompt,
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode } from "$lib/stores/searchStore";
-  import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
+  import { getQualityParam, imageAction } from "$lib/requests/imageRequests";
   import { autofocus } from "../../actions/autofocus";
   import { fullscreenStyle } from "$lib/stores/styleStore";
   import type { ClientImage, ImageInfo } from "$lib/types/images";

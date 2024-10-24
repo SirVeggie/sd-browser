@@ -1,5 +1,5 @@
-import { ClientImage } from "./images";
-import { SearchMode, SortingMethod, testType } from "./misc";
+import type { ClientImage } from "./images";
+import { type SearchMode, type SortingMethod, testType } from "./misc";
 
 export type ActionRequest = NsfwAction | FavoriteAction | DeleteAction | OpenAction;
 export function isActionRequest(object: any): object is ActionRequest {
@@ -22,6 +22,11 @@ export type FavoriteAction = {
     type: 'favorite';
     state: boolean;
 };
+
+export type MoveAction = {
+    type: 'move';
+    target: string;
+}
 
 export type DeleteAction = {
     type: 'delete';
@@ -73,6 +78,20 @@ export type UpdateResponse = {
 };
 export function isUpdateResponse(object: any): object is UpdateResponse {
     return testType(object, ['additions', 'deletions', 'timestamp']);
+}
+
+export type SettingsRequest = {
+    settingsJson: string;
+}
+export function isSettingRequest(object: any): object is SettingsRequest {
+    return testType(object, ['settingsJson']);
+}
+
+export type SettingsResponse = {
+    settingsJson: string;
+}
+export function isSettingResponse(object: any): object is SettingsResponse {
+    return testType(object, ['settingsJson']);
 }
 
 export type ServerError = {

@@ -20,16 +20,24 @@
     import { fullscreenStyle, imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
     import { authLogout, authStore } from "$lib/stores/authStore";
+    import { updateGlobalSettings } from "$lib/stores/globalSettings";
+    import { pullGlobalSettings } from "$lib/requests/settingRequests";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
     let flyoutMode = $flyoutStore.mode;
 
     $: setInput($flyoutStore.url);
+    
+    let refreshInterval: any = setInterval(() => {
+        pullGlobalSettings();
+    }, 1000);
 
     onDestroy(() => {
         clearTimeout(inputTimer);
         inputTimer = undefined;
+        clearInterval(refreshInterval);
+        refreshInterval = undefined;
     });
 
     function setInput(value: string) {

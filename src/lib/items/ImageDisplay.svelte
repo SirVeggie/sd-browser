@@ -1,17 +1,17 @@
 <script lang="ts">
-    import type { inputEvent } from "$lib/types/misc";
+    import type { InputEvent } from "$lib/types/misc";
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
     import { animatedThumb, thumbMode } from "$lib/stores/searchStore";
-    import { getPreviewParam, getQualityParam } from "$lib/tools/imageRequests";
+    import { getPreviewParam, getQualityParam } from "$lib/requests/imageRequests";
     import { seamlessStyle } from "$lib/stores/styleStore";
     import type { ClientImage } from "$lib/types/images";
 
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
         undefined;
-    export let onContext: ((e: inputEvent) => void) | undefined = undefined;
+    export let onContext: ((e: InputEvent) => void) | undefined = undefined;
     export let unselect = false;
 
     let hasLoaded = false;

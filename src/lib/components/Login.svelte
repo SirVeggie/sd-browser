@@ -1,7 +1,7 @@
 <script lang="ts">
     import { authStore } from "$lib/stores/authStore";
     import { notify } from "./Notifier.svelte";
-    import { attemptLogin } from "$lib/tools/authRequests";
+    import { attemptLogin } from "$lib/requests/authRequests";
     import Input from "$lib/items/Input.svelte";
 
     let password = "";

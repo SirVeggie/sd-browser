@@ -1,9 +1,9 @@
-import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/misc';
 import Database from 'better-sqlite3';
 import type { Database as BetterSqlite3 } from 'better-sqlite3';
 import path from 'path';
 import { datapath } from './filemanager';
 import { updateLine } from '$lib/tools/misc';
+import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/images';
 
 //#region unique list
 export function saveUniqueList(reverse: Map<string, string[]>) {

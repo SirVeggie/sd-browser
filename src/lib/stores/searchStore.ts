@@ -19,9 +19,9 @@ export const initialImages = writable(25);
 export const slideDelay = writable(4000);
 
 export function syncSearchWithLocalStorage() {
-    syncMemory('nsfwFilter', nsfwFilter);
+    syncMemory('nsfwFilter', nsfwFilter, true);
     syncMemory('nsfwMode', nsfwMode);
-    syncMemory('folderFilter', folderFilter);
+    syncMemory('folderFilter', folderFilter, true);
     syncMemory('folderMode', folderMode);
     syncMemory('webpMode', thumbMode);
     syncMemory('compressedMode', compressedMode);

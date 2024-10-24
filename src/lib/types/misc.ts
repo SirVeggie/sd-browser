@@ -32,8 +32,12 @@ export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);
 }
 
-export type inputEvent = MouseEvent | KeyboardEvent | TouchEvent;
-export type pcEvent = MouseEvent | KeyboardEvent;
+export type GlobalSettings = {
+    nsfwFilter: string;
+}
+
+export type InputEvent = MouseEvent | KeyboardEvent | TouchEvent;
+export type PCEvent = MouseEvent | KeyboardEvent;
 
 export function testType(object: any, keylist: (string | ((o: any) => boolean))[]) {
     for (const key of keylist) {

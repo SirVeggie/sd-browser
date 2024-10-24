@@ -14,11 +14,11 @@
         imageAction,
         searchImages,
         updateImages,
-    } from "$lib/tools/imageRequests";
+    } from "$lib/requests/imageRequests";
     import { expandClientImages } from "$lib/tools/misc";
     import {
     sortingMethods,
-        type inputEvent,
+        type InputEvent,
         type SortingMethod,
     } from "$lib/types/misc";
     import { onMount } from "svelte";
@@ -440,7 +440,7 @@
     }
 
     function handleImgContext(id: string) {
-        return (e: inputEvent) => {
+        return (e: InputEvent) => {
             const pos = getEventCoords(e);
             const options: string[] = [];
             if (!selecting) options.push("Select");
@@ -472,7 +472,7 @@
         };
     }
 
-    function getEventCoords(e: inputEvent) {
+    function getEventCoords(e: InputEvent) {
         if (e instanceof MouseEvent) {
             return {
                 x: e.clientX,

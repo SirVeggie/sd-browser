@@ -1,6 +1,6 @@
 import { page } from "$app/stores";
+import { doGet, doServerGet } from "$lib/tools/requests";
 import { get } from "svelte/store";
-import { doGet, doServerGet } from "./requests";
 
 
 export async function attemptLogin(): Promise<boolean> {

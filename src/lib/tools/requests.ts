@@ -1,9 +1,12 @@
 import { authStore } from "$lib/stores/authStore";
 
 let auth = "";
-authStore.subscribe(value => auth = value.password);
 
 export type FetchType = (input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<Response>;
+
+export function subscribeAuth() {
+    authStore?.subscribe(value => auth = value.password);
+}
 
 export async function doGet(url: string, fetch: FetchType) {
     const response = await fetch(url, {

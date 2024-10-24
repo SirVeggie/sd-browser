@@ -1,10 +1,10 @@
 <script lang="ts">
     import { cx } from "$lib/tools/cx";
-    import type { inputEvent, pcEvent } from "$lib/types/misc";
+    import type { InputEvent, PCEvent } from "$lib/types/misc";
 
-    export let down: ((e: pcEvent) => void) | undefined = undefined;
-    export let up: ((e: pcEvent) => void) | undefined = undefined;
-    export let contextMenu: ((e: inputEvent) => void) | undefined = undefined;
+    export let down: ((e: PCEvent) => void) | undefined = undefined;
+    export let up: ((e: PCEvent) => void) | undefined = undefined;
+    export let contextMenu: ((e: InputEvent) => void) | undefined = undefined;
     export let enter: ((e: FocusEvent) => void) | undefined = undefined;
     export let leave: ((e: FocusEvent) => void) | undefined = undefined;
     export let anyClick = false;
