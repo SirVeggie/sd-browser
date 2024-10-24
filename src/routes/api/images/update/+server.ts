@@ -2,7 +2,7 @@ import { invalidAuth } from '$lib/server/auth';
 import { getDeletedImageIds, getFreshImageTimestamp, searchImages, sortImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses';
 import { mapServerImageToClient } from '$lib/tools/misc.js';
-import { isUpdateRequest, type UpdateResponse } from '$lib/types';
+import { isUpdateRequest, type UpdateResponse } from '$lib/types/requests';
 
 export async function POST(e) {
     const err = invalidAuth(e);

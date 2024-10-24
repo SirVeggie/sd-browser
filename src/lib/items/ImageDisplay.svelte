@@ -1,11 +1,12 @@
 <script lang="ts">
-    import type { ClientImage, inputEvent } from "$lib/types";
+    import type { inputEvent } from "$lib/types/misc";
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
     import { animatedThumb, thumbMode } from "$lib/stores/searchStore";
     import { getPreviewParam, getQualityParam } from "$lib/tools/imageRequests";
     import { seamlessStyle } from "$lib/stores/styleStore";
+    import type { ClientImage } from "$lib/types/images";
 
     export let img: ClientImage;
     export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =

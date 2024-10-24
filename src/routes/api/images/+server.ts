@@ -2,7 +2,8 @@ import { invalidAuth } from '$lib/server/auth.js';
 import { searchImages, sortImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 import { mapServerImageToClient } from '$lib/tools/misc.js';
-import { isImageRequest, type ImageResponse, type ServerImage } from '$lib/types.js';
+import { type ServerImage } from '$lib/types/images';
+import { type ImageResponse, isImageRequest } from '$lib/types/requests';
 
 const imageLimit = 100;
 

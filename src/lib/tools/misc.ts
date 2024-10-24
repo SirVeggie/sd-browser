@@ -1,4 +1,4 @@
-import type { ClientImage, ServerImage } from "$lib/types";
+import type { ClientImage, ServerImage } from "$lib/types/misc";
 import { RePromise, RePromisify } from "./RePromise";
 import rl from "readline";
 

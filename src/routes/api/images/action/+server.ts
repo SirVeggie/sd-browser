@@ -1,6 +1,6 @@
 import { deleteImages, markFavorite, markNsfw, openExplorer } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
-import { isMultiActionRequest } from '$lib/types.js';
+import { isMultiActionRequest } from '$lib/types/requests';
 
 export async function POST(e) {
     const action = await e.request.json();

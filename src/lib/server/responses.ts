@@ -1,4 +1,4 @@
-import type { ServerError } from "$lib/types";
+import type { ServerError } from "$lib/types/misc";
 import { readFile, unlink } from "fs/promises";
 import { generateCompressed, generateCompressedTask, generateThumbnail, generateThumbnailTask } from "./convert";
 import { compressedPath, generationDisabled, getImage, hashPath, thumbnailPath } from "./filemanager";

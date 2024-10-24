@@ -1,6 +1,6 @@
 <script lang="ts">
     import { cx } from "$lib/tools/cx";
-    import { inputEvent, pcEvent } from "$lib/types";
+    import type { inputEvent, pcEvent } from "$lib/types/misc";
 
     export let down: ((e: pcEvent) => void) | undefined = undefined;
     export let up: ((e: pcEvent) => void) | undefined = undefined;

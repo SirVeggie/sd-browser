@@ -1,4 +1,4 @@
-import { ComfyNode, ComfyPrompt, ComfyWorkflow, ComfyWorkflowNode } from "$lib/types";
+import type { ComfyNode, ComfyPrompt, ComfyWorkflow, ComfyWorkflowNode } from "$lib/types/images";
 
 export function getMetadataVersion(prompt: string | undefined) {
     if (/^{"\d+":/.test(prompt ?? ''))

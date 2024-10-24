@@ -17,12 +17,10 @@
     } from "$lib/tools/imageRequests";
     import { expandClientImages } from "$lib/tools/misc";
     import {
-        inputEvent,
-        sortingMethods,
-        type ClientImage,
-        type ImageInfo,
+    sortingMethods,
+        type inputEvent,
         type SortingMethod,
-    } from "$lib/types";
+    } from "$lib/types/misc";
     import { onMount } from "svelte";
     import { fade } from "svelte/transition";
     import {
@@ -45,6 +43,7 @@
     import { createSelection } from "$lib/tools/selectManager";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import { sleep } from "$lib/tools/sleep";
+    import type { ClientImage, ImageInfo } from "$lib/types/images";
 
     type ActionMode = "manual" | "auto";
 
@@ -155,7 +154,7 @@
         } else if (leftArrow) {
             currentImage = paginated[prevIndex];
             scrollToImage();
-            getImageInfo(currentImage.id).then((res) => {
+            getImageInfo(currentImage!.id).then((res) => {
                 info = res;
             });
 
@@ -178,7 +177,7 @@
                 loadMore();
             }
             scrollToImage();
-            getImageInfo(currentImage.id).then((res) => {
+            getImageInfo(currentImage!.id).then((res) => {
                 info = res;
             });
 

@@ -1,5 +1,5 @@
 import { syncMemory } from "$lib/tools/syncStorage";
-import type { FlyoutMode } from "$lib/types";
+import type { FlyoutMode } from "$lib/types/misc";
 import { writable } from "svelte/store";
 
 export type FlyoutStore = {

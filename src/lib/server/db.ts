@@ -1,4 +1,4 @@
-import type { ImageExtraData, ImageList, ServerImage } from '$lib/types';
+import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/misc';
 import Database from 'better-sqlite3';
 import type { Database as BetterSqlite3 } from 'better-sqlite3';
 import path from 'path';

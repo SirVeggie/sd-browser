@@ -1,6 +1,6 @@
 import { getImage } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
-import type { ImageInfo } from '$lib/types.js';
+import type { ImageInfo } from '$lib/types/images.js';
 
 export async function GET(e) {
     const src = e.params.src;

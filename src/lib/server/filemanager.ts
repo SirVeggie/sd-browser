@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import cp from 'child_process';
 import crypto from 'crypto';
-import { ImageExtraData, searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types';
+import { ImageExtraData, searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types/misc';
 import fs from 'fs/promises';
 import exifr from 'exifr';
 import { getComfyPrompt, getComfyPrompts, getComfyWorkflowNodes, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';

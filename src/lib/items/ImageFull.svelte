@@ -8,7 +8,6 @@
 
 <script lang="ts">
   import "../../scroll.css";
-  import type { ClientImage, ImageInfo } from "$lib/types";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Button from "./Button.svelte";
@@ -30,6 +29,7 @@
   import { getQualityParam, imageAction } from "$lib/tools/imageRequests";
   import { autofocus } from "../../actions/autofocus";
   import { fullscreenStyle } from "$lib/stores/styleStore";
+  import type { ClientImage, ImageInfo } from "$lib/types/images";
 
   export let cancel: () => void;
   export let image: ClientImage | undefined;
@@ -392,7 +392,8 @@
           box-shadow: 0 0 1em 1em #111b;
         }
 
-        img, video {
+        img,
+        video {
           height: 100dvh;
           max-height: 100dvh;
           min-height: 100dvh;
@@ -402,7 +403,8 @@
       }
     }
 
-    img, video {
+    img,
+    video {
       max-height: calc(100dvh - var(--pad) * 2);
       max-width: 100%;
     }

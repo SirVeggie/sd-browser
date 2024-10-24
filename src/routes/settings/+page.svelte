@@ -15,7 +15,7 @@
         slideDelay,
         thumbMode,
     } from "$lib/stores/searchStore";
-    import { flyoutModes, qualityModes, searchKeywords, searchModes } from "$lib/types";
+    import { flyoutModes, qualityModes, searchKeywords, searchModes } from "$lib/types/misc";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import { fullscreenStyle, imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";

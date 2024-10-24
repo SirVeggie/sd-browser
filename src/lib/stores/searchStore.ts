@@ -1,5 +1,5 @@
 import { syncMemory } from "$lib/tools/syncStorage";
-import type { QualityMode, SearchMode } from "$lib/types";
+import type { QualityMode, SearchMode } from "$lib/types/misc";
 import { writable } from "svelte/store";
 
 export const nsfwFilterDefault = 'NOT FOLDER nsfw AND NOT nude|sex|seductive|underwear|pussy|cum|fellatio|ahegao|lust|crotch|vagina|penis|blow ?job|hentai|nipple|rating_explicit|rating_questionable';
