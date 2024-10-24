@@ -10,6 +10,7 @@
     export let anyClick = false;
     
     let isDown = false;
+    let preventTouchUp = false;
     let _class = cx($$restProps.class, "clickable", isDown && "isDown");
     let contextTimeout: any = undefined;
     let contextDelay = 600;
@@ -42,9 +43,11 @@
     }
 
     function handleTouchStart(e: TouchEvent) {
+        preventTouchUp = false;
         if (contextMenu) {
             contextTimeout = setTimeout(() => {
                 isDown = false;
+                preventTouchUp = true;
                 contextMenu?.(e);
             }, contextDelay);
         }
@@ -52,6 +55,9 @@
 
     function handleTouchEnd(e: TouchEvent) {
         clearTimeout(contextTimeout);
+        if (preventTouchUp) {
+            e.preventDefault();
+        }
     }
 
     function handTouchMove(e: TouchEvent) {
