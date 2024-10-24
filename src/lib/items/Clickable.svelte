@@ -26,8 +26,10 @@
         if (e instanceof KeyboardEvent && e.key !== " ") return;
         if (!anyClick && e instanceof MouseEvent && e.button !== 0) return;
         e.preventDefault();
-        isDown = false;
-        up?.(e);
+        if (isDown) {
+            isDown = false;
+            up?.(e);
+        }
     }
 
     function handleFocusIn(e: FocusEvent) {
@@ -40,9 +42,12 @@
     }
 
     function handleTouchStart(e: TouchEvent) {
-        contextTimeout = setTimeout(() => {
-            contextMenu?.(e);
-        }, contextDelay);
+        if (contextMenu) {
+            contextTimeout = setTimeout(() => {
+                isDown = false;
+                contextMenu?.(e);
+            }, contextDelay);
+        }
     }
 
     function handleTouchEnd(e: TouchEvent) {
@@ -64,6 +69,7 @@
             clearTimeout(contextTimeout);
 
             if (e instanceof TouchEvent) return;
+            isDown = false;
             contextMenu(e);
         }
     }
@@ -93,5 +99,6 @@
     div {
         width: 100%;
         height: 100%;
+        -webkit-touch-callout: none;
     }
 </style>
