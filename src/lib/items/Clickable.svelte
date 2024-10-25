@@ -2,13 +2,14 @@
     import { cx } from "$lib/tools/cx";
     import type { InputEvent, PCEvent } from "$lib/types/misc";
 
-    export let down: ((e: PCEvent) => void) | undefined = undefined;
-    export let up: ((e: PCEvent) => void) | undefined = undefined;
-    export let contextMenu: ((e: InputEvent) => void) | undefined = undefined;
-    export let enter: ((e: FocusEvent) => void) | undefined = undefined;
-    export let leave: ((e: FocusEvent) => void) | undefined = undefined;
+    export let down: ((e: PCEvent) => void) | undefined | false = undefined;
+    export let up: ((e: PCEvent) => void) | undefined | false = undefined;
+    export let contextMenu: ((e: InputEvent) => void) | undefined | false =
+        undefined;
+    export let enter: ((e: FocusEvent) => void) | undefined | false = undefined;
+    export let leave: ((e: FocusEvent) => void) | undefined | false = undefined;
     export let anyClick = false;
-    
+
     let isDown = false;
     let preventTouchUp = false;
     let _class = cx($$restProps.class, "clickable", isDown && "isDown");
@@ -20,7 +21,7 @@
         if (!anyClick && e instanceof MouseEvent && e.button !== 0) return;
         e.preventDefault();
         isDown = true;
-        down?.(e);
+        if (down) down(e);
     }
 
     function handleUp(e: MouseEvent | KeyboardEvent) {
@@ -29,17 +30,17 @@
         e.preventDefault();
         if (isDown) {
             isDown = false;
-            up?.(e);
+            if (up) up(e);
         }
     }
 
     function handleFocusIn(e: FocusEvent) {
-        enter?.(e);
+        if (enter) enter(e);
     }
 
     function handleFocusOut(e: FocusEvent) {
         isDown = false;
-        leave?.(e);
+        if (leave) leave(e);
     }
 
     function handleTouchStart(e: TouchEvent) {

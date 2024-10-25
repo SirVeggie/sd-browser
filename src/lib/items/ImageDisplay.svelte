@@ -4,14 +4,20 @@
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
     import { animatedThumb, thumbMode } from "$lib/stores/searchStore";
-    import { getPreviewParam, getQualityParam } from "$lib/requests/imageRequests";
+    import {
+        getPreviewParam,
+        getQualityParam,
+    } from "$lib/requests/imageRequests";
     import { seamlessStyle } from "$lib/stores/styleStore";
     import type { ClientImage } from "$lib/types/images";
 
     export let img: ClientImage;
-    export let onClick: ((e: MouseEvent | KeyboardEvent) => void) | undefined =
+    export let onClick:
+        | ((e: MouseEvent | KeyboardEvent) => void)
+        | undefined
+        | false = undefined;
+    export let onContext: ((e: InputEvent) => void) | undefined | false =
         undefined;
-    export let onContext: ((e: InputEvent) => void) | undefined = undefined;
     export let unselect = false;
 
     let hasLoaded = false;
@@ -110,7 +116,6 @@
 
     .unselect {
         filter: grayscale(0.8) opacity(0.5);
-        pointer-events: none;
     }
 
     .loading {

@@ -1,4 +1,4 @@
-import type { ClientImage, ServerImage } from "$lib/types/misc";
+import type { ClientImage, ServerImage } from "$lib/types/images";
 import { RePromise, RePromisify } from "./RePromise";
 import rl from "readline";
 
@@ -136,4 +136,12 @@ export function skipGeneration(file: string) {
 
 export function removeExtension(file: string) {
     return file.replace(/\.[^\\/.]+$/, '');
+}
+
+export function stringSortSingle(a: string, b: string) {
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function stringSort<T>(map: (x: T) => string) {
+    return (a: T, b: T) => stringSortSingle(map(a), map(b));
 }

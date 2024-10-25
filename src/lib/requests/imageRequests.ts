@@ -2,8 +2,8 @@ import { get } from 'svelte/store';
 import { doGet, doPost, doServerGet, doServerPost, type FetchType } from '../tools/requests';
 import { page } from '$app/stores';
 import type { ActionRequest, ImageRequest, ImageResponse, MultiActionRequest, UpdateRequest, UpdateResponse } from '$lib/types/requests';
-import type { QualityMode } from '$lib/types/misc';
 import { isImageInfo, type ImageInfo } from '$lib/types/images';
+import type { QualityMode } from '$lib/types/misc';
 
 export async function searchImages(search: ImageRequest, fetch?: FetchType): Promise<ImageResponse> {
     let url = '/api/images';

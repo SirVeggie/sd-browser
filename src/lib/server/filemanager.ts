@@ -4,7 +4,6 @@ import path from 'path';
 import os from 'os';
 import cp from 'child_process';
 import crypto from 'crypto';
-import { ImageExtraData, searchKeywords, type ImageList, type MatchType, type SearchMode, type ServerImage, type SortingMethod } from '$lib/types/misc';
 import fs from 'fs/promises';
 import exifr from 'exifr';
 import { getComfyPrompt, getComfyPrompts, getComfyWorkflowNodes, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
@@ -15,6 +14,8 @@ import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB, loadUniqueList, saveUniqueList } from './db';
+import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/images';
+import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } from '$lib/types/misc';
 
 type TimedImage = {
     id: string;
@@ -1052,6 +1053,10 @@ function removeBasePath(filepath: string) {
     return filepath.replace(IMG_FOLDER, '');
 }
 
+function removeFolderFromPath(file: string) {
+    return file.match(/[^/\\]+(\/|\\)?$/)?.[0].replace(/(\/|\\)$/, '');
+}
+
 async function readMetadata(image: ServerImage, source?: string): Promise<ServerImage> {
     try {
         const stats = await fs.stat(image.file);
@@ -1114,6 +1119,45 @@ export function markFavorite(ids: string | string[], favorite: boolean) {
     }
 }
 
+export function moveImages(ids: string | string[], folder: string) {
+    if (typeof ids === 'string') ids = [ids];
+
+    const targetFolder = path.join(IMG_FOLDER, folder.replace(/^\/?/, ''));
+
+    let failcount = 0;
+    for (const id of ids) {
+        const img = imageList.get(id);
+        if (!img) {
+            failcount++;
+            return;
+        }
+
+        try {
+            fs.rename(img.file, path.join(targetFolder, removeFolderFromPath(img.file)!));
+            removeUniqueImage(img);
+            imageList.delete(id);
+            deleteTextFiles(img.file);
+            deleteTempImage(id);
+        } catch {
+            failcount++;
+            continue;
+        }
+
+        if (img.preview) {
+            try {
+                fs.rename(img.preview, path.join(targetFolder, removeFolderFromPath(img.preview)!));
+                deleteTempImage(hashPath(img.preview));
+            } catch {
+                console.log(`Failed to move preview file ${img.preview}`);
+            }
+        }
+    }
+
+    if (failcount) {
+        console.log(`Failed to move ${failcount} images`);
+    }
+}
+
 export function deleteImages(ids: string | string[]) {
     if (typeof ids === 'string') ids = [ids];
 
@@ -1121,6 +1165,7 @@ export function deleteImages(ids: string | string[]) {
     for (const id of ids) {
         const img = imageList.get(id);
         if (!img) return;
+
         try {
             fs.unlink(img.file);
             removeUniqueImage(img);
@@ -1134,13 +1179,14 @@ export function deleteImages(ids: string | string[]) {
         if (img.preview) {
             try {
                 fs.unlink(img.preview);
+                deleteTempImage(hashPath(img.preview));
             } catch {
                 console.log(`Failed to delete preview file ${img.preview}`);
             }
         }
     }
 
-    if (failcount > 0)
+    if (failcount)
         console.log(`Failed to delete ${failcount} images`);
 }
 

@@ -1,7 +1,7 @@
 import type { ClientImage } from "./images";
 import { type SearchMode, type SortingMethod, testType } from "./misc";
 
-export type ActionRequest = NsfwAction | FavoriteAction | DeleteAction | OpenAction;
+export type ActionRequest = NsfwAction | FavoriteAction | MoveAction | DeleteAction | OpenAction;
 export function isActionRequest(object: any): object is ActionRequest {
     return testType(object, ['type']);
 }
@@ -25,8 +25,8 @@ export type FavoriteAction = {
 
 export type MoveAction = {
     type: 'move';
-    target: string;
-}
+    folder: string;
+};
 
 export type DeleteAction = {
     type: 'delete';
@@ -82,16 +82,28 @@ export function isUpdateResponse(object: any): object is UpdateResponse {
 
 export type SettingsRequest = {
     settingsJson: string;
-}
+};
 export function isSettingRequest(object: any): object is SettingsRequest {
     return testType(object, ['settingsJson']);
 }
 
 export type SettingsResponse = {
     settingsJson: string;
-}
+};
 export function isSettingResponse(object: any): object is SettingsResponse {
     return testType(object, ['settingsJson']);
+}
+
+export type Folder = {
+    name: string;
+    parent: string;
+    subfolders: Folder[];
+};
+export type FoldersResponse = {
+    folders: Folder[];
+};
+export function isFoldersResponse(object: any): object is FoldersResponse {
+    return testType(object, ['folders']);
 }
 
 export type ServerError = {

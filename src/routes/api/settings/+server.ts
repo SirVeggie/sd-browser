@@ -1,7 +1,7 @@
 import { invalidAuth } from '$lib/server/auth';
 import { MiscDB } from '$lib/server/db.js';
 import { error, success } from '$lib/server/responses.js';
-import { isSettingRequest, SettingsResponse } from '$lib/types/requests';
+import { isSettingRequest, type SettingsResponse } from '$lib/types/requests';
 
 const settingKey = 'settings';
 

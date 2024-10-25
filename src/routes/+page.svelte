@@ -15,9 +15,9 @@
         searchImages,
         updateImages,
     } from "$lib/requests/imageRequests";
-    import { expandClientImages } from "$lib/tools/misc";
+    import { expandClientImages, stringSort } from "$lib/tools/misc";
     import {
-    sortingMethods,
+        sortingMethods,
         type InputEvent,
         type SortingMethod,
     } from "$lib/types/misc";
@@ -38,12 +38,14 @@
     import { imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import {
         closeAllContextMenus,
+        type ContextReturn,
         openContextMenu,
     } from "$lib/items/ContextMenu.svelte";
     import { createSelection } from "$lib/tools/selectManager";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import { sleep } from "$lib/tools/sleep";
     import type { ClientImage, ImageInfo } from "$lib/types/images";
+    import { fetchFolderStructure } from "$lib/requests/miscRequests";
 
     type ActionMode = "manual" | "auto";
 
@@ -440,36 +442,70 @@
     }
 
     function handleImgContext(id: string) {
-        return (e: InputEvent) => {
+        return async (e: InputEvent) => {
             const pos = getEventCoords(e);
-            const options: string[] = [];
-            if (!selecting) options.push("Select");
-            else options.push("Cancel selection", "Select row");
-            if (!selecting) options.push("Open folder");
-            if (!selecting) options.push("Delete");
-            else options.push("Delete selected");
-
             closeAllContextMenus();
-            openContextMenu(options, pos, (option) => {
-                if (option === "Select") {
-                    selection.select(id);
-                    selecting = true;
-                } else if (option === "Select row") {
-                    selection.selectRow(id);
-                    if ($selection.length === 0) selecting = false;
-                } else if (option === "Cancel selection") {
-                    cancelSelect();
-                } else if (option === "Delete") {
-                    deleteImg(id);
-                } else if (option === "Delete selected") {
-                    deleteSelected();
-                } else if (option === "Open folder") {
-                    openFolder(id);
-                } else {
-                    return "keep";
-                }
-            });
+            openContextMenu(pos, [
+                {
+                    name: "Select",
+                    visible: !selecting,
+                    handler() {
+                        selection.select(id);
+                        selecting = true;
+                    },
+                },
+                {
+                    name: "Cancel selection",
+                    visible: selecting,
+                    handler: cancelSelect,
+                },
+                {
+                    name: "Select row",
+                    visible: selecting,
+                    handler() {
+                        selection.selectRow(id);
+                        if ($selection.length === 0) selecting = false;
+                    },
+                },
+                {
+                    name: "Open folder",
+                    visible: !selecting,
+                    handler: () => openFolder(id),
+                },
+                {
+                    name: "Move",
+                    handler: () => moveImages(id),
+                },
+                {
+                    name: "Delete",
+                    visible: !selecting,
+                    handler: () => deleteImg(id),
+                },
+                {
+                    name: "Delete selected",
+                    visible: selecting,
+                    handler: deleteSelected,
+                },
+            ]);
         };
+    }
+
+    async function moveImages(id: string): Promise<ContextReturn> {
+        const folders = (await fetchFolderStructure()).sort(stringSort(x => x.name)).reverse();
+        const list: string[] = ['/'];
+        
+        while (folders.length) {
+            const folder = folders.pop()!;
+            list.push(`${folder.parent}/${folder.name}`.replace(/^\//, ''));
+            if (folder.subfolders) {
+                folders.push(...(folder.subfolders.sort(stringSort(x => x.name)).reverse()));
+            }
+        }
+        
+        return list.map(x => ({
+            name: x,
+            handler: () => imageAction(selecting ? $selection : id, { type: 'move', folder: x }),
+        }));
     }
 
     function getEventCoords(e: InputEvent) {
@@ -485,7 +521,7 @@
                 y: e.touches[0].clientY,
             };
         }
-        
+
         const rect = (e.target as Element)?.getBoundingClientRect();
         if (rect) {
             return {
@@ -643,7 +679,7 @@
             <ImageDisplay
                 {img}
                 unselect={selecting && !$selection.includes(img.id)}
-                onClick={(e) => openImage(img, e)}
+                onClick={!selecting && ((e) => openImage(img, e))}
                 onContext={handleImgContext(img.id)}
             />
         </div>
@@ -807,12 +843,6 @@
         }
     }
 
-    .selecting {
-        & > :global(*) {
-            pointer-events: none;
-        }
-    }
-
     select {
         margin: 0;
         padding: 0;
@@ -840,7 +870,6 @@
         display: flex;
         align-items: center;
         gap: 0.5em;
-        // background-color: red;
     }
 
     input[type="checkbox"] {

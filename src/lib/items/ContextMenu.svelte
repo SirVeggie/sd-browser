@@ -3,25 +3,29 @@
     import { writable } from "svelte/store";
     import { outclick } from "../../actions/outclick";
 
-    export type ContextReturn = void | "keep" | string[];
+    export type ContextReturn = void | "keep" | ContextMenuOption[];
     export type IContextMenu = {
         id: string;
-        options: string[];
-        handler: (option: string) => ContextReturn;
+        options: ContextMenuOption[];
         position: { x: number; y: number };
+    };
+    export type ContextMenuOption = {
+        name: string;
+        handler: () => ContextReturn | Promise<ContextReturn>;
+        visible?: boolean;
+        enabled?: boolean;
     };
 
     const menuStore = writable<IContextMenu[]>([]);
 
     export function openContextMenu(
-        options: string[],
         position: { x: number; y: number },
-        handler: (option: string) => ContextReturn
+        options: ContextMenuOption[],
     ) {
         window.addEventListener("keydown", handleEsc);
         const id = _.uniqueId("contextmenu_");
         menuStore.update((menus) => {
-            menus.push({ id, options, handler, position });
+            menus.push({ id, options, position });
             return menus;
         });
         return id;
@@ -57,17 +61,45 @@
     import { fade } from "svelte/transition";
     import { cubicOut } from "svelte/easing";
 
-    function baseHandler(e: MouseEvent, menu: IContextMenu, option: string) {
+    async function clickHandler(
+        e: MouseEvent,
+        menu: IContextMenu,
+        option: ContextMenuOption,
+    ) {
         if (e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
-        const result = menu.handler(option);
+        const result = await option.handler();
         if (!result) return closeContextMenu(menu.id);
         if (result === "keep") return;
 
         const subposition = { x: e.clientX, y: e.clientY };
-        openContextMenu(result, subposition, menu.handler);
+        openContextMenu(subposition, result);
     }
+
+    function hoverEnter(
+        e: MouseEvent,
+        menu: IContextMenu,
+        option: ContextMenuOption,
+    ) {}
+
+    function hoverExit(
+        e: MouseEvent,
+        menu: IContextMenu,
+        option: ContextMenuOption,
+    ) {}
+
+    function focusEnter(
+        e: FocusEvent,
+        menu: IContextMenu,
+        option: ContextMenuOption,
+    ) {}
+
+    function focusExit(
+        e: FocusEvent,
+        menu: IContextMenu,
+        option: ContextMenuOption,
+    ) {}
 </script>
 
 {#each $menuStore as menu (menu.id)}
@@ -79,10 +111,19 @@
         use:outclick
         on:outclick={() => closeContextMenu(menu.id)}
     >
-        {#each menu.options as option (option)}
-            <button on:click={(e) => baseHandler(e, menu, option)}>
-                {option}
-            </button>
+        {#each menu.options as option (option.name)}
+            {#if option.visible ?? true}
+                <button
+                    on:click={(e) => clickHandler(e, menu, option)}
+                    on:mouseover={(e) => hoverEnter(e, menu, option)}
+                    on:mouseout={(e) => hoverExit(e, menu, option)}
+                    on:focus={(e) => focusEnter(e, menu, option)}
+                    on:blur={(e) => focusExit(e, menu, option)}
+                    class:disabled={!(option.enabled ?? true)}
+                >
+                    {option.name}
+                </button>
+            {/if}
         {/each}
     </div>
 {/each}
@@ -116,12 +157,17 @@
         width: 100%;
         cursor: pointer;
 
-        &:hover {
+        &:hover:not(.disabled) {
             background-color: #333a;
         }
 
-        &:active {
+        &:active:not(.disabled) {
             background-color: #444a;
+        }
+
+        &.disabled {
+            color: #ddd5;
+            cursor: default;
         }
     }
 </style>
