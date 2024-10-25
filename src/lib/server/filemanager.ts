@@ -1127,13 +1127,12 @@ export function moveImages(ids: string | string[], folder: string) {
     let failcount = 0;
     for (const id of ids) {
         const img = imageList.get(id);
-        if (!img) {
-            failcount++;
-            return;
-        }
+        if (!img) continue;
 
         try {
-            fs.rename(img.file, path.join(targetFolder, removeFolderFromPath(img.file)!));
+            const newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
+            if (img.file === newPath) continue;
+            fs.rename(img.file, newPath);
             removeUniqueImage(img);
             imageList.delete(id);
             deleteTextFiles(img.file);
@@ -1164,7 +1163,7 @@ export function deleteImages(ids: string | string[]) {
     let failcount = 0;
     for (const id of ids) {
         const img = imageList.get(id);
-        if (!img) return;
+        if (!img) continue;
 
         try {
             fs.unlink(img.file);
