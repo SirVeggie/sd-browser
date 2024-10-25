@@ -12,10 +12,11 @@ export const flyoutStore = writable<FlyoutStore>({
     url: 'http://localhost:7860/',
     mode: 'normal',
 });
-
+export const flyoutHistory = writable<string[]>([]);
 export const flyoutState = writable(false);
 
 export function syncFlyoutWithLocalStorage() {
     syncMemory('flyout', flyoutStore);
     syncMemory('flyoutState', flyoutState);
+    syncMemory('flyoutHistory', flyoutHistory, true);
 }

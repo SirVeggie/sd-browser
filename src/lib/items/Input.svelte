@@ -24,6 +24,8 @@
                 {placeholder}
                 on:change
                 on:input
+                on:focus
+                on:blur
                 bind:value
             />
         {:else}
@@ -33,6 +35,8 @@
                 {placeholder}
                 on:change
                 on:input
+                on:focus
+                on:blur
                 bind:value
             />
         {/if}

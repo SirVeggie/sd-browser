@@ -2,11 +2,11 @@
     import Input from "$lib/items/Input.svelte";
     import { onDestroy } from "svelte";
     import Link from "../../lib/items/Link.svelte";
-    import { flyoutStore } from "$lib/stores/flyoutStore";
+    import { flyoutHistory, flyoutStore } from "$lib/stores/flyoutStore";
     import Button from "$lib/items/Button.svelte";
     import { notify } from "$lib/components/Notifier.svelte";
     import {
-    animatedThumb,
+        animatedThumb,
         compressedMode,
         folderFilter,
         initialImages,
@@ -15,19 +15,34 @@
         slideDelay,
         thumbMode,
     } from "$lib/stores/searchStore";
-    import { flyoutModes, qualityModes, searchKeywords, searchModes } from "$lib/types/misc";
+    import {
+        flyoutModes,
+        qualityModes,
+        searchKeywords,
+        searchModes,
+    } from "$lib/types/misc";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
-    import { fullscreenStyle, imageSize, seamlessStyle } from "$lib/stores/styleStore";
+    import {
+        fullscreenStyle,
+        imageSize,
+        seamlessStyle,
+    } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
     import { authLogout, authStore } from "$lib/stores/authStore";
     import { pullGlobalSettings } from "$lib/requests/settingRequests";
+    import {
+        closeContextMenu,
+        openContextMenu,
+    } from "$lib/items/ContextMenu.svelte";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
     let flyoutMode = $flyoutStore.mode;
+    let flyoutContext = "";
+    let flyoutHistoryLength = 5;
 
     $: setInput($flyoutStore.url);
-    
+
     let refreshInterval: any = setInterval(() => {
         pullGlobalSettings();
     }, 1000);
@@ -46,11 +61,23 @@
     function onInput() {
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
+            closeContextMenu(flyoutContext);
+
+            const old = $flyoutStore.url;
+            if (address === old) return;
+
             flyoutStore.update((x) => ({ ...x, url: address }));
+
+            flyoutHistory.update((history) => {
+                history = history.filter((item) => item !== address && item !== old);
+                if (old) history.unshift(old);
+                if (address && address !== old) history.unshift(address);
+                return history.slice(0, flyoutHistoryLength + 1);
+            });
             notify(`Flyout address set to '${address}'`);
         }, 2000);
     }
-    
+
     function onFlyoutModeChange() {
         flyoutStore.update((x) => ({ ...x, mode: flyoutMode }));
     }
@@ -60,10 +87,43 @@
         localStorage.clear();
         window.location.reload();
     }
-    
+
     function logout() {
         notify(`Logging out`);
         authLogout();
+    }
+
+    function flyoutFocus(e: FocusEvent) {
+        setTimeout(() => {
+            const rect = (e.target as Element).getBoundingClientRect();
+            flyoutContext = openContextMenu(
+                {
+                    x: rect.left - 15,
+                    y: rect.bottom,
+                },
+                $flyoutHistory.filter(x => x !== $flyoutStore.url).map((x) => ({
+                    name: x,
+                    handler() {
+                        address = x;
+                        const old = $flyoutStore.url;
+
+                        flyoutStore.update((prev) => ({ ...prev, url: x }));
+
+                        flyoutHistory.update((history) => {
+                            history = history.filter((item) => item !== x && item !== old);
+                            if (old) history.unshift(old);
+                            if (x !== old) history.unshift(x);
+                            return history.slice(0, flyoutHistoryLength + 1);
+                        });
+                        notify(`Flyout address set to '${x}'`);
+                    },
+                })),
+            );
+        }, 150);
+    }
+
+    function flyoutBlur() {
+        // closeContextMenu(flyoutContext);
     }
 </script>
 
@@ -80,12 +140,21 @@
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Set flyout address (webui url)
-        <Input bind:value={address} on:input={onInput} />
+        <Input
+            bind:value={address}
+            on:input={onInput}
+            on:focus={flyoutFocus}
+            on:blur={flyoutBlur}
+        />
     </label>
-    
+
     <label for="matching">
         Flyout styling:
-        <select id="matching" bind:value={flyoutMode} on:change={onFlyoutModeChange}>
+        <select
+            id="matching"
+            bind:value={flyoutMode}
+            on:change={onFlyoutModeChange}
+        >
             {#each flyoutModes as mode}
                 <option value={mode}>{mode}</option>
             {/each}
@@ -128,7 +197,7 @@
             {/each}
         </select>
     </label>
-    
+
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Initial amount of images loaded (default: 25)
@@ -164,27 +233,25 @@
             {/each}
         </select>
     </label>
-    
+
     <label class="checkbox">
         Animate thumbnail for videos:
         <input type="checkbox" bind:checked={$animatedThumb} />
     </label>
-    
+
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Slideshow interval (milliseconds)
         <NumInput bind:value={$slideDelay} />
     </label>
-    
-    <span class="gray">
-        Visual style settings
-    </span>
+
+    <span class="gray"> Visual style settings </span>
 
     <label class="checkbox">
         Maximize fullscreen image size:
         <input type="checkbox" bind:checked={$fullscreenStyle} />
     </label>
-    
+
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Image grid size offset:
@@ -201,8 +268,7 @@
         <br />
         Enable this setting before adding to homescreen to disable mobile UI elements
         <br />
-        Results depend on browser support
-        (status bar, taskbar on tablets)
+        Results depend on browser support (status bar, taskbar on tablets)
     </span>
 
     <label class="checkbox">
@@ -264,7 +330,9 @@
             bottom: 2px;
             transform: scale(0);
             opacity: 0;
-            transition: 120ms transform ease, 120ms opacity ease;
+            transition:
+                120ms transform ease,
+                120ms opacity ease;
             border-radius: 0.15em;
         }
 
