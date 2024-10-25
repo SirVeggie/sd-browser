@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const root = IMG_FOLDER;
+const folderRegex = /^\.?[^.]+$/;
 
 export async function GET(e) {
     const err = invalidAuth(e);
@@ -20,7 +21,7 @@ async function startRecurse(): Promise<Folder[]> {
     const result: Folder[] = [];
 
     const files = await fs.readdir(root);
-    for (const file of files) {
+    for (const file of files.filter(x => folderRegex.test(x))) {
         const fullpath = path.join(root, file);
         try {
             const stats = await fs.stat(fullpath);
@@ -43,7 +44,7 @@ async function recurse(name: string, parent: string): Promise<Folder> {
 
     const files = await fs.readdir(path.join(root, parent, name));
 
-    for (const file of files) {
+    for (const file of files.filter(x => folderRegex.test(x))) {
         const fullpath = path.join(root, parent, name, file);
         try {
             const stats = await fs.stat(fullpath);
@@ -53,6 +54,6 @@ async function recurse(name: string, parent: string): Promise<Folder> {
             // failed
         }
     }
-    
+
     return folder;
 }

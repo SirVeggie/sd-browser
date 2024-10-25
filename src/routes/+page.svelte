@@ -496,7 +496,7 @@
         
         while (folders.length) {
             const folder = folders.pop()!;
-            list.push(`${folder.parent}/${folder.name}`.replace(/^\//, ''));
+            list.push(`${folder.parent}/${folder.name}`.replace(/^\//, '').replace(/\\/, '/'));
             if (folder.subfolders) {
                 folders.push(...(folder.subfolders.sort(stringSort(x => x.name)).reverse()));
             }
