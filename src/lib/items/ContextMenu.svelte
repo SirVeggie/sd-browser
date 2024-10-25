@@ -106,7 +106,7 @@
 
 {#each $menuStore as menu (menu.id)}
     <div
-        class="contextmenu"
+        class="contextmenu" class:disabled={!menu.options.filter((x) => x.visible ?? true).length}
         style="left: {menu.position.x + 15}px; top: {menu.position.y + 1}px"
         in:fly={{ duration: 300, x: -20, easing: cubicOut }}
         out:fade={{ duration: 300, easing: cubicOut }}
@@ -145,6 +145,11 @@
         z-index: 100;
 
         backdrop-filter: blur(5px);
+        
+        &.disabled {
+            opacity: 0;
+            pointer-events: none;
+        }
     }
 
     button {
