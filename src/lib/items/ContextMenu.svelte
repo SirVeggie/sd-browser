@@ -8,6 +8,7 @@
         id: string;
         options: ContextMenuOption[];
         position: { x: number; y: number };
+        parent?: string;
     };
     export type ContextMenuOption = {
         name: string;
@@ -21,11 +22,12 @@
     export function openContextMenu(
         position: { x: number; y: number },
         options: ContextMenuOption[],
+        parent?: string,
     ) {
         window.addEventListener("keydown", handleEsc);
-        const id = _.uniqueId("contextmenu_");
+        const id = _.uniqueId(`${parent ?? "contextmenu"}_`);
         menuStore.update((menus) => {
-            menus.push({ id, options, position });
+            menus.push({ id, options, position, parent });
             return menus;
         });
         return id;
@@ -38,8 +40,8 @@
     export function closeContextMenu(id?: string) {
         menuStore.update((menus) => {
             if (id) {
-                const index = menus.findIndex((m) => m.id === id);
-                if (index !== -1) menus.splice(index, 1);
+                const ancestor = id.match(/^[^_]+_[^_]+/)?.[0] ?? id;
+                menus = menus.filter((x) => !x.id.startsWith(ancestor));
             } else {
                 menus.pop();
             }
@@ -74,7 +76,7 @@
         if (result === "keep") return;
 
         const subposition = { x: e.clientX, y: e.clientY };
-        openContextMenu(subposition, result);
+        openContextMenu(subposition, result, menu.id);
     }
 
     function hoverEnter(
