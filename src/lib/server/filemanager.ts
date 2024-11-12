@@ -9,7 +9,7 @@ import exifr from 'exifr';
 import { getComfyPrompt, getComfyPrompts, getComfyWorkflowNodes, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { XOR, calcTimeSpent, formatHasMetadata as isMetadataFiletype, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, printLine, removeExtension, selectRandom, updateLine, validRegex, videoFiletypes } from '$lib/tools/misc';
+import { XOR, calcTimeSpent, formatHasMetadata as isMetadataFiletype, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, printLine, removeExtension, selectRandom, updateLine, validRegex, videoFiletypes, unixTime } from '$lib/tools/misc';
 import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
@@ -894,6 +894,7 @@ const allRegex = new RegExp(`^${keywordRegex}ALL `);
 const negativeRegex = new RegExp(`^${keywordRegex}(NEGATIVE|NEG) `);
 const folderRegex = new RegExp(`^${keywordRegex}(FOLDER|FD) `);
 const paramRegex = new RegExp(`^${keywordRegex}(PARAMS|PR) `);
+const dateRegex = new RegExp(`^${keywordRegex}(DATE|DT) `);
 function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
     const parts = search.split(' AND ');
     const regexes = parts.map(x => {
@@ -904,6 +905,7 @@ function buildMatcher(search: string, matching: SearchMode): (image: ServerImage
         else if (negativeRegex.test(x)) type = 'negative';
         else if (folderRegex.test(x)) type = 'folder';
         else if (paramRegex.test(x)) type = 'params';
+        else if (dateRegex.test(x)) type = 'date';
 
         return {
             raw,
@@ -914,16 +916,23 @@ function buildMatcher(search: string, matching: SearchMode): (image: ServerImage
     });
 
     return (image: ServerImage) => {
-        return !regexes.some(x => {
+        return regexes.every(x => {
+            if (x.type === 'date') {
+                const dates = x.raw.toLowerCase().split(' to ');
+                const start = unixTime(dates[0]);
+                const end = dates[1] ? unixTime(dates[1]) : undefined;
+                return image.modifiedDate >= start && (end === undefined || image.modifiedDate <= end);
+            }
+            
             const text = getTextByType(image, x.type);
-
+                
             if (matching === 'contains') {
-                return !XOR(x.not, text.toLowerCase().includes(x.raw.toLowerCase()));
+                return XOR(x.not, text.toLowerCase().includes(x.raw.toLowerCase()));
             } else if (matching === 'words') {
                 const words = x.raw.split(' ');
-                return !XOR(x.not, words.every(word => new RegExp(`\\b${word}\\b`, 'i').test(text)));
+                return XOR(x.not, words.every(word => new RegExp(`\\b${word}\\b`, 'i').test(text)));
             } else {
-                return !XOR(x.not, x.regex.test(text));
+                return XOR(x.not, x.regex.test(text));
             }
         });
     };
@@ -937,6 +946,8 @@ function getTextByType(image: ServerImage, type: MatchType): string {
             return `${image.prompt}, Folder: ${image.folder}`;
         case 'folder':
             return image.folder;
+        case 'date':
+            return String(image.modifiedDate);
     }
 
     if (comfyPromptCache.has(image.id)) {

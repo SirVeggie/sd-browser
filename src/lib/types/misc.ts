@@ -20,13 +20,13 @@ export function isQualityMode(object: any): object is QualityMode {
     return qualityModes.includes(object);
 }
 
-const matchTypes = ['all', 'positive', 'negative', 'params', 'folder'] as const;
+const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date'] as const;
 export type MatchType = typeof matchTypes[number];
 export function isMatchType(object: any): object is MatchType {
     return matchTypes.includes(object);
 }
 
-export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR'] as const;
+export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT'] as const;
 export type SearchKeyword = typeof searchKeywords[number];
 export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);
