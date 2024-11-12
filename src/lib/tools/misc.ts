@@ -173,9 +173,9 @@ export function unixTime(value: number | string): number {
     if (/^\d+$/.test(value)) return Number(value);
     if (dateRegex.test(value)) {
         const parts = value.split(' ');
-        const date = parts[0].split(/\/-\./);
+        const date = parts[0].split(/[-/.]/);
         const time = parts[1]?.split(':') ?? [];
-        return new Date(Number(date[0]), Number(date[1]) - 1, Number(date[2]), Number(time[0]), Number(time[1]), Number(time[2])).getTime();
+        return new Date(Number(date[0]), Number(date[1]) - 1, Number(date[2]), Number(time[0] ?? 0), Number(time[1] ?? 0), Number(time[2] ?? 0)).getTime();
     }
     if (offsetRegex.test(value)) {
         const date = new Date();
