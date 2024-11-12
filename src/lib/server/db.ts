@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import type { Database as BetterSqlite3 } from 'better-sqlite3';
 import path from 'path';
 import { datapath } from './filemanager';
-import { range, updateLine } from '$lib/tools/misc';
+import { updateLine } from '$lib/tools/misc';
 import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/images';
 
 //#region unique list
@@ -113,23 +113,37 @@ export class MetaDB {
         const images = this.db.prepare('SELECT * FROM metadata').all() as ServerImage[];
         return new Map(images.map(image => [image.id, image]));
     }
-    
-    search(parts: string[], startDate?: number, endDate?: number): ImageList {
+
+    search(parts: (string | string[])[], startDate?: number, endDate?: number): ImageList {
         if (this.closed)
             throw new Error('Database already closed');
-        const where = range(parts.length).map(() => "prompt like '%?%'");
-        const params: (string|number)[] = [...parts];
+        parts = parts
+            .map(x => typeof x === 'string' ? x : x.filter(y => !!y))
+            .filter(x => typeof x === 'string' ? !!x : x.length);
         
+        const params: (string | number)[] = parts.map(x => {
+            if (typeof x === 'string') return [`%${x}%`];
+            if (x.length < 1) return [];
+            if (x.length === 1) return [`%${x[0]}%`];
+            return x.filter(y => !!y).map(y => `%${y}%`);
+        }).filter(x => x.length).flat();
+        
+        const where = parts.map(x => {
+            if (typeof x === 'string') return 'prompt like ?';
+            if (x.length === 1) return 'prompt like ?';
+            return `(${x.map(() => 'prompt like ?').join(' or ')})`;
+        });
+
         if (startDate) {
-            where.unshift(`modifiedDate >= ${startDate}`);
-            params.push(startDate);
+            where.unshift(`modifiedDate >= ?`);
+            params.unshift(startDate);
         }
-        
+
         if (endDate) {
-            where.unshift(`modifiedDate <= ${endDate}`);
-            params.push(endDate);
+            where.unshift(`modifiedDate <= ?`);
+            params.unshift(endDate);
         }
-        
+
         const sql = 'SELECT * FROM metadata WHERE ' + where.join(' and ');
         const images = this.db.prepare(sql).all(params) as ServerImage[];
         return new Map(images.map(image => [image.id, image]));

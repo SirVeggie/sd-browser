@@ -896,7 +896,12 @@ const folderRegex = new RegExp(`^${keywordRegex}(FOLDER|FD) `);
 const paramRegex = new RegExp(`^${keywordRegex}(PARAMS|PR) `);
 const dateRegex = new RegExp(`^${keywordRegex}(DATE|DT) `);
 function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
-    const parts = search.split(' AND ');
+    let parts = search.split(' AND ');
+    // reorder query for performance
+    parts = parts.filter(x => dateRegex.test(x))
+        .concat(parts.filter(x => folderRegex.test(x)))
+        .concat(parts.filter(x => !dateRegex.test(x) && !folderRegex.test(x)));
+    
     const regexes = parts.map(x => {
         const raw = x.replace(removeRegex, '');
 
