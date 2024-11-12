@@ -54,6 +54,26 @@ Hides duplicate images with the same prompt. Browsing old prompts is much easier
 
 ## Searching
 
+### Dates
+
+The search can be restricted into a specific time frame using the `DATE` or `DT` keyword with special syntax.
+
+- Date format: `2024.12.24` | `2024.12.24 23:59` | `2024.12.24 23:59:59`
+- Unix timestamp (milliseconds): `1731436728000`
+- Offset format: `-1y` | `-1m -10d 12h`
+- Date range: `TO` keyword
+
+#### Examples
+
+```
+DT -1d -12h | between 36 hours ago and now
+DT 2024.6.1 14:00 | between 2024.06.01 14:00:00 and now
+DT -1y TO -6m | between 1 year ago and 6 months ago
+DT 2023.01.01 TO 1731436728000 | between 2023.01.01 00:00:00 and 2024.11.12 18:38:48
+```
+
+### Text
+
 Default search settings use Regex matching and keywords. All searching is case insensitive.
 
 By default, all matches are performed on the positive prompt only. This can be modified by keywords.
@@ -63,22 +83,22 @@ The current version supports 3 matching modes:
 - Words: Matches given words in any order
 - Contains: Matches the given value anywhere in the prompt
 
-### Examples (Regex)
+#### Examples (Regex)
 Search `red` matches `scarred` and `a red cap`  
 Search `\bred\b` matches `a red cap` and `(red)` but not `scarred` (\b is a word boundary character)  
 Search `happy (girl|boy)` matches `a happy girl` and `a happy boy`.
 
-### Examples (Words)
+#### Examples (Words)
 Search `cute girl` matches `cute, girl` and `girl, ..., cute`, but does not match `cuteness`  
 Search `red` matches `a red cap` and `(red) cap` but not `scarred`
 
-### Examples (Contains)
+#### Examples (Contains)
 Search `cute girl` matches `a cute girl` but not `cute, girl`  
 Search `red` matches `scarred`
 
 ## Keywords
 
-Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR`. Keywords must always be upper case. Keywords can be in any order (except AND). Both are valid: `NOT FOLDER img2img` and `FOLDER NOT img2img`.
+Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT`. Keywords must always be upper case. Keywords can be in any order (except AND). Both are valid: `NOT FOLDER img2img` and `FOLDER NOT img2img`.
 
 `AND`: Specify multiple conditions that all have to match  
 Example: `red hair AND man`
@@ -97,6 +117,8 @@ Example: `FOLDER txt2img` or `landscape AND NOT FD img2img|grid`
 
 `ALL`: Condition matches whole prompt (and folder name) instead of only the positive  
 Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part of the prompt)
+
+`DT`: Uses special date syntax to restrict search to some time frame (examples above)
 
 ## Sorting
 - Date: Sorts images based on file modification date
