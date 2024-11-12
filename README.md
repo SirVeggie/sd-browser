@@ -118,7 +118,7 @@ Example: `FOLDER txt2img` or `landscape AND NOT FD img2img|grid`
 `ALL`: Condition matches whole prompt (and folder name) instead of only the positive  
 Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part of the prompt)
 
-`DT`: Uses special date syntax to restrict search to some time frame (examples above)
+`DATE`: Uses special date syntax to restrict search to some time frame (examples above)
 
 ## Sorting
 - Date: Sorts images based on file modification date
