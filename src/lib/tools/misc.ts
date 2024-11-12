@@ -170,6 +170,7 @@ const offsetRegex = /^(-?\d+(y|m|d|h)( |$))+$/;
 export function unixTime(value: number | string): number {
     if (typeof value === 'number') return value;
     if (value === 'n') return Math.ceil(Date.now());
+    if (/^\d+$/.test(value)) return Number(value);
     if (dateRegex.test(value)) {
         const parts = value.split(' ');
         const date = parts[0].split(/\/-\./);
