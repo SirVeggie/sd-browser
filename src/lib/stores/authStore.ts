@@ -18,3 +18,8 @@ export function syncAuthWithLocalStorage() {
 export function authLogout() {
     authStore.update(() => ({ password: '', valid: false }));
 }
+
+export function isLocalAuthValid() {
+    const value = JSON.parse(localStorage.getItem('authStore') || '');
+    return !!value.valid;
+}
