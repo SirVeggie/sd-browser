@@ -255,7 +255,7 @@
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Image grid size offset:
-        <NumInput bind:value={$imageSize} />
+        <Input bind:value={$imageSize} placeholder="-100 (pixels) or calc(10vw + 50px)" />
     </label>
 
     <label class="checkbox">

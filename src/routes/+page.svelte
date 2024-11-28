@@ -82,7 +82,7 @@
     $: seamless = $seamlessStyle;
     $: selection.setObjects(paginated.map((x) => x.id));
     $: slideshowInterval = Math.max($slideDelay, 100);
-    $: gridStyle = `--size-offset:${$imageSize}px`;
+    $: gridStyle = `--size-offset:${parseSizeOffset($imageSize)}`;
 
     onMount(() => {
         scrollToTop();
@@ -100,6 +100,12 @@
             window.removeEventListener("keydown", keylistener);
         };
     });
+
+    function parseSizeOffset(str: string) {
+        if (!str) return "0px";
+        if (/^-?\d+$/.test(str)) return `${str}px`;
+        return str;
+    }
 
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         // do nothing if not left click
@@ -491,20 +497,34 @@
     }
 
     async function moveImages(id: string): Promise<ContextReturn> {
-        const folders = (await fetchFolderStructure()).sort(stringSort(x => x.name)).reverse();
-        const list: string[] = ['/'];
-        
+        const folders = (await fetchFolderStructure())
+            .sort(stringSort((x) => x.name))
+            .reverse();
+        const list: string[] = ["/"];
+
         while (folders.length) {
             const folder = folders.pop()!;
-            list.push(`${folder.parent}/${folder.name}`.replace(/^\//, '').replace(/\\/, '/'));
+            list.push(
+                `${folder.parent}/${folder.name}`
+                    .replace(/^\//, "")
+                    .replace(/\\/, "/"),
+            );
             if (folder.subfolders) {
-                folders.push(...(folder.subfolders.sort(stringSort(x => x.name)).reverse()));
+                folders.push(
+                    ...folder.subfolders
+                        .sort(stringSort((x) => x.name))
+                        .reverse(),
+                );
             }
         }
-        
-        return list.map(x => ({
+
+        return list.map((x) => ({
             name: x,
-            handler: () => imageAction(selecting ? $selection : id, { type: 'move', folder: x }),
+            handler: () =>
+                imageAction(selecting ? $selection : id, {
+                    type: "move",
+                    folder: x,
+                }),
         }));
     }
 
