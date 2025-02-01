@@ -43,10 +43,12 @@
   let hiddenElementSvNeg: HTMLDivElement;
   let hiddenElementParams: HTMLDivElement;
   let hiddenElementWorkflow: HTMLDivElement;
+  
+  let showOriginal = false;
 
   $: full = $fullscreenStyle;
   $: imageUrl = image?.id
-    ? `/api/images/${image.id}?${getQualityParam($compressedMode)}`
+    ? `/api/images/${image.id}?${getQualityParam(showOriginal ? 'original' : $compressedMode)}`
     : "";
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : formatMetadata(data.prompt, data.workflow);
@@ -56,6 +58,9 @@
   $: svNegativePrompt = !data ? "" : getSvNegativePrompt(data.prompt);
   $: paramsPrompt = !data ? "" : getParams(data.prompt);
   $: workflowPrompt = !data ? "" : data.workflow;
+  $: {
+    showOriginal = showOriginal && !!image;
+  }
 
   function extractBasic(d: ImageInfo): string {
     const model = getModel(d.prompt, d.workflow);
@@ -236,6 +241,11 @@
       type: "delete",
     }).then(cancel);
   }
+  
+  function showOriginalImage() {
+    showOriginal = true;
+    notify('Showing original quality image');
+  }
 
   function selectPrompt(element: HTMLDivElement) {
     if (!element) return;
@@ -287,6 +297,9 @@
                     <Button on:click={copyPrompt}>Copy all</Button>
                   {/if}
                   <Button on:click={deleteImage}>Delete</Button>
+                  {#if $compressedMode != 'original' && !showOriginal}
+                    <Button on:click={showOriginalImage}>Show original</Button>
+                  {/if}
                 </div>
               </div>
               {#each promptInfo as info}
@@ -386,8 +399,8 @@
         .info {
           min-width: auto;
           max-width: auto;
-          width: min(calc(100% - 2em), 1200px);
-          padding-inline: 1em;
+          width: min(calc(100% - max(10vw, 10vh)), 1200px);
+          padding-inline: 1em 0.4em;
           background-color: #111b;
           box-shadow: 0 0 1em 1em #111b;
         }
