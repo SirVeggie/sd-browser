@@ -923,10 +923,15 @@ function buildMatcher(search: string, matching: SearchMode): (image: ServerImage
     return (image: ServerImage) => {
         return regexes.every(x => {
             if (x.type === 'date') {
-                const dates = x.raw.toLowerCase().split(' to ');
-                const start = unixTime(dates[0]);
-                const end = dates[1] ? unixTime(dates[1]) : undefined;
-                return image.modifiedDate >= start && (end === undefined || image.modifiedDate <= end);
+                if (x.raw.toLowerCase().startsWith('to ')) {
+                    const end = unixTime(x.raw.substring(3));
+                    return image.modifiedDate <= end;
+                } else {
+                    const dates = x.raw.toLowerCase().split(' to ');
+                    const start = unixTime(dates[0]);
+                    const end = dates[1] ? unixTime(dates[1]) : undefined;
+                    return image.modifiedDate >= start && (end === undefined || image.modifiedDate <= end);
+                }
             }
             
             const text = getTextByType(image, x.type);
