@@ -1,7 +1,7 @@
 import type { ClientImage } from "./images";
 import { type SearchMode, type SortingMethod, testType } from "./misc";
 
-export type ActionRequest = NsfwAction | FavoriteAction | MoveAction | DeleteAction | OpenAction;
+export type ActionRequest = NsfwAction | FavoriteAction | MoveAction | CopyAction | DeleteAction | OpenAction;
 export function isActionRequest(object: any): object is ActionRequest {
     return testType(object, ['type']);
 }
@@ -27,6 +27,11 @@ export type MoveAction = {
     type: 'move';
     folder: string;
 };
+
+export type CopyAction = {
+    type: 'copy';
+    folder: string;
+}
 
 export type DeleteAction = {
     type: 'delete';

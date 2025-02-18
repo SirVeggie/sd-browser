@@ -1,4 +1,4 @@
-import { deleteImages, markFavorite, markNsfw, moveImages, openExplorer } from '$lib/server/filemanager.js';
+import { copyImages, deleteImages, markFavorite, markNsfw, moveImages, openExplorer } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 import { isMultiActionRequest } from '$lib/types/requests';
 
@@ -17,6 +17,9 @@ export async function POST(e) {
         return success();
     } else if (action.type === 'move') {
         moveImages(action.ids, action.folder);
+        return success();
+    } else if (action.type === 'copy') {
+        copyImages(action.ids, action.folder);
         return success();
     } else if (action.type === 'delete') {
         deleteImages(action.ids);

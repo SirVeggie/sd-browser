@@ -483,6 +483,10 @@
                     handler: () => moveImages(id),
                 },
                 {
+                    name: "Copy",
+                    handler: () => copyImages(id),
+                },
+                {
                     name: "Delete",
                     visible: !selecting,
                     handler: () => deleteImg(id),
@@ -523,6 +527,38 @@
             handler: () =>
                 imageAction(selecting ? $selection : id, {
                     type: "move",
+                    folder: x,
+                }),
+        }));
+    }
+
+    async function copyImages(id: string): Promise<ContextReturn> {
+        const folders = (await fetchFolderStructure())
+            .sort(stringSort((x) => x.name))
+            .reverse();
+        const list: string[] = ["/"];
+
+        while (folders.length) {
+            const folder = folders.pop()!;
+            list.push(
+                `${folder.parent}/${folder.name}`
+                    .replace(/^\//, "")
+                    .replace(/\\/, "/"),
+            );
+            if (folder.subfolders) {
+                folders.push(
+                    ...folder.subfolders
+                        .sort(stringSort((x) => x.name))
+                        .reverse(),
+                );
+            }
+        }
+        
+        return list.map((x) => ({
+            name: x,
+            handler: () =>
+                imageAction(selecting ? $selection : id, {
+                    type: "copy",
                     folder: x,
                 }),
         }));

@@ -1148,11 +1148,13 @@ export function moveImages(ids: string | string[], folder: string) {
     let failcount = 0;
     for (const id of ids) {
         const img = imageList.get(id);
-        if (!img) continue;
+        if (!img)
+            continue;
+        const newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
+        if (img.file === newPath)
+            continue;
 
         try {
-            const newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
-            if (img.file === newPath) continue;
             fs.rename(img.file, newPath);
             removeUniqueImage(img);
             imageList.delete(id);
@@ -1175,6 +1177,41 @@ export function moveImages(ids: string | string[], folder: string) {
 
     if (failcount) {
         console.log(`Failed to move ${failcount} images`);
+    }
+}
+
+export function copyImages(ids: string | string[], folder: string) {
+    if (typeof ids === 'string') ids = [ids];
+    
+    const targetFolder = path.join(IMG_FOLDER, folder.replace(/^\/?/, ''));
+    
+    let failcount = 0;
+    for (const id of ids) {
+        const img = imageList.get(id);
+        if (!img)
+            continue;
+        const newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
+        if (img.file === newPath)
+            continue;
+        
+        try {
+            fs.copyFile(img.file, newPath);
+        } catch {
+            failcount++;
+            continue;
+        }
+        
+        if (img.preview) {
+            try {
+                fs.copyFile(img.preview, path.join(targetFolder, removeFolderFromPath(img.preview)!));
+            } catch {
+                console.log(`Failed to copy preview file ${img.preview}`);
+            }
+        }
+    }
+    
+    if (failcount) {
+        console.log(`Failed to copy ${failcount} images`);
     }
 }
 
