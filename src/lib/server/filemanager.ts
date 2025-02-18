@@ -16,7 +16,7 @@ import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB, loadUniqueList, saveUniqueList } from './db';
 import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/images';
 import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } from '$lib/types/misc';
-import { fileExists, splitExtension } from './filetools';
+import { fileExists, fileUniquefy, splitExtension } from './filetools';
 
 type TimedImage = {
     id: string;
@@ -1150,12 +1150,8 @@ export async function moveImages(ids: string | string[], folder: string) {
         let newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
         if (img.file === newPath)
             continue;
-        const [left, right] = splitExtension(newPath);
-        while (await fileExists(newPath)) {
-            // append a random 6 digit number to make the filename unique
-            newPath = `${left}-${String(Date.now()).substring(7)}${right}`
-        }
-
+        newPath = await fileUniquefy(newPath);
+        
         try {
             await fs.rename(img.file, newPath);
             removeUniqueImage(img);
@@ -1169,7 +1165,8 @@ export async function moveImages(ids: string | string[], folder: string) {
 
         if (img.preview) {
             try {
-                fs.rename(img.preview, path.join(targetFolder, removeFolderFromPath(img.preview)!));
+                const newPreview = `${splitExtension(newPath)[0]}.png`;
+                fs.rename(img.preview, newPreview);
                 deleteTempImage(hashPath(img.preview));
             } catch {
                 console.log(`Failed to move preview file ${img.preview}`);
@@ -1195,11 +1192,7 @@ export async function copyImages(ids: string | string[], folder: string) {
         let newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
         if (img.file === newPath)
             continue;
-        while (await fileExists(newPath)) {
-            const [left, right] = splitExtension(newPath);
-            // append a random 6 digit number to make the filename unique
-            newPath = `${left}-${String(Date.now()).substring(7)}${right}`
-        }
+        newPath = await fileUniquefy(newPath);
         
         try {
             await fs.copyFile(img.file, newPath);
@@ -1210,7 +1203,8 @@ export async function copyImages(ids: string | string[], folder: string) {
         
         if (img.preview) {
             try {
-                fs.copyFile(img.preview, path.join(targetFolder, removeFolderFromPath(img.preview)!));
+                const newPreview = `${splitExtension(newPath)[0]}.png`;
+                fs.copyFile(img.preview, newPreview);
             } catch {
                 console.log(`Failed to copy preview file ${img.preview}`);
             }
