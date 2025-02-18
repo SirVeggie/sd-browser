@@ -16,13 +16,13 @@ export async function POST(e) {
         markFavorite(action.ids, action.state);
         return success();
     } else if (action.type === 'move') {
-        moveImages(action.ids, action.folder);
+        await moveImages(action.ids, action.folder);
         return success();
     } else if (action.type === 'copy') {
-        copyImages(action.ids, action.folder);
+        await copyImages(action.ids, action.folder);
         return success();
     } else if (action.type === 'delete') {
-        deleteImages(action.ids);
+        await deleteImages(action.ids);
         return success();
     } else if (action.type === 'open') {
         openExplorer(action.ids[0]);

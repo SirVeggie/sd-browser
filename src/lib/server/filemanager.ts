@@ -16,6 +16,7 @@ import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB, loadUniqueList, saveUniqueList } from './db';
 import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/images';
 import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } from '$lib/types/misc';
+import { fileExists, splitExtension } from './filetools';
 
 type TimedImage = {
     id: string;
@@ -1065,10 +1066,6 @@ export function hashPath(filepath: string) {
     return hash.digest('hex');
 }
 
-async function fileExists(file: string) {
-    return await fs.stat(file).then(x => x.isFile()).catch(() => false);
-}
-
 function removeBasePath(filepath: string) {
     filepath = filepath.replace(/(\/|\\)+$/, '');
     return filepath.replace(IMG_FOLDER, '');
@@ -1140,7 +1137,7 @@ export function markFavorite(ids: string | string[], favorite: boolean) {
     }
 }
 
-export function moveImages(ids: string | string[], folder: string) {
+export async function moveImages(ids: string | string[], folder: string) {
     if (typeof ids === 'string') ids = [ids];
 
     const targetFolder = path.join(IMG_FOLDER, folder.replace(/^\/?/, ''));
@@ -1150,12 +1147,17 @@ export function moveImages(ids: string | string[], folder: string) {
         const img = imageList.get(id);
         if (!img)
             continue;
-        const newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
+        let newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
         if (img.file === newPath)
             continue;
+        const [left, right] = splitExtension(newPath);
+        while (await fileExists(newPath)) {
+            // append a random 6 digit number to make the filename unique
+            newPath = `${left}-${String(Date.now()).substring(7)}${right}`
+        }
 
         try {
-            fs.rename(img.file, newPath);
+            await fs.rename(img.file, newPath);
             removeUniqueImage(img);
             imageList.delete(id);
             deleteTextFiles(img.file);
@@ -1180,7 +1182,7 @@ export function moveImages(ids: string | string[], folder: string) {
     }
 }
 
-export function copyImages(ids: string | string[], folder: string) {
+export async function copyImages(ids: string | string[], folder: string) {
     if (typeof ids === 'string') ids = [ids];
     
     const targetFolder = path.join(IMG_FOLDER, folder.replace(/^\/?/, ''));
@@ -1190,12 +1192,17 @@ export function copyImages(ids: string | string[], folder: string) {
         const img = imageList.get(id);
         if (!img)
             continue;
-        const newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
+        let newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
         if (img.file === newPath)
             continue;
+        while (await fileExists(newPath)) {
+            const [left, right] = splitExtension(newPath);
+            // append a random 6 digit number to make the filename unique
+            newPath = `${left}-${String(Date.now()).substring(7)}${right}`
+        }
         
         try {
-            fs.copyFile(img.file, newPath);
+            await fs.copyFile(img.file, newPath);
         } catch {
             failcount++;
             continue;
@@ -1215,7 +1222,7 @@ export function copyImages(ids: string | string[], folder: string) {
     }
 }
 
-export function deleteImages(ids: string | string[]) {
+export async function deleteImages(ids: string | string[]) {
     if (typeof ids === 'string') ids = [ids];
 
     let failcount = 0;
@@ -1224,7 +1231,7 @@ export function deleteImages(ids: string | string[]) {
         if (!img) continue;
 
         try {
-            fs.unlink(img.file);
+            await fs.unlink(img.file);
             removeUniqueImage(img);
             imageList.delete(id);
             deleteTextFiles(img.file);
