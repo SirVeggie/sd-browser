@@ -2,55 +2,7 @@ import Database from 'better-sqlite3';
 import type { Database as BetterSqlite3 } from 'better-sqlite3';
 import path from 'path';
 import { datapath } from './filemanager';
-import { updateLine } from '$lib/tools/misc';
-import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/images';
-
-//#region unique list
-export function saveUniqueList(reverse: Map<string, string[]>) {
-    const db = new MiscDB();
-    db.set('uniqueList', [...reverse.values()].map(x => x.join('|')).join('\n'));
-    db.close();
-
-    const db2 = new MetaCalcDB();
-    const items = [] as ImageExtraData[];
-    for (const item of reverse.entries()) {
-        for (const id of item[1]) {
-            items.push({
-                id,
-                simplifiedPrompt: item[0]
-            });
-        }
-    }
-    db2.setAllSimplified(items);
-    db2.close();
-}
-
-export function loadUniqueList(cache: ImageList | undefined): [Set<string>, Map<string, string[]>] {
-    if (!cache)
-        return [new Set(), new Map()];
-    const db = new MiscDB();
-    const raw = db.get('uniqueList');
-    db.close();
-    if (!raw)
-        return [new Set(), new Map()];
-
-    updateLine('Loading unique list ids from cache');
-
-    const db2 = new MetaCalcDB();
-    const ids = raw.split('\n').map(x => x.split('|').filter(x => cache.has(x) && cache.get(x)!.prompt)).filter(idlist => idlist.length);
-    const reverse: Map<string, string[]> = new Map();
-    for (const idlist of ids) {
-        const id = idlist[0];
-        const prompt = db2.getSimplified(id);
-        if (!prompt)
-            continue;
-        reverse.set(prompt, idlist);
-    }
-    db2.close();
-    const set = new Set(ids.map(idlist => idlist[0]));
-    return [set, reverse];
-}
-//#endregion
+import type { ImageExtraData, ImageList, ImageListFull, ServerImage, ServerImageFull } from '$lib/types/images';
 
 export class MetaDB {
     private static setup = false;
@@ -101,20 +53,27 @@ export class MetaDB {
         MetaDB.connections--;
     }
 
-    get(id: string): ServerImage | undefined {
+    get(id: string): ServerImageFull | undefined {
         if (this.closed)
             throw new Error('Database already closed');
-        return this.db.prepare('SELECT * FROM metadata WHERE id = ?').get(id) as ServerImage | undefined;
+        return this.db.prepare('SELECT * FROM metadata WHERE id = ?').get(id) as ServerImageFull | undefined;
     }
 
-    getAll(): ImageList {
+    getAll(): ImageListFull {
         if (this.closed)
             throw new Error('Database already closed');
-        const images = this.db.prepare('SELECT * FROM metadata').all() as ServerImage[];
+        const images = this.db.prepare('SELECT * FROM metadata').all() as ServerImageFull[];
+        return new Map(images.map(image => [image.id, image]));
+    }
+    
+    getAllShort(): ImageList {
+        if (this.closed)
+            throw new Error('Database already closed');
+        const images = this.db.prepare('SELECT id, file, folder, modifiedDate, createdDate, preview FROM metadata').all() as ServerImage[];
         return new Map(images.map(image => [image.id, image]));
     }
 
-    search(parts: (string | string[])[], startDate?: number, endDate?: number): ImageList {
+    search(parts: (string | string[])[], startDate?: number, endDate?: number): Map<string, ServerImageFull> {
         if (this.closed)
             throw new Error('Database already closed');
         parts = parts
@@ -145,22 +104,22 @@ export class MetaDB {
         }
 
         const sql = 'SELECT * FROM metadata WHERE ' + where.join(' and ');
-        const images = this.db.prepare(sql).all(params) as ServerImage[];
+        const images = this.db.prepare(sql).all(params) as ServerImageFull[];
         return new Map(images.map(image => [image.id, image]));
     }
 
-    set(image: ServerImage) {
+    set(image: ServerImageFull) {
         if (this.closed)
             throw new Error('Database already closed');
         const stmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
         stmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow, image.preview);
     }
 
-    setAll(images: ServerImage[]) {
+    setAll(images: ServerImageFull[]) {
         if (this.closed)
             throw new Error('Database already closed');
         const stmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        this.db.transaction((images: ServerImage[]) => {
+        this.db.transaction((images: ServerImageFull[]) => {
             for (const image of images)
                 stmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow, image.preview);
         })(images);
@@ -182,7 +141,7 @@ export class MetaDB {
         })(ids);
     }
 
-    setAndDeleteAll(images: ServerImage[], deletions: string[]) {
+    setAndDeleteAll(images: ServerImageFull[], deletions: string[]) {
         if (this.closed)
             throw new Error('Database already closed');
         if (!images || !deletions)
@@ -193,7 +152,7 @@ export class MetaDB {
             return;
         const delstmt = this.db.prepare('DELETE FROM metadata WHERE id = ?');
         const addstmt = this.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        this.db.transaction((deletions: string[], images: ServerImage[]) => {
+        this.db.transaction((deletions: string[], images: ServerImageFull[]) => {
             for (const id of deletions)
                 delstmt.run(id);
             for (const image of images)
@@ -216,13 +175,13 @@ export class MetaDB {
 
 export class MetaCalcDB {
     private static file = 'data.sqlite3';
-    private static table = 'extradata';
+    private static table = 'extradata_v2';
     private static sql_create = `
     CREATE TABLE IF NOT EXISTS ${MetaCalcDB.table} (
         id TEXT PRIMARY KEY,
-        simplifiedPrompt TEXT,
-        comfyPositive TEXT,
-        comfyNegative TEXT
+        positive TEXT,
+        negative TEXT,
+        params TEXT
     )`;
 
     static connections = 0;
@@ -237,6 +196,9 @@ export class MetaCalcDB {
         const fullpath = path.join(datapath, MetaCalcDB.file);
         this.db = new Database(fullpath);
         this.db.exec(MetaCalcDB.sql_create);
+        
+        // Delete outdated versions
+        this.db.exec('DROP TABLE IF EXISTS extradata');
     }
 
     close() {
@@ -249,26 +211,13 @@ export class MetaCalcDB {
     get(id: string): ImageExtraData | undefined {
         if (this.closed)
             throw new Error('Database already closed');
-        return this.db.prepare(`SELECT id, simplifiedPrompt, comfyPositive, comfyNegative FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as ImageExtraData | undefined;
-    }
-
-    getSimplified(id: string): string | undefined {
-        if (this.closed)
-            throw new Error('Database already closed');
-        return this.db.prepare(`SELECT simplifiedPrompt FROM ${MetaCalcDB.table} WHERE id = ?`).pluck().get(id) as string | undefined;
-    }
-
-    getComfy(id: string): [string, string] | undefined {
-        if (this.closed)
-            throw new Error('Database already closed');
-        const comfy = this.db.prepare(`SELECT id, comfyPositive, comfyNegative FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as ImageExtraData | undefined;
-        return comfy?.comfyPositive ? [comfy.comfyPositive!, comfy.comfyNegative!] : undefined;
+        return this.db.prepare(`SELECT id, positive, negative, params FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as ImageExtraData | undefined;
     }
 
     getAll(): ImageExtraData[] {
         if (this.closed)
             throw new Error('Database already closed');
-        return this.db.prepare(`SELECT id, simplifiedPrompt, comfyPositive, comfyNegative FROM ${MetaCalcDB.table}`).all() as ImageExtraData[];
+        return this.db.prepare(`SELECT id, positive, negative, params FROM ${MetaCalcDB.table}`).all() as ImageExtraData[];
     }
 
     getAllIds(): string[] {
@@ -277,53 +226,20 @@ export class MetaCalcDB {
         return this.db.prepare(`SELECT id FROM ${MetaCalcDB.table}`).all().map(x => (x as ImageExtraData).id) as string[];
     }
 
-    getAllComfy(): ImageExtraData[] {
-        if (this.closed)
-            throw new Error('Database already closed');
-        return this.db.prepare(`SELECT id, comfyPositive, comfyNegative FROM ${MetaCalcDB.table} WHERE comfyPositive IS NOT NULL AND comfyPositive != ''`)
-            .all() as ImageExtraData[];
-    }
-
     set(data: ImageExtraData) {
         if (this.closed)
             throw new Error('Database already closed');
-        const stmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, simplifiedPrompt, comfyPositive, comfyNegative) VALUES (?, ?, ?, ?)`);
-        stmt.run(data.id, data.simplifiedPrompt, data.comfyPositive, data.comfyNegative);
+        const stmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params) VALUES (?, ?, ?, ?)`);
+        stmt.run(data.id, data.positive, data.negative, data.params);
     }
 
     setAll(data: ImageExtraData[]) {
         if (this.closed)
             throw new Error('Database already closed');
-        const stmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, simplifiedPrompt, comfyPositive, comfyNegative) VALUES (?, ?, ?, ?)`);
-        this.db.transaction(data => {
-            for (const image of data)
-                stmt.run(image.id, image.simplifiedPrompt, image.comfyPositive, image.comfyNegative);
-        })(data);
-    }
-
-    setAllSimplified(data: ImageExtraData[]) {
-        if (this.closed)
-            throw new Error('Database already closed');
-        const stmtUpdate = this.db.prepare(`UPDATE ${MetaCalcDB.table} SET simplifiedPrompt = ? WHERE id = ?`);
-        const stmtInsert = this.db.prepare(`INSERT OR IGNORE INTO ${MetaCalcDB.table} (id, simplifiedPrompt) VALUES (?, ?)`);
-        this.db.transaction(data => {
-            for (const image of data) {
-                stmtUpdate.run(image.simplifiedPrompt, image.id);
-                stmtInsert.run(image.id, image.simplifiedPrompt);
-            }
-        })(data);
-    }
-
-    setAllComfy(data: ImageExtraData[]) {
-        if (this.closed)
-            throw new Error('Database already closed');
-        const stmtUpdate = this.db.prepare(`UPDATE ${MetaCalcDB.table} SET comfyPositive = ?, comfyNegative = ? WHERE id = ?`);
-        const stmtInsert = this.db.prepare(`INSERT OR IGNORE INTO ${MetaCalcDB.table} (id, comfyPositive, comfyNegative) VALUES (?, ?, ?)`);
-        this.db.transaction(data => {
-            for (const image of data) {
-                stmtUpdate.run(image.comfyPositive, image.comfyNegative, image.id);
-                stmtInsert.run(image.id, image.comfyPositive, image.comfyNegative);
-            }
+        const stmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params) VALUES (?, ?, ?, ?)`);
+        this.db.transaction((data: ImageExtraData[]) => {
+            for (const item of data)
+                stmt.run(item.id, item.positive, item.negative, item.params);
         })(data);
     }
 
@@ -354,13 +270,13 @@ export class MetaCalcDB {
         if (!data.length && !deletions.length)
             return;
         const delstmt = this.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
-        const addstmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, simplifiedPrompt, comfyPositive, comfyNegative) VALUES (?, ?, ?, ?)`);
-        this.db.transaction((deletions, images) => {
+        const addstmt = this.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params) VALUES (?, ?, ?, ?)`);
+        this.db.transaction((data: ImageExtraData[], deletions: string[]) => {
             for (const id of deletions)
                 delstmt.run(id);
-            for (const image of images)
-                addstmt.run(image.id, image.simplifiedPrompt, image.comfyPositive, image.comfyNegative);
-        })(deletions, data);
+            for (const item of data)
+                addstmt.run(item.id, item.positive, item.negative, item.params);
+        })(data, deletions);
     }
 
     clearAll() {

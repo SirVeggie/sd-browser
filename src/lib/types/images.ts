@@ -1,6 +1,21 @@
 import { testType } from "./misc";
 
 export type ImageList = Map<string, ServerImage>;
+export type ImageListFull = Map<string, ServerImageFull>;
+
+export type ServerImageFull = {
+    id: string;
+    file: string;
+    folder: string;
+    modifiedDate: number;
+    createdDate: number;
+    preview: string;
+    prompt: string;
+    workflow: string;
+};
+export function isServerImage(object: any): object is ServerImageFull {
+    return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'prompt', 'workflow']);
+}
 
 export type ServerImage = {
     id: string;
@@ -8,12 +23,20 @@ export type ServerImage = {
     folder: string;
     modifiedDate: number;
     createdDate: number;
-    prompt?: string;
-    workflow?: string;
-    preview?: string;
-};
-export function isServerImage(object: any): object is ServerImage {
-    return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate']);
+    preview: string;
+    positive: string;
+    negative: string;
+    params: string;
+}
+export function isServerImageSimple(object: any): object is ServerImage {
+    return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'positive', 'negative', 'params']);
+}
+
+export type ImageExtraData = {
+    id: string;
+    positive: string;
+    negative: string;
+    params: string;
 }
 
 export type ClientImage = {
@@ -32,6 +55,9 @@ export type ImageInfo = {
     createdDate: number;
     prompt?: string;
     workflow?: string;
+    positive?: string;
+    negative?: string;
+    params?: string;
 };
 export function isImageInfo(object: any): object is ImageInfo {
     return testType(object, ['id', 'folder', 'modifiedDate', 'createdDate']);
@@ -84,11 +110,4 @@ export type ComfyWorkflowNode = {
     widgets_values: (string|number|boolean)[];
     properties: Record<string, string>;
     shape: number;
-}
-
-export type ImageExtraData = {
-    id: string;
-    simplifiedPrompt?: string;
-    comfyPositive?: string;
-    comfyNegative?: string;
 }

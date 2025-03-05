@@ -6,17 +6,18 @@ import cp from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import exifr from 'exifr';
-import { getComfyPrompt, getComfyPrompts, getComfyWorkflowNodes, getMetadataVersion, getNegativePrompt, getParams, getPositivePrompt, getSwarmPrompts } from '$lib/tools/metadataInterpreter';
+import { getServerImage } from '$lib/tools/metadataInterpreter';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { XOR, calcTimeSpent, formatHasMetadata as isMetadataFiletype, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, printLine, removeExtension, selectRandom, updateLine, validRegex, videoFiletypes, unixTime } from '$lib/tools/misc';
 import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
-import { MetaCalcDB, MetaDB, loadUniqueList, saveUniqueList } from './db';
-import type { ImageExtraData, ImageList, ServerImage } from '$lib/types/images';
+import { MetaCalcDB, MetaDB } from './db';
+import type { ImageList, ServerImage, ServerImageFull } from '$lib/types/images';
 import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } from '$lib/types/misc';
 import { fileExists, fileUniquefy, splitExtension } from './filetools';
+import { handleLegacy } from './legacy';
 
 type TimedImage = {
     id: string;
@@ -34,7 +35,6 @@ const nsfwList: string[] = [];
 const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
 const freshLimit = 1000;
-const comfyPromptCache = new Map<string, [string, string]>();
 
 export const datapath = './localData';
 export const thumbnailPath = path.join(datapath, 'thumbnails');
@@ -61,7 +61,7 @@ export async function indexFiles() {
     // Initialize existing cache
     if (imageList.size) {
         print(`Building unique list for ${imageList.size} images...`);
-        await createUniqueListChunked(cache);
+        await createUniqueListChunked();
         updateLine(`Unique list created with ${uniqueSet.size} items\n`);
     }
 
@@ -88,62 +88,28 @@ export async function indexFiles() {
         backgroundTasks.limit = originalLimit;
     }
 
-    print('Building comfy prompt cache...');
-    buildComfyPromptCache();
-    updateLine(`Comfy prompt cache created with ${comfyPromptCache.size} items\n`);
-
     generationDisabled = false;
 
     // finish up
     print('Writing cache files...');
-    saveUniqueList(uniqueReverse);
-    serializeImageList([...imageList].map(x => x[1]), cache);
+    deleteMissingImages([...imageList].map(x => x[1]), cache);
     cleanCalcDB();
     updateLine(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}\n`);
-    await renameLegacyFile();
+    await handleLegacy();
 
     cleanTempImages();
-    console.log(`Found ${[...imageList].filter(x => x[1].prompt).length} images with metadata`);
+    console.log(`Found ${[...imageList].filter(x => x[1].positive).length} images with metadata`);
 }
 
-async function renameLegacyFile() {
-    try {
-        const cachefile = path.join(datapath, 'metadata.json');
-        if ((await fs.stat(cachefile)).isFile()) {
-            const newfile = path.join(datapath, 'metadata-deprecated-delete-this.json');
-            await fs.rename(cachefile, newfile).catch(console.log);
-            console.log('\nDELETE OLD METADATA JSON - old json file has been preserved just in case, you can delete it to save space\n');
-        }
-    } catch { undefined; }
-}
+function deleteMissingImages(images: ServerImage[], cache: ImageList | undefined) {
+    if (!cache) return;
 
-function serializeImageList(images: ServerImage[], cache: ImageList | undefined) {
-    const db = new MetaDB();
-    if (!cache) {
-        db.setAll(images);
-        db.close();
-        return;
-    }
+    const metadb = new MetaDB();
+    const calcdb = new MetaCalcDB();
 
     const deletions: string[] = [];
-    const additions: ServerImage[] = [];
-    const updates: ServerImage[] = [];
 
     for (const image of images) {
-        const cached = cache.get(image.id);
-        if (!cached) {
-            additions.push(image);
-        } else {
-            if (image.file !== cached.file
-                || image.folder !== cached.folder
-                || image.modifiedDate !== cached.modifiedDate
-                || image.createdDate !== cached.createdDate
-                || image.prompt != cached.prompt
-                || image.workflow != cached.workflow) {
-                updates.push(image);
-            }
-        }
-
         cache.delete(image.id);
     }
 
@@ -151,17 +117,18 @@ function serializeImageList(images: ServerImage[], cache: ImageList | undefined)
         deletions.push(key);
     }
 
-    db.setAndDeleteAll(additions.concat(updates), deletions);
-    updateLine(`Updated ${additions.length + updates.length} images, deleted ${deletions.length} images in cache\n`);
-    db.close();
+    metadb.deleteAll(deletions);
+    calcdb.deleteAll(deletions);
+    metadb.close();
+    calcdb.close();
+    updateLine(`deleted ${deletions.length} images in cache\n`);
 }
 
-async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, ImageList | undefined, Map<string, string>]> {
+async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, string>, ImageList | undefined, Map<string, string>]> {
     const db = new MetaDB();
+    const infoDb = new MetaCalcDB();
 
-    const cachefile = path.join(datapath, 'metadata.json');
-    let imageCache: ImageList | undefined;
-    const templist: ServerImage[] = [];
+    const templist: ServerImageFull[] = [];
     const images: ImageList = new Map();
     const dirs: string[] = [IMG_FOLDER];
     const set = new Set<string>();
@@ -170,24 +137,26 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
     let found = 0;
     let foundtxt = 0;
     let foundtxtnew = 0;
-    let useLegacy = false;
 
-    const dbCount = db.count();
+    const dbImages = db.getAllShort();
+    const imageCache = dbImages.size ? dbImages : undefined;
+    if (imageCache) {
+        const missing = [];
+        const dbInfo = infoDb.getAll();
+        for (const info of dbInfo) {
+            if (!imageCache.has(info.id)) {
+                missing.push(info.id);
+                continue;
+            }
 
-    try {
-        const cache = await fs.readFile(cachefile);
-        imageCache = new Map(JSON.parse(cache.toString()));
-        if (imageCache.size > dbCount) {
-            useLegacy = true;
-            console.log('Using legacy cache file instead of database');
+            const image = imageCache.get(info.id)!;
+            image.positive = info.positive;
+            image.negative = info.negative;
+            image.params = info.params;
         }
-    } catch {
-        imageCache = undefined;
-    }
-
-    if (!useLegacy) {
-        const dbImages = db.getAll();
-        imageCache = dbImages.size ? dbImages : undefined;
+        infoDb.deleteAll(missing);
+    } else {
+        infoDb.clearAll();
     }
 
     if (!imageCache) {
@@ -227,6 +196,9 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
                 file: fullpath,
                 modifiedDate: 0,
                 createdDate: 0,
+                preview: '',
+                prompt: '',
+                workflow: '',
             });
         }
 
@@ -257,6 +229,9 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
                 file: fullpath,
                 modifiedDate: 0,
                 createdDate: 0,
+                preview: '',
+                prompt: '',
+                workflow: '',
             });
         }
 
@@ -292,10 +267,10 @@ async function indexCachedFiles(): Promise<[ServerImage[], Map<string, string>, 
 
     db.close();
     imageList = images;
-    return [templist, txtmap, useLegacy ? undefined : imageCache, videomap];
+    return [templist, txtmap, imageCache, videomap];
 }
 
-async function indexBasicFileData(templist: ServerImage[]): Promise<ServerImage[]> {
+async function indexBasicFileData(templist: ServerImageFull[]): Promise<ServerImageFull[]> {
     const log = `Reading dates for ${templist.length} images...`;
     print(log);
     let progress = 0;
@@ -322,83 +297,107 @@ async function indexBasicFileData(templist: ServerImage[]): Promise<ServerImage[
     return templist;
 }
 
-async function indexTxtFiles(templist: ServerImage[], txtmap: Map<string, string>): Promise<ServerImage[]> {
+async function indexTxtFiles(templist: ServerImageFull[], txtmap: Map<string, string>): Promise<ServerImageFull[]> {
     const log = `Indexing ${txtmap.size} images from txt files...`;
     updateLine(log);
 
     const startTimestamp = Date.now();
     let progress = 0;
     let found = 0;
-    const newlist: ServerImage[] = [];
+    const newlist: ServerImageFull[] = [];
+    const fullImages: ServerImageFull[] = [];
+    const serverImages: ServerImage[] = [];
+
+    const metadb = new MetaDB();
+    const calcdb = new MetaCalcDB();
 
     for (const image of templist) {
-        const partial = removeExtension(image.file);
-        if (!txtmap.has(partial)) {
-            newlist.push(image);
-            continue;
-        }
+        progress++;
 
         backgroundTasks.addWork(async () => {
-            const res = await readMetadataFromFile(image, txtmap.get(partial)!).catch(() => image);
-            if (res.prompt || res.workflow) {
-                imageList.set(res.id, res);
-                addUniqueImage(res);
-                found++;
-            } else {
-                newlist.push(res);
+            const partial = removeExtension(image.file);
+            if (!txtmap.has(partial)) {
+                newlist.push(image);
+                return;
             }
 
-            progress++;
-            if (progress % 1000 === 0)
-                updateLine(log + ` ${(progress / txtmap.size * 100).toFixed(1)}%`);
+            const res = await readMetadataFromFile(image, txtmap.get(partial)!).catch(() => image);
+
+            if (!res.prompt && !res.workflow) {
+                newlist.push(res);
+                return;
+            }
+
+            const processed = getServerImage(res);
+            fullImages.push(res);
+            serverImages.push(processed);
+            imageList.set(res.id, processed);
+            addUniqueImage(processed);
+            found++;
         });
+
+        if (progress % 1000 === 0 || progress >= templist.length) {
+            await backgroundTasks.wait();
+            metadb.setAll(fullImages);
+            calcdb.setAll(serverImages);
+            updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
+        }
     }
 
-    while (progress < txtmap.size) {
-        await sleep(100);
-    }
-
+    metadb.close();
+    calcdb.close();
     updateLine(`Found txt metadata for ${found} images in ${calcTimeSpent(startTimestamp)}\n`);
     return newlist;
 }
 
-async function indexExifFiles(templist: ServerImage[], videomap: Map<string, string>): Promise<void> {
+async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string, string>): Promise<void> {
     const log = `Indexing ${templist.length} images from exif...`;
     updateLine(log);
 
     const startTimestamp = Date.now();
     let progress = 0;
     let found = 0;
+    const fullImages: ServerImageFull[] = [];
+    const serverImages: ServerImage[] = [];
+
+    const metadb = new MetaDB();
+    const calcdb = new MetaCalcDB();
 
     for (const image of templist) {
+        progress++;
+
         backgroundTasks.addWork(async () => {
             const partial = removeExtension(image.file);
             const source = videomap.get(partial);
             const res = await readMetadataFromExif(image, source).catch(() => image);
-            imageList.set(res.id, res);
-            addUniqueImage(res);
+
+            const processed = getServerImage(res);
+            fullImages.push(res);
+            serverImages.push(processed);
+            imageList.set(res.id, processed);
+            addUniqueImage(processed);
             if (res.prompt || res.workflow)
                 found++;
-            progress++;
-            if (progress % 1000 === 0)
-                updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
         });
-    }
 
-    while (progress < templist.length) {
-        await sleep(100);
+        if (progress % 1000 === 0 || progress >= templist.length) {
+            await backgroundTasks.wait();
+            metadb.setAll(fullImages);
+            calcdb.setAll(serverImages);
+            updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
+        }
     }
 
     updateLine(`Found exif metadata for ${found} images in ${calcTimeSpent(startTimestamp)}\n`);
 }
 
-async function readMetadataFromFile(image: ServerImage, file: string): Promise<ServerImage> {
+async function readMetadataFromFile(image: ServerImageFull, file: string): Promise<ServerImageFull> {
     const text = await fs.readFile(file, 'utf8');
     image.prompt = text;
     return image;
 }
 
-async function readMetadataFromExif(image: ServerImage, altSource?: string): Promise<ServerImage> {
+async function readMetadataFromExif(image: ServerImageFull, altSource?: string): Promise<ServerImageFull> {
     const validSource = isMetadataFiletype(image.file) || isMetadataFiletype(altSource ?? "");
     if (!validSource)
         return image;
@@ -503,7 +502,6 @@ function setupWatcher() {
         for (const [key, value] of imageList) {
             if (value.file.startsWith(dir)) {
                 removeUniqueImage(value);
-                removeComfyPromptFromCache(key);
                 imageList.delete(key);
                 deleteTempImage(key);
             }
@@ -570,9 +568,12 @@ async function addFile(file: string, hash?: string) {
         file,
         modifiedDate: 0,
         createdDate: 0,
+        preview: "",
+        prompt: "",
+        workflow: "",
     });
 
-    imageList.set(hash, image);
+    imageList.set(hash, getServerImage(image));
 
     const amount = freshList.unshift({
         id: hash,
@@ -581,16 +582,23 @@ async function addFile(file: string, hash?: string) {
     if (amount > freshLimit) freshList.pop();
 
     addUniqueImage(imageList.get(hash)!);
-    addComfyPromptToCache(image);
 }
 
 async function updateImageMetadata(image: ServerImage, source: string) {
-    await readMetadata(image, source);
+    const newFull = await readMetadata({
+        id: image.id,
+        file: image.file,
+        folder: image.folder,
+        createdDate: image.createdDate,
+        modifiedDate: image.modifiedDate,
+        preview: image.preview,
+        prompt: '',
+        workflow: '',
+    }, source);
     image.preview = source;
+    const newImage = getServerImage(newFull);
     removeUniqueImage(image);
-    addUniqueImage(image);
-    removeComfyPromptFromCache(image.id);
-    addComfyPromptToCache(image);
+    addUniqueImage(newImage);
 }
 
 function videoExists(imagefile: string): ServerImage | undefined {
@@ -628,7 +636,6 @@ async function deleteFile(file: string) {
     if (!isMedia(file)) return;
     const hash = hashPath(file);
     removeUniqueImage(imageList.get(hash));
-    removeComfyPromptFromCache(hash);
     imageList.delete(hash);
     freshList = freshList.filter(x => x.id !== hash);
     const size = deletionList.unshift({
@@ -643,7 +650,6 @@ async function renameFile(from: string, to: string) {
     if (isMedia(from)) {
         const oldhash = hashPath(from);
         removeUniqueImage(imageList.get(oldhash));
-        removeComfyPromptFromCache(oldhash);
         imageList.delete(oldhash);
         deleteTempImage(oldhash);
     }
@@ -658,12 +664,13 @@ async function renameFile(from: string, to: string) {
         file: to,
         modifiedDate: 0,
         createdDate: 0,
+        preview: '',
+        prompt: '',
+        workflow: '',
     });
 
-    imageList.set(newhash, image);
-
+    imageList.set(newhash, getServerImage(image));
     addUniqueImage(imageList.get(newhash)!);
-    addComfyPromptToCache(image);
 }
 
 async function pollFiles() {
@@ -741,42 +748,19 @@ export function searchImages(search: string, filters: string[], mode: SearchMode
     return list;
 }
 
-export function simplifyPrompt(prompt: string | undefined, location?: string, workflow?: string) {
-    if (!prompt)
+export function simplifyPrompt(image: ServerImage | undefined): string {
+    if (!image)
         return '';
-    if (getMetadataVersion(prompt) === 'comfy' && workflow)
-        return simplifyComfyPrompt(prompt, workflow, location);
-    return prompt
+    return `${image.positive}\n${image.negative}\n` + image.params
         .replace(/(, )?seed: \d+/i, '')
-        .replace(/(, )?([^,]*)version: [^,]*/ig, '')
-        + (location ?? '');
-}
-
-function simplifyComfyPrompt(prompt: string | undefined, workflow: string | undefined, location?: string) {
-    if (!prompt || !workflow)
-        return '';
-    const comfy = getComfyPrompt(prompt);
-    const wf = getComfyWorkflowNodes(workflow);
-    if (!comfy || !wf)
-        return '';
-    const regex = /seed/i;
-    const processed = Object.keys(comfy).filter(x => wf[x] && !regex.test(wf[x].title ?? "") && !regex.test(comfy[x].class_type)).map(x => Number(x)).sort((a, b) => a - b).map(x => comfy[x]).map(x => ({ ...x, is_cached: undefined }));
-    return JSON.stringify(processed) + (location ?? '');
+        .replace(/(, )?([^,]*)version: [^,]*/ig, '');
 }
 
 function isUnique(id: string) {
     return uniqueSet.has(id);
 }
 
-async function createUniqueListChunked(cache: ImageList | undefined) {
-    const [cachedList, cachedReverse] = loadUniqueList(cache);
-
-    if (cachedList.size && cachedList.size === cachedReverse.size) {
-        uniqueSet = cachedList;
-        uniqueReverse = cachedReverse;
-        return;
-    }
-
+async function createUniqueListChunked() {
     uniqueSet = new Set();
     uniqueReverse = new Map();
 
@@ -785,9 +769,9 @@ async function createUniqueListChunked(cache: ImageList | undefined) {
     for (let i = 0; i < templist.length; i += chunksize) {
         const chunk = templist.slice(i, i + chunksize);
         for (const image of chunk) {
-            if (!image.prompt)
+            if (!image.positive)
                 continue;
-            const prompt = simplifyPrompt(image.prompt, image.folder, image.workflow);
+            const prompt = simplifyPrompt(image);
             if (uniqueReverse.has(prompt)) {
                 const ids = uniqueReverse.get(prompt)!;
                 ids.unshift(image.id);
@@ -805,7 +789,7 @@ async function createUniqueListChunked(cache: ImageList | undefined) {
 }
 
 function addUniqueImage(image: ServerImage) {
-    const prompt = simplifyPrompt(image.prompt, image.folder, image.workflow);
+    const prompt = simplifyPrompt(image);
     const existing = uniqueReverse.get(prompt);
     if (existing) {
         uniqueSet.delete(existing[0]);
@@ -821,7 +805,7 @@ let uniqueTimeout: NodeJS.Timeout | undefined;
 function removeUniqueImage(image: ServerImage | undefined) {
     if (!image) return;
     const id = image.id;
-    const prompt = simplifyPrompt(image.prompt, image.folder, image.workflow);
+    const prompt = simplifyPrompt(image);
 
     if (prompt) {
         uniqueSet.delete(id);
@@ -840,52 +824,11 @@ function removeUniqueImage(image: ServerImage | undefined) {
             clearTimeout(uniqueTimeout);
             uniqueTimeout = setTimeout(() => {
                 print('Attempting to rebuild unique list...');
-                createUniqueListChunked(undefined);
+                createUniqueListChunked();
                 updateLine('Unique list rebuilt');
-                saveUniqueList(uniqueReverse);
-                updateLine('Unique list saved to cache\n');
             }, 5000);
         }
     }
-}
-
-function buildComfyPromptCache() {
-    const db = new MetaCalcDB();
-    const all = db.getAllComfy();
-
-    for (const item of all) {
-        if (imageList.has(item.id))
-            comfyPromptCache.set(item.id, [item.comfyPositive!, item.comfyNegative!]);
-    }
-
-    const items = [] as ImageExtraData[];
-    for (const image of imageList.values()) {
-        if (comfyPromptCache.has(image.id))
-            continue;
-        const prompts = addComfyPromptToCache(image);
-        if (!prompts)
-            continue;
-        items.push({
-            id: image.id,
-            comfyPositive: prompts?.pos,
-            comfyNegative: prompts?.neg,
-        });
-    }
-
-    db.setAllComfy(items);
-    db.close();
-}
-
-function addComfyPromptToCache(image: ServerImage) {
-    const prompts = getComfyPrompts(image.prompt, image.workflow);
-    if (!prompts)
-        return;
-    comfyPromptCache.set(image.id, [prompts.pos, prompts.neg]);
-    return prompts;
-}
-
-function removeComfyPromptFromCache(id: string) {
-    comfyPromptCache.delete(id);
 }
 
 const keywordRegex = `((${searchKeywords.join('|')}) )*`;
@@ -902,7 +845,7 @@ function buildMatcher(search: string, matching: SearchMode): (image: ServerImage
     parts = parts.filter(x => dateRegex.test(x))
         .concat(parts.filter(x => folderRegex.test(x)))
         .concat(parts.filter(x => !dateRegex.test(x) && !folderRegex.test(x)));
-    
+
     const regexes = parts.map(x => {
         const raw = x.replace(removeRegex, '');
 
@@ -953,51 +896,25 @@ function getTextByType(image: ServerImage, type: MatchType): string {
     if (!image) return '';
 
     switch (type) {
-        case 'all':
-            return `${image.prompt}, Folder: ${image.folder}`;
         case 'folder':
             return image.folder;
         case 'date':
             return String(image.modifiedDate);
+        case 'positive':
+            return image.positive;
+        case 'negative':
+            return image.negative;
+        case 'params':
+            return image.params;
+        case 'all':
+            return getFullMetaForImage(image.id);
     }
+}
 
-    if (comfyPromptCache.has(image.id)) {
-        // assume comfy metadata
-        const [positive, negative] = comfyPromptCache.get(image.id)!;
-        switch (type) {
-            case 'positive':
-                return positive;
-            case 'negative':
-                return negative;
-            case 'params':
-                return image.prompt!;
-        }
-    } else if (getMetadataVersion(image.prompt) === 'swarm') {
-        // assume swarm metadata
-        const prompts = getSwarmPrompts(image.prompt);
-        switch (type) {
-            case 'positive':
-                return prompts?.pos || image.prompt || '';
-            case 'negative':
-                return prompts?.neg || '';
-            case 'params':
-                return getParams(image.prompt);
-            default:
-                return '';
-        }
-    } else {
-        // assume automatic1111 metadata
-        switch (type) {
-            case 'positive':
-                return getPositivePrompt(image.prompt) || image.prompt || '';
-            case 'negative':
-                return getNegativePrompt(image.prompt);
-            case 'params':
-                return getParams(image.prompt);
-            default:
-                return '';
-        }
-    }
+function getFullMetaForImage(id: string): string {
+    const db = new MetaDB();
+    const image = db.get(id);
+    return `${image?.prompt}\n${image?.workflow}\n${image?.folder}`;
 }
 
 export function sortImages(images: ServerImage[], sort: SortingMethod): ServerImage[] {
@@ -1075,7 +992,7 @@ function removeFolderFromPath(file: string) {
     return file.match(/[^/\\]+(\/|\\)?$/)?.[0].replace(/(\/|\\)$/, '');
 }
 
-async function readMetadata(image: ServerImage, source?: string): Promise<ServerImage> {
+async function readMetadata(image: ServerImageFull, source?: string): Promise<ServerImageFull> {
     try {
         const stats = await fs.stat(image.file);
         image.modifiedDate = stats.mtimeMs;

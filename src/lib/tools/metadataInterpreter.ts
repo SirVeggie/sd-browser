@@ -1,4 +1,19 @@
-import type { ComfyNode, ComfyPrompt, ComfyWorkflow, ComfyWorkflowNode } from "$lib/types/images";
+import type { ComfyNode, ComfyPrompt, ComfyWorkflow, ComfyWorkflowNode, ServerImage, ServerImageFull } from "$lib/types/images";
+
+export function getServerImage(image: ServerImageFull): ServerImage {
+    const prompts = getPrompts(image.prompt, image.workflow);
+    return {
+        id: image.id,
+        file: image.file,
+        folder: image.folder,
+        createdDate: image.createdDate,
+        modifiedDate: image.modifiedDate,
+        preview: image.preview,
+        positive: prompts?.pos ?? '',
+        negative: prompts?.neg ?? '',
+        params: getParams(image.prompt),
+    };
+}
 
 export function getMetadataVersion(prompt: string | undefined) {
     if (/^{"\d+":/.test(prompt ?? ''))
@@ -69,7 +84,7 @@ export function getParams(prompt: string | undefined) {
     if (!prompt) return '';
     const params = paramsRegex.exec(prompt)?.[1] ?? '';
     if (params)
-        return splitPromptParams(params).join("\n")
+        return splitPromptParams(params).join("\n");
     return '';
 }
 
