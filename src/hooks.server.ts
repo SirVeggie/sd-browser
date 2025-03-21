@@ -1,3 +1,4 @@
+import { building } from "$app/environment";
 import { startFileManager } from "$lib/server/filemanager";
 // import { startWebsocket } from "$lib/server/websocketServer";
 
@@ -26,9 +27,8 @@ export async function handle({ resolve, event }) {
 
 
 
-
-
-// server startup (probably fires at first request?)
-
-startFileManager();
-// startWebsocket();
+// Server startup
+if (!building) {
+    startFileManager();
+    // startWebsocket();
+}

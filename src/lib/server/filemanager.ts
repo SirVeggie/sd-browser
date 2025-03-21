@@ -14,7 +14,7 @@ import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB } from './db';
-import type { ImageList, ServerImage, ServerImageFull } from '$lib/types/images';
+import type { ImageInfo, ImageList, ServerImage, ServerImageFull } from '$lib/types/images';
 import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } from '$lib/types/misc';
 import { fileExists, fileUniquefy, splitExtension } from './filetools';
 import { handleLegacy } from './legacy';
@@ -40,6 +40,10 @@ export const datapath = './localData';
 export const thumbnailPath = path.join(datapath, 'thumbnails');
 export const compressedPath = path.join(datapath, 'compressed');
 export let generationDisabled = false;
+
+export async function remoteDebug() {
+    console.log(imageList.get([...imageList.keys()][10])?.positive);
+}
 
 export async function startFileManager() {
     await indexFiles();
@@ -103,10 +107,6 @@ export async function indexFiles() {
 
 function deleteMissingImages(images: ServerImage[], cache: ImageList | undefined) {
     if (!cache) return;
-
-    const metadb = new MetaDB();
-    const calcdb = new MetaCalcDB();
-
     const deletions: string[] = [];
 
     for (const image of images) {
@@ -117,16 +117,12 @@ function deleteMissingImages(images: ServerImage[], cache: ImageList | undefined
         deletions.push(key);
     }
 
-    metadb.deleteAll(deletions);
-    calcdb.deleteAll(deletions);
-    metadb.close();
-    calcdb.close();
+    MetaDB.deleteAll(deletions);
+    MetaCalcDB.deleteAll(deletions);
     updateLine(`deleted ${deletions.length} images in cache\n`);
 }
 
 async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, string>, ImageList | undefined, Map<string, string>]> {
-    const db = new MetaDB();
-    const infoDb = new MetaCalcDB();
 
     const templist: ServerImageFull[] = [];
     const images: ImageList = new Map();
@@ -138,11 +134,11 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
     let foundtxt = 0;
     let foundtxtnew = 0;
 
-    const dbImages = db.getAllShort();
+    const dbImages = MetaDB.getAllShort();
     const imageCache = dbImages.size ? dbImages : undefined;
     if (imageCache) {
         const missing = [];
-        const dbInfo = infoDb.getAll();
+        const dbInfo = MetaCalcDB.getAll();
         for (const info of dbInfo) {
             if (!imageCache.has(info.id)) {
                 missing.push(info.id);
@@ -154,9 +150,9 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
             image.negative = info.negative;
             image.params = info.params;
         }
-        infoDb.deleteAll(missing);
+        MetaCalcDB.deleteAll(missing);
     } else {
-        infoDb.clearAll();
+        MetaCalcDB.clearAll();
     }
 
     if (!imageCache) {
@@ -265,7 +261,6 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
         deletions.forEach(x => imageCache.delete(x));
     }
 
-    db.close();
     imageList = images;
     return [templist, txtmap, imageCache, videomap];
 }
@@ -308,9 +303,6 @@ async function indexTxtFiles(templist: ServerImageFull[], txtmap: Map<string, st
     const fullImages: ServerImageFull[] = [];
     const serverImages: ServerImage[] = [];
 
-    const metadb = new MetaDB();
-    const calcdb = new MetaCalcDB();
-
     for (const image of templist) {
         progress++;
 
@@ -338,14 +330,12 @@ async function indexTxtFiles(templist: ServerImageFull[], txtmap: Map<string, st
 
         if (progress % 1000 === 0 || progress >= templist.length) {
             await backgroundTasks.wait();
-            metadb.setAll(fullImages);
-            calcdb.setAll(serverImages);
+            MetaDB.setAll(fullImages);
+            MetaCalcDB.setAll(serverImages);
             updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
         }
     }
-
-    metadb.close();
-    calcdb.close();
+    
     updateLine(`Found txt metadata for ${found} images in ${calcTimeSpent(startTimestamp)}\n`);
     return newlist;
 }
@@ -359,9 +349,6 @@ async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string,
     let found = 0;
     const fullImages: ServerImageFull[] = [];
     const serverImages: ServerImage[] = [];
-
-    const metadb = new MetaDB();
-    const calcdb = new MetaCalcDB();
 
     for (const image of templist) {
         progress++;
@@ -382,8 +369,8 @@ async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string,
 
         if (progress % 1000 === 0 || progress >= templist.length) {
             await backgroundTasks.wait();
-            metadb.setAll(fullImages);
-            calcdb.setAll(serverImages);
+            MetaDB.setAll(fullImages);
+            MetaCalcDB.setAll(serverImages);
             updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
         }
     }
@@ -447,11 +434,9 @@ async function cleanTempImages() {
 }
 
 function cleanCalcDB() {
-    const db = new MetaCalcDB();
-    const ids = db.getAllIds();
+    const ids = MetaCalcDB.getAllIds();
     const deletions = ids.filter(x => !imageList.has(x));
-    db.deleteAll(deletions);
-    db.close();
+    MetaCalcDB.deleteAll(deletions);
 }
 
 async function deleteTempImage(id: string) {
@@ -721,6 +706,24 @@ export function getImage(imageid: string) {
     return image;
 }
 
+export function buildImageInfo(imageid: string): ImageInfo | undefined {
+    const image = imageList.get(imageid);
+    if (!image)
+        return undefined;
+    const full = MetaDB.get(imageid);
+    return {
+        id: image.id,
+        createdDate: image.createdDate,
+        modifiedDate: image.modifiedDate,
+        folder: image.folder,
+        positive: image.positive,
+        negative: image.negative,
+        params: image.params,
+        prompt: full?.prompt,
+        workflow: full?.workflow,
+    }
+}
+
 export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean, timestamp?: number) {
     if (mode === 'regex' && !validRegex(search))
         return [];
@@ -912,8 +915,7 @@ function getTextByType(image: ServerImage, type: MatchType): string {
 }
 
 function getFullMetaForImage(id: string): string {
-    const db = new MetaDB();
-    const image = db.get(id);
+    const image = MetaDB.get(id);
     return `${image?.prompt}\n${image?.workflow}\n${image?.folder}`;
 }
 

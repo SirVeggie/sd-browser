@@ -27,21 +27,16 @@ function saveSettings(json: string) {
     if (!json)
         throw new Error('invalid settings json');
     const settings: Record<string, string> = JSON.parse(json);
-    const db = new MiscDB();
-    const old = JSON.parse(db.get(settingKey) ?? '{}');
+    const old = JSON.parse(MiscDB.get(settingKey) ?? '{}');
     const newJson = JSON.stringify({
         ...old,
         ...settings,
     });
-    db.set(settingKey, newJson);
-    db.close();
+    MiscDB.set(settingKey, newJson);
 }
 
 function fetchSettings(): SettingsResponse {
-    const db = new MiscDB();
-    const content = db.get(settingKey);
-    db.close();
-
+    const content = MiscDB.get(settingKey);
     return {
         settingsJson: content ?? '{}',
     };
