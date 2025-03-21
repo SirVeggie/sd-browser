@@ -16,7 +16,7 @@ export class MetaDB {
         prompt TEXT,
         workflow TEXT,
         preview TEXT
-        )`;
+    )`;
 
     private static isOpen = false;
     private static isSetup = false;
@@ -25,7 +25,7 @@ export class MetaDB {
     private static setup() {
         if (MetaDB.isOpen)
             return;
-        
+
         MetaDB.isOpen = true;
         const fullpath = path.join(datapath, MetaDB.file);
         MetaDB.db = new Database(fullpath);
@@ -174,17 +174,17 @@ export class MetaCalcDB {
     )`;
 
     private static isOpen = false;
-    private static isSetup = false; 
+    private static isSetup = false;
     private static db: BetterSqlite3;
-    
+
     static setup() {
         if (MetaCalcDB.isOpen)
             return;
-        
+
         MetaCalcDB.isOpen = true;
         const fullpath = path.join(datapath, MetaCalcDB.file);
         MetaCalcDB.db = new Database(fullpath);
-        
+
         if (MetaCalcDB.isSetup)
             return;
         MetaCalcDB.isSetup = true;
@@ -285,21 +285,21 @@ export class MiscDB {
     private static isOpen = false;
     private static isSetup = false;
     private static db: BetterSqlite3;
-    
+
     private static setup() {
         if (MiscDB.isOpen)
             return;
-        
+
         MiscDB.isOpen = true;
         const fullpath = path.join(datapath, MiscDB.file);
         MiscDB.db = new Database(fullpath);
-        
+
         if (MiscDB.isSetup)
             return;
         MiscDB.isSetup = true;
         MiscDB.db.exec(MiscDB.sql_create);
     }
-    
+
     static close() {
         if (!MiscDB.isOpen)
             return;
