@@ -64,9 +64,9 @@ export function isImageInfo(object: any): object is ImageInfo {
 }
 
 export type ComfyNode = {
-    inputs: Record<string, (string|number|boolean|[string, number]|object)>;
+    inputs: Record<string, (string | number | boolean | [string, number] | object)>;
     class_type: string;
-}
+};
 export type ComfyPrompt = Record<string, ComfyNode>;
 
 export type ComfyWorkflow = {
@@ -75,7 +75,7 @@ export type ComfyWorkflow = {
     groups: any[];
     config: any;
     version: number;
-}
+};
 
 export type ComfyWorkflowNode = {
     id: number;
@@ -107,7 +107,7 @@ export type ComfyWorkflowNode = {
         old_label?: string;
         slot_index?: number;
     }[];
-    widgets_values: (string|number|boolean)[];
+    widgets_values: (string | number | boolean)[];
     properties: Record<string, string>;
     shape: number;
-}
+};

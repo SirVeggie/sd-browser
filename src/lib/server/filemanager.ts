@@ -95,7 +95,7 @@ export async function indexFiles() {
     generationDisabled = false;
 
     // finish up
-    print('Writing cache files...');
+    print('Cleaning up...');
     deleteMissingImages([...imageList].map(x => x[1]), cache);
     cleanCalcDB();
     updateLine(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}\n`);
@@ -123,7 +123,6 @@ function deleteMissingImages(images: ServerImage[], cache: ImageList | undefined
 }
 
 async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, string>, ImageList | undefined, Map<string, string>]> {
-
     const templist: ServerImageFull[] = [];
     const images: ImageList = new Map();
     const dirs: string[] = [IMG_FOLDER];
@@ -335,7 +334,7 @@ async function indexTxtFiles(templist: ServerImageFull[], txtmap: Map<string, st
             updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
         }
     }
-    
+
     updateLine(`Found txt metadata for ${found} images in ${calcTimeSpent(startTimestamp)}\n`);
     return newlist;
 }
@@ -721,7 +720,7 @@ export function buildImageInfo(imageid: string): ImageInfo | undefined {
         params: image.params,
         prompt: full?.prompt,
         workflow: full?.workflow,
-    }
+    };
 }
 
 export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean, timestamp?: number) {
@@ -861,7 +860,7 @@ function buildMatcher(search: string, matching: SearchMode): (image: ServerImage
 
         return {
             raw,
-            regex: new RegExp(raw, 'i'),
+            regex: new RegExp(raw, 'is'),
             not: x.match(notRegex),
             type,
         };
@@ -880,9 +879,9 @@ function buildMatcher(search: string, matching: SearchMode): (image: ServerImage
                     return image.modifiedDate >= start && (end === undefined || image.modifiedDate <= end);
                 }
             }
-            
+
             const text = getTextByType(image, x.type);
-                
+
             if (matching === 'contains') {
                 return XOR(x.not, text.toLowerCase().includes(x.raw.toLowerCase()));
             } else if (matching === 'words') {
@@ -1070,7 +1069,7 @@ export async function moveImages(ids: string | string[], folder: string) {
         if (img.file === newPath)
             continue;
         newPath = await fileUniquefy(newPath);
-        
+
         try {
             await fs.rename(img.file, newPath);
             removeUniqueImage(img);
@@ -1100,9 +1099,9 @@ export async function moveImages(ids: string | string[], folder: string) {
 
 export async function copyImages(ids: string | string[], folder: string) {
     if (typeof ids === 'string') ids = [ids];
-    
+
     const targetFolder = path.join(IMG_FOLDER, folder.replace(/^\/?/, ''));
-    
+
     let failcount = 0;
     for (const id of ids) {
         const img = imageList.get(id);
@@ -1112,14 +1111,14 @@ export async function copyImages(ids: string | string[], folder: string) {
         if (img.file === newPath)
             continue;
         newPath = await fileUniquefy(newPath);
-        
+
         try {
             await fs.copyFile(img.file, newPath);
         } catch {
             failcount++;
             continue;
         }
-        
+
         if (img.preview) {
             try {
                 const newPreview = `${splitExtension(newPath)[0]}.png`;
@@ -1129,7 +1128,7 @@ export async function copyImages(ids: string | string[], folder: string) {
             }
         }
     }
-    
+
     if (failcount) {
         console.log(`Failed to copy ${failcount} images`);
     }
