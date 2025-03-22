@@ -93,7 +93,10 @@ export function updateLine(str: string) {
 }
 
 export function calcTimeSpent(start: number) {
-    const ms = Date.now() - start;
+    return calcTimeString(Date.now() - start);
+}
+
+export function calcTimeString(ms: number) {
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor(ms / 1000 % 60);
     const smin = minutes !== 1 ? 's' : '';
@@ -153,7 +156,7 @@ export function* irange(start: number, stop?: number, step = 1) {
         stop = start;
         start = 0;
     }
-    
+
     if (start > stop)
         step = -step;
     for (let i = start; start <= stop ? i < stop : i > stop; i += step) {
