@@ -220,7 +220,7 @@
             scrollToTop();
             currentAmount = initialAmount;
             fetchImages();
-        }, 1000);
+        }, 100);
     }
 
     function startTrigger(delay: number) {
@@ -553,7 +553,7 @@
                 );
             }
         }
-        
+
         return list.map((x) => ({
             name: x,
             handler: () =>
