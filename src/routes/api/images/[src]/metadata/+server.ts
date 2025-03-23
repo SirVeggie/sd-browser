@@ -1,4 +1,4 @@
-import { buildImageInfo } from '$lib/server/filemanager.js';
+import { buildImageInfo } from '$lib/server/imageUtils';
 import { error, success } from '$lib/server/responses.js';
 
 export async function GET(e) {

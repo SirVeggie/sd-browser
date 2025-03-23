@@ -17,6 +17,16 @@ export function isServerImage(object: any): object is ServerImageFull {
     return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'prompt', 'workflow']);
 }
 
+export type ServerImagePartial = {
+    id: string;
+    prompt: string;
+    workflow: string;
+};
+
+export function isServerImagePartial(object: any): object is ServerImageFull {
+    return testType(object, ['id', 'prompt', 'workflow']);
+}
+
 export type ServerImage = {
     id: string;
     file: string;
@@ -27,7 +37,9 @@ export type ServerImage = {
     positive: string;
     negative: string;
     params: string;
-}
+    hash: string;
+    isUnique: -1 | 0 | 1;
+};
 export function isServerImageSimple(object: any): object is ServerImage {
     return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'positive', 'negative', 'params']);
 }
@@ -37,7 +49,9 @@ export type ImageExtraData = {
     positive: string;
     negative: string;
     params: string;
-}
+    hash: string;
+    isUnique: -1 | 0 | 1;
+};
 
 export type ClientImage = {
     id: string;
@@ -62,6 +76,11 @@ export type ImageInfo = {
 export function isImageInfo(object: any): object is ImageInfo {
     return testType(object, ['id', 'folder', 'modifiedDate', 'createdDate']);
 }
+
+export type TimedImage = {
+    id: string;
+    timestamp: number;
+};
 
 export type ComfyNode = {
     inputs: Record<string, (string | number | boolean | [string, number] | object)>;

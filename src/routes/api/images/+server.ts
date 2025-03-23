@@ -1,6 +1,6 @@
 import { invalidAuth } from '$lib/server/auth.js';
-import { searchImages, sortImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
+import { searchImages, sortImages } from '$lib/server/searching';
 import { mapServerImageToClient } from '$lib/tools/misc.js';
 import { type ServerImage } from '$lib/types/images';
 import { type ImageResponse, isImageRequest } from '$lib/types/requests';

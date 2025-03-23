@@ -1,135 +1,242 @@
 import Database from 'better-sqlite3';
-import type { Database as BetterSqlite3 } from 'better-sqlite3';
+import type { Database as BetterSqlite3, Statement } from 'better-sqlite3';
 import path from 'path';
 import { datapath } from './filemanager';
-import type { ImageExtraData, ImageList, ImageListFull, ServerImage, ServerImageFull } from '$lib/types/images';
+import type { ImageExtraData, ServerImage, ServerImageFull, ServerImagePartial } from '$lib/types/images';
+import { fileExistsSync } from './filetools';
+import fs from 'fs';
 
 export class MetaDB {
-    private static file = 'metadata.sqlite3';
-    private static sql_create = `
-    CREATE TABLE IF NOT EXISTS metadata (
+    private static fShort = 'metadata.sqlite3';
+    private static fFull = 'workflows.sqlite3';
+    private static tShort = 'short';
+    private static tFull = 'full';
+    private static sqlCreate = `
+    CREATE TABLE IF NOT EXISTS ${MetaDB.tShort} (
         id TEXT PRIMARY KEY,
         file TEXT NOT NULL,
         folder TEXT NOT NULL,
         modifiedDate INTEGER NOT NULL,
         createdDate INTEGER NOT NULL,
-        prompt TEXT,
-        workflow TEXT,
         preview TEXT
+    )`;
+    private static sqlCreateFull = `
+    CREATE TABLE IF NOT EXISTS ${MetaDB.tFull} (
+        id TEXT PRIMARY KEY,
+        prompt TEXT,
+        workflow TEXT
     )`;
 
     private static isOpen = false;
     private static isSetup = false;
-    private static db: BetterSqlite3;
+    private static sdb: BetterSqlite3;
+    private static fdb: BetterSqlite3;
+
+    private static stmtGetS: Statement<unknown[], unknown>;
+    private static stmtGetF: Statement<unknown[], unknown>;
+    private static stmtGetRows: Statement<unknown[], unknown>;
+    private static stmtGetRowsShort: Statement<unknown[], unknown>;
+    private static stmtGetAllShort: Statement<unknown[], unknown>;
+    private static stmtSetS: Statement<unknown[], unknown>;
+    private static stmtSetF: Statement<unknown[], unknown>;
+    private static stmtDeleteS: Statement<unknown[], unknown>;
+    private static stmtDeleteF: Statement<unknown[], unknown>;
+    private static stmtCount: Statement<unknown[], unknown>;
 
     private static setup() {
         if (MetaDB.isOpen)
             return;
+        
+        const shortPath = path.join(datapath, MetaDB.fShort);
+        const fullPath = path.join(datapath, MetaDB.fFull);
+        
+        if (!fileExistsSync(shortPath) || !fileExistsSync(fullPath)) {
+            try {
+                fs.unlinkSync(shortPath);
+                fs.unlinkSync(fullPath);
+            } catch { '' }
+        }
 
         MetaDB.isOpen = true;
-        const fullpath = path.join(datapath, MetaDB.file);
-        MetaDB.db = new Database(fullpath);
+        MetaDB.sdb = new Database(shortPath);
+        MetaDB.fdb = new Database(fullPath);
 
         if (MetaDB.isSetup)
             return;
         MetaDB.isSetup = true;
-        MetaDB.db.exec(MetaDB.sql_create);
-        MetaDB.ensureColumn('preview', 'TEXT');
+        MetaDB.sdb.exec(MetaDB.sqlCreate);
+        MetaDB.fdb.exec(MetaDB.sqlCreateFull);
+
+        MetaDB.stmtGetS = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE id = ?`);
+        MetaDB.stmtGetF = MetaDB.fdb.prepare(`SELECT * FROM ${MetaDB.tFull} WHERE id = ?`);
+        MetaDB.stmtGetRows = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE ROWID > ? AND ROWID <= ?`);
+        MetaDB.stmtGetRowsShort = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE ROWID > ? AND ROWID <= ?`);
+        MetaDB.stmtGetAllShort = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort}`);
+        MetaDB.stmtSetS = MetaDB.sdb.prepare(`INSERT OR REPLACE INTO ${MetaDB.tShort} (id, file, folder, modifiedDate, createdDate, preview) VALUES (?, ?, ?, ?, ?, ?)`);
+        MetaDB.stmtSetF = MetaDB.fdb.prepare(`INSERT OR REPLACE INTO ${MetaDB.tFull} (id, prompt, workflow) VALUES (?, ?, ?)`);
+        MetaDB.stmtDeleteS = MetaDB.sdb.prepare(`DELETE FROM ${MetaDB.tShort} WHERE id = ?`);
+        MetaDB.stmtDeleteF = MetaDB.fdb.prepare(`DELETE FROM ${MetaDB.tFull} WHERE id = ?`);
+        MetaDB.stmtCount = MetaDB.sdb.prepare(`SELECT COUNT(*) FROM ${MetaDB.tShort}`);
     }
 
-    static ensureColumn(column: string, definition: string) {
-        MetaDB.setup();
-        const result = MetaDB.db.prepare("select count(*) as count from pragma_table_info('metadata') where name='preview'").get() as { count: number; };
-        if (!result.count) {
-            console.log(`Adding column '${column} ${definition}' to the metadata database`);
-            MetaDB.db.prepare(`ALTER TABLE metadata ADD ${column} ${definition}`).run();
-        }
+    // static ensureColumn(column: string, definition: string) {
+    //     MetaDB.setup();
+    //     const result = MetaDB.db.prepare("select count(*) as count from pragma_table_info('metadata') where name = ?").get(column) as { count: number; };
+    //     if (!result.count) {
+    //         console.log(`Adding column '${column} ${definition}' to the metadata database`);
+    //         MetaDB.db.prepare(`ALTER TABLE ${MetaDB.tShort} ADD ${column} ${definition}`).run();
+    //     }
+    // }
+    
+    static dropTable(name: string) {
+        new Database(path.join(datapath, MetaDB.fShort)).exec('DROP TABLE IF EXISTS ' + name).close();
+        new Database(path.join(datapath, MetaDB.fFull)).exec('DROP TABLE IF EXISTS ' + name).close();
     }
 
     static close() {
         if (!MetaDB.isOpen)
             return;
         MetaDB.isOpen = false;
-        MetaDB.db.close();
+        MetaDB.sdb.close();
+        MetaDB.fdb.close();
     }
 
     static get(id: string): ServerImageFull | undefined {
         MetaDB.setup();
-        return MetaDB.db.prepare('SELECT * FROM metadata WHERE id = ?').get(id) as ServerImageFull | undefined;
+        const main = MetaDB.stmtGetS.get(id) as ServerImageFull | undefined;
+        if (!main)
+            return;
+        const full = MetaDB.stmtGetF.get(id) as ServerImagePartial | undefined;
+        main.prompt = full!.prompt;
+        main.workflow = full!.workflow;
+        return main;
     }
 
-    static getAll(): ImageListFull {
+    static getMany(ids: string[]): ServerImageFull[] {
         MetaDB.setup();
-        const images = MetaDB.db.prepare('SELECT * FROM metadata').all() as ServerImageFull[];
-        return new Map(images.map(image => [image.id, image]));
-    }
-
-    static getAllShort(): ImageList {
-        MetaDB.setup();
-        const images = MetaDB.db.prepare('SELECT id, file, folder, modifiedDate, createdDate, preview FROM metadata').all() as ServerImage[];
-        return new Map(images.map(image => [image.id, image]));
-    }
-
-    static search(parts: (string | string[])[], startDate?: number, endDate?: number): Map<string, ServerImageFull> {
-        MetaDB.setup();
-        parts = parts
-            .map(x => typeof x === 'string' ? x : x.filter(y => !!y))
-            .filter(x => typeof x === 'string' ? !!x : x.length);
-
-        const params: (string | number)[] = parts.map(x => {
-            if (typeof x === 'string') return [`%${x}%`];
-            if (x.length < 1) return [];
-            if (x.length === 1) return [`%${x[0]}%`];
-            return x.filter(y => !!y).map(y => `%${y}%`);
-        }).filter(x => x.length).flat();
-
-        const where = parts.map(x => {
-            if (typeof x === 'string') return 'prompt like ?';
-            if (x.length === 1) return 'prompt like ?';
-            return `(${x.map(() => 'prompt like ?').join(' or ')})`;
-        });
-
-        if (startDate) {
-            where.unshift(`modifiedDate >= ?`);
-            params.unshift(startDate);
+        const results = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE id IN('${ids.join("', '")}')`).all() as ServerImageFull[];
+        const data = MetaDB.fdb.prepare(`SELECT * FROM ${MetaDB.tFull} WHERE id IN('${ids.join("', '")}')`).all() as ServerImagePartial[];
+        for (let i = 0; i < results.length; i++) {
+            results[i].prompt = data[i].prompt;
+            results[i].workflow = data[i].workflow;
         }
-
-        if (endDate) {
-            where.unshift(`modifiedDate <= ?`);
-            params.unshift(endDate);
-        }
-
-        const sql = 'SELECT * FROM metadata WHERE ' + where.join(' and ');
-        const images = MetaDB.db.prepare(sql).all(params) as ServerImageFull[];
-        return new Map(images.map(image => [image.id, image]));
+        return results;
     }
+
+    // static getAll(): ImageListFull {
+    //     MetaDB.setup();
+    //     const images = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort}`).all() as ServerImageFull[];
+    //     const images = MetaDB.fdb.prepare(`SELECT * FROM ${MetaDB.tFull}`).all() as ServerImagePartial[];
+    //     return new Map(images.map(image => [image.id, image]));
+    // }
+
+    static * getAllLazy(batch: number) {
+        MetaDB.setup();
+        const amount = MetaDB.count();
+        let fetched = 0;
+        while (fetched < amount) {
+            const res = MetaDB.stmtGetRowsShort.all(fetched, fetched + batch) as ServerImageFull[];
+            const data = MetaDB.stmtGetRows.all(fetched, fetched + batch) as ServerImagePartial[];
+            for (let i = 0; i < res.length; i++) {
+                res[i].prompt = data[i].prompt;
+                res[i].workflow = data[i].workflow;
+            }
+            yield res;
+            fetched += batch;
+        }
+    }
+
+    /** TODO: type is not accurate */
+    static getAllShort(): ServerImage[] {
+        MetaDB.setup();
+        return MetaDB.stmtGetAllShort.all() as ServerImage[];
+    }
+
+    /** TODO: type is not accurate */
+    static * getAllShortLazy(batch: number) {
+        MetaDB.setup();
+        const amount = MetaDB.count();
+        let fetched = 0;
+        while (fetched < amount) {
+            yield MetaDB.stmtGetRowsShort.all(fetched, fetched + batch) as ServerImage[];
+            fetched += batch;
+        }
+    }
+
+    // static search(parts: (string | string[])[], startDate?: number, endDate?: number): Map<string, ServerImageFull> {
+    //     MetaDB.setup();
+    //     parts = parts
+    //         .map(x => typeof x === 'string' ? x : x.filter(y => !!y))
+    //         .filter(x => typeof x === 'string' ? !!x : x.length);
+
+    //     const params: (string | number)[] = parts.map(x => {
+    //         if (typeof x === 'string') return [`%${x}%`];
+    //         if (x.length < 1) return [];
+    //         if (x.length === 1) return [`%${x[0]}%`];
+    //         return x.filter(y => !!y).map(y => `%${y}%`);
+    //     }).filter(x => x.length).flat();
+
+    //     const where = parts.map(x => {
+    //         if (typeof x === 'string') return `prompt like ?`;
+    //         if (x.length === 1) return `prompt like ?`;
+    //         return `(${x.map(() => `prompt like ?`).join(' or ')})`;
+    //     });
+
+    //     if (startDate) {
+    //         where.unshift(`modifiedDate >= ?`);
+    //         params.unshift(startDate);
+    //     }
+
+    //     if (endDate) {
+    //         where.unshift(`modifiedDate <= ?`);
+    //         params.unshift(endDate);
+    //     }
+
+    //     const images = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE ${where.join(' and ')}`).all(params) as ServerImageFull[];
+    //     const images = MetaDB.fdb.prepare(`SELECT * FROM ${MetaDB.tFull} WHERE ${where.join(' and ')}`).all(params) as ServerImageFull[];
+    //     return new Map(images.map(image => [image.id, image]));
+    // }
+
 
     static set(image: ServerImageFull) {
         MetaDB.setup();
-        const stmt = MetaDB.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        stmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow, image.preview);
+        MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview);
+        MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow);
     }
 
     static setAll(images: ServerImageFull[]) {
+        if (!images?.length)
+            return;
         MetaDB.setup();
-        const stmt = MetaDB.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        MetaDB.db.transaction((images: ServerImageFull[]) => {
-            for (const image of images)
-                stmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow, image.preview);
+        MetaDB.sdb.transaction((images: ServerImageFull[]) => {
+            for (const image of images) {
+                MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview);
+            }
+        })(images);
+        MetaDB.fdb.transaction((images: ServerImageFull[]) => {
+            for (const image of images) {
+                MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow);
+            }
         })(images);
     }
 
     static delete(id: string) {
         MetaDB.setup();
-        MetaDB.db.prepare('DELETE FROM metadata WHERE id = ?').run(id);
+        MetaDB.stmtDeleteS.run(id);
+        MetaDB.stmtDeleteF.run(id);
     }
 
     static deleteAll(ids: string[]) {
         MetaDB.setup();
-        const stmt = MetaDB.db.prepare('DELETE FROM metadata WHERE id = ?');
-        MetaDB.db.transaction(ids => {
-            for (const id of ids)
-                stmt.run(id);
+        MetaDB.sdb.transaction(ids => {
+            for (const id of ids) {
+                MetaDB.stmtDeleteS.run(id);
+            }
+        })(ids);
+        MetaDB.fdb.transaction(ids => {
+            for (const id of ids) {
+                MetaDB.stmtDeleteF.run(id);
+            }
         })(ids);
     }
 
@@ -141,36 +248,45 @@ export class MetaDB {
             throw new Error('Cannot set and delete the same image');
         if (!images.length && !deletions.length)
             return;
-        const delstmt = MetaDB.db.prepare('DELETE FROM metadata WHERE id = ?');
-        const addstmt = MetaDB.db.prepare('INSERT OR REPLACE INTO metadata (id, file, folder, modifiedDate, createdDate, prompt, workflow, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        MetaDB.db.transaction((deletions: string[], images: ServerImageFull[]) => {
+
+        MetaDB.sdb.transaction((deletions: string[], images: ServerImageFull[]) => {
             for (const id of deletions)
-                delstmt.run(id);
+                MetaDB.stmtDeleteS.run(id);
             for (const image of images)
-                addstmt.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.prompt, image.workflow, image.preview);
+                MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview);
+        })(deletions, images);
+
+        MetaDB.fdb.transaction((deletions: string[], images: ServerImageFull[]) => {
+            for (const id of deletions)
+                MetaDB.stmtDeleteF.run(id);
+            for (const image of images)
+                MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow);
         })(deletions, images);
     }
 
     static clearAll() {
         MetaDB.setup();
-        MetaDB.db.exec('DELETE FROM metadata');
+        MetaDB.sdb.exec(`DELETE FROM ${MetaDB.tShort}`);
+        MetaDB.fdb.exec(`DELETE FROM ${MetaDB.tFull}`);
     }
 
     static count(): number {
         MetaDB.setup();
-        return Number(MetaDB.db.prepare('SELECT COUNT(*) FROM metadata').pluck().get());
+        return Number(MetaDB.stmtCount.pluck().get());
     }
 }
 
 export class MetaCalcDB {
-    private static file = 'data.sqlite3';
-    private static table = 'extradata_v2';
-    private static sql_create = `
+    private static file = 'appdata.sqlite3';
+    private static table = 'extradata';
+    private static sqlCreate = `
     CREATE TABLE IF NOT EXISTS ${MetaCalcDB.table} (
         id TEXT PRIMARY KEY,
         positive TEXT,
         negative TEXT,
-        params TEXT
+        params TEXT,
+        hash TEXT,
+        isUnique INTEGER
     )`;
 
     private static isOpen = false;
@@ -184,15 +300,17 @@ export class MetaCalcDB {
         MetaCalcDB.isOpen = true;
         const fullpath = path.join(datapath, MetaCalcDB.file);
         MetaCalcDB.db = new Database(fullpath);
-
+        
         if (MetaCalcDB.isSetup)
             return;
         MetaCalcDB.isSetup = true;
-        // Delete outdated versions
-        MetaCalcDB.db.exec('DROP TABLE IF EXISTS extradata');
-        MetaCalcDB.db.exec(MetaCalcDB.sql_create);
+        MetaCalcDB.db.exec(MetaCalcDB.sqlCreate);
     }
-
+    
+    static dropTable(name: string) {
+        new Database(path.join(datapath, MetaCalcDB.file)).exec('DROP TABLE IF EXISTS ' + name).close();
+    }
+    
     static close() {
         if (!MetaCalcDB.isOpen)
             return;
@@ -202,12 +320,12 @@ export class MetaCalcDB {
 
     static get(id: string): ImageExtraData | undefined {
         MetaCalcDB.setup();
-        return MetaCalcDB.db.prepare(`SELECT id, positive, negative, params FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as ImageExtraData | undefined;
+        return MetaCalcDB.db.prepare(`SELECT * FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as ImageExtraData | undefined;
     }
 
     static getAll(): ImageExtraData[] {
         MetaCalcDB.setup();
-        return MetaCalcDB.db.prepare(`SELECT id, positive, negative, params FROM ${MetaCalcDB.table}`).all() as ImageExtraData[];
+        return MetaCalcDB.db.prepare(`SELECT * FROM ${MetaCalcDB.table}`).all() as ImageExtraData[];
     }
 
     static getAllIds(): string[] {
@@ -215,19 +333,56 @@ export class MetaCalcDB {
         return MetaCalcDB.db.prepare(`SELECT id FROM ${MetaCalcDB.table}`).all().map(x => (x as ImageExtraData).id) as string[];
     }
 
+    static * getAllLazy(batch: number) {
+        MetaCalcDB.setup();
+        const amount = MetaDB.count();
+        const stmt = MetaCalcDB.db.prepare(`SELECT * FROM ${MetaCalcDB.table} WHERE ROWID > ? AND ROWID <= ?`);
+        let fetched = 0;
+        while (fetched < amount) {
+            yield stmt.all(fetched, fetched + batch) as ImageExtraData[];
+            fetched += batch;
+        }
+    }
+
+    static getIdsByHash(hash: string): string[] {
+        MetaCalcDB.setup();
+        return MetaCalcDB.db.prepare(`SELECT id FROM ${MetaCalcDB.table} WHERE hash = ?`).all(hash).map(x => (x as ImageExtraData).id) as string[];
+    }
+
     static set(data: ImageExtraData) {
         MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params) VALUES (?, ?, ?, ?)`);
-        stmt.run(data.id, data.positive, data.negative, data.params);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique) VALUES (?, ?, ?, ?, ?, ?)`);
+        stmt.run(data.id, data.positive, data.negative, data.params, data.hash, data.isUnique);
     }
 
     static setAll(data: ImageExtraData[]) {
         MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params) VALUES (?, ?, ?, ?)`);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique) VALUES (?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
             for (const item of data)
-                stmt.run(item.id, item.positive, item.negative, item.params);
+                stmt.run(item.id, item.positive, item.negative, item.params, item.hash, item.isUnique);
         })(data);
+    }
+
+    static setUnique(id: string, state: boolean) {
+        MetaCalcDB.setup();
+        const stmt = MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET isUnique = ? WHERE id = ?`);
+        stmt.run(state ? 1 : 0, id);
+    }
+
+    static setAllUnique(ids: string[], state: boolean) {
+        MetaCalcDB.setup();
+        const stmt = MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET isUnique = ${state ? 1 : 0} WHERE id = ?`);
+        MetaCalcDB.db.transaction((ids: string[]) => {
+            for (const id of ids) {
+                stmt.run(id);
+            }
+        })(ids);
+    }
+
+    static clearUniques(onlyUnkowns = false) {
+        MetaCalcDB.setup();
+        MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET isUnique = 0 WHERE isUnique = -1${(onlyUnkowns ? '' : ' OR isUnique = 1')}`).run();
     }
 
     static delete(id: string) {
@@ -254,12 +409,12 @@ export class MetaCalcDB {
         if (!data.length && !deletions.length)
             return;
         const delstmt = MetaCalcDB.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
-        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params) VALUES (?, ?, ?, ?)`);
+        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique) VALUES (?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[], deletions: string[]) => {
             for (const id of deletions)
                 delstmt.run(id);
             for (const item of data)
-                addstmt.run(item.id, item.positive, item.negative, item.params);
+                addstmt.run(item.id, item.positive, item.negative, item.params, item.hash, item.isUnique);
         })(data, deletions);
     }
 

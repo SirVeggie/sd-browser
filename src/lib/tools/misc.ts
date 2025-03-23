@@ -96,7 +96,14 @@ export function calcTimeSpent(start: number) {
     return calcTimeString(Date.now() - start);
 }
 
+export function calcTimeRemaining(start: number, current: number, total: number) {
+    const elapsed = Date.now() - start;
+    const timeRemaining = total / current * (Date.now() - start) - elapsed;
+    return calcTimeString(timeRemaining);
+}
+
 export function calcTimeString(ms: number) {
+    ms = Math.round(ms);
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor(ms / 1000 % 60);
     const smin = minutes !== 1 ? 's' : '';
@@ -105,6 +112,11 @@ export function calcTimeString(ms: number) {
     res += seconds ? `${res ? ' ' : ''}${seconds} second${ssec}` : '';
     res += res ? '' : `${ms} ms`;
     return res;
+}
+
+export function calcProgress(current: number, total: number) {
+    const percentage = current / total * 100;
+    return percentage.toFixed(1);
 }
 
 export function* reverseYield<T>(array: T[]): Generator<T> {
@@ -129,7 +141,7 @@ export function isTxt(file: string) {
     return txtFiletypes.some(x => file.endsWith(`.${x}`));
 }
 
-export function formatHasMetadata(file: string) {
+export function isMetadataFiletype(file: string) {
     return file.endsWith(".png");
 }
 
@@ -194,4 +206,68 @@ export function unixTime(value: number | string): number {
         return date.getTime();
     }
     throw new Error(`unknown date format for value '${value}'`);
+}
+
+export function lazy<T>(iterable: Iterable<T>): LazyExecutor<T> {
+    return new LazyExecutor(iterable);
+}
+
+class LazyExecutor<T> {
+    private iterable;
+
+    constructor(iterable: Iterable<T>) {
+        this.iterable = iterable;
+    }
+
+    filter(fn: (item: T, index: number) => boolean) {
+        return lazy(LazyExecutor._filter(this.iterable, fn));
+    }
+
+    map<U>(fn: (item: T, index: number) => U) {
+        return lazy(LazyExecutor._map(this.iterable, fn));
+    }
+
+    forEach(fn: (item: T, index: number) => void) {
+        let index = 0;
+        for (const item of this.iterable) {
+            fn(item, index);
+            index++;
+        }
+    }
+
+    collect() {
+        return [...this.iterable];
+    }
+
+    count() {
+        let amount = 0;
+        for (const _ of this.iterable) {
+            amount++;
+        }
+        return amount;
+    }
+
+    *[Symbol.iterator]() {
+        for (const item of this.iterable) {
+            yield item;
+        }
+    }
+
+    static * _filter<T>(iterable: Iterable<T>, fn: (item: T, index: number) => boolean) {
+        let index = 0;
+        for (const item of iterable) {
+            if (fn(item, index)) {
+                yield item;
+            }
+            index++;
+        }
+    }
+
+    static * _map<T, U>(iterable: Iterable<T>, fn: (item: T, index: number) => U) {
+        let index = 0;
+        for (const item of iterable) {
+            yield fn(item, index);
+            index++;
+        }
+    }
 }

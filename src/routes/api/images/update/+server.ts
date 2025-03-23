@@ -1,6 +1,7 @@
 import { invalidAuth } from '$lib/server/auth';
-import { getDeletedImageIds, getFreshImageTimestamp, searchImages, sortImages } from '$lib/server/filemanager.js';
+import { getDeletedImageIds, getFreshImageTimestamp } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses';
+import { searchImages, sortImages } from '$lib/server/searching';
 import { mapServerImageToClient } from '$lib/tools/misc.js';
 import { isUpdateRequest, type UpdateResponse } from '$lib/types/requests';
 
