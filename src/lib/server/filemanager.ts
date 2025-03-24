@@ -95,6 +95,7 @@ export async function indexFiles() {
     await handleLegacyEnd();
     cleanTempImages();
     console.log(`Found ${lazy(imageList.values()).filter(x => !!x.positive).count()} images with metadata`);
+    console.log('\nIndexing complete, yay!\n');
 }
 
 async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, string>, Map<string, string>]> {
@@ -747,8 +748,8 @@ export function addUniqueImage(image: ServerImage) {
     // defer db access for bulk updates
     clearTimeout(uniqueSaveTimeout);
     setTimeout(() => {
-        MetaCalcDB.setAllUnique(uniqueRems, false);
         MetaCalcDB.setAllUnique(unqiueAdds, true);
+        MetaCalcDB.setAllUnique(uniqueRems, false);
         uniqueRems.length = 0;
         unqiueAdds.length = 0;
     }, 1000);

@@ -16,6 +16,24 @@ export async function folderExists(file: string): Promise<boolean> {
     return await fs.stat(file).then(x => x.isDirectory(), () => false);
 }
 
+export async function deleteFile(file: string): Promise<boolean> {
+    try {
+        await fs.unlink(file);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export function deleteFileSync(file: string): boolean {
+    try {
+        fsSync.unlinkSync(file);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Ensures a unique file name by using a random 6 digit postfix if necessary (-123456)
  */

@@ -3,8 +3,7 @@ import type { Database as BetterSqlite3, Statement } from 'better-sqlite3';
 import path from 'path';
 import { datapath } from './filemanager';
 import type { ImageExtraData, ServerImage, ServerImageFull, ServerImagePartial } from '$lib/types/images';
-import { fileExistsSync } from './filetools';
-import fs from 'fs';
+import { deleteFileSync, fileExistsSync } from './filetools';
 
 export class MetaDB {
     private static fShort = 'metadata.sqlite3';
@@ -46,15 +45,13 @@ export class MetaDB {
     private static setup() {
         if (MetaDB.isOpen)
             return;
-        
+
         const shortPath = path.join(datapath, MetaDB.fShort);
         const fullPath = path.join(datapath, MetaDB.fFull);
-        
+
         if (!fileExistsSync(shortPath) || !fileExistsSync(fullPath)) {
-            try {
-                fs.unlinkSync(shortPath);
-                fs.unlinkSync(fullPath);
-            } catch { '' }
+            deleteFileSync(shortPath);
+            deleteFileSync(fullPath);
         }
 
         MetaDB.isOpen = true;
@@ -87,7 +84,7 @@ export class MetaDB {
     //         MetaDB.db.prepare(`ALTER TABLE ${MetaDB.tShort} ADD ${column} ${definition}`).run();
     //     }
     // }
-    
+
     static dropTable(name: string) {
         new Database(path.join(datapath, MetaDB.fShort)).exec('DROP TABLE IF EXISTS ' + name).close();
         new Database(path.join(datapath, MetaDB.fFull)).exec('DROP TABLE IF EXISTS ' + name).close();
@@ -300,17 +297,13 @@ export class MetaCalcDB {
         MetaCalcDB.isOpen = true;
         const fullpath = path.join(datapath, MetaCalcDB.file);
         MetaCalcDB.db = new Database(fullpath);
-        
+
         if (MetaCalcDB.isSetup)
             return;
         MetaCalcDB.isSetup = true;
         MetaCalcDB.db.exec(MetaCalcDB.sqlCreate);
     }
-    
-    static dropTable(name: string) {
-        new Database(path.join(datapath, MetaCalcDB.file)).exec('DROP TABLE IF EXISTS ' + name).close();
-    }
-    
+
     static close() {
         if (!MetaCalcDB.isOpen)
             return;
@@ -430,7 +423,7 @@ export class MetaCalcDB {
 }
 
 export class MiscDB {
-    private static file = 'data.sqlite3';
+    private static file = 'appdata.sqlite3';
     private static sql_create = `
     CREATE TABLE IF NOT EXISTS misc (
         id TEXT PRIMARY KEY,
@@ -454,11 +447,18 @@ export class MiscDB {
         MiscDB.isSetup = true;
         MiscDB.db.exec(MiscDB.sql_create);
     }
+    
+    static vacuum() {
+        MiscDB.setup();
+        MiscDB.db.exec('VACUUM');
+    }
 
-    static close() {
+    static close(resetSetup = false) {
         if (!MiscDB.isOpen)
             return;
         MiscDB.isOpen = false;
+        if (resetSetup)
+            MiscDB.isSetup = false;
         MiscDB.db.close();
     }
 
