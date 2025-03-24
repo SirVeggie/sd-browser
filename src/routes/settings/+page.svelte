@@ -2,7 +2,12 @@
     import Input from "$lib/items/Input.svelte";
     import { onDestroy } from "svelte";
     import Link from "../../lib/items/Link.svelte";
-    import { flyoutButton, flyoutHistory, flyoutStore } from "$lib/stores/flyoutStore";
+    import {
+        flyoutButton,
+        flyoutButtonTop,
+        flyoutHistory,
+        flyoutStore,
+    } from "$lib/stores/flyoutStore";
     import Button from "$lib/items/Button.svelte";
     import { notify } from "$lib/components/Notifier.svelte";
     import {
@@ -40,6 +45,7 @@
     let flyoutMode = $flyoutStore.mode;
     let flyoutContext = "";
     let flyoutHistoryLength = 5;
+    let flyoutButtonPosition = $flyoutButtonTop ? "top" : "bottom";
 
     $: setInput($flyoutStore.url);
 
@@ -69,7 +75,9 @@
             flyoutStore.update((x) => ({ ...x, url: address }));
 
             flyoutHistory.update((history) => {
-                history = history.filter((item) => item !== address && item !== old);
+                history = history.filter(
+                    (item) => item !== address && item !== old,
+                );
                 if (old) history.unshift(old);
                 if (address && address !== old) history.unshift(address);
                 return history.slice(0, flyoutHistoryLength + 1);
@@ -80,6 +88,10 @@
 
     function onFlyoutModeChange() {
         flyoutStore.update((x) => ({ ...x, mode: flyoutMode }));
+    }
+
+    function onFlyoutButtonPositionChange() {
+        $flyoutButtonTop = flyoutButtonPosition === "top";
     }
 
     function reset() {
@@ -101,23 +113,30 @@
                     x: rect.left - 15,
                     y: rect.bottom,
                 },
-                $flyoutHistory.filter(x => x !== $flyoutStore.url).map((x) => ({
-                    name: x,
-                    handler() {
-                        address = x;
-                        const old = $flyoutStore.url;
+                $flyoutHistory
+                    .filter((x) => x !== $flyoutStore.url)
+                    .map((x) => ({
+                        name: x,
+                        handler() {
+                            address = x;
+                            const old = $flyoutStore.url;
 
-                        flyoutStore.update((prev) => ({ ...prev, url: x }));
+                            flyoutStore.update((prev) => ({ ...prev, url: x }));
 
-                        flyoutHistory.update((history) => {
-                            history = history.filter((item) => item !== x && item !== old);
-                            if (old) history.unshift(old);
-                            if (x !== old) history.unshift(x);
-                            return history.slice(0, flyoutHistoryLength + 1);
-                        });
-                        notify(`Flyout address set to '${x}'`);
-                    },
-                })),
+                            flyoutHistory.update((history) => {
+                                history = history.filter(
+                                    (item) => item !== x && item !== old,
+                                );
+                                if (old) history.unshift(old);
+                                if (x !== old) history.unshift(x);
+                                return history.slice(
+                                    0,
+                                    flyoutHistoryLength + 1,
+                                );
+                            });
+                            notify(`Flyout address set to '${x}'`);
+                        },
+                    })),
             );
         }, 150);
     }
@@ -147,44 +166,63 @@
         </div>
     </div>
 
-    <label class="checkbox">
-        Flyout enabled:
-        <input type="checkbox" bind:checked={$flyoutStore.enabled} />
-    </label>
+    <div class="sgroup">
+        <label class="checkbox">
+            Flyout enabled:
+            <input type="checkbox" bind:checked={$flyoutStore.enabled} />
+        </label>
 
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
-        Set flyout address (webui url)
-        <Input
-            bind:value={address}
-            on:input={onInput}
-            on:focus={flyoutFocus}
-            on:blur={flyoutBlur}
-        />
-    </label>
+        <div class="wrapper" class:isOpen={$flyoutStore.enabled}>
+            <div class="inner">
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    Address (webui url)
+                    <Input
+                        bind:value={address}
+                        on:input={onInput}
+                        on:focus={flyoutFocus}
+                        on:blur={flyoutBlur}
+                    />
+                </label>
 
-    <label for="matching">
-        Flyout styling:
-        <select
-            id="matching"
-            bind:value={flyoutMode}
-            on:change={onFlyoutModeChange}
-        >
-            {#each flyoutModes as mode}
-                <option value={mode}>{mode}</option>
-            {/each}
-        </select>
-    </label>
+                <label for="matching">
+                    Styling:
+                    <select
+                        id="matching"
+                        bind:value={flyoutMode}
+                        on:change={onFlyoutModeChange}
+                    >
+                        {#each flyoutModes as mode}
+                            <option value={mode}>{mode}</option>
+                        {/each}
+                    </select>
+                </label>
 
-    <label class="checkbox">
-        Flyout button:
-        <input type="checkbox" bind:checked={$flyoutButton} />
-    </label>
+                <label class="checkbox">
+                    Show button:
+                    <input type="checkbox" bind:checked={$flyoutButton} />
+                </label>
+
+                <label for="matching">
+                    Styling:
+                    <select
+                        id="matching"
+                        bind:value={flyoutButtonPosition}
+                        on:change={onFlyoutButtonPositionChange}
+                    >
+                        {#each ["top", "bottom"] as mode}
+                            <option value={mode}>{mode}</option>
+                        {/each}
+                    </select>
+                </label>
+            </div>
+        </div>
+    </div>
 
     <div class="gray">
-        Search keywords:<br /><span
-            >{searchKeywords.join(", ").replaceAll("|", " | ")}</span
-        >
+        Search keywords:<br /><span>
+            {searchKeywords.join(", ").replaceAll("|", " | ")}
+        </span>
     </div>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->
@@ -270,7 +308,10 @@
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Image grid size offset:
-        <Input bind:value={$imageSize} placeholder="-100 (pixels) or 10vw + 50px" />
+        <Input
+            bind:value={$imageSize}
+            placeholder="-100 (pixels) or 10vw + 50px"
+        />
     </label>
 
     <label class="checkbox">
@@ -309,7 +350,48 @@
         font-size: 0.8em;
         color: #aaa;
     }
-    
+
+    .sgroup {
+        --gap: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap);
+        // border: 1px solid #aaaa;
+        outline: solid 1px #aaa4;
+        outline-offset: 10px;
+        border-radius: 5px;
+        padding: 10px;
+    }
+
+    .wrapper {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition:
+            grid-template-rows 0.5s ease,
+            margin-top 0.5s ease;
+        margin-top: calc(0px - var(--gap));
+
+        &.isOpen {
+            position: relative;
+            grid-template-rows: 1fr;
+            margin-top: 0px;
+        }
+
+        .inner {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
+
+            & > :first-child {
+                border-top: dashed 1px #aaa4;
+                padding-top: var(--gap);
+            }
+        }
+    }
+
     .list {
         display: flex;
         gap: 2em;

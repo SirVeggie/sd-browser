@@ -1,9 +1,14 @@
 <script lang="ts">
-    import { cx } from "$lib/tools/cx";
-    import { flyoutButton, flyoutState, flyoutStore } from "$lib/stores/flyoutStore";
+    import {
+        flyoutButton,
+        flyoutButtonTop,
+        flyoutState,
+        flyoutStore,
+    } from "$lib/stores/flyoutStore";
 
     let iframe: HTMLIFrameElement;
-    $: disabled = !$flyoutState;
+    $: disabled = !$flyoutState || !$flyoutStore.enabled;
+    $: isTop = $flyoutButtonTop;
 
     export function fullscreen() {
         iframe.requestFullscreen();
@@ -24,7 +29,24 @@
     />
 </div>
 {#if $flyoutButton}
-    <button on:click={toggle}>{$flyoutState ? "Close" : "Open"}</button>
+    <button on:click={toggle} class:isTop>
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            class:flip={$flyoutState}
+        >
+            <path
+                d="M15 4l-8 8 8 8"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            />
+        </svg>
+    </button>
 {/if}
 
 <style lang="scss">
@@ -38,7 +60,9 @@
         overflow-y: scroll;
         overscroll-behavior-y: contain;
 
-        transition: opacity 0.2s ease, transform 0.2s ease;
+        transition:
+            opacity 0.2s ease,
+            transform 0.2s ease;
 
         &.disabled {
             opacity: 0;
@@ -54,17 +78,32 @@
     }
 
     button {
+        line-height: 0;
         z-index: 99;
-        font-size: 1.5em;
+        color: #ddda;
         appearance: none;
-        border: 1px solid #fff1;
+        border: 1px solid #fff3;
         background-color: #222a;
-        border-radius: 0.5em;
+        border-radius: 5px 0px 0px 5px;
+        border-right: none;
+        padding: 15px;
         position: fixed;
-        bottom: 1em;
-        right: 1em;
-        width: 5em;
-        height: 2.5em;
+        right: var(--flyout-width);
         cursor: pointer;
+        top: auto;
+        bottom: 50px;
+        
+        &.isTop {
+            top: 90px;
+            bottom: auto;
+        }
+        
+        :global(.flanimate) & {
+            transition: right 0.2s ease;
+        }
+        
+        svg.flip {
+            transform: scaleX(-1);
+        }
     }
 </style>

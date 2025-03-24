@@ -19,7 +19,7 @@
     $: flhalf = $flyoutStore.mode === "half";
     $: flfull = $flyoutStore.mode === "fullscreen";
 
-    $: flvisible = $flyoutState;
+    $: flvisible = $flyoutState && $flyoutStore.enabled;
     $: {
         $flyoutState;
         clearTimeout(fltimeout);
