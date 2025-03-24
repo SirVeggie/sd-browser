@@ -216,6 +216,7 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
             const hash = hashPath(fullpath);
 
             if (videomap.has(partial) && fullpath.endsWith('.png')) {
+                found--;
                 videomap.set(partial, fullpath);
                 continue;
             }
@@ -464,13 +465,18 @@ function setupWatcher() {
     });
 
     watcher.on('unlinkDir', dir => {
+        const deletions: string[] = [];
         for (const [key, value] of imageList) {
             if (value.file.startsWith(dir)) {
                 removeUniqueImage(value);
                 imageList.delete(key);
                 deleteTempImage(key);
+                deletions.push(key);
             }
         }
+        
+        MetaDB.deleteAll(deletions);
+        MetaCalcDB.deleteAll(deletions);
     });
 
     if (pollingInterval > 0) {
@@ -527,7 +533,7 @@ async function addFile(file: string, hash?: string) {
     }
 
     console.log(`Added ${file}`);
-    const image = await readMetadata({
+    const full = await readMetadata({
         id: hash,
         folder: path.basename(path.dirname(file)),
         file,
@@ -538,15 +544,18 @@ async function addFile(file: string, hash?: string) {
         workflow: "",
     });
 
-    imageList.set(hash, getServerImage(image));
-
+    const image = getServerImage(full);
+    imageList.set(hash, image);
+    addUniqueImage(image);
+    
     const amount = freshList.unshift({
         id: hash,
         timestamp: Date.now(),
     });
     if (amount > freshLimit) freshList.pop();
-
-    addUniqueImage(imageList.get(hash)!);
+    
+    MetaDB.set(full);
+    MetaCalcDB.set(image);
 }
 
 function videoExists(imagefile: string): ServerImage | undefined {
@@ -592,6 +601,9 @@ async function deleteFile(file: string) {
     });
     if (size > freshLimit) deletionList.pop();
     deleteTempImage(hash);
+    
+    MetaDB.delete(hash);
+    MetaCalcDB.delete(hash);
 }
 
 async function renameFile(from: string, to: string) {
@@ -600,13 +612,16 @@ async function renameFile(from: string, to: string) {
         removeUniqueImage(imageList.get(oldhash));
         imageList.delete(oldhash);
         deleteTempImage(oldhash);
+        
+        MetaDB.delete(oldhash);
+        MetaCalcDB.delete(oldhash);
     }
 
     if (!isMedia(to)) return;
     console.log(`Renamed ${from} to ${to}`);
 
     const newhash = hashPath(to);
-    const image = await readMetadata({
+    const full = await readMetadata({
         id: newhash,
         folder: path.basename(path.dirname(to)),
         file: to,
@@ -617,8 +632,12 @@ async function renameFile(from: string, to: string) {
         workflow: '',
     });
 
-    imageList.set(newhash, getServerImage(image));
-    addUniqueImage(imageList.get(newhash)!);
+    const image = getServerImage(full);
+    imageList.set(newhash, image);
+    addUniqueImage(image);
+    
+    MetaDB.set(full);
+    MetaCalcDB.set(image);
 }
 
 async function pollFiles() {
