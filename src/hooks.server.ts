@@ -1,6 +1,4 @@
 import { building } from "$app/environment";
-import { startFileManager } from "$lib/server/filemanager";
-// import { startWebsocket } from "$lib/server/websocketServer";
 
 export async function handle({ resolve, event }) {
 
@@ -29,6 +27,6 @@ export async function handle({ resolve, event }) {
 
 // Server startup
 if (!building) {
-    startFileManager();
-    // startWebsocket();
+    import("$lib/server/filemanager").then(x => x.startFileManager());
+    // import("$lib/server/websocketServer").then(x => x.startWebsocket());
 }
