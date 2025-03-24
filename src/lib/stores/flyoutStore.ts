@@ -14,9 +14,11 @@ export const flyoutStore = writable<FlyoutStore>({
 });
 export const flyoutHistory = writable<string[]>([]);
 export const flyoutState = writable(false);
+export const flyoutButton = writable(true);
 
 export function syncFlyoutWithLocalStorage() {
     syncMemory('flyout', flyoutStore);
     syncMemory('flyoutState', flyoutState);
+    syncMemory('flyoutButton', flyoutButton);
     syncMemory('flyoutHistory', flyoutHistory, true);
 }

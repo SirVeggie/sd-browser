@@ -46,6 +46,7 @@
     import { sleep } from "$lib/tools/sleep";
     import type { ClientImage, ImageInfo } from "$lib/types/images";
     import { fetchFolderStructure } from "$lib/requests/miscRequests";
+    import { flyoutState } from "$lib/stores/flyoutStore";
 
     type ActionMode = "manual" | "auto";
 
@@ -436,6 +437,11 @@
                 notify("Slideshow stopped");
             } else {
                 startSlideshow();
+            }
+        } else if (e.key === "f") {
+            const active = document.activeElement;
+            if (active?.tagName !== "INPUT") {
+                flyoutState.set(!$flyoutState);
             }
         }
     }

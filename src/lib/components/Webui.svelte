@@ -1,6 +1,6 @@
 <script lang="ts">
     import { cx } from "$lib/tools/cx";
-    import { flyoutState, flyoutStore } from "$lib/stores/flyoutStore";
+    import { flyoutButton, flyoutState, flyoutStore } from "$lib/stores/flyoutStore";
 
     let iframe: HTMLIFrameElement;
     $: disabled = !$flyoutState;
@@ -23,7 +23,9 @@
         allow="fullscreen; clipboard-write"
     />
 </div>
-<button on:click={toggle}>{$flyoutState ? "Close" : "Open"}</button>
+{#if $flyoutButton}
+    <button on:click={toggle}>{$flyoutState ? "Close" : "Open"}</button>
+{/if}
 
 <style lang="scss">
     div {

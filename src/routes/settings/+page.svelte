@@ -2,7 +2,7 @@
     import Input from "$lib/items/Input.svelte";
     import { onDestroy } from "svelte";
     import Link from "../../lib/items/Link.svelte";
-    import { flyoutHistory, flyoutStore } from "$lib/stores/flyoutStore";
+    import { flyoutButton, flyoutHistory, flyoutStore } from "$lib/stores/flyoutStore";
     import Button from "$lib/items/Button.svelte";
     import { notify } from "$lib/components/Notifier.svelte";
     import {
@@ -137,6 +137,21 @@
         {/if}
     </div>
 
+    <div class="gray">
+        Keyboard shortcuts:<br />
+        <div class="list">
+            <span>Esc: Cancel</span>
+            <span>Arrows: Browse images</span>
+            <span>Space: toggle slideshow</span>
+            <span>F: toggle flyout</span>
+        </div>
+    </div>
+
+    <label class="checkbox">
+        Flyout enabled:
+        <input type="checkbox" bind:checked={$flyoutStore.enabled} />
+    </label>
+
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Set flyout address (webui url)
@@ -162,8 +177,8 @@
     </label>
 
     <label class="checkbox">
-        Flyout enabled:
-        <input type="checkbox" bind:checked={$flyoutStore.enabled} />
+        Flyout button:
+        <input type="checkbox" bind:checked={$flyoutButton} />
     </label>
 
     <div class="gray">
@@ -293,6 +308,11 @@
     .gray {
         font-size: 0.8em;
         color: #aaa;
+    }
+    
+    .list {
+        display: flex;
+        gap: 2em;
     }
 
     label {
