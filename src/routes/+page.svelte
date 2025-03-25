@@ -78,7 +78,7 @@
         ? -1
         : paginated.findIndex((img) => img.id === currentImage?.id) + 1;
     $: rightArrow = live || (nextIndex >= 0 && nextIndex < paginated.length);
-    $: leftArrow = rightArrow && !live;
+    $: leftArrow = (rightArrow || nextIndex == paginated.length) && !live;
     $: newestImage = paginated[0];
     $: seamless = $seamlessStyle;
     $: selection.setObjects(paginated.map((x) => x.id));
