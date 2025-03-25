@@ -204,7 +204,7 @@
                 </label>
 
                 <label for="matching">
-                    Styling:
+                    Button position:
                     <select
                         id="matching"
                         bind:value={flyoutButtonPosition}
