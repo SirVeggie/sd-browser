@@ -112,8 +112,6 @@ export function getModel(prompt: string | undefined, workflow: string | undefine
     const comfyWorkflow = getComfyWorkflowNodes(workflow);
     if (!comfyPrompt || !comfyWorkflow) return 'Unknown';
     model = getComfyModel(comfyPrompt, comfyWorkflow);
-    if (model.includes('\n'))
-        return "Multiple models";
     return model || 'Unknown';
 }
 

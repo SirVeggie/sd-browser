@@ -43,12 +43,12 @@
   let hiddenElementSvNeg: HTMLDivElement;
   let hiddenElementParams: HTMLDivElement;
   let hiddenElementWorkflow: HTMLDivElement;
-  
+
   let showOriginal = false;
 
   $: full = $fullscreenStyle;
   $: imageUrl = image?.id
-    ? `/api/images/${image.id}?${getQualityParam(showOriginal ? 'original' : $compressedMode)}`
+    ? `/api/images/${image.id}?${getQualityParam(showOriginal ? "original" : $compressedMode)}`
     : "";
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : formatMetadata(data.prompt, data.workflow);
@@ -66,7 +66,8 @@
     const model = getModel(d.prompt, d.workflow);
     const hash = getModelHash(d.prompt);
     let info = "";
-    if (model) info += `Model: ${model}`;
+    if (model)
+      info += `Model: ${model.includes("\n") ? "Multiple models" : model}`;
     if (hash) info += ` [${hash}]`;
     info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
     info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
@@ -87,6 +88,11 @@
     const params = getParams(prompt);
     const version = getMetadataVersion(prompt);
 
+    if (model.includes("\n"))
+      blocks.push({
+        header: "Models",
+        content: model,
+      });
     if (prompts?.pos)
       blocks.push({
         header: "positive prompt",
@@ -241,10 +247,10 @@
       type: "delete",
     }).then(cancel);
   }
-  
+
   function showOriginalImage() {
     showOriginal = true;
-    notify('Showing original quality image');
+    notify("Showing original quality image");
   }
 
   function selectPrompt(element: HTMLDivElement) {
@@ -297,7 +303,7 @@
                     <Button on:click={copyPrompt}>Copy all</Button>
                   {/if}
                   <Button on:click={deleteImage}>Delete</Button>
-                  {#if $compressedMode != 'original' && !showOriginal}
+                  {#if $compressedMode != "original" && !showOriginal}
                     <Button on:click={showOriginalImage}>Show original</Button>
                   {/if}
                 </div>

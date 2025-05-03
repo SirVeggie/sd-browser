@@ -15,8 +15,19 @@ export async function POST(e) {
     if (!isImageRequest(query))
         return error('Invalid request body', 400);
 
-    let images = searchImages(query.search, query.filters, query.matching, query.collapse);
-    images = sortImages(images, query.sorting);
+    let images: ServerImage[] = [];
+    try {
+        images = searchImages(query.search, query.filters, query.matching, query.collapse);
+        images = sortImages(images, query.sorting);
+    } catch (e) {
+        if (e instanceof Error) {
+            console.log(`${e.message}`);
+            return error('Malformed search string', 200);
+        } else {
+            console.log(e);
+            return error('Malformed search string', 400);
+        }
+    }
 
     const firstIndex = !query.latestId ? undefined : images.findIndex(i => i.id === query.latestId);
     const lastIndex = !query.oldestId ? undefined : images.findIndex(i => i.id === query.oldestId);

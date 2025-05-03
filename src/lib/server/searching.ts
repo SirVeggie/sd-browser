@@ -1,6 +1,7 @@
-import { selectRandom, unixTime, validRegex, XOR } from "$lib/tools/misc";
+import { unixTime, validRegex, XOR } from "$lib/tools/misc";
 import type { ServerImage } from "$lib/types/images";
 import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } from "$lib/types/misc";
+import _ from "lodash";
 import { MetaDB } from "./db";
 import { getFreshImages, getImageList, isUnique } from "./filemanager";
 
@@ -15,7 +16,7 @@ const dateRegex = new RegExp(`^${keywordRegex}(DATE|DT) `);
 
 export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean, timestamp?: number) {
     if (mode === 'regex' && !validRegex(search))
-        return [];
+        throw new Error('Invalid regex');
     const matcher = buildMatcher(search, mode);
     const filter = buildMatcher(filters.join(' AND '), 'regex');
     let list: ServerImage[] = [];
@@ -139,7 +140,7 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
         case 'name (desc)':
             return [...images].sort(createComparer<ServerImage>(x => x.file, false));
         case 'random':
-            return selectRandom(images, images.length);
+            return _.shuffle(images);
         default:
             return [];
     }

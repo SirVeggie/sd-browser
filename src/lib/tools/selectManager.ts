@@ -46,7 +46,7 @@ class SelectManager {
         const [min, max] = [Math.min(start, end), Math.max(start, end)];
         const items = this.objects.slice(min, max + 1);
         const notSelected = items.filter((item) => !this.selected.includes(item));
-        
+
         if (notSelected.length === 0 || (notSelected.length === 1 && notSelected[0] === this.lastSelection)) {
             this.selected = this.selected.filter((item) => !items.includes(item));
             this.lastSelection = target;
@@ -54,6 +54,14 @@ class SelectManager {
             this.selected.push(...notSelected);
             this.lastSelection = target;
         }
+    }
+
+    fillSelection() {
+        if (this.selected.length <= 1) return;
+        const indexes = this.selected.map(x => this.objects.indexOf(x));
+        const first = Math.min(...indexes);
+        const last = Math.max(...indexes);
+        this.selected = this.objects.slice(first, last + 1);
     }
 
     getSelected() {
@@ -71,6 +79,7 @@ export function createSelection() {
         select: (target: string) => action(() => manager.select(target)),
         deselectAll: () => action(() => manager.deselectAll()),
         selectRow: (target: string) => action(() => manager.selectRow(target)),
+        fillSelection: () => action(() => manager.fillSelection()),
     };
 
     function action(func: any) {

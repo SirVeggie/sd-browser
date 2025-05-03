@@ -37,6 +37,7 @@
         if (e.key === "Escape") closeAllContextMenus();
     }
 
+    /** Closes all menus that are part of the same tree (finds root menu and closes all of its children) */
     export function closeContextMenu(id?: string) {
         menuStore.update((menus) => {
             if (id) {
@@ -50,6 +51,13 @@
                 window.removeEventListener("keydown", handleEsc);
             return menus;
         });
+    }
+
+    export function closeContextMenuChildren(id: string | undefined) {
+        if (!id) return;
+        menuStore.update((menus) =>
+            menus.filter((x) => !x.id.startsWith(`${id}_`)),
+        );
     }
 
     export function closeAllContextMenus() {
@@ -76,6 +84,7 @@
         if (result === "keep") return;
 
         const subposition = { x: e.clientX, y: e.clientY };
+        closeContextMenuChildren(menu.id);
         openContextMenu(subposition, result, menu.id);
     }
 
@@ -106,7 +115,8 @@
 
 {#each $menuStore as menu (menu.id)}
     <div
-        class="contextmenu" class:disabled={!menu.options.filter((x) => x.visible ?? true).length}
+        class="contextmenu"
+        class:disabled={!menu.options.filter((x) => x.visible ?? true).length}
         style="left: {menu.position.x + 15}px; top: {menu.position.y + 1}px"
         in:fly={{ duration: 300, x: -20, easing: cubicOut }}
         out:fade={{ duration: 300, easing: cubicOut }}
@@ -145,7 +155,7 @@
         z-index: 100;
 
         backdrop-filter: blur(5px);
-        
+
         &.disabled {
             opacity: 0;
             pointer-events: none;

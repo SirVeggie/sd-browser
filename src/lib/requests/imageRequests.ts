@@ -12,7 +12,16 @@ export async function searchImages(search: ImageRequest, fetch?: FetchType): Pro
     const res = await (fetch ? doPost(url, fetch, search) : doServerPost(url, search));
 
     if ('error' in res) {
-        throw new Error(res.error);
+        if (res.error === 'Malformed search string') {
+            console.log(res.error);
+            return {
+                images: [],
+                amount: -1,
+                timestamp: -1,
+            };
+        } else {
+            throw new Error(res.error);
+        }
     }
 
     if ('message' in res) {
@@ -29,7 +38,15 @@ export async function updateImages(search: UpdateRequest, fetch?: FetchType): Pr
     const res = await (fetch ? doPost(url, fetch, search) : doServerPost(url, search));
 
     if ('error' in res) {
-        throw new Error(res.error);
+        if (res.error === 'Malformed search string') {
+            return {
+                additions: [],
+                deletions: [],
+                timestamp: -1,
+            }
+        } else {
+            throw new Error(res.error);
+        }
     }
 
     if ('message' in res) {

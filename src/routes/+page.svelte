@@ -38,6 +38,7 @@
     import { imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import {
         closeAllContextMenus,
+        type ContextMenuOption,
         type ContextReturn,
         openContextMenu,
     } from "$lib/items/ContextMenu.svelte";
@@ -268,6 +269,7 @@
             oldestId: "",
         })
             .then((images) => {
+                if (images.amount === -1) return;
                 imageStore.set(expandClientImages(images.images));
                 imageAmountStore.set(images.amount);
                 updateTime = images.timestamp;
@@ -296,7 +298,7 @@
                 nsfw: $nsfwMode,
             });
 
-            if (images.amount === 0) return;
+            if (images.amount <= 0) return;
             // TODO: is this check even useful?
             if ($imageStore.some((x) => x.id === images.images[0].id)) {
                 console.log("Duplicate image found");
@@ -319,8 +321,10 @@
     }
 
     async function updateLoop() {
-        console.log("Updating images");
-        await fetchUpdate();
+        if (sorting !== "random") {
+            console.log("Updating images");
+            await fetchUpdate();
+        }
         updateTimer = setTimeout(updateLoop, 1000);
     }
 
@@ -337,6 +341,8 @@
                 timestamp: updateTime,
                 nsfw: $nsfwMode,
             });
+            
+            if (res.timestamp === -1) return;
 
             updateTime = res.timestamp;
 
@@ -505,8 +511,17 @@
             ]);
         };
     }
+    
+    function handleSelectionButton(type: "move" | "copy") {
+        return async (e: InputEvent) => {
+            const pos = getEventCoords(e);
+            closeAllContextMenus();
+            const options = type === "move" ? await moveImages("") : await copyImages("");
+            openContextMenu(pos, options);
+        };
+    }
 
-    async function moveImages(id: string): Promise<ContextReturn> {
+    async function moveImages(id: string): Promise<ContextMenuOption[]> {
         const folders = (await fetchFolderStructure())
             .sort(stringSort((x) => x.name))
             .reverse();
@@ -538,7 +553,7 @@
         }));
     }
 
-    async function copyImages(id: string): Promise<ContextReturn> {
+    async function copyImages(id: string): Promise<ContextMenuOption[]> {
         const folders = (await fetchFolderStructure())
             .sort(stringSort((x) => x.name))
             .reverse();
@@ -613,6 +628,10 @@
             }
         };
     }
+    
+    function fillSelected() {
+        selection.fillSelection();
+    }
 
     async function deleteImg(id: string) {
         if (!id) return;
@@ -649,6 +668,7 @@
         });
         imageAmountStore.update((x) => x - change);
         currentAmount = Math.min(current, currentAmount);
+        cancelSelect();
     }
 
     function cancelSelect() {
@@ -727,6 +747,9 @@
     {:else}
         <div class="nav">
             <Button on:click={deleteSelected}>Delete</Button>
+            <Button on:click={handleSelectionButton("move")}>Move</Button>
+            <Button on:click={handleSelectionButton("copy")}>Copy</Button>
+            <Button on:click={fillSelected}>Fill</Button>
             <div class="flexspacer" />
             <Button on:click={cancelSelect}>Cancel</Button>
         </div>

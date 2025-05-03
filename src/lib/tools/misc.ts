@@ -1,4 +1,5 @@
 import type { ClientImage, ServerImage } from "$lib/types/images";
+import _ from "lodash";
 import { RePromise, RePromisify } from "./RePromise";
 import rl from "readline";
 
@@ -43,9 +44,7 @@ export function randomIndex(array: any[]) {
 }
 
 export function selectRandom<T>(array: T[], amount: number): T[] {
-    const copy = [...array];
-    copy.sort(() => Math.random() - 0.5);
-    return copy.slice(0, amount);
+    return _.shuffle(array).slice(0, amount);
 }
 
 export async function limitedParallelMap<T, U>(
