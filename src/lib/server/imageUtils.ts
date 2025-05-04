@@ -1,4 +1,4 @@
-import { getParams, getPrompts, simplifyPrompt } from "$lib/tools/metadataInterpreter";
+import { getPrompts, simplifyPrompt } from "$lib/tools/metadataInterpreter";
 import type { ImageExtraData, ImageInfo, ServerImage, ServerImageFull } from "$lib/types/images";
 import { isMetadataFiletype, isVideo } from '$lib/tools/misc';
 import crypto from 'crypto';
@@ -9,7 +9,7 @@ import { addUniqueImage, getImage, removeUniqueImage } from "./filemanager";
 import { MetaDB } from "./db";
 
 export function getServerImage(image: ServerImageFull): ServerImage {
-    const prompts = getPrompts(image.prompt, image.workflow);
+    const prompts = getPrompts(image.prompt, image.workflow, image.extra);
     const result: ServerImage = {
         id: image.id,
         file: image.file,
@@ -19,7 +19,7 @@ export function getServerImage(image: ServerImageFull): ServerImage {
         preview: image.preview,
         positive: prompts?.pos ?? '',
         negative: prompts?.neg ?? '',
-        params: getParams(image.prompt),
+        params: prompts?.params ?? '',
         hash: '',
         isUnique: -1,
     };
@@ -71,10 +71,11 @@ export async function readMetadataFromExif(image: ServerImageFull, altSource?: s
     } as any);
     if (!metadata)
         return image;
-    image.prompt = metadata.parameters ?? metadata.prompt ?? undefined;
-    image.workflow = metadata.workflow ?? undefined;
+    image.prompt = metadata.parameters ?? metadata.prompt ?? '';
+    image.workflow = metadata.workflow ?? '';
+    image.extra = metadata.extra ?? '';
 
-    if (image.prompt === undefined && image.workflow === undefined) {
+    if (!image.prompt && !image.workflow && !image.extra) {
         image.prompt = JSON.stringify(metadata);
     }
 
@@ -129,6 +130,7 @@ export async function updateImageMetadata(image: ServerImage, source: string) {
         preview: image.preview,
         prompt: '',
         workflow: '',
+        extra: '',
     }, source);
     image.preview = source;
     const newImage = getServerImage(newFull);
@@ -151,5 +153,6 @@ export function buildImageInfo(imageid: string): ImageInfo | undefined {
         params: image.params,
         prompt: full?.prompt,
         workflow: full?.workflow,
+        extra: full?.extra,
     };
 }

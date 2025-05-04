@@ -206,6 +206,7 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
                 preview: '',
                 prompt: '',
                 workflow: '',
+                extra: '',
             });
         }
 
@@ -238,6 +239,7 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
                 preview: '',
                 prompt: '',
                 workflow: '',
+                extra: '',
             });
         }
 
@@ -379,7 +381,7 @@ async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string,
                 extraData.push(processed);
                 imageList.set(res.id, processed);
                 addUniqueImage(processed);
-                if (res.prompt || res.workflow)
+                if (res.prompt || res.workflow || res.extra)
                     found++;
             });
         }
@@ -542,6 +544,7 @@ async function addFile(file: string, hash?: string) {
         preview: "",
         prompt: "",
         workflow: "",
+        extra: "",
     });
 
     const image = getServerImage(full);
@@ -630,6 +633,7 @@ async function renameFile(from: string, to: string) {
         preview: '',
         prompt: '',
         workflow: '',
+        extra: '',
     });
 
     const image = getServerImage(full);

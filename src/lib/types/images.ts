@@ -12,19 +12,21 @@ export type ServerImageFull = {
     preview: string;
     prompt: string;
     workflow: string;
+    extra: string;
 };
 export function isServerImage(object: any): object is ServerImageFull {
-    return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'prompt', 'workflow']);
+    return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'prompt', 'workflow', 'extra']);
 }
 
 export type ServerImagePartial = {
     id: string;
     prompt: string;
     workflow: string;
+    extra: string;
 };
 
 export function isServerImagePartial(object: any): object is ServerImageFull {
-    return testType(object, ['id', 'prompt', 'workflow']);
+    return testType(object, ['id', 'prompt', 'workflow', 'extra']);
 }
 
 export type ServerImage = {
@@ -69,6 +71,7 @@ export type ImageInfo = {
     createdDate: number;
     prompt?: string;
     workflow?: string;
+    extra?: string;
     positive?: string;
     negative?: string;
     params?: string;

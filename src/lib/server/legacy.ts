@@ -68,7 +68,8 @@ async function handleVersion1(oldVersion: string | undefined) {
             CREATE TABLE IF NOT EXISTS full (
                 id TEXT PRIMARY KEY,
                 prompt TEXT,
-                workflow TEXT
+                workflow TEXT,
+                extra TEXT
             )`;
             sdb.exec(sqlCreate);
             fdb.exec(sqlCreateFull);
@@ -77,7 +78,7 @@ async function handleVersion1(oldVersion: string | undefined) {
             const stmtCount = odb.prepare('SELECT COUNT(*) FROM metadata');
             const stmtFetch = odb.prepare('SELECT * FROM metadata WHERE ROWID > ? AND ROWID <= ?');
             const stmtSetS = sdb.prepare('INSERT OR REPLACE INTO short (id, file, folder, modifiedDate, createdDate, preview) VALUES (?, ?, ?, ?, ?, ?)');
-            const stmtSetF = fdb.prepare('INSERT OR REPLACE INTO full (id, prompt, workflow) VALUES (?, ?, ?)');
+            const stmtSetF = fdb.prepare('INSERT OR REPLACE INTO full (id, prompt, workflow, extra) VALUES (?, ?, ?, ?)');
             const size = 5000;
             let batch: ServerImageFull[] = [];
             let fetched = 0;
@@ -101,7 +102,7 @@ async function handleVersion1(oldVersion: string | undefined) {
                 updateLine(`Transferring data: ${fetched}/${total} (moving 2/2) | estimate: ${estimate}`);
                 fdb.transaction((images: ServerImageFull[]) => {
                     for (const image of images) {
-                        stmtSetF.run(image.id, image.prompt, image.workflow);
+                        stmtSetF.run(image.id, image.prompt, image.workflow, '');
                     }
                 })(batch);
 

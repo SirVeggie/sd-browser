@@ -16,18 +16,42 @@ export function getMetadataVersion(prompt: string | undefined) {
     return 'a1111';
 }
 
-export function getPrompts(prompt: string | undefined, workflow: string | undefined): { pos: string, neg: string; } | undefined {
-    const version = getMetadataVersion(prompt);
-    if (workflow)
-        return getComfyPrompts(prompt, workflow);
-    if (version === 'swarm')
-        return getSwarmPrompts(prompt);
-    return { pos: getPositivePrompt(prompt), neg: getNegativePrompt(prompt) };
+export function getPrompts(prompt: string | undefined, workflow: string | undefined, extra: string | undefined): { pos: string, neg: string, params?: string; } | undefined {
+    let res: { pos: string, neg: string, params?: string; };
+    const get = (type?: string) => {
+        if (res) return res;
+        const version = getMetadataVersion(prompt);
+        if (version === 'comfy' && type === 'params')
+            res = { pos: '', neg: '', params: '' };
+        else if (workflow)
+            res = getComfyPrompts(prompt, workflow) ?? { pos: '', neg: '' };
+        else if (version === 'swarm')
+            res = { ...getSwarmPrompts(prompt), params: getParams(prompt) };
+        else
+            res = { pos: getPositivePrompt(prompt), neg: getNegativePrompt(prompt), params: getParams(prompt) };
+        return res;
+    };
+
+    if (extra) {
+        try {
+            const custom = JSON.parse(extra);
+            const parts = (custom.prompt as string)?.split(/[\n\r,]+ ?-{3,}[\n\r,]+/) ?? [];
+            if (custom.prompt || custom.positive) {
+                return {
+                    pos: custom.positive || parts[0] || custom.prompt || get().pos,
+                    neg: custom.negative || parts[1] || get().neg,
+                    params: custom.params || get('params').params,
+                };
+            }
+        } catch { /**/ }
+    }
+
+    return get();
 }
 
-export function getSwarmPrompts(prompt: string | undefined) {
+export function getSwarmPrompts(prompt: string | undefined): { pos: string, neg: string; } {
     if (!prompt)
-        return undefined;
+        return { pos: '', neg: '' };
     const data = JSON.parse(prompt);
     return { pos: data.sui_image_params.prompt, neg: data.sui_image_params.negativeprompt };
 }
@@ -99,7 +123,16 @@ export function splitPromptParams(str: string): string[] {
 }
 
 const autoModelRegex = /Model: (.*?)(,|$)/;
-export function getModel(prompt: string | undefined, workflow: string | undefined) {
+export function getModel(prompt: string | undefined, workflow: string | undefined, extra: string | undefined) {
+    if (extra) {
+        try {
+            const data = JSON.parse(extra);
+            if (data.model) {
+                return data.model;
+            }
+        } catch { /**/ }
+    }
+
     const version = getMetadataVersion(prompt);
     if (version === 'swarm' && prompt)
         return JSON.parse(prompt).sui_image_params.model;
@@ -115,7 +148,15 @@ export function getModel(prompt: string | undefined, workflow: string | undefine
     return model || 'Unknown';
 }
 
-export function getSeed(prompt: string | undefined, workflow: string | undefined) {
+export function getSeed(prompt: string | undefined, workflow: string | undefined, extra: string | undefined) {
+    if (extra) {
+        try {
+            const data = JSON.parse(extra);
+            if (data.seed) {
+                return data.seed;
+            }
+        } catch { /**/ }
+    }
     const version = getMetadataVersion(prompt);
     if (!prompt)
         return '';

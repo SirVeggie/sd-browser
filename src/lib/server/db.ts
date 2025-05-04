@@ -23,7 +23,8 @@ export class MetaDB {
     CREATE TABLE IF NOT EXISTS ${MetaDB.tFull} (
         id TEXT PRIMARY KEY,
         prompt TEXT,
-        workflow TEXT
+        workflow TEXT,
+        extra TEXT
     )`;
 
     private static isOpen = false;
@@ -63,6 +64,8 @@ export class MetaDB {
         MetaDB.isSetup = true;
         MetaDB.sdb.exec(MetaDB.sqlCreate);
         MetaDB.fdb.exec(MetaDB.sqlCreateFull);
+        
+        MetaDB.ensureColumnF('extra', 'TEXT');
 
         MetaDB.stmtGetS = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE id = ?`);
         MetaDB.stmtGetF = MetaDB.fdb.prepare(`SELECT * FROM ${MetaDB.tFull} WHERE id = ?`);
@@ -70,20 +73,21 @@ export class MetaDB {
         MetaDB.stmtGetRowsShort = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE ROWID > ? AND ROWID <= ?`);
         MetaDB.stmtGetAllShort = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort}`);
         MetaDB.stmtSetS = MetaDB.sdb.prepare(`INSERT OR REPLACE INTO ${MetaDB.tShort} (id, file, folder, modifiedDate, createdDate, preview) VALUES (?, ?, ?, ?, ?, ?)`);
-        MetaDB.stmtSetF = MetaDB.fdb.prepare(`INSERT OR REPLACE INTO ${MetaDB.tFull} (id, prompt, workflow) VALUES (?, ?, ?)`);
+        MetaDB.stmtSetF = MetaDB.fdb.prepare(`INSERT OR REPLACE INTO ${MetaDB.tFull} (id, prompt, workflow, extra) VALUES (?, ?, ?, ?)`);
         MetaDB.stmtDeleteS = MetaDB.sdb.prepare(`DELETE FROM ${MetaDB.tShort} WHERE id = ?`);
         MetaDB.stmtDeleteF = MetaDB.fdb.prepare(`DELETE FROM ${MetaDB.tFull} WHERE id = ?`);
         MetaDB.stmtCount = MetaDB.sdb.prepare(`SELECT COUNT(*) FROM ${MetaDB.tShort}`);
+        
     }
 
-    // static ensureColumn(column: string, definition: string) {
-    //     MetaDB.setup();
-    //     const result = MetaDB.db.prepare("select count(*) as count from pragma_table_info('metadata') where name = ?").get(column) as { count: number; };
-    //     if (!result.count) {
-    //         console.log(`Adding column '${column} ${definition}' to the metadata database`);
-    //         MetaDB.db.prepare(`ALTER TABLE ${MetaDB.tShort} ADD ${column} ${definition}`).run();
-    //     }
-    // }
+    static ensureColumnF(column: string, definition: string) {
+        MetaDB.setup();
+        const result = MetaDB.fdb.prepare(`select count(*) as count from pragma_table_info('${MetaDB.tFull}') where name = ?`).get(column) as { count: number; };
+        if (!result.count) {
+            console.log(`Adding column '${column} ${definition}' to the metadata database`);
+            MetaDB.fdb.prepare(`ALTER TABLE ${MetaDB.tFull} ADD ${column} ${definition}`).run();
+        }
+    }
 
     static dropTable(name: string) {
         new Database(path.join(datapath, MetaDB.fShort)).exec('DROP TABLE IF EXISTS ' + name).close();
@@ -106,6 +110,7 @@ export class MetaDB {
         const full = MetaDB.stmtGetF.get(id) as ServerImagePartial | undefined;
         main.prompt = full!.prompt;
         main.workflow = full!.workflow;
+        main.extra = full!.extra;
         return main;
     }
 
@@ -116,6 +121,7 @@ export class MetaDB {
         for (let i = 0; i < results.length; i++) {
             results[i].prompt = data[i].prompt;
             results[i].workflow = data[i].workflow;
+            results[i].extra = data[i].extra;
         }
         return results;
     }
@@ -137,6 +143,7 @@ export class MetaDB {
             for (let i = 0; i < res.length; i++) {
                 res[i].prompt = data[i].prompt;
                 res[i].workflow = data[i].workflow;
+                res[i].extra = data[i].extra;
             }
             yield res;
             fetched += batch;
@@ -198,7 +205,7 @@ export class MetaDB {
     static set(image: ServerImageFull) {
         MetaDB.setup();
         MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview);
-        MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow);
+        MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow, image.extra);
     }
 
     static setAll(images: ServerImageFull[]) {
@@ -212,7 +219,7 @@ export class MetaDB {
         })(images);
         MetaDB.fdb.transaction((images: ServerImageFull[]) => {
             for (const image of images) {
-                MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow);
+                MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow, image.extra);
             }
         })(images);
     }
@@ -257,7 +264,7 @@ export class MetaDB {
             for (const id of deletions)
                 MetaDB.stmtDeleteF.run(id);
             for (const image of images)
-                MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow);
+                MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow, image.extra);
         })(deletions, images);
     }
 

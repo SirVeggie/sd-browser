@@ -115,7 +115,7 @@ function getTextByType(image: ServerImage, type: MatchType): string {
 
 function getFullMetaForImage(id: string): string {
     const image = MetaDB.get(id);
-    return `${image?.prompt}\n${image?.workflow}\n${image?.folder}`;
+    return `${image?.prompt}\n${image?.workflow}\n${image?.extra}\n${image?.folder}`;
 }
 
 function createComparer<T>(selector: (a: T) => any, descending: boolean) {

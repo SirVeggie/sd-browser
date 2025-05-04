@@ -51,19 +51,23 @@
     ? `/api/images/${image.id}?${getQualityParam(showOriginal ? "original" : $compressedMode)}`
     : "";
   $: basicInfo = !data ? "" : extractBasic(data);
-  $: promptInfo = !data ? [] : formatMetadata(data.prompt, data.workflow);
+  $: promptInfo = !data
+    ? []
+    : formatMetadata(data.prompt, data.workflow, data.extra);
   $: fullPrompt = !data ? "" : data.prompt;
-  $: prompts = !data ? undefined : getPrompts(data.prompt, data.workflow);
+  $: prompts = !data
+    ? undefined
+    : getPrompts(data.prompt, data.workflow, data.extra);
   $: svPositivePrompt = !data ? "" : getSvPositivePrompt(data.prompt);
   $: svNegativePrompt = !data ? "" : getSvNegativePrompt(data.prompt);
-  $: paramsPrompt = !data ? "" : getParams(data.prompt);
+  $: paramsPrompt = !data ? "" : prompts!.params;
   $: workflowPrompt = !data ? "" : data.workflow;
   $: {
     showOriginal = showOriginal && !!image;
   }
 
   function extractBasic(d: ImageInfo): string {
-    const model = getModel(d.prompt, d.workflow);
+    const model = getModel(d.prompt, d.workflow, d.extra);
     const hash = getModelHash(d.prompt);
     let info = "";
     if (model)
@@ -78,14 +82,16 @@
   function formatMetadata(
     prompt: string | undefined,
     workflow?: string,
+    extra?: string,
   ): PromptFragment[] {
     if (!prompt) return [];
     let blocks: PromptFragment[] = [];
-    const prompts = getPrompts(prompt, workflow);
-    const seed = getSeed(prompt, workflow);
+    const prompts = getPrompts(prompt, workflow, extra);
+    const model = getModel(prompt, workflow, extra);
+    const seed = getSeed(prompt, workflow, extra);
     const sv_pos = getSvPositivePrompt(prompt);
     const sv_neg = getSvNegativePrompt(prompt);
-    const params = getParams(prompt);
+    const params = prompts?.params;
     const version = getMetadataVersion(prompt);
 
     if (model.includes("\n"))
@@ -128,6 +134,7 @@
         content: params,
         action: copyParams,
       });
+    if (extra) blocks.push({ header: "Extra", content: extra });
     if (version === "comfy")
       blocks = blocks.concat(formatComfy(prompt, workflow));
     if (blocks.length === 0 || version === "comfy")
