@@ -488,8 +488,8 @@ function setupWatcher() {
     console.log('Listening to file changes...');
 }
 
-let genCount = 0;
-const genLimit = 10;
+// let genCount = 0;
+// const genLimit = 10;
 
 async function addFile(file: string, hash?: string) {
     if (!isMedia(file)) return;
@@ -507,18 +507,6 @@ async function addFile(file: string, hash?: string) {
             console.log(`Skipping image since a video for it exists: ${file}`);
             return;
         }
-    }
-
-    try {
-        if (genCount < genLimit) {
-            genCount++;
-            await generateCompressedFromId(hash, file);
-            await generateThumbnailFromId(hash, file);
-            genCount--;
-        }
-    } catch (e) {
-        console.log(`Failed to generate preview for ${path.basename(file)} (this shouldn't appear)`);
-        console.error(e);
     }
 
     if (isVideo(file)) {
@@ -559,6 +547,18 @@ async function addFile(file: string, hash?: string) {
     
     MetaDB.set(full);
     MetaCalcDB.set(image);
+
+    // try {
+    //     if (genCount < genLimit) {
+    //         genCount++;
+    //         await generateCompressedFromId(hash, file);
+    //         await generateThumbnailFromId(hash, file);
+    //         genCount--;
+    //     }
+    // } catch (e) {
+    //     console.log(`Failed to generate preview for ${path.basename(file)} (this shouldn't appear)`);
+    //     console.error(e);
+    // }
 }
 
 function videoExists(imagefile: string): ServerImage | undefined {
