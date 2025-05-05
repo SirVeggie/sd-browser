@@ -16,8 +16,8 @@ export function getMetadataVersion(prompt: string | undefined) {
     return 'a1111';
 }
 
-export function getPrompts(prompt: string | undefined, workflow: string | undefined, extra: string | undefined): { pos: string, neg: string, params?: string; } | undefined {
-    let res: { pos: string, neg: string, params?: string; };
+export function getPrompts(prompt: string | undefined, workflow: string | undefined, extra: string | undefined, og = false): { pos: string, neg: string, params?: string, ogpos?: string, ogneg?: string; } | undefined {
+    let res: { pos: string, neg: string, params?: string, ogpos?: string, ogneg?: string; };
     const get = (type?: string) => {
         if (res) return res;
         const version = getMetadataVersion(prompt);
@@ -37,9 +37,13 @@ export function getPrompts(prompt: string | undefined, workflow: string | undefi
             const custom = JSON.parse(extra);
             const parts = (custom.prompt as string)?.split(/[\n\r,]+ ?-{3,}[\n\r,]+/) ?? [];
             if (custom.prompt || custom.positive) {
+                const pos: string = custom.positive || parts[0] || custom.prompt;
+                const neg: string = custom.negative || parts[1];
                 return {
-                    pos: custom.positive || parts[0] || custom.prompt || get().pos,
-                    neg: custom.negative || parts[1] || get().neg,
+                    pos: pos.trim() || get().pos,
+                    neg: neg.trim() || get().neg,
+                    ogpos: (pos && og) ? get().pos : undefined,
+                    ogneg: (neg && og) ? get().neg : undefined,
                     params: custom.params || get('params').params,
                 };
             }

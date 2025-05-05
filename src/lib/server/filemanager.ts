@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { calcTimeSpent, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, printLine, removeExtension, updateLine, videoFiletypes, lazy, calcProgress, calcTimeRemaining } from '$lib/tools/misc';
-import { generateCompressedFromId, generateThumbnailFromId } from './convert';
+// import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB } from './db';

@@ -19,7 +19,6 @@
     getMetadataVersion,
     getModel,
     getModelHash,
-    getParams,
     getPrompts,
     getSeed,
     getSvNegativePrompt,
@@ -58,8 +57,8 @@
   $: prompts = !data
     ? undefined
     : getPrompts(data.prompt, data.workflow, data.extra);
-  $: svPositivePrompt = !data ? "" : getSvPositivePrompt(data.prompt);
-  $: svNegativePrompt = !data ? "" : getSvNegativePrompt(data.prompt);
+  $: svPositivePrompt = !data ? "" : prompts?.ogpos || getSvPositivePrompt(data.prompt);
+  $: svNegativePrompt = !data ? "" : prompts?.ogneg || getSvNegativePrompt(data.prompt);
   $: paramsPrompt = !data ? "" : prompts!.params;
   $: workflowPrompt = !data ? "" : data.workflow;
   $: {
@@ -86,17 +85,17 @@
   ): PromptFragment[] {
     if (!prompt) return [];
     let blocks: PromptFragment[] = [];
-    const prompts = getPrompts(prompt, workflow, extra);
+    const prompts = getPrompts(prompt, workflow, extra, true);
     const model = getModel(prompt, workflow, extra);
     const seed = getSeed(prompt, workflow, extra);
-    const sv_pos = getSvPositivePrompt(prompt);
-    const sv_neg = getSvNegativePrompt(prompt);
+    const sv_pos = prompts?.ogpos || getSvPositivePrompt(prompt);
+    const sv_neg = prompts?.ogneg || getSvNegativePrompt(prompt);
     const params = prompts?.params;
     const version = getMetadataVersion(prompt);
 
     if (model.includes("\n"))
       blocks.push({
-        header: "Models",
+        header: "models",
         content: model,
       });
     if (prompts?.pos)
@@ -134,7 +133,7 @@
         content: params,
         action: copyParams,
       });
-    if (extra) blocks.push({ header: "Extra", content: extra });
+    if (extra) blocks.push({ header: "extra", content: extra });
     if (version === "comfy")
       blocks = blocks.concat(formatComfy(prompt, workflow));
     if (blocks.length === 0 || version === "comfy")

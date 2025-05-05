@@ -119,11 +119,15 @@ export class MetaDB {
         const results = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE id IN('${ids.join("', '")}')`).all() as ServerImageFull[];
         const data = MetaDB.fdb.prepare(`SELECT * FROM ${MetaDB.tFull} WHERE id IN('${ids.join("', '")}')`).all() as ServerImagePartial[];
         for (let i = 0; i < results.length; i++) {
+            if (!data[i]) {
+                results[i] = undefined as any;
+                continue;
+            }
             results[i].prompt = data[i].prompt;
             results[i].workflow = data[i].workflow;
             results[i].extra = data[i].extra;
         }
-        return results;
+        return results.filter(x => !!x);
     }
 
     // static getAll(): ImageListFull {
