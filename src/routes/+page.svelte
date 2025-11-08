@@ -51,8 +51,8 @@
 
     type ActionMode = "manual" | "auto";
 
-    const initialAmount = Math.max($initialImages, 0);
-    const increment = 25;
+    const initialAmount = Math.max($initialImages, 1);
+    const increment = Math.max(initialAmount, 25);
     let currentAmount = initialAmount;
     let currentImage: ClientImage | undefined = undefined;
     let inputElement: HTMLInputElement;
@@ -238,7 +238,7 @@
             scrollToTop();
             currentAmount = initialAmount;
         } else {
-            currentAmount = Math.min(currentAmount, 100);
+            currentAmount = Math.min(currentAmount, initialAmount);
         }
 
         startTrigger(1000);

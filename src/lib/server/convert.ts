@@ -32,11 +32,12 @@ export function convertImage(image: Readable, outputFormat: string): Promise<Buf
     });
 }
 
-export function readCompressedImage(imagepath: string): Promise<Buffer> {
+export function readCompressedImage(imagepath: string, quality: number, size?: number): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         const passthrough = new PassThrough();
-        ffmpeg(imagepath)
+        (!size ? ffmpeg(imagepath) : ffmpeg(imagepath).size(`${size}x?`))
+            .outputOptions([`-quality ${quality}`, '-compression_level 0'])
             .on('error', reject)
             .outputFormat('webp')
             .stream(passthrough, { end: true });
@@ -76,7 +77,7 @@ export function generateThumbnailTask(imagepath: string, outputpath: string): Pr
 export function generateThumbnail(imagepath: string, outputpath: string): Promise<string> {
     return new Promise((resolve, reject) => {
         ffmpeg(imagepath)
-            .outputOptions('-quality 80')
+            .outputOptions(['-quality 80', '-compression_level 0'])
             .size('460x?')
             .on('error', reject)
             .on('end', () => resolve(outputpath))
@@ -91,7 +92,7 @@ export function generateCompressedTask(imagepath: string, outputpath: string): P
 export function generateCompressed(imagepath: string, outputpath: string): Promise<string> {
     return new Promise((resolve, reject) => {
         ffmpeg(imagepath)
-            .outputOptions('-quality 90')
+            .outputOptions(['-quality 90', '-compression_level 0'])
             .on('error', reject)
             .on('end', () => resolve(outputpath))
             .saveToFile(outputpath);

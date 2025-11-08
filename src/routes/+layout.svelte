@@ -80,6 +80,7 @@
         --main-padding: 2em;
         --flyout-width: 0px;
         --content-width: calc(100dvw - var(--flyout-width));
+        --flyout-button-reset: 1;
 
         .content {
             flex-grow: 1;
@@ -109,6 +110,7 @@
                 @media (width < 1000px) {
                     --flyout-width: 100dvw;
                     --content-width: 100dvw;
+                    --flyout-button-reset: 0;
                 }
             }
             
@@ -118,12 +120,14 @@
                 @media (width < 1000px) {
                     --flyout-width: 100dvw;
                     --content-width: 100dvw;
+                    --flyout-button-reset: 0;
                 }
             }
-
+            
             &.flfull {
                 --flyout-width: 100dvw;
                 --content-width: 100dvw;
+                --flyout-button-reset: 0;
             }
         }
 

@@ -88,7 +88,7 @@
         border-right: none;
         padding: 15px;
         position: fixed;
-        right: var(--flyout-width);
+        right: calc(var(--flyout-width) * var(--flyout-button-reset));
         cursor: pointer;
         top: auto;
         bottom: 50px;

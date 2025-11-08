@@ -56,7 +56,7 @@
   $: fullPrompt = !data ? "" : data.prompt;
   $: prompts = !data
     ? undefined
-    : getPrompts(data.prompt, data.workflow, data.extra);
+    : getPrompts(data.prompt, data.workflow, data.extra, true);
   $: svPositivePrompt = !data ? "" : prompts?.ogpos || getSvPositivePrompt(data.prompt);
   $: svNegativePrompt = !data ? "" : prompts?.ogneg || getSvNegativePrompt(data.prompt);
   $: paramsPrompt = !data ? "" : prompts!.params;

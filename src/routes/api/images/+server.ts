@@ -5,7 +5,7 @@ import { mapServerImageToClient } from '$lib/tools/misc.js';
 import { type ServerImage } from '$lib/types/images';
 import { type ImageResponse, isImageRequest } from '$lib/types/requests';
 
-const imageLimit = 100;
+const imageLimit = 1000;
 
 export async function POST(e) {
     const err = invalidAuth(e);

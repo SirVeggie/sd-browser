@@ -229,11 +229,9 @@ function getComfyIds(prompt: ComfyPrompt, nodes: Record<string, ComfyWorkflowNod
         if (match.test(nodes[id].title) && (!ignore || !ignore.test(nodes[id].title)))
             ids.push(Number(id));
     }
-    if (!ids.length) {
-        for (const id in nodes) {
-            if (match.test(prompt[id]?.class_type) && (!ignore || !ignore.test(prompt[id]?.class_type)))
-                ids.push(Number(id));
-        }
+    for (const id in nodes) {
+        if (match.test(prompt[id]?.class_type) && (!ignore || !ignore.test(prompt[id]?.class_type)))
+            ids.push(Number(id));
     }
     return ids;
 }
@@ -316,7 +314,7 @@ export function getComfySeed(prompt: string | ComfyPrompt, nodes: string | Recor
 export function getComfyModel(prompt: ComfyPrompt, nodes: Record<string, ComfyWorkflowNode>) {
     const ids = getComfyIds(prompt, nodes, /model|checkpoint/i);
     const models = ids.reduce((acc, id) => {
-        const model = String(getComfyValue(prompt[id], ['model', 'checkpoint', 'string', 'str'], 'string'));
+        const model = String(getComfyValue(prompt[id], ['ckpt_name', 'model', 'checkpoint', 'string', 'str'], 'string'));
         if (model)
             acc[id] = model;
         return acc;
