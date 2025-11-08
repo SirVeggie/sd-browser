@@ -5,7 +5,7 @@
     import Notifier from "../lib/components/Notifier.svelte";
     import { assets } from "$app/paths";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
-    import ContextMenu from "$lib/items/ContextMenu.svelte";
+    import ContextMenuManager from "$lib/items/ContextMenuManager.svelte";
     import Confirm from "$lib/components/Confirm.svelte";
     import { authStore } from "$lib/stores/authStore";
     import Login from "$lib/components/Login.svelte";
@@ -62,7 +62,7 @@
         <Webui />
     {/if}
     <Confirm />
-    <ContextMenu />
+    <ContextMenuManager />
     <Notifier />
 </main>
 

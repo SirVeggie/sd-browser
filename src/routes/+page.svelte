@@ -41,7 +41,7 @@
         type ContextMenuOption,
         type ContextReturn,
         openContextMenu,
-    } from "$lib/items/ContextMenu.svelte";
+    } from "$lib/items/ContextMenuManager.svelte";
     import { createSelection } from "$lib/tools/selectManager";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import { sleep } from "$lib/tools/sleep";

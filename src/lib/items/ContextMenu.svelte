@@ -1,75 +1,30 @@
 <script lang="ts" context="module">
-    import _ from "lodash";
-    import { writable } from "svelte/store";
     import { outclick } from "../../actions/outclick";
-
-    export type ContextReturn = void | "keep" | ContextMenuOption[];
-    export type IContextMenu = {
-        id: string;
-        options: ContextMenuOption[];
-        position: { x: number; y: number };
-        parent?: string;
-    };
-    export type ContextMenuOption = {
-        name: string;
-        handler: () => ContextReturn | Promise<ContextReturn>;
-        visible?: boolean;
-        enabled?: boolean;
-    };
-
-    const menuStore = writable<IContextMenu[]>([]);
-
-    export function openContextMenu(
-        position: { x: number; y: number },
-        options: ContextMenuOption[],
-        parent?: string,
-    ) {
-        window.addEventListener("keydown", handleEsc);
-        const id = _.uniqueId(`${parent ?? "contextmenu"}_`);
-        menuStore.update((menus) => {
-            menus.push({ id, options, position, parent });
-            return menus;
-        });
-        return id;
-    }
-
-    export function handleEsc(e: KeyboardEvent) {
-        if (e.key === "Escape") closeAllContextMenus();
-    }
-
-    /** Closes all menus that are part of the same tree (finds root menu and closes all of its children) */
-    export function closeContextMenu(id?: string) {
-        menuStore.update((menus) => {
-            if (id) {
-                const ancestor = id.match(/^[^_]+_[^_]+/)?.[0] ?? id;
-                menus = menus.filter((x) => !x.id.startsWith(ancestor));
-            } else {
-                menus.pop();
-            }
-
-            if (menus.length === 0)
-                window.removeEventListener("keydown", handleEsc);
-            return menus;
-        });
-    }
-
-    export function closeContextMenuChildren(id: string | undefined) {
-        if (!id) return;
-        menuStore.update((menus) =>
-            menus.filter((x) => !x.id.startsWith(`${id}_`)),
-        );
-    }
-
-    export function closeAllContextMenus() {
-        menuStore.set([]);
-        window.removeEventListener("keydown", handleEsc);
-    }
 </script>
 
 <script lang="ts">
+    import { closeContextMenu, closeContextMenuChildren, openContextMenu, type ContextMenuOption, type IContextMenu } from "./ContextMenuManager.svelte";
     import { fly } from "svelte/transition";
     import { fade } from "svelte/transition";
     import { cubicOut } from "svelte/easing";
+    import { onMount } from "svelte";
+
+    export let menu: IContextMenu;
+    
+    let element: HTMLDivElement;
+    
+    $: x = menu.position.x;
+    $: y = menu.position.y;
+    
+    onMount(() => {
+        const rect = element.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            x -= rect.right - window.innerWidth + 10;
+        }
+        if (rect.bottom > window.innerHeight) {
+            y -= rect.bottom - window.innerHeight + 10;
+        }
+    });
 
     async function clickHandler(
         e: MouseEvent,
@@ -113,34 +68,31 @@
     ) {}
 </script>
 
-{#each $menuStore as menu (menu.id)}
-    <div
-        class="contextmenu"
-        class:disabled={!menu.options.filter((x) => x.visible ?? true).length}
-        style="left: {menu.position.x + 15}px; top: {menu.position.y + 1}px"
-        in:fly={{ duration: 300, x: -20, easing: cubicOut }}
-        out:fade={{ duration: 300, easing: cubicOut }}
-        use:outclick
-        on:outclick={() => closeContextMenu(menu.id)}
-    >
-        {#each menu.options as option (option.name)}
-            {#if option.visible ?? true}
-                <button
-                    on:click={(e) => clickHandler(e, menu, option)}
-                    on:mouseover={(e) => hoverEnter(e, menu, option)}
-                    on:mouseout={(e) => hoverExit(e, menu, option)}
-                    on:focus={(e) => focusEnter(e, menu, option)}
-                    on:blur={(e) => focusExit(e, menu, option)}
-                    class:disabled={!(option.enabled ?? true)}
-                >
-                    {option.name}
-                </button>
-            {/if}
-        {/each}
-    </div>
-{/each}
-
-<svelte:window on:blur={() => closeAllContextMenus()} />
+<div
+    bind:this={element}
+    class="contextmenu"
+    class:disabled={!menu.options.filter((x) => x.visible ?? true).length}
+    style="left: {x + 15}px; top: {y + 1}px"
+    in:fly={{ duration: 300, x: -20, easing: cubicOut }}
+    out:fade={{ duration: 300, easing: cubicOut }}
+    use:outclick
+    on:outclick={() => closeContextMenu(menu.id)}
+>
+    {#each menu.options as option (option.name)}
+        {#if option.visible ?? true}
+            <button
+                on:click={(e) => clickHandler(e, menu, option)}
+                on:mouseover={(e) => hoverEnter(e, menu, option)}
+                on:mouseout={(e) => hoverExit(e, menu, option)}
+                on:focus={(e) => focusEnter(e, menu, option)}
+                on:blur={(e) => focusExit(e, menu, option)}
+                class:disabled={!(option.enabled ?? true)}
+            >
+                {option.name}
+            </button>
+        {/if}
+    {/each}
+</div>
 
 <style lang="scss">
     .contextmenu {

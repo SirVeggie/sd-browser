@@ -38,7 +38,7 @@
     import {
         closeContextMenu,
         openContextMenu,
-    } from "$lib/items/ContextMenu.svelte";
+    } from "$lib/items/ContextMenuManager.svelte";
 
     let inputTimer: any;
     let address = $flyoutStore.url;
