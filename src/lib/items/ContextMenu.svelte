@@ -3,28 +3,38 @@
 </script>
 
 <script lang="ts">
-    import { closeContextMenu, closeContextMenuChildren, openContextMenu, type ContextMenuOption, type IContextMenu } from "./ContextMenuManager.svelte";
+    import {
+        closeContextMenu,
+        closeContextMenuChildren,
+        openContextMenu,
+        type ContextMenuOption,
+        type IContextMenu,
+    } from "./ContextMenuManager.svelte";
     import { fly } from "svelte/transition";
     import { fade } from "svelte/transition";
     import { cubicOut } from "svelte/easing";
     import { onMount } from "svelte";
 
     export let menu: IContextMenu;
-    
+
     let element: HTMLDivElement;
-    
-    $: x = menu.position.x;
-    $: y = menu.position.y;
-    
-    onMount(() => {
-        const rect = element.getBoundingClientRect();
-        if (rect.right > window.innerWidth) {
-            x -= rect.right - window.innerWidth + 10;
+    let position = menu.position;
+
+    $: {
+        if (element) {
+            const rect = element.getBoundingClientRect();
+            if (rect.right > window.innerWidth - 30) {
+                position.x =
+                    menu.position.x - (rect.right - window.innerWidth + 35);
+            }
+            if (rect.bottom > window.innerHeight - 10) {
+                position.y =
+                    menu.position.y - (rect.bottom - window.innerHeight + 11);
+            }
         }
-        if (rect.bottom > window.innerHeight) {
-            y -= rect.bottom - window.innerHeight + 10;
-        }
-    });
+    }
+
+    onMount(() => {});
 
     async function clickHandler(
         e: MouseEvent,
@@ -72,7 +82,7 @@
     bind:this={element}
     class="contextmenu"
     class:disabled={!menu.options.filter((x) => x.visible ?? true).length}
-    style="left: {x + 15}px; top: {y + 1}px"
+    style="left: {position.x + 15}px; top: {position.y + 1}px"
     in:fly={{ duration: 300, x: -20, easing: cubicOut }}
     out:fade={{ duration: 300, easing: cubicOut }}
     use:outclick
@@ -100,8 +110,9 @@
         background-color: #222a;
         border: 1px solid #ddd4;
         border-radius: 5px;
-        overflow: hidden;
+        overflow-y: auto;
         min-width: 125px;
+        max-height: calc(100vh - 50px);
 
         position: fixed;
         z-index: 100;
@@ -120,6 +131,7 @@
         border: none;
         color: #ddd;
         background-color: transparent;
+        white-space: nowrap;
         padding: 0.5em 0.75em;
         font-size: 1em;
         text-align: start;
