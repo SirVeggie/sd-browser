@@ -34,8 +34,6 @@
         }
     }
 
-    onMount(() => {});
-
     async function clickHandler(
         e: MouseEvent,
         menu: IContextMenu,
