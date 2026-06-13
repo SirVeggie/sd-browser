@@ -126,3 +126,64 @@ export type ServerMessage = {
 export function isServerMessage(object: any): object is ServerMessage {
     return testType(object, ['message']);
 }
+
+export type BulkLlmConfig = {
+    baseUrl: string;
+    apiKey?: string;
+    modelId: string;
+    parallelCalls: number;
+};
+
+export type BulkAnnotateOptions = {
+    type: 'annotate';
+    clearAnnotation: boolean;
+    includeImage: boolean;
+    includePrompt: boolean;
+    systemInstruction: string;
+    responsePrefix: string;
+    disableThinking: boolean;
+    resultRegex?: string;
+    appendResult: boolean;
+};
+
+export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOptions;
+
+export type MatchRequest = {
+    search: string;
+    filters: string[];
+    matching: SearchMode;
+    collapse: boolean;
+};
+export function isMatchRequest(object: any): object is MatchRequest {
+    return testType(object, ['search', 'filters', 'matching', 'collapse']);
+}
+
+export type MatchResponse = {
+    total: number;
+};
+export function isMatchResponse(object: any): object is MatchResponse {
+    return testType(object, ['total']);
+}
+
+export type BulkRequest = {
+    search: string;
+    filters: string[];
+    matching: SearchMode;
+    collapse: boolean;
+    action: BulkAction;
+    llm?: BulkLlmConfig;
+};
+
+export function isBulkRequest(object: any): object is BulkRequest {
+    return testType(object, ['search', 'filters', 'matching', 'collapse', 'action', (o) => typeof o.action?.type === 'string']);
+}
+
+export type BulkProgressEvent = {
+    done: number;
+    total: number;
+} | {
+    complete: true;
+    refresh?: boolean;
+} | {
+    error: string;
+};

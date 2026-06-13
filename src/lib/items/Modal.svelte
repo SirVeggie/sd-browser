@@ -1,13 +1,18 @@
 <script>
     import { fade } from "svelte/transition";
-    import { outclick } from "../../actions/outclick";
     import { cubicOut } from "svelte/easing";
 
     export let close = () => {};
 </script>
 
-<div class="modal" transition:fade={{ duration: 200, easing: cubicOut }}>
-    <div class="box" use:outclick on:outclick={close}>
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<div
+    class="modal"
+    transition:fade={{ duration: 200, easing: cubicOut }}
+    on:click|self={close}
+>
+    <div class="box" on:click|stopPropagation>
         <slot />
     </div>
 </div>

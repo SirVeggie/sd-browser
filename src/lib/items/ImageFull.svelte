@@ -41,6 +41,7 @@
   let hiddenElementSvPos: HTMLDivElement;
   let hiddenElementSvNeg: HTMLDivElement;
   let hiddenElementParams: HTMLDivElement;
+  let hiddenElementAnnotation: HTMLDivElement;
   let hiddenElementWorkflow: HTMLDivElement;
 
   let showOriginal = false;
@@ -50,9 +51,8 @@
     ? `/api/images/${image.id}?${getQualityParam(showOriginal ? "original" : $compressedMode)}`
     : "";
   $: basicInfo = !data ? "" : extractBasic(data);
-  $: promptInfo = !data
-    ? []
-    : formatMetadata(data.prompt, data.workflow, data.extra);
+  $: promptInfo = !data ? [] : buildPromptInfo(data);
+  $: annotationText = data?.annotation ?? "";
   $: fullPrompt = !data ? "" : data.prompt;
   $: prompts = !data
     ? undefined
@@ -76,6 +76,35 @@
     info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
     if (d.folder) info += `\nFolder: ${d.folder}`;
     return info;
+  }
+
+  function buildPromptInfo(d: ImageInfo): PromptFragment[] {
+    const blocks = formatMetadata(d.prompt, d.workflow, d.extra);
+    if (!d.annotation) return blocks;
+
+    const annotationBlock: PromptFragment = {
+      header: "annotation",
+      content: d.annotation,
+      action: copyAnnotation,
+    };
+    const seedIdx = blocks.findIndex((block) => block.header === "seed");
+    if (seedIdx >= 0) {
+      blocks.splice(seedIdx, 0, annotationBlock);
+      return blocks;
+    }
+    const promptHeaders = new Set([
+      "models",
+      "positive prompt",
+      "negative prompt",
+      "original positive prompt",
+      "original negative prompt",
+    ]);
+    const afterPromptsIdx = blocks.findIndex(
+      (block) => !promptHeaders.has(block.header),
+    );
+    const insertIdx = afterPromptsIdx >= 0 ? afterPromptsIdx : blocks.length;
+    blocks.splice(insertIdx, 0, annotationBlock);
+    return blocks;
   }
 
   function formatMetadata(
@@ -243,6 +272,10 @@
     copyInfo(hiddenElementParams, paramsPrompt, "parameters");
   }
 
+  function copyAnnotation() {
+    copyInfo(hiddenElementAnnotation, annotationText, "annotation");
+  }
+
   function copyWorkflow() {
     copyInfo(hiddenElementWorkflow, workflowPrompt, "workflow");
   }
@@ -339,6 +372,7 @@
   <div class="fallback" bind:this={hiddenElementSvPos}>{svPositivePrompt}</div>
   <div class="fallback" bind:this={hiddenElementSvNeg}>{svNegativePrompt}</div>
   <div class="fallback" bind:this={hiddenElementParams}>{paramsPrompt}</div>
+  <div class="fallback" bind:this={hiddenElementAnnotation}>{annotationText}</div>
   <div class="fallback" bind:this={hiddenElementWorkflow}>{workflowPrompt}</div>
 {/if}
 

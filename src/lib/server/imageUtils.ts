@@ -22,6 +22,7 @@ export function getServerImage(image: ServerImageFull): ServerImage {
         params: prompts?.params ?? '',
         hash: '',
         isUnique: -1,
+        annotation: '',
     };
     hashPrompt(result);
     return result;
@@ -34,6 +35,7 @@ export function populateServerImage(image: ServerImage, info: ImageExtraData): S
     image.params = info.params;
     image.hash = info.hash;
     image.isUnique = info.isUnique;
+    image.annotation = info.annotation ?? '';
     return image;
 }
 
@@ -154,5 +156,6 @@ export function buildImageInfo(imageid: string): ImageInfo | undefined {
         prompt: full?.prompt,
         workflow: full?.workflow,
         extra: full?.extra,
+        annotation: image.annotation,
     };
 }

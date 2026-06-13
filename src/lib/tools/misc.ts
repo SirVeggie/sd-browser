@@ -1,6 +1,5 @@
 import type { ClientImage, ServerImage } from "$lib/types/images";
 import _ from "lodash";
-import { RePromise, RePromisify } from "./RePromise";
 import rl from "readline";
 
 export const imageFiletypes = ['png', 'jpg', 'jpeg', 'webp'] as const;
@@ -52,29 +51,22 @@ export async function limitedParallelMap<T, U>(
     callback: (item: T) => Promise<U>,
     limit: number
 ): Promise<U[]> {
-    const res: U[] = [];
-    const promises: RePromise<U>[] = [];
+    if (!array.length) return [];
 
-    for (const item of [...array]) {
-        promises.push(RePromisify(callback(item)));
-        if (promises.length === limit) {
-            await Promise.race(promises);
-            for (let i = promises.length - 1; i >= 0; i--) {
-                if (promises[i].state === 'resolved') {
-                    res.push(promises[i].value!);
-                    promises.splice(i, 1);
-                } else if (promises[i].state === 'rejected') {
-                    throw promises[i].reason;
-                }
-            }
+    const results: U[] = new Array(array.length);
+    let nextIndex = 0;
+
+    async function worker() {
+        while (true) {
+            const index = nextIndex++;
+            if (index >= array.length) return;
+            results[index] = await callback(array[index]);
         }
     }
 
-    for (const promise of promises) {
-        res.push(await promise);
-    }
-
-    return res;
+    const workerCount = Math.min(Math.max(1, limit), array.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    return results;
 }
 
 export function print(str: string) {

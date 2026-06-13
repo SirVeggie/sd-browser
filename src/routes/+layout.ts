@@ -4,6 +4,8 @@ import { syncFlyoutWithLocalStorage } from "$lib/stores/flyoutStore";
 import { syncFullscreenWithLocalStorage } from "$lib/stores/fullscreenStore";
 import { syncSearchWithLocalStorage } from "$lib/stores/searchStore";
 import { syncStyleWithLocalStorage } from "$lib/stores/styleStore";
+import { syncBulkModalWithLocalStorage } from "$lib/stores/bulkStore";
+import { syncLlmWithLocalStorage } from "$lib/stores/llmStore";
 import { subscribeAuth } from "$lib/tools/requests";
 
 export async function load() {
@@ -15,5 +17,7 @@ export async function load() {
         syncFlyoutWithLocalStorage();
         syncFullscreenWithLocalStorage();
         syncStyleWithLocalStorage();
+        syncLlmWithLocalStorage();
+        syncBulkModalWithLocalStorage();
     }
 }

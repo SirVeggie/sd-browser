@@ -33,6 +33,7 @@
         seamlessStyle,
     } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
+    import { llmStore } from "$lib/stores/llmStore";
     import { authLogout, authStore } from "$lib/stores/authStore";
     import { pullGlobalSettings } from "$lib/requests/settingRequests";
     import {
@@ -46,6 +47,7 @@
     let flyoutContext = "";
     let flyoutHistoryLength = 5;
     let flyoutButtonPosition = $flyoutButtonTop ? "top" : "bottom";
+    let llmOpen = false;
 
     $: setInput($flyoutStore.url);
 
@@ -219,6 +221,46 @@
         </div>
     </div>
 
+    <div class="sgroup llm-settings">
+        <button
+            type="button"
+            class="llm-summary"
+            aria-expanded={llmOpen}
+            on:click={() => (llmOpen = !llmOpen)}
+        >
+            LLM API settings
+            <span class="chevron" class:open={llmOpen} aria-hidden="true" />
+        </button>
+
+        <div class="wrapper" class:isOpen={llmOpen}>
+            <div class="inner llm-inner">
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    Base URL
+                    <Input bind:value={$llmStore.baseUrl} placeholder="http://localhost:8000/v1" />
+                </label>
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    API key (optional)
+                    <Input password bind:value={$llmStore.apiKey} />
+                </label>
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    Model ID
+                    <Input bind:value={$llmStore.modelId} />
+                </label>
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    Parallel API calls
+                    <NumInput bind:value={$llmStore.parallelCalls} />
+                </label>
+            </div>
+        </div>
+    </div>
+
     <div class="gray">
         Search keywords:<br /><span>
             {searchKeywords.join(", ").replaceAll("|", " | ")}
@@ -361,6 +403,56 @@
         outline-offset: 10px;
         border-radius: 5px;
         padding: 10px;
+    }
+
+    .llm-settings {
+        gap: 0;
+
+        .llm-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: none;
+            color: inherit;
+            font: inherit;
+            font-family: "Open sans", sans-serif;
+            cursor: pointer;
+            user-select: none;
+            text-align: left;
+        }
+
+        .chevron {
+            flex-shrink: 0;
+            width: 0.45em;
+            height: 0.45em;
+            margin-left: 1em;
+            border-right: 2px solid #ccc;
+            border-bottom: 2px solid #ccc;
+            transform: rotate(-45deg);
+            transition: transform 0.5s ease;
+
+            &.open {
+                transform: rotate(45deg);
+            }
+        }
+
+        .llm-inner {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+        }
+
+        .wrapper {
+            margin-top: 0;
+
+            &.isOpen {
+                margin-top: var(--gap);
+            }
+        }
     }
 
     .wrapper {

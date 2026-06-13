@@ -4,6 +4,7 @@ import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } f
 import _ from "lodash";
 import { MetaDB } from "./db";
 import { getFreshImages, getImageList, isUnique } from "./filemanager";
+import { ModelIndex } from "./modelIndex";
 
 const keywordRegex = `((${searchKeywords.join('|')}) )*`;
 const removeRegex = new RegExp(`^${keywordRegex}`);
@@ -13,6 +14,8 @@ const negativeRegex = new RegExp(`^${keywordRegex}(NEGATIVE|NEG) `);
 const folderRegex = new RegExp(`^${keywordRegex}(FOLDER|FD) `);
 const paramRegex = new RegExp(`^${keywordRegex}(PARAMS|PR) `);
 const dateRegex = new RegExp(`^${keywordRegex}(DATE|DT) `);
+const modelRegex = new RegExp(`^${keywordRegex}(MODEL|MD) `);
+const annotationRegex = new RegExp(`^${keywordRegex}(ANNOTATION|AN) `);
 
 export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean, timestamp?: number) {
     if (mode === 'regex' && !validRegex(search))
@@ -46,7 +49,8 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
     // reorder query for performance
     parts = parts.filter(x => dateRegex.test(x))
         .concat(parts.filter(x => folderRegex.test(x)))
-        .concat(parts.filter(x => !dateRegex.test(x) && !folderRegex.test(x)));
+        .concat(parts.filter(x => modelRegex.test(x)))
+        .concat(parts.filter(x => !dateRegex.test(x) && !folderRegex.test(x) && !modelRegex.test(x)));
 
     const regexes = parts.map(x => {
         const raw = x.replace(removeRegex, '');
@@ -57,13 +61,21 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
         else if (folderRegex.test(x)) type = 'folder';
         else if (paramRegex.test(x)) type = 'params';
         else if (dateRegex.test(x)) type = 'date';
+        else if (modelRegex.test(x)) type = 'model';
+        else if (annotationRegex.test(x)) type = 'annotation';
 
-        return {
+        const part = {
             raw,
             regex: new RegExp(raw, 'is'),
             not: x.match(notRegex),
             type,
+            matchingIds: undefined as Set<string> | undefined,
         };
+
+        if (type === 'model')
+            part.matchingIds = ModelIndex.getImageIdsForSearch(raw, matching);
+
+        return part;
     });
 
     return (image: ServerImage) => {
@@ -78,6 +90,10 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
                     const end = dates[1] ? unixTime(dates[1]) : undefined;
                     return image.modifiedDate >= start && (end === undefined || image.modifiedDate <= end);
                 }
+            }
+
+            if (x.type === 'model') {
+                return XOR(x.not, x.matchingIds!.has(image.id));
             }
 
             const text = getTextByType(image, x.type);
@@ -110,6 +126,10 @@ function getTextByType(image: ServerImage, type: MatchType): string {
             return image.params;
         case 'all':
             return getFullMetaForImage(image.id);
+        case 'model':
+            return '';
+        case 'annotation':
+            return image.annotation ?? '';
     }
 }
 

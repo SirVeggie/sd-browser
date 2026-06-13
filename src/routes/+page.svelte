@@ -34,6 +34,9 @@
         matchingMode,
         slideDelay,
         initialImages,
+        buildSearchParams,
+        syncSearchInput,
+        type SearchParams,
     } from "$lib/stores/searchStore";
     import { imageSize, seamlessStyle } from "$lib/stores/styleStore";
     import {
@@ -48,6 +51,7 @@
     import type { ClientImage, ImageInfo } from "$lib/types/images";
     import { fetchFolderStructure } from "$lib/requests/miscRequests";
     import { flyoutState } from "$lib/stores/flyoutStore";
+    import BulkModal from "$lib/components/BulkModal.svelte";
 
     type ActionMode = "manual" | "auto";
 
@@ -68,6 +72,8 @@
     let triggerTimer: any;
     let updateTime = 0;
     let selecting = false;
+    let bulkOpen = false;
+    let bulkSearchParams: SearchParams = buildSearchParams();
     const selection = createSelection();
     let anchorElement: HTMLDivElement;
 
@@ -245,21 +251,11 @@
         fetchImages();
     }
 
-    function buildSearch() {
-        let filters = [];
-        if (!$nsfwMode && $nsfwFilter) filters.push($nsfwFilter);
-        if ($folderMode && $folderFilter) filters.push($folderFilter);
-        return {
-            input: $searchFilter,
-            filters,
-        };
-    }
-
     function fetchImages() {
-        const search = buildSearch();
+        const search = buildSearchParams();
 
         searchImages({
-            search: search.input,
+            search: search.search,
             filters: search.filters,
             sorting,
             matching: $matchingMode,
@@ -280,7 +276,7 @@
     }
 
     async function fetchNext() {
-        const search = buildSearch();
+        const search = buildSearchParams();
         if ($imageStore.length === 0) return;
         const lastImage = $imageStore[$imageStore.length - 1];
 
@@ -288,7 +284,7 @@
 
         try {
             const images = await searchImages({
-                search: search.input,
+                search: search.search,
                 filters: search.filters,
                 sorting,
                 matching: $matchingMode,
@@ -330,11 +326,11 @@
 
     async function fetchUpdate() {
         if ($imageStore.length === 0) return;
-        const search = buildSearch();
+        const search = buildSearchParams();
 
         try {
             const res = await updateImages({
-                search: search.input,
+                search: search.search,
                 filters: search.filters,
                 matching: $matchingMode,
                 collapse: $collapseMode,
@@ -679,6 +675,18 @@
     function openFolder(id: string) {
         imageAction(id, { type: "open" });
     }
+
+    function openBulk() {
+        syncSearchInput(inputElement);
+        bulkSearchParams = buildSearchParams(inputElement?.value);
+        bulkOpen = true;
+    }
+
+    function handleBulkComplete(refresh?: boolean) {
+        if (refresh) {
+            fetchImages();
+        }
+    }
 </script>
 
 <svelte:window on:keydown={handleEsc} />
@@ -742,6 +750,7 @@
             />
             <Button on:click={() => (selecting = true)}>Select</Button>
             <Button on:click={openLive}>Live</Button>
+            <Button on:click={openBulk}>Bulk</Button>
             <Link to="/settings">Settings</Link>
         </div>
     {:else}
@@ -796,6 +805,15 @@
     data={info}
     cancel={closeImage}
 />
+
+{#if bulkOpen}
+    <BulkModal
+        imageCount={$imageAmountStore}
+        searchParams={bulkSearchParams}
+        on:close={() => (bulkOpen = false)}
+        onComplete={handleBulkComplete}
+    />
+{/if}
 
 <NavArrows
     onLeft={goLeft}

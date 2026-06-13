@@ -282,6 +282,18 @@ export class MetaDB {
         MetaDB.setup();
         return Number(MetaDB.stmtCount.pluck().get());
     }
+
+    static searchPrompt(words: string[]): Set<string> {
+        MetaDB.setup();
+        const terms = words.filter(w => w);
+        if (!terms.length)
+            return new Set();
+
+        const params = terms.map(w => `%${w}%`);
+        const where = terms.map(() => 'prompt LIKE ?').join(' AND ');
+        const rows = MetaDB.fdb.prepare(`SELECT id FROM ${MetaDB.tFull} WHERE ${where}`).all(params) as { id: string }[];
+        return new Set(rows.map(r => r.id));
+    }
 }
 
 export class MetaCalcDB {
@@ -294,7 +306,8 @@ export class MetaCalcDB {
         negative TEXT,
         params TEXT,
         hash TEXT,
-        isUnique INTEGER
+        isUnique INTEGER,
+        annotation TEXT
     )`;
 
     private static isOpen = false;
@@ -313,6 +326,16 @@ export class MetaCalcDB {
             return;
         MetaCalcDB.isSetup = true;
         MetaCalcDB.db.exec(MetaCalcDB.sqlCreate);
+        MetaCalcDB.ensureColumn('annotation', 'TEXT');
+    }
+
+    static ensureColumn(column: string, definition: string) {
+        MetaCalcDB.setup();
+        const result = MetaCalcDB.db.prepare(`select count(*) as count from pragma_table_info('${MetaCalcDB.table}') where name = ?`).get(column) as { count: number; };
+        if (!result.count) {
+            console.log(`Adding column '${column} ${definition}' to the extradata table`);
+            MetaCalcDB.db.prepare(`ALTER TABLE ${MetaCalcDB.table} ADD ${column} ${definition}`).run();
+        }
     }
 
     static close() {
@@ -355,17 +378,27 @@ export class MetaCalcDB {
 
     static set(data: ImageExtraData) {
         MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique) VALUES (?, ?, ?, ?, ?, ?)`);
-        stmt.run(data.id, data.positive, data.negative, data.params, data.hash, data.isUnique);
+        const existing = MetaCalcDB.get(data.id);
+        const annotation = data.annotation !== undefined ? data.annotation : (existing?.annotation ?? null);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        stmt.run(data.id, data.positive, data.negative, data.params, data.hash, data.isUnique, annotation);
     }
 
     static setAll(data: ImageExtraData[]) {
         MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique) VALUES (?, ?, ?, ?, ?, ?)`);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
-            for (const item of data)
-                stmt.run(item.id, item.positive, item.negative, item.params, item.hash, item.isUnique);
+            for (const item of data) {
+                const existing = MetaCalcDB.get(item.id);
+                const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
+                stmt.run(item.id, item.positive, item.negative, item.params, item.hash, item.isUnique, annotation);
+            }
         })(data);
+    }
+
+    static setAnnotation(id: string, annotation: string) {
+        MetaCalcDB.setup();
+        MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET annotation = ? WHERE id = ?`).run(annotation, id);
     }
 
     static setUnique(id: string, state: boolean) {
@@ -413,12 +446,15 @@ export class MetaCalcDB {
         if (!data.length && !deletions.length)
             return;
         const delstmt = MetaCalcDB.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
-        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique) VALUES (?, ?, ?, ?, ?, ?)`);
+        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[], deletions: string[]) => {
             for (const id of deletions)
                 delstmt.run(id);
-            for (const item of data)
-                addstmt.run(item.id, item.positive, item.negative, item.params, item.hash, item.isUnique);
+            for (const item of data) {
+                const existing = MetaCalcDB.get(item.id);
+                const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
+                addstmt.run(item.id, item.positive, item.negative, item.params, item.hash, item.isUnique, annotation);
+            }
         })(data, deletions);
     }
 
