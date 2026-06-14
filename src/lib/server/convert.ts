@@ -1,4 +1,5 @@
 import { Readable, PassThrough } from 'stream';
+import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import { compressedPath, getImage, thumbnailPath } from './filemanager';
@@ -9,6 +10,11 @@ import { sleep } from '$lib/tools/sleep';
 import { skipGeneration } from '$lib/tools/misc';
 
 ffmpeg.setFfmpegPath(ffmpegPath.path);
+
+export async function encodeImageForLlm(imagepath: string): Promise<Buffer> {
+    return sharp(imagepath).jpeg({ quality: 80 }).toBuffer();
+}
+
 export function convertImage(image: Readable, outputFormat: string): Promise<Buffer> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];

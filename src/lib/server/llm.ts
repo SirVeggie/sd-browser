@@ -1,25 +1,9 @@
-import { readFile } from "fs/promises";
-import path from "path";
 import { MetaCalcDB } from "./db";
+import { encodeImageForLlm } from "./convert";
 import { getImage } from "./filemanager";
 import type { BulkAnnotateOptions, BulkLlmConfig } from "$lib/types/requests";
 
 const LLM_REQUEST_TIMEOUT_MS = 120_000;
-
-function mimeFromPath(file: string) {
-    const ext = path.extname(file).toLowerCase();
-    switch (ext) {
-        case ".jpg":
-        case ".jpeg":
-            return "image/jpeg";
-        case ".webp":
-            return "image/webp";
-        case ".gif":
-            return "image/gif";
-        default:
-            return "image/png";
-    }
-}
 
 function applyResultRegex(text: string, pattern?: string) {
     if (!pattern) return text;
@@ -51,9 +35,8 @@ export async function annotateImage(id: string, llm: BulkLlmConfig, options: Bul
     }
 
     if (options.includeImage) {
-        const buffer = await readFile(image.file);
-        const mime = mimeFromPath(image.file);
-        const dataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
+        const buffer = await encodeImageForLlm(image.file);
+        const dataUrl = `data:image/jpeg;base64,${buffer.toString("base64")}`;
         userContent.push({ type: "image_url", image_url: { url: dataUrl } });
     }
 
