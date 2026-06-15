@@ -8,6 +8,7 @@ const CHUNK_SIZE = 100;
 
 type BulkProgressStats = {
     totalTaskDurationMs: number;
+    failures: number;
 };
 
 export async function runBulkAction(
@@ -82,7 +83,7 @@ export async function runBulkAction(
                 }
                 totalTaskDurationMs += Date.now() - taskStart;
                 completed++;
-                onProgress(completed, total, { totalTaskDurationMs });
+                onProgress(completed, total, { totalTaskDurationMs, failures });
                 console.log(`Bulk clear annotation: completed ${completed}/${total}`);
                 updateLine(`Bulk clear annotation: completed ${completed}/${total}`);
             }, parallel);
@@ -104,7 +105,12 @@ export async function runBulkAction(
         await limitedParallelMap(ids, async (id) => {
             const taskStart = Date.now();
             try {
-                await annotateImage(id, request.llm!, annotateOptions);
+                const saved = await annotateImage(id, request.llm!, annotateOptions);
+                if (!saved) {
+                    failures++;
+                    errors.push(`${id}: empty result`);
+                    console.error(`Bulk annotate failed: ${id}: empty result`);
+                }
             } catch (cause) {
                 failures++;
                 const message = cause instanceof Error ? cause.message : String(cause);
@@ -113,7 +119,7 @@ export async function runBulkAction(
             }
             totalTaskDurationMs += Date.now() - taskStart;
             completed++;
-            onProgress(completed, total, { totalTaskDurationMs });
+            onProgress(completed, total, { totalTaskDurationMs, failures });
             console.log(`Bulk annotate: completed ${completed}/${total}`);
             updateLine(`Bulk annotate: completed ${completed}/${total}`);
         }, parallel);

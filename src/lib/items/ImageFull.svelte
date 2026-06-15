@@ -82,28 +82,11 @@
     const blocks = formatMetadata(d.prompt, d.workflow, d.extra);
     if (!d.annotation) return blocks;
 
-    const annotationBlock: PromptFragment = {
+    blocks.unshift({
       header: "annotation",
       content: d.annotation,
       action: copyAnnotation,
-    };
-    const seedIdx = blocks.findIndex((block) => block.header === "seed");
-    if (seedIdx >= 0) {
-      blocks.splice(seedIdx, 0, annotationBlock);
-      return blocks;
-    }
-    const promptHeaders = new Set([
-      "models",
-      "positive prompt",
-      "negative prompt",
-      "original positive prompt",
-      "original negative prompt",
-    ]);
-    const afterPromptsIdx = blocks.findIndex(
-      (block) => !promptHeaders.has(block.header),
-    );
-    const insertIdx = afterPromptsIdx >= 0 ? afterPromptsIdx : blocks.length;
-    blocks.splice(insertIdx, 0, annotationBlock);
+    });
     return blocks;
   }
 

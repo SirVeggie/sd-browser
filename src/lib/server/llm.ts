@@ -24,9 +24,9 @@ export function clearAnnotation(id: string) {
     image.annotation = "";
 }
 
-export async function annotateImage(id: string, llm: BulkLlmConfig, options: BulkAnnotateOptions) {
+export async function annotateImage(id: string, llm: BulkLlmConfig, options: BulkAnnotateOptions): Promise<boolean> {
     const image = getImage(id);
-    if (!image) return;
+    if (!image) return false;
 
     const userContent: ({ type: string; text?: string; image_url?: { url: string } })[] = [];
 
@@ -103,7 +103,7 @@ export async function annotateImage(id: string, llm: BulkLlmConfig, options: Bul
     }
 
     result = applyResultRegex(result, options.resultRegex?.trim() || undefined);
-    if (!result) return;
+    if (!result.trim()) return false;
 
     let annotation = result;
     if (options.appendResult) {
@@ -113,4 +113,5 @@ export async function annotateImage(id: string, llm: BulkLlmConfig, options: Bul
 
     MetaCalcDB.setAnnotation(id, annotation);
     image.annotation = annotation;
+    return true;
 }

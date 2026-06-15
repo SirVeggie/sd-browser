@@ -27,6 +27,7 @@
     let progressTotal = 0;
     let bulkStartTime = 0;
     let totalTaskDurationMs = 0;
+    let progressFailures = 0;
     let progressHovering = false;
     let tickNow = Date.now();
     let tickInterval: ReturnType<typeof setInterval> | undefined;
@@ -169,6 +170,7 @@
         running = true;
         progressDone = 0;
         totalTaskDurationMs = 0;
+        progressFailures = 0;
         abortController = new AbortController();
         let refresh = false;
 
@@ -199,6 +201,9 @@
                         progressTotal = event.total;
                         if (event.totalTaskDurationMs !== undefined) {
                             totalTaskDurationMs = event.totalTaskDurationMs;
+                        }
+                        if (event.failures !== undefined) {
+                            progressFailures = event.failures;
                         }
                     } else if ("complete" in event) {
                         refresh = !!event.refresh;
@@ -372,6 +377,12 @@
                             <span class="label">Time left</span>
                             <span class="value">{formatStat(timeLeftMs)}</span>
                         </div>
+                        {#if progressFailures > 0}
+                            <div class="stat">
+                                <span class="label">Failed</span>
+                                <span class="value fail">{progressFailures}</span>
+                            </div>
+                        {/if}
                     </div>
                 {/if}
             </div>
@@ -538,6 +549,10 @@
         color: #eee;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
+
+        &.fail {
+            color: #f08080;
+        }
     }
 
     .bar {

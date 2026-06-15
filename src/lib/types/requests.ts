@@ -182,6 +182,7 @@ export type BulkProgressEvent = {
     done: number;
     total: number;
     totalTaskDurationMs?: number;
+    failures?: number;
 } | {
     complete: true;
     refresh?: boolean;

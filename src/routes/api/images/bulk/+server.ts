@@ -25,6 +25,7 @@ export async function POST(e) {
                         done,
                         total,
                         totalTaskDurationMs: stats?.totalTaskDurationMs,
+                        failures: stats?.failures,
                     });
                 });
                 send({
