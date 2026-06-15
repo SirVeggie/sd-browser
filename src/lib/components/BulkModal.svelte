@@ -4,7 +4,11 @@
     import Button from "$lib/items/Button.svelte";
     import Input from "$lib/items/Input.svelte";
     import { bulkModalStore } from "$lib/stores/bulkStore";
-    import { llmStore } from "$lib/stores/llmStore";
+    import {
+        CUSTOM_INSTRUCTION_ID,
+        llmStore,
+        resolveSystemInstruction,
+    } from "$lib/stores/llmStore";
     import type { SearchParams } from "$lib/stores/searchStore";
     import { resolveSearchMatch, runBulkAction } from "$lib/requests/bulkRequests";
     import { fetchFolderStructure } from "$lib/requests/miscRequests";
@@ -46,6 +50,28 @@
     $: timeLeftMs = progressDone > 0
         ? Math.max(0, progressTotal * effectiveTaskMsAtProgress - elapsedMs)
         : undefined;
+
+    $: isCustomSystemInstruction =
+        $bulkModalStore.systemInstructionPresetId === CUSTOM_INSTRUCTION_ID;
+
+    $: systemInstructionTooltip = resolveSystemInstruction(
+        $llmStore.systemInstructions,
+        $bulkModalStore.systemInstructionPresetId,
+        $bulkModalStore.systemInstruction,
+    );
+
+    $: {
+        const presetId = $bulkModalStore.systemInstructionPresetId;
+        if (
+            presetId !== CUSTOM_INSTRUCTION_ID &&
+            !$llmStore.systemInstructions.some((item) => item.id === presetId)
+        ) {
+            bulkModalStore.update((settings) => ({
+                ...settings,
+                systemInstructionPresetId: CUSTOM_INSTRUCTION_ID,
+            }));
+        }
+    }
 
     function formatStat(ms: number | undefined) {
         return ms === undefined ? "—" : formatTaskDuration(ms);
@@ -121,13 +147,18 @@
             case "annotate":
                 return {
                     type: "annotate",
-                    clearAnnotation: s.clearAnnotation,
+                    mode: s.annotateMode,
                     includeImage: s.includeImage,
                     includePrompt: s.includePrompt,
-                    systemInstruction: s.systemInstruction,
+                    systemInstruction: resolveSystemInstruction(
+                        $llmStore.systemInstructions,
+                        s.systemInstructionPresetId,
+                        s.systemInstruction,
+                    ),
                     responsePrefix: s.responsePrefix,
                     disableThinking: s.disableThinking,
                     resultRegex: s.resultRegex.trim() || undefined,
+                    resultTemplate: s.resultTemplate?.trim() || undefined,
                     appendResult: s.appendResult,
                 };
         }
@@ -157,14 +188,30 @@
         const bulkAction = buildAction();
         if (!bulkAction) return;
 
-        if (bulkAction.type === "annotate" && !bulkAction.clearAnnotation) {
-            if (!$llmStore.modelId || !$llmStore.baseUrl) {
-                notify("Configure LLM settings first", "warn");
-                return;
-            }
-            if (!bulkAction.includeImage && !bulkAction.includePrompt) {
-                notify("Enable at least one of Include image or Include prompt", "warn");
-                return;
+        if (bulkAction.type === "annotate") {
+            switch (bulkAction.mode) {
+                case "generate":
+                    if (!$llmStore.modelId || !$llmStore.baseUrl) {
+                        notify("Configure LLM settings first", "warn");
+                        return;
+                    }
+                    if (!bulkAction.includeImage && !bulkAction.includePrompt) {
+                        notify("Enable at least one of Include image or Include prompt", "warn");
+                        return;
+                    }
+                    break;
+                case "modify":
+                    if (!bulkAction.resultRegex?.trim()) {
+                        notify("Result regex is required for modify mode", "warn");
+                        return;
+                    }
+                    break;
+                case "clear":
+                    break;
+                default: {
+                    const _exhaustive: never = bulkAction.mode;
+                    return _exhaustive;
+                }
             }
         }
 
@@ -278,16 +325,16 @@
 
         {#if $bulkModalStore.action === "annotate"}
             <div class="annotate">
-                <label class="checkbox">
-                    <input
-                        type="checkbox"
-                        bind:checked={$bulkModalStore.clearAnnotation}
-                        disabled={running}
-                    />
-                    Clear annotation
+                <label>
+                    Mode
+                    <select bind:value={$bulkModalStore.annotateMode} disabled={running}>
+                        <option value="generate">Generate</option>
+                        <option value="clear">Clear</option>
+                        <option value="modify">Modify</option>
+                    </select>
                 </label>
 
-                {#if !$bulkModalStore.clearAnnotation}
+                {#if $bulkModalStore.annotateMode === "generate"}
                     <hr class="separator" />
 
                     <label class="checkbox" title="Positive prompt only">
@@ -309,12 +356,33 @@
 
                     <label>
                         System instruction
-                        <textarea
-                            bind:value={$bulkModalStore.systemInstruction}
+                        <select
+                            bind:value={$bulkModalStore.systemInstructionPresetId}
                             disabled={running}
-                            rows="4"
-                        />
+                            title={systemInstructionTooltip || undefined}
+                        >
+                            {#each $llmStore.systemInstructions as instruction (instruction.id)}
+                                <option
+                                    value={instruction.id}
+                                    title={instruction.text}
+                                >
+                                    {instruction.name}
+                                </option>
+                            {/each}
+                            <option value={CUSTOM_INSTRUCTION_ID}>Custom</option>
+                        </select>
                     </label>
+
+                    {#if isCustomSystemInstruction}
+                        <label>
+                            Custom instruction
+                            <textarea
+                                bind:value={$bulkModalStore.systemInstruction}
+                                disabled={running}
+                                rows="4"
+                            />
+                        </label>
+                    {/if}
 
                     <label>
                         Response prefix
@@ -341,6 +409,16 @@
                         <Input bind:value={$bulkModalStore.resultRegex} />
                     </label>
 
+                    <label>
+                        Result template (optional)
+                        <span class="hint">Use $1, $2, … for regex capture groups</span>
+                        <textarea
+                            bind:value={$bulkModalStore.resultTemplate}
+                            disabled={running}
+                            rows="3"
+                        />
+                    </label>
+
                     <label class="checkbox">
                         <input
                             type="checkbox"
@@ -348,6 +426,24 @@
                             disabled={running}
                         />
                         Append result
+                    </label>
+                {:else if $bulkModalStore.annotateMode === "modify"}
+                    <hr class="separator" />
+
+                    <!-- svelte-ignore a11y-label-has-associated-control -->
+                    <label>
+                        Result regex
+                        <Input bind:value={$bulkModalStore.resultRegex} />
+                    </label>
+
+                    <label>
+                        Result template (optional)
+                        <span class="hint">Use $1, $2, … for regex capture groups. Matched against the existing annotation.</span>
+                        <textarea
+                            bind:value={$bulkModalStore.resultTemplate}
+                            disabled={running}
+                            rows="3"
+                        />
                     </label>
                 {/if}
             </div>

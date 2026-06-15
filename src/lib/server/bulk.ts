@@ -1,6 +1,6 @@
 import { limitedParallelMap, updateLine } from "$lib/tools/misc";
 import type { BulkRequest } from "$lib/types/requests";
-import { annotateImage, clearAnnotation } from "./llm";
+import { annotateImage, clearAnnotation, modifyAnnotation } from "./llm";
 import { copyImages, deleteImages, moveImages } from "./filemanager";
 import { searchImages } from "./searching";
 
@@ -68,8 +68,9 @@ export async function runBulkAction(
 
         let totalTaskDurationMs = 0;
 
-        if (annotateOptions.clearAnnotation) {
-            const parallel = Math.max(1, request.llm?.parallelCalls || 8);
+        const parallel = Math.max(1, request.llm?.parallelCalls || 8);
+
+        if (annotateOptions.mode === "clear") {
             console.log(`Bulk clear annotation: ${parallel} parallel workers`);
             await limitedParallelMap(ids, async (id) => {
                 const taskStart = Date.now();
@@ -95,40 +96,76 @@ export async function runBulkAction(
             return false;
         }
 
-        if (!request.llm?.modelId || !request.llm?.baseUrl) {
-            throw new Error("LLM settings are incomplete");
-        }
-
-        const parallel = Math.max(1, request.llm.parallelCalls || 1);
-
-        console.log(`Bulk annotate: ${parallel} parallel requests`);
-        await limitedParallelMap(ids, async (id) => {
-            const taskStart = Date.now();
-            try {
-                const saved = await annotateImage(id, request.llm!, annotateOptions);
-                if (!saved) {
+        if (annotateOptions.mode === "modify") {
+            console.log(`Bulk modify annotation: ${parallel} parallel workers`);
+            await limitedParallelMap(ids, async (id) => {
+                const taskStart = Date.now();
+                try {
+                    const saved = modifyAnnotation(id, annotateOptions);
+                    if (!saved) {
+                        failures++;
+                        errors.push(`${id}: empty result`);
+                        console.error(`Bulk modify annotation failed: ${id}: empty result`);
+                    }
+                } catch (cause) {
                     failures++;
-                    errors.push(`${id}: empty result`);
-                    console.error(`Bulk annotate failed: ${id}: empty result`);
+                    const message = cause instanceof Error ? cause.message : String(cause);
+                    errors.push(`${id}: ${message}`);
+                    console.error(`Bulk modify annotation failed: ${message}`);
                 }
-            } catch (cause) {
-                failures++;
-                const message = cause instanceof Error ? cause.message : String(cause);
-                errors.push(`${id}: ${message}`);
-                console.error(`Bulk annotate failed: ${message}`);
-            }
-            totalTaskDurationMs += Date.now() - taskStart;
-            completed++;
-            onProgress(completed, total, { totalTaskDurationMs, failures });
-            console.log(`Bulk annotate: completed ${completed}/${total}`);
-            updateLine(`Bulk annotate: completed ${completed}/${total}`);
-        }, parallel);
+                totalTaskDurationMs += Date.now() - taskStart;
+                completed++;
+                onProgress(completed, total, { totalTaskDurationMs, failures });
+                console.log(`Bulk modify annotation: completed ${completed}/${total}`);
+                updateLine(`Bulk modify annotation: completed ${completed}/${total}`);
+            }, parallel);
 
-        updateLine("");
-        if (failures) {
-            throw new Error(`Bulk annotate finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
+            updateLine("");
+            if (failures) {
+                throw new Error(`Bulk modify annotation finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
+            }
+            return false;
         }
-        return false;
+
+        if (annotateOptions.mode === "generate") {
+            if (!request.llm?.modelId || !request.llm?.baseUrl) {
+                throw new Error("LLM settings are incomplete");
+            }
+
+            const generateParallel = Math.max(1, request.llm.parallelCalls || 1);
+
+            console.log(`Bulk annotate: ${generateParallel} parallel requests`);
+            await limitedParallelMap(ids, async (id) => {
+                const taskStart = Date.now();
+                try {
+                    const saved = await annotateImage(id, request.llm!, annotateOptions);
+                    if (!saved) {
+                        failures++;
+                        errors.push(`${id}: empty result`);
+                        console.error(`Bulk annotate failed: ${id}: empty result`);
+                    }
+                } catch (cause) {
+                    failures++;
+                    const message = cause instanceof Error ? cause.message : String(cause);
+                    errors.push(`${id}: ${message}`);
+                    console.error(`Bulk annotate failed: ${message}`);
+                }
+                totalTaskDurationMs += Date.now() - taskStart;
+                completed++;
+                onProgress(completed, total, { totalTaskDurationMs, failures });
+                console.log(`Bulk annotate: completed ${completed}/${total}`);
+                updateLine(`Bulk annotate: completed ${completed}/${total}`);
+            }, generateParallel);
+
+            updateLine("");
+            if (failures) {
+                throw new Error(`Bulk annotate finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
+            }
+            return false;
+        }
+
+        const _exhaustive: never = annotateOptions.mode;
+        throw new Error(`Unknown annotate mode: ${_exhaustive}`);
     }
 
     throw new Error("Unknown bulk action");

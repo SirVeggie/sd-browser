@@ -33,7 +33,12 @@
         seamlessStyle,
     } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
-    import { llmStore } from "$lib/stores/llmStore";
+    import SystemInstructionModal from "$lib/components/SystemInstructionModal.svelte";
+    import { askConfirmation } from "$lib/components/Confirm.svelte";
+    import {
+        llmStore,
+        type SystemInstruction,
+    } from "$lib/stores/llmStore";
     import { authLogout, authStore } from "$lib/stores/authStore";
     import { pullGlobalSettings } from "$lib/requests/settingRequests";
     import {
@@ -48,6 +53,18 @@
     let flyoutHistoryLength = 5;
     let flyoutButtonPosition = $flyoutButtonTop ? "top" : "bottom";
     let llmOpen = false;
+    let selectedInstructionId = "";
+    let instructionModalOpen = false;
+    let editingInstruction: SystemInstruction | null = null;
+    let modalInstructionName = "";
+    let modalInstructionText = "";
+
+    $: {
+        const instructions = $llmStore.systemInstructions;
+        if (!instructions.some((item) => item.id === selectedInstructionId)) {
+            selectedInstructionId = instructions[0]?.id ?? "";
+        }
+    }
 
     $: setInput($flyoutStore.url);
 
@@ -145,6 +162,80 @@
 
     function flyoutBlur() {
         // closeContextMenu(flyoutContext);
+    }
+
+    function openAddInstruction() {
+        editingInstruction = null;
+        modalInstructionName = "";
+        modalInstructionText = "";
+        instructionModalOpen = true;
+    }
+
+    function openEditInstruction() {
+        const instruction = $llmStore.systemInstructions.find(
+            (item) => item.id === selectedInstructionId,
+        );
+        if (!instruction) return;
+
+        editingInstruction = instruction;
+        modalInstructionName = instruction.name;
+        modalInstructionText = instruction.text;
+        instructionModalOpen = true;
+    }
+
+    function closeInstructionModal() {
+        instructionModalOpen = false;
+        editingInstruction = null;
+    }
+
+    function saveInstruction(event: CustomEvent<{ name: string; text: string }>) {
+        const { name, text } = event.detail;
+
+        if (editingInstruction) {
+            llmStore.update((settings) => ({
+                ...settings,
+                systemInstructions: settings.systemInstructions.map((item) =>
+                    item.id === editingInstruction!.id
+                        ? { ...item, name, text }
+                        : item,
+                ),
+            }));
+            notify(`Updated instruction '${name}'`);
+        } else {
+            const id = crypto.randomUUID();
+            llmStore.update((settings) => ({
+                ...settings,
+                systemInstructions: [
+                    ...settings.systemInstructions,
+                    { id, name, text },
+                ],
+            }));
+            selectedInstructionId = id;
+            notify(`Added instruction '${name}'`);
+        }
+
+        closeInstructionModal();
+    }
+
+    async function deleteInstruction() {
+        const instruction = $llmStore.systemInstructions.find(
+            (item) => item.id === selectedInstructionId,
+        );
+        if (!instruction) return;
+
+        const confirmed = await askConfirmation(
+            "Delete instruction",
+            `Delete instruction '${instruction.name}'?`,
+        );
+        if (!confirmed) return;
+
+        llmStore.update((settings) => ({
+            ...settings,
+            systemInstructions: settings.systemInstructions.filter(
+                (item) => item.id !== selectedInstructionId,
+            ),
+        }));
+        notify(`Deleted instruction '${instruction.name}'`);
     }
 </script>
 
@@ -257,9 +348,55 @@
                     Parallel API calls
                     <NumInput bind:value={$llmStore.parallelCalls} />
                 </label>
+
+                <div class="llm-subsection">
+                    <span class="subsection-title">System instructions</span>
+
+                    {#if $llmStore.systemInstructions.length}
+                        <div class="instruction-controls">
+                            <label>
+                                Saved instructions
+                                <select bind:value={selectedInstructionId}>
+                                    {#each $llmStore.systemInstructions as instruction (instruction.id)}
+                                        <option value={instruction.id}>
+                                            {instruction.name}
+                                        </option>
+                                    {/each}
+                                </select>
+                            </label>
+
+                            <div class="instruction-buttons">
+                                <Button
+                                    disabled={!selectedInstructionId}
+                                    on:click={openEditInstruction}
+                                >
+                                    Modify
+                                </Button>
+                                <Button
+                                    disabled={!selectedInstructionId}
+                                    on:click={deleteInstruction}
+                                >
+                                    Delete
+                                </Button>
+                            </div>
+                        </div>
+                    {/if}
+
+                    <Button on:click={openAddInstruction}>Add instruction</Button>
+                </div>
             </div>
         </div>
     </div>
+
+    {#if instructionModalOpen}
+        <SystemInstructionModal
+            title={editingInstruction ? "Modify instruction" : "Add instruction"}
+            bind:name={modalInstructionName}
+            bind:text={modalInstructionText}
+            on:save={saveInstruction}
+            on:close={closeInstructionModal}
+        />
+    {/if}
 
     <div class="gray">
         Search keywords:<br /><span>
@@ -444,6 +581,30 @@
             display: flex;
             flex-direction: column;
             gap: var(--gap);
+        }
+
+        .llm-subsection {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+            border-top: dashed 1px #aaa4;
+            padding-top: var(--gap);
+        }
+
+        .subsection-title {
+            color: #ccc;
+        }
+
+        .instruction-controls {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+        }
+
+        .instruction-buttons {
+            display: flex;
+            gap: 1em;
+            flex-wrap: wrap;
         }
 
         .wrapper {

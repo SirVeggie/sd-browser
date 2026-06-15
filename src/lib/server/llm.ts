@@ -1,20 +1,10 @@
 import { MetaCalcDB } from "./db";
 import { encodeImageForLlm } from "./convert";
 import { getImage } from "./filemanager";
+import { applyResultTransform } from "$lib/tools/misc";
 import type { BulkAnnotateOptions, BulkLlmConfig } from "$lib/types/requests";
 
 const LLM_REQUEST_TIMEOUT_MS = 120_000;
-
-function applyResultRegex(text: string, pattern?: string) {
-    if (!pattern) return text;
-    try {
-        const match = text.match(new RegExp(pattern, "si"));
-        if (!match) return "";
-        return match[1] ?? match[0];
-    } catch {
-        return text;
-    }
-}
 
 export function clearAnnotation(id: string) {
     const image = getImage(id);
@@ -22,6 +12,23 @@ export function clearAnnotation(id: string) {
 
     MetaCalcDB.setAnnotation(id, "");
     image.annotation = "";
+}
+
+export function modifyAnnotation(id: string, options: BulkAnnotateOptions): boolean {
+    const image = getImage(id);
+    if (!image) return false;
+
+    const existing = MetaCalcDB.get(id)?.annotation ?? image.annotation ?? "";
+    const result = applyResultTransform(
+        existing,
+        options.resultRegex?.trim() || undefined,
+        options.resultTemplate?.trim() || undefined,
+    );
+    if (!result.trim()) return false;
+
+    MetaCalcDB.setAnnotation(id, result);
+    image.annotation = result;
+    return true;
 }
 
 export async function annotateImage(id: string, llm: BulkLlmConfig, options: BulkAnnotateOptions): Promise<boolean> {
@@ -102,7 +109,11 @@ export async function annotateImage(id: string, llm: BulkLlmConfig, options: Bul
         result = options.responsePrefix + result;
     }
 
-    result = applyResultRegex(result, options.resultRegex?.trim() || undefined);
+    result = applyResultTransform(
+        result,
+        options.resultRegex?.trim() || undefined,
+        options.resultTemplate?.trim() || undefined,
+    );
     if (!result.trim()) return false;
 
     let annotation = result;

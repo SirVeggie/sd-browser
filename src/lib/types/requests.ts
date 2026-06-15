@@ -134,15 +134,18 @@ export type BulkLlmConfig = {
     parallelCalls: number;
 };
 
+export type BulkAnnotateMode = 'generate' | 'clear' | 'modify';
+
 export type BulkAnnotateOptions = {
     type: 'annotate';
-    clearAnnotation: boolean;
+    mode: BulkAnnotateMode;
     includeImage: boolean;
     includePrompt: boolean;
     systemInstruction: string;
     responsePrefix: string;
     disableThinking: boolean;
     resultRegex?: string;
+    resultTemplate?: string;
     appendResult: boolean;
 };
 

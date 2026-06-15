@@ -117,6 +117,19 @@ export function formatDurationCompact(ms: number) {
     return parts.join(' ');
 }
 
+export function applyResultTransform(text: string, pattern?: string, template?: string) {
+    if (!pattern) return text;
+    try {
+        const match = text.match(new RegExp(pattern, "si"));
+        if (!match) return "";
+        const tpl = template?.trim();
+        if (!tpl) return match[1] ?? match[0];
+        return tpl.replace(/\$(\d+)/g, (_, index) => match[Number(index)] ?? "");
+    } catch {
+        return text;
+    }
+}
+
 export function formatTaskDuration(ms: number) {
     ms = Math.max(0, ms);
     const hours = Math.floor(ms / 3600000);
