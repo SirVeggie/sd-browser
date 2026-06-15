@@ -28,6 +28,7 @@
     let bulkStartTime = 0;
     let totalTaskDurationMs = 0;
     let progressFailures = 0;
+    let effectiveTaskMsAtProgress = 0;
     let progressHovering = false;
     let tickNow = Date.now();
     let tickInterval: ReturnType<typeof setInterval> | undefined;
@@ -42,8 +43,8 @@
         : 0;
     $: averageTaskMs = progressDone > 0 ? totalTaskDurationMs / progressDone : undefined;
     $: effectiveTaskMs = progressDone > 0 ? elapsedMs / progressDone : undefined;
-    $: timeLeftMs = effectiveTaskMs !== undefined
-        ? effectiveTaskMs * (progressTotal - progressDone)
+    $: timeLeftMs = progressDone > 0
+        ? Math.max(0, progressTotal * effectiveTaskMsAtProgress - elapsedMs)
         : undefined;
 
     function formatStat(ms: number | undefined) {
@@ -171,6 +172,7 @@
         progressDone = 0;
         totalTaskDurationMs = 0;
         progressFailures = 0;
+        effectiveTaskMsAtProgress = 0;
         abortController = new AbortController();
         let refresh = false;
 
@@ -199,6 +201,9 @@
                     if ("done" in event) {
                         progressDone = event.done;
                         progressTotal = event.total;
+                        if (event.done > 0 && bulkStartTime) {
+                            effectiveTaskMsAtProgress = (Date.now() - bulkStartTime) / event.done;
+                        }
                         if (event.totalTaskDurationMs !== undefined) {
                             totalTaskDurationMs = event.totalTaskDurationMs;
                         }
@@ -375,7 +380,7 @@
                         </div>
                         <div class="stat">
                             <span class="label">Time left</span>
-                            <span class="value">{formatStat(timeLeftMs)}</span>
+                            <span class="value">{timeLeftMs === undefined ? "—" : formatDurationCompact(timeLeftMs)}</span>
                         </div>
                         {#if progressFailures > 0}
                             <div class="stat">
