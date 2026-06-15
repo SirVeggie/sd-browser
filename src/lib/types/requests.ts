@@ -181,6 +181,7 @@ export function isBulkRequest(object: any): object is BulkRequest {
 export type BulkProgressEvent = {
     done: number;
     total: number;
+    totalTaskDurationMs?: number;
 } | {
     complete: true;
     refresh?: boolean;

@@ -20,8 +20,12 @@ export async function POST(e) {
             };
 
             try {
-                const refresh = await runBulkAction(request, (done, total) => {
-                    send({ done, total });
+                const refresh = await runBulkAction(request, (done, total, stats) => {
+                    send({
+                        done,
+                        total,
+                        totalTaskDurationMs: stats?.totalTaskDurationMs,
+                    });
                 });
                 send({
                     complete: true,

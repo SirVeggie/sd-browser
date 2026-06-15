@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, onDestroy } from "svelte";
     import Modal from "$lib/items/Modal.svelte";
     import Button from "$lib/items/Button.svelte";
     import Input from "$lib/items/Input.svelte";
@@ -8,7 +8,7 @@
     import type { SearchParams } from "$lib/stores/searchStore";
     import { resolveSearchMatch, runBulkAction } from "$lib/requests/bulkRequests";
     import { fetchFolderStructure } from "$lib/requests/miscRequests";
-    import { stringSort } from "$lib/tools/misc";
+    import { formatDurationCompact, formatTaskDuration, stringSort } from "$lib/tools/misc";
     import type { BulkAction, BulkRequest } from "$lib/types/requests";
     import { askConfirmation } from "./Confirm.svelte";
     import { notify } from "./Notifier.svelte";
@@ -25,10 +25,49 @@
     let running = false;
     let progressDone = 0;
     let progressTotal = 0;
+    let bulkStartTime = 0;
+    let totalTaskDurationMs = 0;
+    let progressHovering = false;
+    let tickNow = Date.now();
+    let tickInterval: ReturnType<typeof setInterval> | undefined;
 
     $: progressPercent = progressTotal
         ? Math.min(100, (progressDone / progressTotal) * 100)
         : 0;
+
+    $: showProgressStats = running && $bulkModalStore.action === "annotate";
+    $: elapsedMs = bulkStartTime
+        ? (progressHovering ? tickNow : Date.now()) - bulkStartTime
+        : 0;
+    $: averageTaskMs = progressDone > 0 ? totalTaskDurationMs / progressDone : undefined;
+    $: effectiveTaskMs = progressDone > 0 ? elapsedMs / progressDone : undefined;
+    $: timeLeftMs = effectiveTaskMs !== undefined
+        ? effectiveTaskMs * (progressTotal - progressDone)
+        : undefined;
+
+    function formatStat(ms: number | undefined) {
+        return ms === undefined ? "—" : formatTaskDuration(ms);
+    }
+
+    function onProgressMouseEnter() {
+        progressHovering = true;
+        tickNow = Date.now();
+        tickInterval = setInterval(() => {
+            tickNow = Date.now();
+        }, 1000);
+    }
+
+    function onProgressMouseLeave() {
+        progressHovering = false;
+        if (tickInterval) {
+            clearInterval(tickInterval);
+            tickInterval = undefined;
+        }
+    }
+
+    onDestroy(() => {
+        if (tickInterval) clearInterval(tickInterval);
+    });
 
     async function loadFolders() {
         try {
@@ -129,6 +168,7 @@
 
         running = true;
         progressDone = 0;
+        totalTaskDurationMs = 0;
         abortController = new AbortController();
         let refresh = false;
 
@@ -149,12 +189,17 @@
                 if (!confirmed) return;
             }
 
+            bulkStartTime = Date.now();
+
             await runBulkAction(
                 buildRequest(bulkAction),
                 (event) => {
                     if ("done" in event) {
                         progressDone = event.done;
                         progressTotal = event.total;
+                        if (event.totalTaskDurationMs !== undefined) {
+                            totalTaskDurationMs = event.totalTaskDurationMs;
+                        }
                     } else if ("complete" in event) {
                         refresh = !!event.refresh;
                     }
@@ -299,8 +344,36 @@
         {/if}
 
         {#if running}
-            <div class="progress">
-                <div class="bar" style={`width: ${progressPercent}%`} />
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <div
+                class="progress-wrap"
+                class:has-stats={showProgressStats}
+                on:mouseenter={onProgressMouseEnter}
+                on:mouseleave={onProgressMouseLeave}
+            >
+                <div class="progress">
+                    <div class="bar" style={`width: ${progressPercent}%`} />
+                </div>
+                {#if showProgressStats && progressHovering}
+                    <div class="progress-stats" role="tooltip">
+                        <div class="stat">
+                            <span class="label">Elapsed time</span>
+                            <span class="value">{formatDurationCompact(elapsedMs)}</span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">Average task time</span>
+                            <span class="value">{formatStat(averageTaskMs)}</span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">Effective task time</span>
+                            <span class="value">{formatStat(effectiveTaskMs)}</span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">Time left</span>
+                            <span class="value">{formatStat(timeLeftMs)}</span>
+                        </div>
+                    </div>
+                {/if}
             </div>
             <p class="progress-text">{progressDone} / {progressTotal}</p>
         {/if}
@@ -403,13 +476,68 @@
         margin: 0.5em 0 0.75em;
     }
 
+    .progress-wrap {
+        position: relative;
+        margin-top: 1em;
+
+        &.has-stats {
+            cursor: help;
+        }
+    }
+
     .progress {
         width: 100%;
         height: 0.75em;
         background: #333;
         border-radius: 0.5em;
         overflow: hidden;
-        margin-top: 1em;
+    }
+
+    .progress-stats {
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 0.5em);
+        transform: translateX(-50%);
+        min-width: 14em;
+        padding: 0.6em 0.75em;
+        background: #222;
+        border: 1px solid #555;
+        border-radius: 0.5em;
+        box-shadow: 0 4px 12px #0008;
+        z-index: 1;
+        pointer-events: none;
+
+        &::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 100%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: #555;
+        }
+    }
+
+    .stat {
+        display: flex;
+        justify-content: space-between;
+        gap: 1em;
+        font-size: 0.85em;
+        line-height: 1.5;
+
+        & + .stat {
+            margin-top: 0.15em;
+        }
+    }
+
+    .label {
+        color: #aaa;
+    }
+
+    .value {
+        color: #eee;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
     }
 
     .bar {

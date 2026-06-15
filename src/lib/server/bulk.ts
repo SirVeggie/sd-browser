@@ -6,9 +6,13 @@ import { searchImages } from "./searching";
 
 const CHUNK_SIZE = 100;
 
+type BulkProgressStats = {
+    totalTaskDurationMs: number;
+};
+
 export async function runBulkAction(
     request: BulkRequest,
-    onProgress: (done: number, total: number) => void,
+    onProgress: (done: number, total: number, stats?: BulkProgressStats) => void,
 ): Promise<boolean> {
     const images = searchImages(request.search, request.filters, request.matching, request.collapse);
     const ids = images.map((image) => image.id);
@@ -61,10 +65,13 @@ export async function runBulkAction(
         let failures = 0;
         const errors: string[] = [];
 
+        let totalTaskDurationMs = 0;
+
         if (annotateOptions.clearAnnotation) {
             const parallel = Math.max(1, request.llm?.parallelCalls || 8);
             console.log(`Bulk clear annotation: ${parallel} parallel workers`);
             await limitedParallelMap(ids, async (id) => {
+                const taskStart = Date.now();
                 try {
                     clearAnnotation(id);
                 } catch (cause) {
@@ -73,8 +80,9 @@ export async function runBulkAction(
                     errors.push(`${id}: ${message}`);
                     console.error(`Bulk clear annotation failed: ${message}`);
                 }
+                totalTaskDurationMs += Date.now() - taskStart;
                 completed++;
-                onProgress(completed, total);
+                onProgress(completed, total, { totalTaskDurationMs });
                 console.log(`Bulk clear annotation: completed ${completed}/${total}`);
                 updateLine(`Bulk clear annotation: completed ${completed}/${total}`);
             }, parallel);
@@ -94,6 +102,7 @@ export async function runBulkAction(
 
         console.log(`Bulk annotate: ${parallel} parallel requests`);
         await limitedParallelMap(ids, async (id) => {
+            const taskStart = Date.now();
             try {
                 await annotateImage(id, request.llm!, annotateOptions);
             } catch (cause) {
@@ -102,8 +111,9 @@ export async function runBulkAction(
                 errors.push(`${id}: ${message}`);
                 console.error(`Bulk annotate failed: ${message}`);
             }
+            totalTaskDurationMs += Date.now() - taskStart;
             completed++;
-            onProgress(completed, total);
+            onProgress(completed, total, { totalTaskDurationMs });
             console.log(`Bulk annotate: completed ${completed}/${total}`);
             updateLine(`Bulk annotate: completed ${completed}/${total}`);
         }, parallel);

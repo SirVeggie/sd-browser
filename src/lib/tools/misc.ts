@@ -105,6 +105,37 @@ export function calcTimeString(ms: number) {
     return res;
 }
 
+export function formatDurationCompact(ms: number) {
+    ms = Math.max(0, Math.round(ms));
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    const parts: string[] = [];
+    if (hours) parts.push(`${hours}h`);
+    if (minutes) parts.push(`${minutes}m`);
+    if (seconds || !parts.length) parts.push(`${seconds}s`);
+    return parts.join(' ');
+}
+
+export function formatTaskDuration(ms: number) {
+    ms = Math.max(0, ms);
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    const precise = ms <= 10000;
+    const seconds = precise
+        ? (ms % 60000) / 1000
+        : Math.floor((ms % 60000) / 1000);
+    const parts: string[] = [];
+    if (hours) parts.push(`${hours}h`);
+    if (minutes) parts.push(`${minutes}m`);
+    if (precise) {
+        parts.push(`${seconds.toFixed(2)}s`);
+    } else if (seconds || !parts.length) {
+        parts.push(`${seconds}s`);
+    }
+    return parts.join(' ');
+}
+
 export function calcProgress(current: number, total: number) {
     const percentage = current / total * 100;
     return percentage.toFixed(1);
