@@ -6,6 +6,10 @@ import type { BulkAnnotateOptions, BulkLlmConfig } from "$lib/types/requests";
 
 const LLM_REQUEST_TIMEOUT_MS = 120_000;
 
+function formatImagePromptForLlm(prompt: string): string {
+    return `--- image prompt start ---\n${prompt}\n--- image prompt end ---`;
+}
+
 export function clearAnnotation(id: string) {
     const image = getImage(id);
     if (!image) return;
@@ -38,7 +42,7 @@ export async function annotateImage(id: string, llm: BulkLlmConfig, options: Bul
     const userContent: ({ type: string; text?: string; image_url?: { url: string } })[] = [];
 
     if (options.includePrompt && image.positive) {
-        userContent.push({ type: "text", text: image.positive });
+        userContent.push({ type: "text", text: formatImagePromptForLlm(image.positive) });
     }
 
     if (options.includeImage) {
