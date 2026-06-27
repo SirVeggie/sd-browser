@@ -215,32 +215,135 @@ export function range(start: number, stop?: number, step = 1) {
     return [...irange(start, stop, step)];
 }
 
-const dateRegex = /^\d{4}(\.|-|\/)\d{1,2}(\.|-|\/)\d{1,2}( \d{1,2}:\d{1,2}(:\d{1,2})?)?$/;
-const offsetRegex = /^(-?\d+(y|m|d|h)( |$))+$/;
-export function unixTime(value: number | string): number {
-    if (typeof value === 'number') return value;
-    if (value === 'n') return Math.ceil(Date.now());
-    if (/^\d+$/.test(value)) return Number(value);
-    if (dateRegex.test(value)) {
-        const parts = value.split(' ');
-        const date = parts[0].split(/[-/.]/);
-        const time = parts[1]?.split(':') ?? [];
-        return new Date(Number(date[0]), Number(date[1]) - 1, Number(date[2]), Number(time[0] ?? 0), Number(time[1] ?? 0), Number(time[2] ?? 0)).getTime();
-    }
-    if (offsetRegex.test(value)) {
-        const date = new Date();
-        const parts = value.split(' ');
-        for (const part of parts) {
-            const value = Number(part.substring(0, part.length - 1));
-            const type = part.substring(part.length - 1).toLowerCase();
-            if (type === 'y') date.setUTCFullYear(date.getUTCFullYear() + value);
-            if (type === 'm') date.setUTCMonth(date.getUTCMonth() + value);
-            if (type === 'd') date.setUTCDate(date.getUTCDate() + value);
-            if (type === 'h') date.setUTCHours(date.getUTCHours() + value);
+const absoluteDateTokenRegex = /^\d{4}(\.|-|\/)\d{1,2}(\.|-|\/)\d{1,2}$/;
+const timeTokenRegex = /^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/;
+const offsetTokenRegex = /^(-?\d+)([ymdh])$/i;
+
+export type DateBoundary = 'start' | 'end';
+
+type ParsedOffset = { value: number; unit: 'y' | 'm' | 'd' | 'h' };
+
+function applyDateOffset(date: Date, offset: ParsedOffset): void {
+    switch (offset.unit) {
+        case 'y':
+            date.setFullYear(date.getFullYear() + offset.value);
+            break;
+        case 'm':
+            date.setMonth(date.getMonth() + offset.value);
+            break;
+        case 'd':
+            date.setDate(date.getDate() + offset.value);
+            break;
+        case 'h':
+            date.setHours(date.getHours() + offset.value);
+            break;
+        default: {
+            const _exhaustive: never = offset.unit;
+            throw new Error(`unknown offset unit '${_exhaustive}'`);
         }
-        return date.getTime();
     }
-    throw new Error(`unknown date format for value '${value}'`);
+}
+
+function snapToDayBoundary(date: Date, boundary: DateBoundary): void {
+    if (boundary === 'start') {
+        date.setHours(0, 0, 0, 0);
+    } else {
+        date.setHours(23, 59, 59, 999);
+    }
+}
+
+function applyExplicitTime(
+    date: Date,
+    hours: number,
+    minutes: number,
+    seconds: number,
+    boundary: DateBoundary,
+    hasSeconds: boolean,
+): void {
+    if (boundary === 'start') {
+        date.setHours(hours, minutes, seconds, 0);
+        return;
+    }
+    if (hasSeconds) {
+        date.setHours(hours, minutes, seconds, 999);
+    } else {
+        date.setHours(hours, minutes, 59, 999);
+    }
+}
+
+export function parseSearchDate(value: string, boundary: DateBoundary): number {
+    const trimmed = value.trim();
+    if (trimmed === 'n') return Math.ceil(Date.now());
+    if (/^\d+$/.test(trimmed)) return Number(trimmed);
+
+    const parts = trimmed.split(/\s+/);
+    let date: Date | null = null;
+    let hadExplicitTime = false;
+    let shouldSnapToDayBoundary = false;
+    let lastTimeHasSeconds = false;
+
+    for (const part of parts) {
+        if (absoluteDateTokenRegex.test(part)) {
+            const dateParts = part.split(/[-/.]/);
+            const year = Number(dateParts[0]);
+            const month = Number(dateParts[1]);
+            const day = Number(dateParts[2]);
+            if (date === null) {
+                date = new Date(year, month - 1, day, 0, 0, 0, 0);
+            } else {
+                date.setFullYear(year, month - 1, day);
+            }
+            shouldSnapToDayBoundary = true;
+            continue;
+        }
+
+        const timeMatch = part.match(timeTokenRegex);
+        if (timeMatch) {
+            if (date === null) date = new Date();
+            const hours = Number(timeMatch[1]);
+            const minutes = Number(timeMatch[2]);
+            const seconds = Number(timeMatch[3] ?? 0);
+            lastTimeHasSeconds = timeMatch[3] !== undefined;
+            date.setHours(hours, minutes, seconds, 0);
+            hadExplicitTime = true;
+            continue;
+        }
+
+        const offsetMatch = part.match(offsetTokenRegex);
+        if (offsetMatch) {
+            if (date === null) date = new Date();
+            const unit = offsetMatch[2].toLowerCase();
+            if (unit !== 'y' && unit !== 'm' && unit !== 'd' && unit !== 'h') {
+                throw new Error(`unknown date format for value '${value}'`);
+            }
+            applyDateOffset(date, { value: Number(offsetMatch[1]), unit });
+            if (unit === 'y' || unit === 'm' || unit === 'd') {
+                shouldSnapToDayBoundary = true;
+            }
+            continue;
+        }
+
+        throw new Error(`unknown date format for value '${value}'`);
+    }
+
+    if (date === null) {
+        throw new Error(`unknown date format for value '${value}'`);
+    }
+
+    if (!hadExplicitTime && shouldSnapToDayBoundary) {
+        snapToDayBoundary(date, boundary);
+    } else if (hadExplicitTime) {
+        applyExplicitTime(
+            date,
+            date.getHours(),
+            date.getMinutes(),
+            date.getSeconds(),
+            boundary,
+            lastTimeHasSeconds,
+        );
+    }
+
+    return date.getTime();
 }
 
 export function lazy<T>(iterable: Iterable<T>): LazyExecutor<T> {

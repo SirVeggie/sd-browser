@@ -1,4 +1,4 @@
-import { unixTime, validRegex, XOR } from "$lib/tools/misc";
+import { parseSearchDate, validRegex, XOR } from "$lib/tools/misc";
 import type { ServerImage } from "$lib/types/images";
 import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } from "$lib/types/misc";
 import _ from "lodash";
@@ -6,18 +6,36 @@ import { MetaDB } from "./db";
 import { getFreshImages, getImageList, isUnique } from "./filemanager";
 import { ModelIndex } from "./modelIndex";
 
-const keywordRegex = `((${searchKeywords.join('|')}) )*`;
-const removeRegex = new RegExp(`^${keywordRegex}`);
-const notRegex = new RegExp(`^${keywordRegex}NOT `);
-const allRegex = new RegExp(`^${keywordRegex}ALL `);
-const negativeRegex = new RegExp(`^${keywordRegex}(NEGATIVE|NEG) `);
-const folderRegex = new RegExp(`^${keywordRegex}(FOLDER|FD) `);
-const paramRegex = new RegExp(`^${keywordRegex}(PARAMS|PR) `);
-const dateRegex = new RegExp(`^${keywordRegex}(DATE|DT) `);
-const modelRegex = new RegExp(`^${keywordRegex}(MODEL|MD) `);
-const annotationRegex = new RegExp(`^${keywordRegex}(ANNOTATION|AN) `);
+const keywordPattern = `((${searchKeywords.join('|')}) )*`;
+const keywordFlags = 'i';
 
-export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean, timestamp?: number) {
+const removeRegex = new RegExp(`^${keywordPattern}`, keywordFlags);
+const notRegex = new RegExp(`^${keywordPattern}NOT `, keywordFlags);
+const allRegex = new RegExp(`^${keywordPattern}ALL `, keywordFlags);
+const negativeRegex = new RegExp(`^${keywordPattern}(NEGATIVE|NEG) `, keywordFlags);
+const folderRegex = new RegExp(`^${keywordPattern}(FOLDER|FD) `, keywordFlags);
+const paramRegex = new RegExp(`^${keywordPattern}(PARAMS|PR) `, keywordFlags);
+const dateRegex = new RegExp(`^${keywordPattern}(DATE|DT) `, keywordFlags);
+const modelRegex = new RegExp(`^${keywordPattern}(MODEL|MD) `, keywordFlags);
+const annotationRegex = new RegExp(`^${keywordPattern}(ANNOTATION|AN) `, keywordFlags);
+const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
+const andSplitRegex = /\s+AND\s+/i;
+const skipCountRegex = /^\d+$/;
+
+function splitSearchParts(search: string): string[] {
+    return search.split(andSplitRegex);
+}
+
+type SearchPart = {
+    raw: string;
+    regex: RegExp;
+    not: RegExpMatchArray | null;
+    type: MatchType;
+    matchingIds: Set<string> | undefined;
+    skip: boolean;
+};
+
+export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean, timestamp?: number, skipResults = true) {
     if (mode === 'regex' && !validRegex(search))
         throw new Error('Invalid regex');
     const matcher = buildMatcher(search, mode);
@@ -41,22 +59,25 @@ export function searchImages(search: string, filters: string[], mode: SearchMode
         list = list.filter(x => isUnique(x.id));
     }
 
+    if (skipResults) {
+        list = applyResultSkip(list, search);
+    }
+
     return list;
 }
 
 export function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
-    let parts = search.split(' AND ');
-    // reorder query for performance
-    parts = parts.filter(x => dateRegex.test(x))
-        .concat(parts.filter(x => folderRegex.test(x)))
-        .concat(parts.filter(x => modelRegex.test(x)))
-        .concat(parts.filter(x => !dateRegex.test(x) && !folderRegex.test(x) && !modelRegex.test(x)));
-
-    const regexes = parts.map(x => {
+    const regexes = splitSearchParts(search).map(x => {
         const raw = x.replace(removeRegex, '');
+        const skip = skipRegex.test(x);
+
+        if (skip && skipCountRegex.test(raw.trim())) {
+            return undefined;
+        }
 
         let type: MatchType = 'positive';
-        if (allRegex.test(x)) type = 'all';
+        if (skip) type = 'positive';
+        else if (allRegex.test(x)) type = 'all';
         else if (negativeRegex.test(x)) type = 'negative';
         else if (folderRegex.test(x)) type = 'folder';
         else if (paramRegex.test(x)) type = 'params';
@@ -70,24 +91,26 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
             not: x.match(notRegex),
             type,
             matchingIds: undefined as Set<string> | undefined,
+            skip,
         };
 
         if (type === 'model')
             part.matchingIds = ModelIndex.getImageIdsForSearch(raw, matching);
 
         return part;
-    });
+    }).filter((x): x is SearchPart => x !== undefined)
+        .sort((a, b) => getSearchPartRank(a) - getSearchPartRank(b));
 
     return (image: ServerImage) => {
         return regexes.every(x => {
             if (x.type === 'date') {
                 if (x.raw.toLowerCase().startsWith('to ')) {
-                    const end = unixTime(x.raw.substring(3));
+                    const end = parseSearchDate(x.raw.substring(3), 'end');
                     return image.modifiedDate <= end;
                 } else {
                     const dates = x.raw.toLowerCase().split(' to ');
-                    const start = unixTime(dates[0]);
-                    const end = dates[1] ? unixTime(dates[1]) : undefined;
+                    const start = parseSearchDate(dates[0], 'start');
+                    const end = dates[1] ? parseSearchDate(dates[1], 'end') : undefined;
                     return image.modifiedDate >= start && (end === undefined || image.modifiedDate <= end);
                 }
             }
@@ -97,17 +120,51 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
             }
 
             const text = getTextByType(image, x.type);
+            const matched = textMatches(text, x, matching);
 
-            if (matching === 'contains') {
-                return XOR(x.not, text.toLowerCase().includes(x.raw.toLowerCase()));
-            } else if (matching === 'words') {
-                const words = x.raw.split(' ');
-                return XOR(x.not, words.every(word => new RegExp(`\\b${word}\\b`, 'i').test(text)));
-            } else {
-                return XOR(x.not, x.regex.test(text));
-            }
+            if (x.skip)
+                return !matched;
+
+            return XOR(x.not, matched);
         });
     };
+}
+
+export function applyResultSkip(images: ServerImage[], search: string): ServerImage[] {
+    const skipCount = getResultSkipCount(search);
+    if (!skipCount) return images;
+    return images.slice(skipCount);
+}
+
+function getResultSkipCount(search: string): number {
+    return splitSearchParts(search).reduce((total, part) => {
+        if (!skipRegex.test(part)) return total;
+
+        const raw = part.replace(removeRegex, '').trim();
+        if (!skipCountRegex.test(raw)) return total;
+
+        return total + Number(raw);
+    }, 0);
+}
+
+function getSearchPartRank(part: SearchPart): number {
+    if (part.type === 'date') return 0;
+    if (part.type === 'folder') return 1;
+    if (part.type === 'model') return 2;
+    if (part.skip) return 4;
+    if (part.type === 'all') return 5;
+    return 3;
+}
+
+function textMatches(text: string, part: SearchPart, matching: SearchMode): boolean {
+    if (matching === 'contains') {
+        return text.toLowerCase().includes(part.raw.toLowerCase());
+    } else if (matching === 'words') {
+        const words = part.raw.split(' ');
+        return words.every(word => new RegExp(`\\b${word}\\b`, 'i').test(text));
+    } else {
+        return part.regex.test(text);
+    }
 }
 
 function getTextByType(image: ServerImage, type: MatchType): string {

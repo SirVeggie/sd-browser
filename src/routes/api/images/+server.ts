@@ -1,6 +1,6 @@
 import { invalidAuth } from '$lib/server/auth.js';
 import { error, success } from '$lib/server/responses.js';
-import { searchImages, sortImages } from '$lib/server/searching';
+import { applyResultSkip, searchImages, sortImages } from '$lib/server/searching';
 import { mapServerImageToClient } from '$lib/tools/misc.js';
 import { type ServerImage } from '$lib/types/images';
 import { type ImageResponse, isImageRequest } from '$lib/types/requests';
@@ -17,8 +17,9 @@ export async function POST(e) {
 
     let images: ServerImage[] = [];
     try {
-        images = searchImages(query.search, query.filters, query.matching, query.collapse);
+        images = searchImages(query.search, query.filters, query.matching, query.collapse, undefined, false);
         images = sortImages(images, query.sorting);
+        images = applyResultSkip(images, query.search);
     } catch (e) {
         if (e instanceof Error) {
             console.log(`${e.message}`);

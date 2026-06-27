@@ -1,7 +1,7 @@
 import { invalidAuth } from '$lib/server/auth';
 import { getDeletedImageIds, getFreshImageTimestamp } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses';
-import { searchImages, sortImages } from '$lib/server/searching';
+import { applyResultSkip, searchImages, sortImages } from '$lib/server/searching';
 import { mapServerImageToClient } from '$lib/tools/misc.js';
 import type { ServerImage } from '$lib/types/images';
 import { isUpdateRequest, type UpdateResponse } from '$lib/types/requests';
@@ -21,8 +21,9 @@ export async function POST(e) {
 
     let images: ServerImage[] = [];
     try {
-        images = searchImages(query.search, query.filters, query.matching, query.collapse, query.timestamp);
+        images = searchImages(query.search, query.filters, query.matching, query.collapse, query.timestamp, false);
         images = sortImages(images, 'date');
+        images = applyResultSkip(images, query.search);
     } catch (e) {
         if (e instanceof Error) {
             console.log(`${e.message}`);

@@ -4,9 +4,9 @@
     import Button from "$lib/items/Button.svelte";
     import ImageDisplay from "$lib/items/ImageDisplay.svelte";
     import ImageFull from "$lib/items/ImageFull.svelte";
-    import Input from "$lib/items/Input.svelte";
     import Intersecter from "$lib/items/Intersecter.svelte";
     import Link from "$lib/items/Link.svelte";
+    import SearchInput from "$lib/items/SearchInput.svelte";
     import { imageAmountStore, imageStore } from "$lib/stores/imageStore";
     import {
         generateCompressedImages,
@@ -742,7 +742,7 @@
 
     {#if !selecting}
         <div class="nav">
-            <Input
+            <SearchInput
                 bind:element={inputElement}
                 bind:value={$searchFilter}
                 placeholder="Search"

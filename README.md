@@ -60,15 +60,21 @@ The search can be restricted into a specific time frame using the `DATE` or `DT`
 
 - Date format: `2024.12.24` | `2024.12.24 23:59` | `2024.12.24 23:59:59`
 - Unix timestamp (milliseconds): `1731436728000`
-- Offset format: `-1y` | `-1m -10d 12h`
+- Offset format: `-1y` | `-1m -10d 12h` | `-1y 10:00`
+- Absolute and relative parts can be combined: `2026.6.27 -5h`
 - Date range: `TO` keyword
+- Relative hour offsets by themselves stay anchored to the current time
+- Absolute dates and relative date offsets (`y`/`m`/`d`) anchor to full days unless an explicit time is specified: start at 00:00:00, end at 23:59:59.999
 
 #### Examples
 
 ```
 DT -1d -12h | between 36 hours ago and now
+DT -2d TO -1d | full calendar days from two days ago through yesterday
 DT 2024.6.1 14:00 | between 2024.06.01 14:00:00 and now
-DT -1y TO -6m | between 1 year ago and 6 months ago
+DT 2026.6.27 -5h | the full boundary day reached by subtracting five hours from 2026.06.27
+DT -1y 10:00 TO -5m -2d 18:00 | from 10:00 one year ago until 18:00 on the day from -5m -2d
+DT -1y TO -6m | from start of day one year ago through end of day six months ago
 DT 2023.01.01 TO 1731436728000 | between 2023.01.01 00:00:00 and 2024.11.12 18:38:48
 ```
 
@@ -98,7 +104,7 @@ Search `red` matches `scarred`
 
 ## Keywords
 
-Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT`. Keywords must always be upper case. Keywords can be in any order (except AND). Both are valid: `NOT FOLDER img2img` and `FOLDER NOT img2img`.
+Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT, MODEL | MD, ANNOTATION | AN, SKIP`. Keywords are case insensitive. Keywords can be in any order (except AND). Both are valid: `NOT FOLDER img2img` and `FOLDER NOT img2img`, or `not folder img2img` and `folder not img2img`.
 
 `AND`: Specify multiple conditions that all have to match  
 Example: `red hair AND man`
@@ -119,6 +125,9 @@ Example: `FOLDER txt2img` or `landscape AND NOT FD img2img|grid`
 Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part of the prompt)
 
 `DATE`: Uses special date syntax to restrict search to some time frame (examples above)
+
+`SKIP`: Skips matching results. Use a number to skip that many results from the top, or text to remove matching positive prompts using the selected matching mode.  
+Example: `landscape AND SKIP 20` or `landscape AND SKIP blurry`
 
 ## Sorting
 - Date: Sorts images based on file modification date
