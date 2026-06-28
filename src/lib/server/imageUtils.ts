@@ -1,4 +1,4 @@
-import { getPrompts, simplifyPrompt } from "$lib/tools/metadataInterpreter";
+import { getModels, getPrompts, simplifyPrompt } from "$lib/tools/metadataInterpreter";
 import type { ImageExtraData, ImageInfo, ServerImage, ServerImageFull } from "$lib/types/images";
 import { isMetadataFiletype, isVideo } from '$lib/tools/misc';
 import crypto from 'crypto';
@@ -20,6 +20,7 @@ export function getServerImage(image: ServerImageFull): ServerImage {
         positive: prompts?.pos ?? '',
         negative: prompts?.neg ?? '',
         params: prompts?.params ?? '',
+        models: getModels(image.prompt, image.workflow, image.extra),
         hash: '',
         isUnique: -1,
         annotation: '',
@@ -33,6 +34,7 @@ export function populateServerImage(image: ServerImage, info: ImageExtraData): S
     image.positive = info.positive;
     image.negative = info.negative;
     image.params = info.params;
+    image.models = info.models ?? '[]';
     image.hash = info.hash;
     image.isUnique = info.isUnique;
     image.annotation = info.annotation ?? '';
@@ -153,6 +155,7 @@ export function buildImageInfo(imageid: string): ImageInfo | undefined {
         positive: image.positive,
         negative: image.negative,
         params: image.params,
+        models: image.models,
         prompt: full?.prompt,
         workflow: full?.workflow,
         extra: full?.extra,

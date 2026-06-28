@@ -1,4 +1,5 @@
 import { parseSearchDate, validRegex, XOR } from "$lib/tools/misc";
+import { getModelSearchText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
 import {
     searchKeywords,
@@ -11,7 +12,6 @@ import _ from "lodash";
 import { MetaDB } from "./db";
 import { getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./filemanager";
-import { ModelIndex } from "./modelIndex";
 
 const keywordPattern = `((${searchKeywords.join('|')}) )*`;
 const keywordFlags = 'i';
@@ -38,7 +38,6 @@ type SearchPart = {
     regex: RegExp;
     not: RegExpMatchArray | null;
     type: MatchType;
-    matchingIds: Set<string> | undefined;
     skip: boolean;
 };
 
@@ -159,12 +158,8 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
             regex: new RegExp(raw, 'is'),
             not: x.match(notRegex),
             type,
-            matchingIds: undefined as Set<string> | undefined,
             skip,
         };
-
-        if (type === 'model')
-            part.matchingIds = ModelIndex.getImageIdsForSearch(raw, matching);
 
         return part;
     }).filter((x): x is SearchPart => x !== undefined)
@@ -185,7 +180,11 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
             }
 
             if (x.type === 'model') {
-                return XOR(x.not, x.matchingIds!.has(image.id));
+                const text = getModelSearchText(image.models);
+                const matched = textMatches(text, x, matching);
+                if (x.skip)
+                    return !matched;
+                return XOR(x.not, matched);
             }
 
             const text = getTextByType(image, x.type);
@@ -253,7 +252,7 @@ function getTextByType(image: ServerImage, type: MatchType): string {
         case 'all':
             return getFullMetaForImage(image.id);
         case 'model':
-            return '';
+            return getModelSearchText(image.models);
         case 'annotation':
             return image.annotation ?? '';
         default: {

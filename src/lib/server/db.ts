@@ -305,6 +305,7 @@ export class MetaCalcDB {
         positive TEXT,
         negative TEXT,
         params TEXT,
+        models TEXT,
         hash TEXT,
         isUnique INTEGER,
         annotation TEXT
@@ -327,6 +328,7 @@ export class MetaCalcDB {
         MetaCalcDB.isSetup = true;
         MetaCalcDB.db.exec(MetaCalcDB.sqlCreate);
         MetaCalcDB.ensureColumn('annotation', 'TEXT');
+        MetaCalcDB.ensureColumn('models', 'TEXT');
     }
 
     static ensureColumn(column: string, definition: string) {
@@ -380,18 +382,18 @@ export class MetaCalcDB {
         MetaCalcDB.setup();
         const existing = MetaCalcDB.get(data.id);
         const annotation = data.annotation !== undefined ? data.annotation : (existing?.annotation ?? null);
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-        stmt.run(data.id, data.positive, data.negative, data.params, data.hash, data.isUnique, annotation);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        stmt.run(data.id, data.positive, data.negative, data.params, data.models ?? '[]', data.hash, data.isUnique, annotation);
     }
 
     static setAll(data: ImageExtraData[]) {
         MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
             for (const item of data) {
                 const existing = MetaCalcDB.get(item.id);
                 const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                stmt.run(item.id, item.positive, item.negative, item.params, item.hash, item.isUnique, annotation);
+                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '[]', item.hash, item.isUnique, annotation);
             }
         })(data);
     }
@@ -446,14 +448,14 @@ export class MetaCalcDB {
         if (!data.length && !deletions.length)
             return;
         const delstmt = MetaCalcDB.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
-        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[], deletions: string[]) => {
             for (const id of deletions)
                 delstmt.run(id);
             for (const item of data) {
                 const existing = MetaCalcDB.get(item.id);
                 const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                addstmt.run(item.id, item.positive, item.negative, item.params, item.hash, item.isUnique, annotation);
+                addstmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '[]', item.hash, item.isUnique, annotation);
             }
         })(data, deletions);
     }

@@ -8,6 +8,7 @@ import type {
     ComfyWorkflow,
     ComfyWorkflowNode,
     ComfyWorkflowNodeInput,
+    ModelCandidate,
     ServerImage,
 } from "$lib/types/images";
 
@@ -139,29 +140,340 @@ export function splitPromptParams(str: string): string[] {
 }
 
 const autoModelRegex = /Model: (.*?)(,|$)/;
-export function getModel(prompt: string | undefined, workflow: string | undefined, extra: string | undefined) {
-    if (extra) {
-        try {
-            const data = JSON.parse(extra);
-            if (data.model) {
-                return data.model;
-            }
-        } catch { /**/ }
+const QUOTED_MODEL_RE = /"((?:[^"\\]|\\.)*\.(?:safetensors|gguf|pt))"/gi;
+const UNQUOTED_MODEL_RE = /(?:^|[^\w./\\])((?:[\w ./\\()-])+?\.(?:safetensors|gguf|pt))(?!\w)/gi;
+const PRIMARY_EXCLUDE_RE = /vae|clip|encoder|depth|adapter|ipa|control/i;
+const MODEL_INPUT_KEYS = new Set(['ckpt_name', 'model', 'checkpoint', 'unet_name', 'vae_name', 'clip_name', 'lora_name']);
+
+export const UNKNOWN_MODEL = 'Unknown';
+export const MULTIPLE_MODELS = 'Multiple models';
+
+function parseExtraJson(extra: string | undefined): Record<string, unknown> | undefined {
+    if (!extra)
+        return undefined;
+    try {
+        return JSON.parse(extra) as Record<string, unknown>;
+    } catch {
+        return undefined;
+    }
+}
+
+function isModelFilename(value: string): boolean {
+    return /\.(safetensors|gguf|pt)$/i.test(value);
+}
+
+function addUniqueName(names: Set<string>, name: string | undefined) {
+    const trimmed = name?.trim();
+    if (trimmed)
+        names.add(trimmed);
+}
+
+function getExplicitModelNames(extra: string | undefined, prompt: string | undefined): string[] {
+    const names = new Set<string>();
+    const data = parseExtraJson(extra);
+    if (typeof data?.model === 'string')
+        addUniqueName(names, data.model);
+
+    if (typeof data?.params === 'string') {
+        const modelFromParams = /(?:^|[\n\r,])\s*model:\s*([^,\n\r]+)/i.exec(data.params)?.[1];
+        addUniqueName(names, modelFromParams);
     }
 
     const version = getMetadataVersion(prompt);
-    if (version === 'swarm' && prompt)
-        return JSON.parse(prompt).sui_image_params.model;
-    if (!prompt) return 'Unknown';
-    let model = prompt.match(autoModelRegex)?.[1];
-    if (model)
-        return model;
-    if (!workflow) return 'Unknown';
-    const comfyPrompt = getComfyPrompt(prompt);
-    const comfyWorkflow = getComfyWorkflowNodes(workflow);
-    if (!comfyPrompt || !comfyWorkflow) return 'Unknown';
-    model = getComfyModel(comfyPrompt, comfyWorkflow);
-    return model || 'Unknown';
+    if (version === 'swarm' && prompt) {
+        try {
+            const model = JSON.parse(prompt).sui_image_params?.model;
+            if (typeof model === 'string')
+                addUniqueName(names, model);
+        } catch { /**/ }
+    }
+
+    if (prompt) {
+        const a1111Model = prompt.match(autoModelRegex)?.[1];
+        addUniqueName(names, a1111Model);
+    }
+
+    return [...names];
+}
+
+function getExplicitPrimaryModel(extra: string | undefined): string | undefined {
+    const data = parseExtraJson(extra);
+    if (typeof data?.model === 'string' && data.model.trim())
+        return data.model.trim();
+
+    if (typeof data?.params === 'string') {
+        const modelFromParams = /(?:^|[\n\r,])\s*model:\s*([^,\n\r]+)/i.exec(data.params)?.[1]?.trim();
+        if (modelFromParams)
+            return modelFromParams;
+    }
+
+    return undefined;
+}
+
+export function extractModelFilenamesFromText(text: string): string[] {
+    const names = new Set<string>();
+
+    for (const match of text.matchAll(QUOTED_MODEL_RE)) {
+        let value: string;
+        try {
+            value = JSON.parse(match[0]) as string;
+        } catch {
+            value = match[1];
+        }
+        addUniqueName(names, value);
+    }
+
+    for (const match of text.matchAll(UNQUOTED_MODEL_RE))
+        addUniqueName(names, match[1]);
+
+    return [...names];
+}
+
+export function getModels(prompt: string | undefined, workflow: string | undefined, extra: string | undefined): string {
+    const names = new Set<string>();
+    for (const name of getExplicitModelNames(extra, prompt))
+        names.add(name);
+
+    const text = `${prompt ?? ''}\n${workflow ?? ''}`;
+    for (const name of extractModelFilenamesFromText(text))
+        names.add(name);
+
+    return JSON.stringify([...names]);
+}
+
+export function parseStoredModels(models: string | undefined): string[] {
+    if (!models)
+        return [];
+    try {
+        const parsed = JSON.parse(models);
+        if (!Array.isArray(parsed))
+            return [];
+        return parsed.filter((value): value is string => typeof value === 'string' && !!value.trim());
+    } catch {
+        return [];
+    }
+}
+
+function getCandidateSortRank(candidate: ModelCandidate): number {
+    const title = (candidate.nodeTitle ?? '').toLowerCase();
+    const className = (candidate.className ?? '').toLowerCase();
+    const widget = (candidate.widgetLabel ?? '').toLowerCase();
+    const inputKey = (candidate.inputKey ?? '').toLowerCase();
+
+    if (/checkpoint/.test(title) || /checkpoint/.test(className)
+        || widget === 'ckpt_name' || widget === 'checkpoint'
+        || inputKey === 'ckpt_name' || inputKey === 'checkpoint')
+        return 0;
+    if (/diffusion|model/.test(title) || /diffusion|model/.test(className))
+        return 1;
+    if (widget === 'model' || inputKey === 'model')
+        return 2;
+
+    const ext = candidate.model.split('.').pop()?.toLowerCase();
+    if (ext === 'safetensors' || ext === 'gguf')
+        return 3;
+    if (ext === 'pt')
+        return 4;
+    return 5;
+}
+
+export function sortModelCandidates(candidates: ModelCandidate[]): ModelCandidate[] {
+    return [...candidates].sort((a, b) => {
+        const rank = getCandidateSortRank(a) - getCandidateSortRank(b);
+        if (rank !== 0)
+            return rank;
+        return a.model.localeCompare(b.model);
+    });
+}
+
+function candidateContextText(candidate: ModelCandidate): string {
+    return [
+        candidate.nodeTitle,
+        candidate.className,
+        candidate.widgetLabel,
+        candidate.inputKey,
+        candidate.model,
+    ].filter(Boolean).join(' ');
+}
+
+function isExcludedFromPrimary(candidate: ModelCandidate): boolean {
+    return PRIMARY_EXCLUDE_RE.test(candidateContextText(candidate));
+}
+
+function collectComfyModelCandidates(prompt: ComfyPrompt, ctx: ComfyWorkflowContext): ModelCandidate[] {
+    const candidates: ModelCandidate[] = [];
+    const seen = new Set<string>();
+
+    const add = (model: string, info: Omit<ModelCandidate, 'model'>) => {
+        if (!isModelFilename(model))
+            return;
+        const key = `${info.nodeId ?? ''}:${model}:${info.inputKey ?? ''}`;
+        if (seen.has(key))
+            return;
+        seen.add(key);
+        candidates.push({ model, ...info });
+    };
+
+    for (const id in prompt) {
+        const promptNode = prompt[id];
+        const workflowNode = ctx.nodes[id];
+        const subgraph = workflowNode ? getSubgraphDefinition(ctx, workflowNode) : undefined;
+        const nodeTitle = resolveNodeTitle(id, promptNode, workflowNode, subgraph);
+        const className = promptNode.class_type ?? workflowNode?.type ?? '';
+
+        for (const [inputKey, value] of Object.entries(promptNode.inputs ?? {})) {
+            if (typeof value !== 'string')
+                continue;
+            const input = findWorkflowInput(workflowNode, inputKey);
+            const widgetLabel = input ? resolveInputLabel(input, inputKey) : inputKey;
+            const isModelField = MODEL_INPUT_KEYS.has(inputKey.toLowerCase())
+                || MODEL_INPUT_KEYS.has(widgetLabel.toLowerCase())
+                || isModelFilename(value);
+            if (!isModelField)
+                continue;
+            add(value, { nodeId: id, nodeTitle, className, inputKey, widgetLabel });
+        }
+    }
+
+    for (const workflowNode of ctx.workflow.nodes ?? []) {
+        const proxyWidgets = getProxyWidgets(workflowNode);
+        if (!proxyWidgets)
+            continue;
+        const subgraph = getSubgraphDefinition(ctx, workflowNode);
+        const containerTitle = resolveNodeTitle(
+            workflowNode.id,
+            prompt[String(workflowNode.id)],
+            workflowNode,
+            subgraph,
+        );
+        for (const [innerId, widgetName] of proxyWidgets) {
+            const promptNode = prompt[`${workflowNode.id}:${innerId}`];
+            const value = promptNode?.inputs?.[widgetName];
+            if (typeof value !== 'string')
+                continue;
+            const innerNode = findInnerNode(subgraph, innerId);
+            const widgetLabel = resolveProxyWidgetLabel(subgraph, innerId, widgetName);
+            const isModelField = MODEL_INPUT_KEYS.has(widgetName.toLowerCase())
+                || MODEL_INPUT_KEYS.has(widgetLabel.toLowerCase())
+                || isModelFilename(value);
+            if (!isModelField)
+                continue;
+            add(value, {
+                nodeId: `${workflowNode.id}:${innerId}`,
+                nodeTitle: innerNode?.title ?? containerTitle,
+                className: innerNode?.type ?? workflowNode.type,
+                inputKey: widgetName,
+                widgetLabel,
+            });
+        }
+    }
+
+    return candidates;
+}
+
+function collectSimpleModelCandidates(
+    extra: string | undefined,
+    prompt: string | undefined,
+    text: string,
+): ModelCandidate[] {
+    const candidates: ModelCandidate[] = [];
+    const seen = new Set<string>();
+
+    const add = (model: string, info: Omit<ModelCandidate, 'model'> = {}) => {
+        if (!model || seen.has(model))
+            return;
+        seen.add(model);
+        candidates.push({ model, ...info });
+    };
+
+    for (const name of getExplicitModelNames(extra, prompt))
+        add(name);
+
+    for (const name of extractModelFilenamesFromText(text))
+        add(name);
+
+    return candidates;
+}
+
+export function getModelCandidates(
+    prompt: string | undefined,
+    workflow: string | undefined,
+    extra: string | undefined,
+): ModelCandidate[] {
+    const text = `${prompt ?? ''}\n${workflow ?? ''}`;
+    const version = getMetadataVersion(prompt);
+
+    if (version === 'comfy' && prompt && workflow) {
+        const comfyPrompt = getComfyPrompt(prompt);
+        const ctx = getComfyWorkflowContext(workflow);
+        if (comfyPrompt && ctx) {
+            const candidates = collectComfyModelCandidates(comfyPrompt, ctx);
+            const seen = new Set(candidates.map(candidate => candidate.model));
+            for (const name of extractModelFilenamesFromText(text)) {
+                if (!seen.has(name)) {
+                    candidates.push({ model: name });
+                    seen.add(name);
+                }
+            }
+            for (const name of getExplicitModelNames(extra, prompt)) {
+                if (!seen.has(name)) {
+                    candidates.push({ model: name });
+                    seen.add(name);
+                }
+            }
+            return sortModelCandidates(candidates);
+        }
+    }
+
+    return sortModelCandidates(collectSimpleModelCandidates(extra, prompt, text));
+}
+
+export function getPrimaryModel(candidates: ModelCandidate[], extra: string | undefined): string {
+    const explicit = getExplicitPrimaryModel(extra);
+    if (explicit)
+        return explicit;
+
+    const uniqueNames = [...new Set(candidates.map(candidate => candidate.model))];
+    if (uniqueNames.length === 1)
+        return uniqueNames[0];
+    if (!uniqueNames.length)
+        return UNKNOWN_MODEL;
+
+    let pool = candidates.filter(candidate => !candidate.model.toLowerCase().endsWith('.pt'));
+    pool = pool.filter(candidate => !isExcludedFromPrimary(candidate));
+
+    const withMain = pool.filter(candidate => /main/i.test(candidate.nodeTitle ?? ''));
+    if (withMain.length === 1)
+        return withMain[0].model;
+    if (withMain.length > 1)
+        pool = withMain;
+
+    const withFirst = pool.filter(candidate => /first/i.test(candidate.nodeTitle ?? ''));
+    if (withFirst.length === 1)
+        return withFirst[0].model;
+    if (withFirst.length > 1)
+        pool = withFirst;
+
+    const remainingNames = [...new Set(pool.map(candidate => candidate.model))];
+    if (remainingNames.length === 1)
+        return remainingNames[0];
+
+    return MULTIPLE_MODELS;
+}
+
+export function formatModels(candidates: ModelCandidate[]): string {
+    return sortModelCandidates(candidates).map(candidate => {
+        const label = candidate.nodeTitle || candidate.className || candidate.widgetLabel || candidate.inputKey;
+        return label ? `${label}: ${candidate.model}` : candidate.model;
+    }).join('\n');
+}
+
+export function getModelSearchText(models: string | undefined): string {
+    return parseStoredModels(models).map(model => {
+        const normalized = model.replace(/\\/g, '/');
+        const base = normalized.split('/').pop() ?? normalized;
+        return base === normalized ? normalized : `${normalized}\n${base}`;
+    }).join('\n');
 }
 
 export function getSeed(prompt: string | undefined, workflow: string | undefined, extra: string | undefined) {
@@ -1041,18 +1353,4 @@ export function getComfySeed(prompt: string | ComfyPrompt, workflow: string | Co
     );
     const entries = collectComfySeedEntries(prompt, ctx, nodes);
     return formatComfySeedEntries(entries);
-}
-
-export function getComfyModel(prompt: ComfyPrompt, nodes: Record<string, ComfyWorkflowNode>) {
-    const ids = getComfyIds(prompt, nodes, /model|checkpoint/i);
-    const models = ids.reduce((acc, id) => {
-        const model = String(getComfyValue(prompt[id], ['ckpt_name', 'model', 'checkpoint', 'string', 'str', 'unet_name', 'vae_name', 'clip_name', 'lora_name'], 'string'));
-        if (model)
-            acc[id] = model;
-        return acc;
-    }, {} as Record<string, string>);
-    const keys = Object.keys(models);
-    if (keys.length > 1)
-        return keys.map(id => `${nodes[id]?.title ?? getPromptNodeTitle(prompt[id]) ?? prompt[id]?.class_type}: ${models[id]}`).join('\n');
-    return !keys.length ? '' : models[keys[0]];
 }

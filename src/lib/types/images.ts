@@ -39,12 +39,13 @@ export type ServerImage = {
     positive: string;
     negative: string;
     params: string;
+    models: string;
     hash: string;
     isUnique: -1 | 0 | 1;
     annotation: string;
 };
 export function isServerImageSimple(object: any): object is ServerImage {
-    return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'positive', 'negative', 'params']);
+    return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'positive', 'negative', 'params', 'models']);
 }
 
 export type ImageExtraData = {
@@ -52,6 +53,7 @@ export type ImageExtraData = {
     positive: string;
     negative: string;
     params: string;
+    models: string;
     hash: string;
     isUnique: -1 | 0 | 1;
     annotation?: string | null;
@@ -77,7 +79,17 @@ export type ImageInfo = {
     positive?: string;
     negative?: string;
     params?: string;
+    models?: string;
     annotation?: string;
+};
+
+export type ModelCandidate = {
+    model: string;
+    nodeId?: string;
+    nodeTitle?: string;
+    className?: string;
+    widgetLabel?: string;
+    inputKey?: string;
 };
 export function isImageInfo(object: any): object is ImageInfo {
     return testType(object, ['id', 'folder', 'modifiedDate', 'createdDate']);
