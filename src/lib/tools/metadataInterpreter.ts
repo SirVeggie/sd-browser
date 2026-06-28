@@ -246,6 +246,7 @@ const PARAMS_TEXT_MAX_STRING_LENGTH = 1000;
 type ComfySeedEntry = {
     label: string;
     value: string;
+    priority: number;
 };
 
 type ComfyFieldContext = {
@@ -385,12 +386,28 @@ function resolveSeedEntryLabel(
     return workflowNode?.type?.trim() || promptNode?.class_type?.trim() || String(nodeId);
 }
 
+function getSeedEntryPriority(nodeLabel: string, widgetLabel?: string, inputKey?: string): number {
+    const normalizedTitle = nodeLabel.trim().toLowerCase();
+    if (normalizedTitle.startsWith('seed'))
+        return 0;
+    if (/seed/i.test(nodeLabel))
+        return 1;
+    if ((widgetLabel && /seed/i.test(widgetLabel)) || (inputKey && /seed/i.test(inputKey)))
+        return 2;
+    return 3;
+}
+
+function sortComfySeedEntries(entries: ComfySeedEntry[]): ComfySeedEntry[] {
+    return [...entries].sort((a, b) => a.priority - b.priority);
+}
+
 function formatComfySeedEntries(entries: ComfySeedEntry[]): string {
-    if (!entries.length)
+    const sorted = sortComfySeedEntries(entries);
+    if (!sorted.length)
         return '';
-    if (entries.length === 1)
-        return entries[0].value;
-    return entries.map(entry => `${entry.label}: ${entry.value}`).join('\n');
+    if (sorted.length === 1)
+        return sorted[0].value;
+    return sorted.map(entry => `${entry.label}: ${entry.value}`).join('\n');
 }
 
 function resolveInputLabel(input: ComfyWorkflowNodeInput | undefined, fallback: string): string {
@@ -709,12 +726,21 @@ function collectComfySeedEntries(
     const entries: ComfySeedEntry[] = [];
     const seen = new Set<string>();
 
-    const add = (label: string, value: string | number) => {
+    const add = (
+        nodeLabel: string,
+        value: string | number,
+        widgetLabel?: string,
+        inputKey?: string,
+    ) => {
         const normalized = String(value);
         if (!normalized || seen.has(normalized))
             return;
         seen.add(normalized);
-        entries.push({ label, value: normalized });
+        entries.push({
+            label: nodeLabel,
+            value: normalized,
+            priority: getSeedEntryPriority(nodeLabel, widgetLabel, inputKey),
+        });
     };
 
     for (const id of getComfyIds(prompt, nodes, SEED_RE)) {
@@ -722,7 +748,7 @@ function collectComfySeedEntries(
         const nodeLabel = resolveSeedEntryLabel(id, prompt[id], workflowNode, ctx);
         for (const field of collectNumericLiteralFields(prompt[id], workflowNode)) {
             if (shouldTreatAsSeed(nodeLabel, field.value, field.label, field.inputKey))
-                add(nodeLabel, field.value);
+                add(nodeLabel, field.value, field.label, field.inputKey);
         }
     }
 
@@ -732,7 +758,7 @@ function collectComfySeedEntries(
         const nodeLabel = resolveSeedEntryLabel(id, promptNode, workflowNode, ctx);
         for (const field of collectNumericLiteralFields(promptNode, workflowNode)) {
             if (shouldTreatAsSeed(nodeLabel, field.value, field.label, field.inputKey))
-                add(nodeLabel, field.value);
+                add(nodeLabel, field.value, field.label, field.inputKey);
         }
     }
 
