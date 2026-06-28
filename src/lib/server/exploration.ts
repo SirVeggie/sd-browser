@@ -1,37 +1,268 @@
+import crypto from 'crypto';
 import { simplifyPrompt } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
-import type { ExplorationSettings, SimilarityAlgorithm } from "$lib/types/misc";
-import { getImageList } from "./filemanager";
+import { isSimilarityAlgorithm, type ExplorationSettings, type SimilarityAlgorithm } from "$lib/types/misc";
+import { MiscDB } from "./db";
 
-type PoolCacheEntry = {
+type SourceState = {
     fingerprint: string;
+    count: number;
+};
+
+type SparseCachePayload = {
+    type: 'sparse';
+    frequency: number;
+    sourceFingerprint: string;
+    sourceCount: number;
+    poolIds: string[];
+};
+
+type SimilarCachePayload = {
+    type: 'similar';
+    algorithm: SimilarityAlgorithm;
+    threshold: number;
+    sourceFingerprint: string;
+    sourceCount: number;
+    poolIds: string[];
+};
+
+type RuntimeCache<TPayload extends SparseCachePayload | SimilarCachePayload> = {
+    payload: TPayload;
     pool: Set<string>;
 };
 
-const sparseCache = new Map<number, PoolCacheEntry>();
-const similarCache = new Map<string, PoolCacheEntry>();
-const promptSimplificationVersion = 1;
+const sparseCacheKey = 'exploration-cache:sparse';
+const similarCacheKey = 'exploration-cache:similar';
 
-function libraryFingerprint(images: ServerImage[]): string {
-    let maxDate = 0;
-    for (const image of images) {
-        if (image.modifiedDate > maxDate)
-            maxDate = image.modifiedDate;
+let sparseCache: RuntimeCache<SparseCachePayload> | undefined;
+let similarCache: RuntimeCache<SimilarCachePayload> | undefined;
+
+function getSourceState(images: ServerImage[]): SourceState {
+    const ids = images.map(image => image.id).sort();
+    const hash = crypto.createHash('sha256');
+    for (const id of ids) {
+        hash.update(id);
+        hash.update('\0');
     }
-    return `${images.length}:${maxDate}`;
+    return {
+        fingerprint: hash.digest('hex'),
+        count: ids.length,
+    };
 }
 
-function isCacheValid(entry: PoolCacheEntry | undefined, fingerprint: string): entry is PoolCacheEntry {
-    return entry !== undefined && entry.fingerprint === fingerprint;
+function sourceMatches(payload: SparseCachePayload | SimilarCachePayload, source: SourceState) {
+    return payload.sourceFingerprint === source.fingerprint && payload.sourceCount === source.count;
 }
 
-export function invalidateExplorationPools(): void {
-    sparseCache.clear();
-    similarCache.clear();
+function stringArray(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every(item => typeof item === 'string');
 }
 
-export function getExplorationPool(settings: ExplorationSettings): Set<string> {
-    const images = [...getImageList().values()];
+function parseSparseCache(raw: string | undefined): SparseCachePayload | undefined {
+    if (!raw) return undefined;
+    try {
+        const parsed = JSON.parse(raw) as Partial<SparseCachePayload>;
+        if (
+            parsed.type === 'sparse' &&
+            typeof parsed.frequency === 'number' &&
+            typeof parsed.sourceFingerprint === 'string' &&
+            typeof parsed.sourceCount === 'number' &&
+            stringArray(parsed.poolIds)
+        ) {
+            return parsed as SparseCachePayload;
+        }
+    } catch {
+        console.log('Failed to parse sparse exploration cache from DB');
+    }
+    return undefined;
+}
+
+function parseSimilarCache(raw: string | undefined): SimilarCachePayload | undefined {
+    if (!raw) return undefined;
+    try {
+        const parsed = JSON.parse(raw) as Partial<SimilarCachePayload>;
+        if (
+            parsed.type === 'similar' &&
+            isSimilarityAlgorithm(parsed.algorithm) &&
+            typeof parsed.threshold === 'number' &&
+            typeof parsed.sourceFingerprint === 'string' &&
+            typeof parsed.sourceCount === 'number' &&
+            stringArray(parsed.poolIds)
+        ) {
+            return parsed as SimilarCachePayload;
+        }
+    } catch {
+        console.log('Failed to parse similar exploration cache from DB');
+    }
+    return undefined;
+}
+
+function poolIdsAreValid(poolIds: string[], images: ServerImage[]) {
+    const ids = new Set(images.map(image => image.id));
+    return poolIds.every(id => ids.has(id));
+}
+
+function cachePool<TPayload extends SparseCachePayload | SimilarCachePayload>(payload: TPayload): RuntimeCache<TPayload> {
+    return {
+        payload,
+        pool: new Set(payload.poolIds),
+    };
+}
+
+function saveSparseCache(payload: SparseCachePayload) {
+    MiscDB.set(sparseCacheKey, JSON.stringify(payload));
+    console.log(`Saved sparse exploration cache (${payload.poolIds.length}/${payload.sourceCount} images, frequency ${payload.frequency})`);
+}
+
+function saveSimilarCache(payload: SimilarCachePayload) {
+    MiscDB.set(similarCacheKey, JSON.stringify(payload));
+    console.log(`Saved similar exploration cache (${payload.poolIds.length}/${payload.sourceCount} images, ${payload.algorithm}, threshold ${payload.threshold})`);
+}
+
+export function verifyExplorationCaches(images: ServerImage[]): void {
+    const source = getSourceState(images);
+    const sparse = parseSparseCache(MiscDB.get(sparseCacheKey));
+    if (sparse && sourceMatches(sparse, source) && poolIdsAreValid(sparse.poolIds, images)) {
+        console.log(`Verified sparse exploration cache (${sparse.poolIds.length}/${source.count} images)`);
+    } else if (sparse) {
+        MiscDB.delete(sparseCacheKey);
+        sparseCache = undefined;
+        console.log('Removed stale sparse exploration cache after library verification');
+    }
+
+    const similar = parseSimilarCache(MiscDB.get(similarCacheKey));
+    if (similar && sourceMatches(similar, source) && poolIdsAreValid(similar.poolIds, images)) {
+        console.log(`Verified similar exploration cache (${similar.poolIds.length}/${source.count} images)`);
+    } else if (similar) {
+        MiscDB.delete(similarCacheKey);
+        similarCache = undefined;
+        console.log('Removed stale similar exploration cache after library verification');
+    }
+}
+
+export function invalidateExplorationPools(reason?: string): void {
+    const hadCache = !!sparseCache || !!similarCache;
+    sparseCache = undefined;
+    similarCache = undefined;
+    if (hadCache || reason)
+        console.log(`Cleared exploration runtime caches${reason ? `: ${reason}` : ''}`);
+}
+
+function sortByModifiedDate(images: ServerImage[]): ServerImage[] {
+    return [...images].sort((a, b) => {
+        if (a.modifiedDate !== b.modifiedDate)
+            return a.modifiedDate - b.modifiedDate;
+        return a.id.localeCompare(b.id);
+    });
+}
+
+function firstIndexAtOrAfter(images: ServerImage[], modifiedDate: number): number {
+    const index = images.findIndex(image => image.modifiedDate >= modifiedDate);
+    return index === -1 ? images.length : index;
+}
+
+function getImageMap(images: ServerImage[]): Map<string, ServerImage> {
+    return new Map(images.map(image => [image.id, image]));
+}
+
+function getSparsePayloadForRepair(): SparseCachePayload | undefined {
+    return sparseCache?.payload ?? parseSparseCache(MiscDB.get(sparseCacheKey));
+}
+
+function getSimilarPayloadForRepair(): SimilarCachePayload | undefined {
+    return similarCache?.payload ?? parseSimilarCache(MiscDB.get(similarCacheKey));
+}
+
+function repairSparseCache(images: ServerImage[], affectedModifiedDate: number): boolean {
+    const existing = getSparsePayloadForRepair();
+    if (!existing)
+        return false;
+
+    const frequency = Math.max(1, Math.floor(existing.frequency));
+    const source = getSourceState(images);
+    const sorted = sortByModifiedDate(images);
+    const imageMap = getImageMap(images);
+    const startIndex = firstIndexAtOrAfter(sorted, affectedModifiedDate);
+    const prefixIds = existing.poolIds.filter(id => {
+        const image = imageMap.get(id);
+        return image !== undefined && image.modifiedDate < affectedModifiedDate;
+    });
+    const suffixIds: string[] = [];
+    for (let i = startIndex; i < sorted.length; i++) {
+        if ((i + 1) % frequency === 0)
+            suffixIds.push(sorted[i].id);
+    }
+
+    const payload: SparseCachePayload = {
+        ...existing,
+        frequency,
+        sourceFingerprint: source.fingerprint,
+        sourceCount: source.count,
+        poolIds: [...prefixIds, ...suffixIds],
+    };
+    sparseCache = cachePool(payload);
+    saveSparseCache(payload);
+    console.log(`Repaired sparse exploration cache from modified date ${affectedModifiedDate}`);
+    return true;
+}
+
+function repairSimilarCache(images: ServerImage[], affectedModifiedDate: number): boolean {
+    const existing = getSimilarPayloadForRepair();
+    if (!existing)
+        return false;
+
+    const source = getSourceState(images);
+    const sorted = sortByModifiedDate(images);
+    const imageMap = getImageMap(images);
+    const selectedPrefix = existing.poolIds
+        .map(id => imageMap.get(id))
+        .filter((image): image is ServerImage => image !== undefined && image.modifiedDate < affectedModifiedDate)
+        .sort((a, b) => {
+            if (a.modifiedDate !== b.modifiedDate)
+                return a.modifiedDate - b.modifiedDate;
+            return a.id.localeCompare(b.id);
+        });
+    const poolIds = selectedPrefix.map(image => image.id);
+    let latestSelectedPrompt = selectedPrefix.length
+        ? simplifyPrompt(selectedPrefix[selectedPrefix.length - 1])
+        : '';
+    let startIndex = selectedPrefix.length ? firstIndexAtOrAfter(sorted, affectedModifiedDate) : 0;
+
+    if (!selectedPrefix.length && sorted.length) {
+        poolIds.push(sorted[0].id);
+        latestSelectedPrompt = simplifyPrompt(sorted[0]);
+        startIndex = 1;
+    }
+
+    for (let i = startIndex; i < sorted.length; i++) {
+        const prompt = simplifyPrompt(sorted[i]);
+        const similarity = computeSimilarity(latestSelectedPrompt, prompt, existing.algorithm);
+        if (similarity < existing.threshold) {
+            poolIds.push(sorted[i].id);
+            latestSelectedPrompt = prompt;
+        }
+    }
+
+    const payload: SimilarCachePayload = {
+        ...existing,
+        sourceFingerprint: source.fingerprint,
+        sourceCount: source.count,
+        poolIds,
+    };
+    similarCache = cachePool(payload);
+    saveSimilarCache(payload);
+    console.log(`Repaired similar exploration cache from modified date ${affectedModifiedDate}`);
+    return true;
+}
+
+export function repairExplorationCaches(images: ServerImage[], affectedModifiedDate: number, reason: string): void {
+    const repairedSparse = repairSparseCache(images, affectedModifiedDate);
+    const repairedSimilar = repairSimilarCache(images, affectedModifiedDate);
+    if (repairedSparse || repairedSimilar)
+        console.log(`Repaired exploration caches from modified date ${affectedModifiedDate}: ${reason}`);
+}
+
+export function getExplorationPool(settings: ExplorationSettings, images: ServerImage[]): Set<string> {
 
     switch (settings.explorationMode) {
         case 'none':
@@ -51,14 +282,34 @@ export function getExplorationPool(settings: ExplorationSettings): Set<string> {
 
 function getCachedSparsePool(images: ServerImage[], frequency: number): Set<string> {
     const freq = Math.max(1, Math.floor(frequency));
-    const fingerprint = libraryFingerprint(images);
-    const cached = sparseCache.get(freq);
-    if (isCacheValid(cached, fingerprint))
-        return cached.pool;
+    const source = getSourceState(images);
+    if (sparseCache && sparseCache.payload.frequency === freq && sourceMatches(sparseCache.payload, source))
+        return sparseCache.pool;
 
+    const persisted = parseSparseCache(MiscDB.get(sparseCacheKey));
+    if (persisted && persisted.frequency === freq && sourceMatches(persisted, source) && poolIdsAreValid(persisted.poolIds, images)) {
+        sparseCache = cachePool(persisted);
+        console.log(`Loaded sparse exploration cache from DB (${persisted.poolIds.length}/${source.count} images, frequency ${freq})`);
+        return sparseCache.pool;
+    }
+
+    if (persisted)
+        console.log('Sparse exploration cache is stale or settings changed; recalculating');
+
+    const start = Date.now();
+    console.log(`Calculating sparse exploration cache for ${images.length} images (frequency ${freq})`);
     const pool = buildSparsePool(images, freq);
-    sparseCache.set(freq, { fingerprint, pool });
-    return pool;
+    const payload: SparseCachePayload = {
+        type: 'sparse',
+        frequency: freq,
+        sourceFingerprint: source.fingerprint,
+        sourceCount: source.count,
+        poolIds: [...pool],
+    };
+    sparseCache = cachePool(payload);
+    console.log(`Calculated sparse exploration cache in ${Date.now() - start}ms`);
+    saveSparseCache(payload);
+    return sparseCache.pool;
 }
 
 function getCachedSimilarPool(
@@ -66,15 +317,47 @@ function getCachedSimilarPool(
     algorithm: SimilarityAlgorithm,
     threshold: number,
 ): Set<string> {
-    const key = `${promptSimplificationVersion}:${algorithm}:${threshold}`;
-    const fingerprint = libraryFingerprint(images);
-    const cached = similarCache.get(key);
-    if (isCacheValid(cached, fingerprint))
-        return cached.pool;
+    const source = getSourceState(images);
+    if (
+        similarCache &&
+        similarCache.payload.algorithm === algorithm &&
+        similarCache.payload.threshold === threshold &&
+        sourceMatches(similarCache.payload, source)
+    ) {
+        return similarCache.pool;
+    }
 
+    const persisted = parseSimilarCache(MiscDB.get(similarCacheKey));
+    if (
+        persisted &&
+        persisted.algorithm === algorithm &&
+        persisted.threshold === threshold &&
+        sourceMatches(persisted, source) &&
+        poolIdsAreValid(persisted.poolIds, images)
+    ) {
+        similarCache = cachePool(persisted);
+        console.log(`Loaded similar exploration cache from DB (${persisted.poolIds.length}/${source.count} images, ${algorithm}, threshold ${threshold})`);
+        return similarCache.pool;
+    }
+
+    if (persisted)
+        console.log('Similar exploration cache is stale or settings changed; recalculating');
+
+    const start = Date.now();
+    console.log(`Calculating similar exploration cache for ${images.length} images (${algorithm}, threshold ${threshold})`);
     const pool = buildSimilarPool(images, algorithm, threshold);
-    similarCache.set(key, { fingerprint, pool });
-    return pool;
+    const payload: SimilarCachePayload = {
+        type: 'similar',
+        algorithm,
+        threshold,
+        sourceFingerprint: source.fingerprint,
+        sourceCount: source.count,
+        poolIds: [...pool],
+    };
+    similarCache = cachePool(payload);
+    console.log(`Calculated similar exploration cache in ${Date.now() - start}ms`);
+    saveSimilarCache(payload);
+    return similarCache.pool;
 }
 
 function buildUniquePool(images: ServerImage[]): Set<string> {
@@ -100,7 +383,7 @@ function buildUniquePool(images: ServerImage[]): Set<string> {
 }
 
 function buildSparsePool(images: ServerImage[], frequency: number): Set<string> {
-    const sorted = [...images].sort((a, b) => a.modifiedDate - b.modifiedDate);
+    const sorted = sortByModifiedDate(images);
     const pool = new Set<string>();
     const skip = frequency - 1;
 
@@ -115,7 +398,7 @@ function buildSimilarPool(
     algorithm: SimilarityAlgorithm,
     threshold: number,
 ): Set<string> {
-    const sorted = [...images].sort((a, b) => a.modifiedDate - b.modifiedDate);
+    const sorted = sortByModifiedDate(images);
     const pool = new Set<string>();
     if (sorted.length === 0)
         return pool;
@@ -223,44 +506,6 @@ function charTrigramDice(a: string, b: string): number {
     return (2 * intersection) / total;
 }
 
-function levenshteinDistance(a: string, b: string): number {
-    if (a === b)
-        return 0;
-    if (a.length === 0)
-        return b.length;
-    if (b.length === 0)
-        return a.length;
-
-    const previous = new Array<number>(b.length + 1);
-    const current = new Array<number>(b.length + 1);
-
-    for (let j = 0; j <= b.length; j++)
-        previous[j] = j;
-
-    for (let i = 1; i <= a.length; i++) {
-        current[0] = i;
-        for (let j = 1; j <= b.length; j++) {
-            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-            current[j] = Math.min(
-                current[j - 1] + 1,
-                previous[j] + 1,
-                previous[j - 1] + cost,
-            );
-        }
-        for (let j = 0; j <= b.length; j++)
-            previous[j] = current[j];
-    }
-
-    return previous[b.length];
-}
-
-function normalizedLevenshtein(a: string, b: string): number {
-    const maxLen = Math.max(a.length, b.length);
-    if (maxLen === 0)
-        return 1;
-    return 1 - (levenshteinDistance(a, b) / maxLen);
-}
-
 export function computeSimilarity(a: string, b: string, algorithm: SimilarityAlgorithm): number {
     switch (algorithm) {
         case 'token-jaccard':
@@ -269,20 +514,9 @@ export function computeSimilarity(a: string, b: string, algorithm: SimilarityAlg
             return tokenCosine(a, b);
         case 'char-trigram-dice':
             return charTrigramDice(a, b);
-        case 'normalized-levenshtein':
-            return normalizedLevenshtein(a, b);
         default: {
             const _never: never = algorithm;
             return _never;
         }
     }
-}
-
-export function getNewestLibraryImage(): ServerImage | undefined {
-    let newest: ServerImage | undefined;
-    for (const image of getImageList().values()) {
-        if (!newest || image.modifiedDate > newest.modifiedDate)
-            newest = image;
-    }
-    return newest;
 }

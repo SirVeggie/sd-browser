@@ -15,6 +15,7 @@ import type { ImageExtraData, ImageList, ServerImage, ServerImageFull, TimedImag
 import { deleteTempImage, fileExists, fileUniquefy, removeBasePath, removeFolderFromPath, splitExtension } from './filetools';
 import { handleLegacyEnd, handleLegacyStart } from './legacy';
 import { getServerImage, hashPath, hashPrompt, populateServerImage, readMetadata, readMetadataFromExif, readMetadataFromFile, updateImageMetadata } from './imageUtils';
+import { invalidateExplorationPools, repairExplorationCaches, verifyExplorationCaches } from './exploration';
 
 const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
@@ -94,6 +95,7 @@ export async function indexFiles() {
     console.log(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}`);
     await handleLegacyEnd();
     cleanTempImages();
+    verifyExplorationCaches([...imageList.values()]);
     console.log(`Found ${lazy(imageList.values()).filter(x => !!x.positive).count()} images with metadata`);
     console.log('\nIndexing complete, yay!\n');
 }
@@ -274,6 +276,8 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
 
 function deleteMissingImages(set: Set<string>) {
     const deletions = [...set.values()];
+    if (deletions.length)
+        invalidateExplorationPools(`removed ${deletions.length} missing images during indexing`);
     MetaDB.deleteAll(deletions);
     MetaCalcDB.deleteAll(deletions);
 }
@@ -468,8 +472,10 @@ function setupWatcher() {
 
     watcher.on('unlinkDir', dir => {
         const deletions: string[] = [];
+        let oldestDeleted = Number.POSITIVE_INFINITY;
         for (const [key, value] of imageList) {
             if (value.file.startsWith(dir)) {
+                oldestDeleted = Math.min(oldestDeleted, value.modifiedDate);
                 removeUniqueImage(value);
                 imageList.delete(key);
                 deleteTempImage(key);
@@ -477,6 +483,8 @@ function setupWatcher() {
             }
         }
         
+        if (deletions.length)
+            repairExplorationCaches([...imageList.values()], oldestDeleted, `removed directory ${path.basename(dir)} with ${deletions.length} images`);
         MetaDB.deleteAll(deletions);
         MetaCalcDB.deleteAll(deletions);
     });
@@ -538,6 +546,7 @@ async function addFile(file: string, hash?: string) {
     const image = getServerImage(full);
     imageList.set(hash, image);
     addUniqueImage(image);
+    repairExplorationCaches([...imageList.values()], image.modifiedDate, `added image ${path.basename(file)}`);
     
     const amount = freshList.unshift({
         id: hash,
@@ -595,8 +604,11 @@ function videoPreviewExists(videofile: string): ServerImage | undefined {
 async function deleteFile(file: string) {
     if (!isMedia(file)) return;
     const hash = hashPath(file);
-    removeUniqueImage(imageList.get(hash));
+    const image = imageList.get(hash);
+    removeUniqueImage(image);
     imageList.delete(hash);
+    if (image)
+        repairExplorationCaches([...imageList.values()], image.modifiedDate, `deleted image ${path.basename(file)}`);
     freshList = freshList.filter(x => x.id !== hash);
     const size = deletionList.unshift({
         id: hash,
@@ -610,9 +622,13 @@ async function deleteFile(file: string) {
 }
 
 async function renameFile(from: string, to: string) {
+    let affectedModifiedDate = Number.POSITIVE_INFINITY;
     if (isMedia(from)) {
         const oldhash = hashPath(from);
-        removeUniqueImage(imageList.get(oldhash));
+        const oldImage = imageList.get(oldhash);
+        if (oldImage)
+            affectedModifiedDate = Math.min(affectedModifiedDate, oldImage.modifiedDate);
+        removeUniqueImage(oldImage);
         imageList.delete(oldhash);
         deleteTempImage(oldhash);
         
@@ -639,6 +655,8 @@ async function renameFile(from: string, to: string) {
     const image = getServerImage(full);
     imageList.set(newhash, image);
     addUniqueImage(image);
+    affectedModifiedDate = Math.min(affectedModifiedDate, image.modifiedDate);
+    repairExplorationCaches([...imageList.values()], affectedModifiedDate, `renamed image ${path.basename(from)} to ${path.basename(to)}`);
     
     MetaDB.set(full);
     MetaCalcDB.set(image);
@@ -886,6 +904,8 @@ export async function moveImages(ids: string | string[], folder: string) {
     const targetFolder = path.join(IMG_FOLDER, folder.replace(/^\/?/, ''));
 
     let failcount = 0;
+    let moved = 0;
+    let oldestMoved = Number.POSITIVE_INFINITY;
     for (const id of ids) {
         const img = imageList.get(id);
         if (!img)
@@ -897,10 +917,12 @@ export async function moveImages(ids: string | string[], folder: string) {
 
         try {
             await fs.rename(img.file, newPath);
+            oldestMoved = Math.min(oldestMoved, img.modifiedDate);
             removeUniqueImage(img);
             imageList.delete(id);
             deleteTextFiles(img.file);
             deleteTempImage(id);
+            moved++;
         } catch {
             failcount++;
             continue;
@@ -920,6 +942,8 @@ export async function moveImages(ids: string | string[], folder: string) {
     if (failcount) {
         console.log(`Failed to move ${failcount} images`);
     }
+    if (moved)
+        repairExplorationCaches([...imageList.values()], oldestMoved, `moved ${moved} images`);
 }
 
 export async function copyImages(ids: string | string[], folder: string) {
@@ -963,16 +987,20 @@ export async function deleteImages(ids: string | string[]) {
     if (typeof ids === 'string') ids = [ids];
 
     let failcount = 0;
+    let deleted = 0;
+    let oldestDeleted = Number.POSITIVE_INFINITY;
     for (const id of ids) {
         const img = imageList.get(id);
         if (!img) continue;
 
         try {
             await fs.unlink(img.file);
+            oldestDeleted = Math.min(oldestDeleted, img.modifiedDate);
             removeUniqueImage(img);
             imageList.delete(id);
             deleteTextFiles(img.file);
             deleteTempImage(id);
+            deleted++;
         } catch {
             failcount++;
         }
@@ -989,6 +1017,8 @@ export async function deleteImages(ids: string | string[]) {
 
     if (failcount)
         console.log(`Failed to delete ${failcount} images`);
+    if (deleted)
+        repairExplorationCaches([...imageList.values()], oldestDeleted, `deleted ${deleted} images`);
 }
 
 async function deleteTextFiles(imagepath: string) {

@@ -1,6 +1,7 @@
 import { syncMemory } from "$lib/tools/syncStorage";
 import {
     defaultExplorationSettings,
+    isSimilarityAlgorithm,
     type ExplorationMode,
     type QualityMode,
     type SearchMode,
@@ -39,6 +40,7 @@ export const slideDelay = writable(4000);
 
 export function buildSearchParams(searchText?: string): SearchParams {
     const filters: string[] = [];
+    const algorithm = get(similarityAlgorithm);
     if (!get(nsfwMode) && get(nsfwFilter)) filters.push(get(nsfwFilter));
     if (get(folderMode) && get(folderFilter)) filters.push(get(folderFilter));
     return {
@@ -47,7 +49,7 @@ export function buildSearchParams(searchText?: string): SearchParams {
         matching: get(matchingMode),
         explorationMode: get(explorationMode),
         sparseFrequency: get(sparseFrequency),
-        similarityAlgorithm: get(similarityAlgorithm),
+        similarityAlgorithm: isSimilarityAlgorithm(algorithm) ? algorithm : defaultExplorationSettings.similarityAlgorithm,
         similarityThreshold: get(similarityThreshold),
     };
 }

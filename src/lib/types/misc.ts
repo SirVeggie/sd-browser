@@ -29,7 +29,7 @@ export function isExplorationMode(object: any): object is ExplorationMode {
     return explorationModes.includes(object);
 }
 
-export const similarityAlgorithms = ['token-jaccard', 'token-cosine', 'char-trigram-dice', 'normalized-levenshtein'] as const;
+export const similarityAlgorithms = ['token-jaccard', 'token-cosine', 'char-trigram-dice'] as const;
 export type SimilarityAlgorithm = typeof similarityAlgorithms[number];
 export function isSimilarityAlgorithm(object: any): object is SimilarityAlgorithm {
     return similarityAlgorithms.includes(object);

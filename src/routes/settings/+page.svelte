@@ -449,9 +449,11 @@
     </label>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
+    <label
+        title="Prompt similarity cutoff (0–1) for similar exploration. Images are included when their prompt similarity to the previous selection is below this value. Lower values keep only more distinct images; higher values allow more similar prompts."
+    >
         Similarity threshold
-        <NumInput bind:value={$similarityThreshold} />
+        <NumInput bind:value={$similarityThreshold} step="any" />
     </label>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->

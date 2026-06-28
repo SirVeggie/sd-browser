@@ -1,6 +1,7 @@
 <script lang="ts">
     export let placeholder = "";
     export let value = 0;
+    export let step: number | "any" = 1;
     export let element: HTMLInputElement | undefined = undefined;
 
     async function clear() {
@@ -17,6 +18,7 @@
         type="number"
         bind:this={element}
         {placeholder}
+        {step}
         on:change
         on:input
         bind:value={value}

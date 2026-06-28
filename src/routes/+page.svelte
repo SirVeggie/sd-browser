@@ -61,7 +61,8 @@
     let info: ImageInfo | undefined = undefined;
     let slideTimer: any;
     let slideDir: "left" | "right" = "right";
-    let updateTimer: any;
+    let updateTimer: ReturnType<typeof setTimeout> | undefined;
+    let updateSessionId = 0;
     let live = false;
     let sorting: SortingMethod = "date";
     let moreTriggerVisible = false;
@@ -99,7 +100,7 @@
 
         return () => {
             clearTimeout(inputTimer);
-            clearInterval(updateTimer);
+            clearTimeout(updateTimer);
             clearInterval(slideTimer);
             closeImage();
             window.removeEventListener("keydown", keylistener);
@@ -249,6 +250,7 @@
     }
 
     function fetchImages() {
+        const sessionId = ++updateSessionId;
         const search = buildSearchParams();
 
         searchImages({
@@ -259,6 +261,7 @@
             oldestId: "",
         })
             .then((images) => {
+                if (sessionId !== updateSessionId) return;
                 if (images.amount === -1) return;
                 imageStore.set(expandClientImages(images.images));
                 imageAmountStore.set(images.amount);
@@ -303,7 +306,7 @@
     }
 
     function startUpdate() {
-        clearInterval(updateTimer);
+        clearTimeout(updateTimer);
         updateTimer = setTimeout(updateLoop, 1000);
     }
 
@@ -317,6 +320,7 @@
 
     async function fetchUpdate() {
         if ($imageStore.length === 0) return;
+        const sessionId = updateSessionId;
         const search = buildSearchParams();
 
         try {
@@ -327,6 +331,8 @@
                 currentIds: $imageStore.map((image) => image.id),
                 nsfw: $nsfwMode,
             });
+
+            if (sessionId !== updateSessionId) return;
             
             if (res.timestamp === -1) return;
 

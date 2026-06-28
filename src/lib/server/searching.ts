@@ -9,7 +9,7 @@ import {
 } from "$lib/types/misc";
 import _ from "lodash";
 import { MetaDB } from "./db";
-import { getExplorationPool, getNewestLibraryImage } from "./exploration";
+import { getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./filemanager";
 import { ModelIndex } from "./modelIndex";
 
@@ -60,11 +60,13 @@ export function searchImages(
 
     const matcher = buildMatcher(search, matching);
     const filter = buildMatcher(filters.join(' AND '), 'regex');
-    const pool = getExplorationPool(exploration);
+    const imageList = getImageList();
+    const images = [...imageList.values()];
+    const pool = getExplorationPool(exploration, images);
     let list = filterPoolImages(pool, matcher, filter, options.timestamp);
 
     if (options.sorting === 'date')
-        list = applyLatestImageException(list, pool, matcher, filter, options.timestamp);
+        list = applyLatestImageException(list, images, pool, matcher, filter, options.timestamp);
 
     if (options.sorting)
         list = sortImages(list, options.sorting);
@@ -103,12 +105,13 @@ function filterPoolImages(
 
 function applyLatestImageException(
     list: ServerImage[],
+    images: ServerImage[],
     pool: Set<string>,
     matcher: (image: ServerImage) => boolean,
     filter: (image: ServerImage) => boolean,
     timestamp?: number,
 ): ServerImage[] {
-    const newest = getNewestLibraryImage();
+    const newest = getNewestLibraryImage(images);
     if (!newest || pool.has(newest.id) || !matcher(newest) || !filter(newest))
         return list;
     if (list.some(image => image.id === newest.id))
@@ -121,6 +124,15 @@ function applyLatestImageException(
     }
 
     return [...list, newest];
+}
+
+function getNewestLibraryImage(images: ServerImage[]): ServerImage | undefined {
+    let newest: ServerImage | undefined;
+    for (const image of images) {
+        if (!newest || image.modifiedDate > newest.modifiedDate)
+            newest = image;
+    }
+    return newest;
 }
 
 export function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
