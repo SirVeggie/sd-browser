@@ -44,9 +44,9 @@ export type ExplorationSettings = {
 
 export const defaultExplorationSettings: ExplorationSettings = {
     explorationMode: 'none',
-    sparseFrequency: 100,
+    sparseFrequency: 25,
     similarityAlgorithm: 'token-jaccard',
-    similarityThreshold: 0.5,
+    similarityThreshold: 0.65,
 };
 
 const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'model', 'annotation'] as const;
