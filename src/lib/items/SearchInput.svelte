@@ -89,11 +89,10 @@
     input,
     .highlight {
         font-family: "Open sans", sans-serif;
-        font-size: inherit;
+        font-size: 13.3333px;
         line-height: normal;
         width: 100%;
         border-radius: 0.5em;
-        border: 1px solid #1118;
         padding: 0.5em 0.5em;
         box-sizing: border-box;
         white-space: pre;
@@ -105,6 +104,7 @@
         color: transparent;
         caret-color: #ddd;
         box-shadow: inset 0px 2px 3px #0005;
+        border: 1px solid #1118;
 
         &::placeholder {
             color: transparent;
@@ -123,6 +123,7 @@
         pointer-events: none;
         background-color: #333;
         color: #ddd;
+        border: 1px solid transparent;
     }
 
     .highlightText {
@@ -134,7 +135,6 @@
 
     .keyword {
         color: #8fd3ff;
-        font-weight: 700;
     }
 
     .placeholder {
