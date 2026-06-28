@@ -239,7 +239,7 @@ const SEED_RE = /\bseed\b/i;
 const TEXT_INPUT_KEYS = new Set(['text', 'str', 'string', 'value']);
 const REFINE_PROMPT_RE = /refine prompt/i;
 const PROMPT_PART_SEPARATOR_RE = /\n-{3,}\n/;
-const PARAMS_TEXT_PREVIEW_KEYWORD_RE = /\b(show|display|preview)\b/i;
+const PARAMS_TEXT_PREVIEW_KEYWORDS = ['show', 'display', 'preview'] as const;
 const PARAMS_TEXT_PREVIEW_OMIT_MIN_LENGTH = 100;
 const PARAMS_TEXT_MAX_STRING_LENGTH = 1000;
 
@@ -534,6 +534,11 @@ function resolveNodeClassName(context: ComfyFieldContext): string {
     return context.innerNode?.type ?? context.workflowNode?.type ?? '';
 }
 
+function containsParamsTextPreviewKeyword(text: string): boolean {
+    const lower = text.toLowerCase();
+    return PARAMS_TEXT_PREVIEW_KEYWORDS.some(keyword => lower.includes(keyword));
+}
+
 function shouldOmitFromParamsText(
     field: ComfyMetadataField,
     context: ComfyFieldContext,
@@ -546,8 +551,8 @@ function shouldOmitFromParamsText(
     if (field.value.length < PARAMS_TEXT_PREVIEW_OMIT_MIN_LENGTH)
         return false;
     const className = resolveNodeClassName(context);
-    return PARAMS_TEXT_PREVIEW_KEYWORD_RE.test(sectionTitle)
-        || (!!className && PARAMS_TEXT_PREVIEW_KEYWORD_RE.test(className));
+    return containsParamsTextPreviewKeyword(sectionTitle)
+        || (!!className && containsParamsTextPreviewKeyword(className));
 }
 
 function filterSectionDraftForParamsText(
