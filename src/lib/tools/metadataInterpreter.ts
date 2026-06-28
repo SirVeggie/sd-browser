@@ -323,9 +323,26 @@ function collectNumericLiteralFields(
     return results;
 }
 
+function asWidgetValues(
+    values: ComfyWorkflowNode['widgets_values'] | undefined,
+): (string | number | boolean | null)[] {
+    if (Array.isArray(values))
+        return values;
+    if (values && typeof values === 'object')
+        return Object.values(values) as (string | number | boolean | null)[];
+    return [];
+}
+
+function isComfyProxyWidget(entry: unknown): entry is [string | number, string] {
+    return Array.isArray(entry)
+        && entry.length >= 2
+        && (typeof entry[0] === 'string' || typeof entry[0] === 'number')
+        && typeof entry[1] === 'string';
+}
+
 function collectNumericWidgetValues(node: ComfyWorkflowNode): number[] {
     const values: number[] = [];
-    for (const value of node.widgets_values ?? []) {
+    for (const value of asWidgetValues(node.widgets_values)) {
         if (typeof value === 'number' && Number.isFinite(value))
             values.push(value);
     }
@@ -348,7 +365,12 @@ function getProxyWidgets(node: ComfyWorkflowNode): ComfyProxyWidget[] | undefine
     const proxyWidgets = node.properties?.proxyWidgets;
     if (!Array.isArray(proxyWidgets) || !proxyWidgets.length)
         return undefined;
-    return proxyWidgets as ComfyProxyWidget[];
+    const valid = proxyWidgets
+        .filter(isComfyProxyWidget)
+        .map(([innerId, widgetName]): ComfyProxyWidget => [String(innerId), widgetName]);
+    if (!valid.length)
+        return undefined;
+    return valid;
 }
 
 function getSubgraphDefinition(ctx: ComfyWorkflowContext, node: ComfyWorkflowNode): ComfySubgraphDefinition | undefined {
