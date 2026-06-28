@@ -1,6 +1,9 @@
 
 export const sortingMethods = ['date', 'date (asc)', 'name', 'name (desc)', 'random'] as const;
 export type SortingMethod = typeof sortingMethods[number];
+export function isSortingMethod(object: any): object is SortingMethod {
+    return sortingMethods.includes(object);
+}
 
 export const searchModes = ['regex', 'words', 'contains'] as const;
 export type SearchMode = typeof searchModes[number];
@@ -19,6 +22,32 @@ export type QualityMode = typeof qualityModes[number];
 export function isQualityMode(object: any): object is QualityMode {
     return qualityModes.includes(object);
 }
+
+export const explorationModes = ['none', 'unique', 'similar', 'sparse'] as const;
+export type ExplorationMode = typeof explorationModes[number];
+export function isExplorationMode(object: any): object is ExplorationMode {
+    return explorationModes.includes(object);
+}
+
+export const similarityAlgorithms = ['token-jaccard', 'token-cosine', 'char-trigram-dice', 'normalized-levenshtein'] as const;
+export type SimilarityAlgorithm = typeof similarityAlgorithms[number];
+export function isSimilarityAlgorithm(object: any): object is SimilarityAlgorithm {
+    return similarityAlgorithms.includes(object);
+}
+
+export type ExplorationSettings = {
+    explorationMode: ExplorationMode;
+    sparseFrequency: number;
+    similarityAlgorithm: SimilarityAlgorithm;
+    similarityThreshold: number;
+};
+
+export const defaultExplorationSettings: ExplorationSettings = {
+    explorationMode: 'none',
+    sparseFrequency: 100,
+    similarityAlgorithm: 'token-jaccard',
+    similarityThreshold: 0.5,
+};
 
 const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'model', 'annotation'] as const;
 export type MatchType = typeof matchTypes[number];

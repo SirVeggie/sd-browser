@@ -2,7 +2,7 @@ import { limitedParallelMap, updateLine } from "$lib/tools/misc";
 import type { BulkRequest } from "$lib/types/requests";
 import { annotateImage, clearAnnotation, modifyAnnotation } from "./llm";
 import { copyImages, deleteImages, moveImages } from "./filemanager";
-import { searchImages } from "./searching";
+import { explorationFromRequest, searchImages } from "./searching";
 
 const CHUNK_SIZE = 100;
 
@@ -15,7 +15,12 @@ export async function runBulkAction(
     request: BulkRequest,
     onProgress: (done: number, total: number, stats?: BulkProgressStats) => void,
 ): Promise<boolean> {
-    const images = searchImages(request.search, request.filters, request.matching, request.collapse);
+    const images = searchImages(
+        request.search,
+        request.filters,
+        request.matching,
+        explorationFromRequest(request),
+    );
     const ids = images.map((image) => image.id);
     const total = ids.length;
     let done = 0;

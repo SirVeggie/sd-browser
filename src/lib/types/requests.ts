@@ -1,5 +1,14 @@
 import type { ClientImage } from "./images";
-import { type SearchMode, type SortingMethod, testType } from "./misc";
+import {
+    isExplorationMode,
+    isSortingMethod,
+    isSimilarityAlgorithm,
+    type ExplorationMode,
+    type SearchMode,
+    type SimilarityAlgorithm,
+    type SortingMethod,
+    testType,
+} from "./misc";
 
 export type ActionRequest = NsfwAction | FavoriteAction | MoveAction | CopyAction | DeleteAction | OpenAction;
 export function isActionRequest(object: any): object is ActionRequest {
@@ -48,11 +57,22 @@ export type ImageRequest = {
     oldestId: string;
     matching: SearchMode;
     sorting: SortingMethod;
-    collapse: boolean;
+    explorationMode: ExplorationMode;
+    sparseFrequency: number;
+    similarityAlgorithm: SimilarityAlgorithm;
+    similarityThreshold: number;
     nsfw: boolean;
 };
 export function isImageRequest(object: any): object is ImageRequest {
-    return testType(object, ['search', 'filters', 'latestId', 'oldestId', 'sorting', 'collapse']);
+    return testType(object, [
+        'search', 'filters', 'latestId', 'oldestId', 'sorting',
+        'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
+        (o) => isSortingMethod(o.sorting),
+        (o) => isExplorationMode(o.explorationMode),
+        (o) => typeof o.sparseFrequency === 'number',
+        (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
+        (o) => typeof o.similarityThreshold === 'number',
+    ]);
 }
 
 export type ImageResponse = {
@@ -68,12 +88,26 @@ export type UpdateRequest = {
     search: string;
     filters: string[];
     matching: SearchMode;
-    collapse: boolean;
+    sorting: SortingMethod;
+    explorationMode: ExplorationMode;
+    sparseFrequency: number;
+    similarityAlgorithm: SimilarityAlgorithm;
+    similarityThreshold: number;
     timestamp: number;
+    currentIds: string[];
     nsfw: boolean;
 };
 export function isUpdateRequest(object: any): object is UpdateRequest {
-    return testType(object, ['search', 'filters', 'matching', 'collapse', 'timestamp']);
+    return testType(object, [
+        'search', 'filters', 'matching', 'sorting', 'timestamp', 'currentIds',
+        'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
+        (o) => isSortingMethod(o.sorting),
+        (o) => Array.isArray(o.currentIds),
+        (o) => isExplorationMode(o.explorationMode),
+        (o) => typeof o.sparseFrequency === 'number',
+        (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
+        (o) => typeof o.similarityThreshold === 'number',
+    ]);
 }
 
 export type UpdateResponse = {
@@ -155,10 +189,20 @@ export type MatchRequest = {
     search: string;
     filters: string[];
     matching: SearchMode;
-    collapse: boolean;
+    explorationMode: ExplorationMode;
+    sparseFrequency: number;
+    similarityAlgorithm: SimilarityAlgorithm;
+    similarityThreshold: number;
 };
 export function isMatchRequest(object: any): object is MatchRequest {
-    return testType(object, ['search', 'filters', 'matching', 'collapse']);
+    return testType(object, [
+        'search', 'filters', 'matching',
+        'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
+        (o) => isExplorationMode(o.explorationMode),
+        (o) => typeof o.sparseFrequency === 'number',
+        (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
+        (o) => typeof o.similarityThreshold === 'number',
+    ]);
 }
 
 export type MatchResponse = {
@@ -172,13 +216,24 @@ export type BulkRequest = {
     search: string;
     filters: string[];
     matching: SearchMode;
-    collapse: boolean;
+    explorationMode: ExplorationMode;
+    sparseFrequency: number;
+    similarityAlgorithm: SimilarityAlgorithm;
+    similarityThreshold: number;
     action: BulkAction;
     llm?: BulkLlmConfig;
 };
 
 export function isBulkRequest(object: any): object is BulkRequest {
-    return testType(object, ['search', 'filters', 'matching', 'collapse', 'action', (o) => typeof o.action?.type === 'string']);
+    return testType(object, [
+        'search', 'filters', 'matching', 'action',
+        'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
+        (o) => isExplorationMode(o.explorationMode),
+        (o) => typeof o.sparseFrequency === 'number',
+        (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
+        (o) => typeof o.similarityThreshold === 'number',
+        (o) => typeof o.action?.type === 'string',
+    ]);
 }
 
 export type BulkProgressEvent = {

@@ -17,6 +17,7 @@
     } from "$lib/requests/imageRequests";
     import { expandClientImages, stringSort } from "$lib/tools/misc";
     import {
+        explorationModes,
         sortingMethods,
         type InputEvent,
         type SortingMethod,
@@ -24,14 +25,11 @@
     import { onMount } from "svelte";
     import { fade } from "svelte/transition";
     import {
-        nsfwFilter,
-        folderFilter,
         nsfwMode,
         folderMode,
         searchFilter,
-        collapseMode,
+        explorationMode,
         compressedMode,
-        matchingMode,
         slideDelay,
         initialImages,
         buildSearchParams,
@@ -42,7 +40,6 @@
     import {
         closeAllContextMenus,
         type ContextMenuOption,
-        type ContextReturn,
         openContextMenu,
     } from "$lib/items/ContextMenuManager.svelte";
     import { createSelection } from "$lib/tools/selectManager";
@@ -255,11 +252,8 @@
         const search = buildSearchParams();
 
         searchImages({
-            search: search.search,
-            filters: search.filters,
+            ...search,
             sorting,
-            matching: $matchingMode,
-            collapse: $collapseMode,
             nsfw: $nsfwMode,
             latestId: "",
             oldestId: "",
@@ -284,11 +278,8 @@
 
         try {
             const images = await searchImages({
-                search: search.search,
-                filters: search.filters,
+                ...search,
                 sorting,
-                matching: $matchingMode,
-                collapse: $collapseMode,
                 latestId: "",
                 oldestId: lastImage.id,
                 nsfw: $nsfwMode,
@@ -330,11 +321,10 @@
 
         try {
             const res = await updateImages({
-                search: search.search,
-                filters: search.filters,
-                matching: $matchingMode,
-                collapse: $collapseMode,
+                ...search,
+                sorting,
                 timestamp: updateTime,
+                currentIds: $imageStore.map((image) => image.id),
                 nsfw: $nsfwMode,
             });
             
@@ -417,7 +407,7 @@
         if (ui) notify("Slideshow started");
     }
 
-    function stopSlideshow(ui: boolean = true) {
+    function stopSlideshow(ui = true) {
         if (slideTimer) {
             clearInterval(slideTimer);
             slideTimer = undefined;
@@ -711,12 +701,15 @@
 
         <label for="collapse">
             Collapse:
-            <input
-                type="checkbox"
+            <select
                 id="collapse"
-                bind:checked={$collapseMode}
+                bind:value={$explorationMode}
                 on:change={() => selectChange(true)}
-            />
+            >
+                {#each explorationModes as mode}
+                    <option value={mode}>{mode}</option>
+                {/each}
+            </select>
         </label>
 
         <label for="nsfw">

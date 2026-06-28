@@ -1,9 +1,16 @@
 import { parseSearchDate, validRegex, XOR } from "$lib/tools/misc";
 import type { ServerImage } from "$lib/types/images";
-import { searchKeywords, type MatchType, type SearchMode, type SortingMethod } from "$lib/types/misc";
+import {
+    searchKeywords,
+    type ExplorationSettings,
+    type MatchType,
+    type SearchMode,
+    type SortingMethod,
+} from "$lib/types/misc";
 import _ from "lodash";
 import { MetaDB } from "./db";
-import { getFreshImages, getImageList, isUnique } from "./filemanager";
+import { getExplorationPool, getNewestLibraryImage } from "./exploration";
+import { getFreshImages, getImageList } from "./filemanager";
 import { ModelIndex } from "./modelIndex";
 
 const keywordPattern = `((${searchKeywords.join('|')}) )*`;
@@ -35,35 +42,85 @@ type SearchPart = {
     skip: boolean;
 };
 
-export function searchImages(search: string, filters: string[], mode: SearchMode, collapse?: boolean, timestamp?: number, skipResults = true) {
-    if (mode === 'regex' && !validRegex(search))
+export type SearchOptions = {
+    timestamp?: number;
+    sorting?: SortingMethod;
+    skipResults?: boolean;
+};
+
+export function searchImages(
+    search: string,
+    filters: string[],
+    matching: SearchMode,
+    exploration: ExplorationSettings,
+    options: SearchOptions = {},
+) {
+    if (matching === 'regex' && !validRegex(search))
         throw new Error('Invalid regex');
-    const matcher = buildMatcher(search, mode);
+
+    const matcher = buildMatcher(search, matching);
     const filter = buildMatcher(filters.join(' AND '), 'regex');
-    let list: ServerImage[] = [];
-    let source: ServerImage[] = [];
+    const pool = getExplorationPool(exploration);
+    let list = filterPoolImages(pool, matcher, filter, options.timestamp);
+
+    if (options.sorting === 'date')
+        list = applyLatestImageException(list, pool, matcher, filter, options.timestamp);
+
+    if (options.sorting)
+        list = sortImages(list, options.sorting);
+
+    if (options.skipResults !== false)
+        list = applyResultSkip(list, search);
+
+    return list;
+}
+
+function filterPoolImages(
+    pool: Set<string>,
+    matcher: (image: ServerImage) => boolean,
+    filter: (image: ServerImage) => boolean,
+    timestamp?: number,
+): ServerImage[] {
+    const imageList = getImageList();
+    const list: ServerImage[] = [];
 
     if (timestamp) {
-        source = getFreshImages(timestamp);
-    } else {
-        source = [...getImageList().values()];
-    }
-
-    for (const value of source) {
-        if (matcher(value) && filter(value)) {
-            list.push(value);
+        for (const value of getFreshImages(timestamp)) {
+            if (pool.has(value.id) && matcher(value) && filter(value))
+                list.push(value);
         }
+        return list;
     }
 
-    if (collapse) {
-        list = list.filter(x => isUnique(x.id));
-    }
-
-    if (skipResults) {
-        list = applyResultSkip(list, search);
+    for (const id of pool) {
+        const value = imageList.get(id);
+        if (value && matcher(value) && filter(value))
+            list.push(value);
     }
 
     return list;
+}
+
+function applyLatestImageException(
+    list: ServerImage[],
+    pool: Set<string>,
+    matcher: (image: ServerImage) => boolean,
+    filter: (image: ServerImage) => boolean,
+    timestamp?: number,
+): ServerImage[] {
+    const newest = getNewestLibraryImage();
+    if (!newest || pool.has(newest.id) || !matcher(newest) || !filter(newest))
+        return list;
+    if (list.some(image => image.id === newest.id))
+        return list;
+
+    if (timestamp) {
+        const isFresh = getFreshImages(timestamp).some(image => image.id === newest.id);
+        if (!isFresh)
+            return list;
+    }
+
+    return [...list, newest];
 }
 
 export function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
@@ -187,6 +244,10 @@ function getTextByType(image: ServerImage, type: MatchType): string {
             return '';
         case 'annotation':
             return image.annotation ?? '';
+        default: {
+            const _never: never = type;
+            return _never;
+        }
     }
 }
 
@@ -218,7 +279,23 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
             return [...images].sort(createComparer<ServerImage>(x => x.file, false));
         case 'random':
             return _.shuffle(images);
-        default:
-            return [];
+        default: {
+            const _never: never = sort;
+            return _never;
+        }
     }
+}
+
+export function explorationFromRequest(request: {
+    explorationMode: ExplorationSettings['explorationMode'];
+    sparseFrequency: number;
+    similarityAlgorithm: ExplorationSettings['similarityAlgorithm'];
+    similarityThreshold: number;
+}): ExplorationSettings {
+    return {
+        explorationMode: request.explorationMode,
+        sparseFrequency: request.sparseFrequency,
+        similarityAlgorithm: request.similarityAlgorithm,
+        similarityThreshold: request.similarityThreshold,
+    };
 }

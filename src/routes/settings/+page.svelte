@@ -17,7 +17,10 @@
         initialImages,
         matchingMode,
         nsfwFilter,
+        similarityAlgorithm,
+        similarityThreshold,
         slideDelay,
+        sparseFrequency,
         thumbMode,
     } from "$lib/stores/searchStore";
     import {
@@ -25,6 +28,7 @@
         qualityModes,
         searchKeywords,
         searchModes,
+        similarityAlgorithms,
     } from "$lib/types/misc";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import {
@@ -239,7 +243,6 @@
     }
 </script>
 
-<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <div class="container">
     <div class="buttons">
         <Link to="/">Back</Link>
@@ -428,6 +431,27 @@
                 <option value={method}>{method}</option>
             {/each}
         </select>
+    </label>
+
+    <label for="similarityAlgorithm">
+        Similarity algorithm:
+        <select id="similarityAlgorithm" bind:value={$similarityAlgorithm}>
+            {#each similarityAlgorithms as algorithm}
+                <option value={algorithm}>{algorithm}</option>
+            {/each}
+        </select>
+    </label>
+
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label>
+        Sparse frequency (every Nth image)
+        <NumInput bind:value={$sparseFrequency} />
+    </label>
+
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label>
+        Similarity threshold
+        <NumInput bind:value={$similarityThreshold} />
     </label>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->

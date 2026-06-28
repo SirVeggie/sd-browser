@@ -1,12 +1,21 @@
 import { syncMemory } from "$lib/tools/syncStorage";
-import type { QualityMode, SearchMode } from "$lib/types/misc";
+import {
+    defaultExplorationSettings,
+    type ExplorationMode,
+    type QualityMode,
+    type SearchMode,
+    type SimilarityAlgorithm,
+} from "$lib/types/misc";
 import { get, writable, type Writable } from "svelte/store";
 
 export type SearchParams = {
     search: string;
     filters: string[];
     matching: SearchMode;
-    collapse: boolean;
+    explorationMode: ExplorationMode;
+    sparseFrequency: number;
+    similarityAlgorithm: SimilarityAlgorithm;
+    similarityThreshold: number;
 };
 
 export const nsfwFilterDefault = 'NOT FOLDER nsfw AND NOT nude|sex|seductive|underwear|pussy|cum|fellatio|ahegao|lust|crotch|vagina|penis|blow ?job|hentai|nipple|rating_explicit|rating_questionable';
@@ -20,7 +29,10 @@ export const folderMode = writable(true);
 export const thumbMode = writable<QualityMode>('low');
 export const compressedMode = writable<QualityMode>('original');
 export const animatedThumb = writable<boolean>(false);
-export const collapseMode = writable(false);
+export const explorationMode = writable<ExplorationMode>(defaultExplorationSettings.explorationMode);
+export const sparseFrequency = writable(defaultExplorationSettings.sparseFrequency);
+export const similarityAlgorithm = writable<SimilarityAlgorithm>(defaultExplorationSettings.similarityAlgorithm);
+export const similarityThreshold = writable(defaultExplorationSettings.similarityThreshold);
 export const matchingMode = writable<SearchMode>('regex');
 export const initialImages = writable(25);
 export const slideDelay = writable(4000);
@@ -33,7 +45,10 @@ export function buildSearchParams(searchText?: string): SearchParams {
         search: searchText ?? get(searchFilter),
         filters,
         matching: get(matchingMode),
-        collapse: get(collapseMode),
+        explorationMode: get(explorationMode),
+        sparseFrequency: get(sparseFrequency),
+        similarityAlgorithm: get(similarityAlgorithm),
+        similarityThreshold: get(similarityThreshold),
     };
 }
 
@@ -53,7 +68,10 @@ export function syncSearchWithLocalStorage() {
     syncMemory('webpMode', thumbMode);
     syncMemory('compressedMode', compressedMode);
     syncMemory('animatedThumb', animatedThumb);
-    syncMemory('collapseMode', collapseMode);
+    syncMemory('explorationMode', explorationMode);
+    syncMemory('sparseFrequency', sparseFrequency);
+    syncMemory('similarityAlgorithm', similarityAlgorithm);
+    syncMemory('similarityThreshold', similarityThreshold);
     syncMemory('matchingMode', matchingMode);
     syncMemory('initialImages', initialImages);
     syncMemory('slideDelay', slideDelay);
