@@ -29,12 +29,13 @@ export function getMetadataVersion(prompt: string | undefined) {
 
 export function getPrompts(prompt: string | undefined, workflow: string | undefined, extra: string | undefined, og = false): { pos: string, neg: string, params?: string, ogpos?: string, ogneg?: string; } | undefined {
     let res: { pos: string, neg: string, params?: string, ogpos?: string, ogneg?: string; };
-    const get = (type?: string) => {
+    const get = () => {
         if (res) return res;
         const version = getMetadataVersion(prompt);
-        if (version === 'comfy' && type === 'params')
-            res = { pos: '', neg: '', params: '' };
-        else if (workflow)
+        if (version === 'comfy' && workflow) {
+            const comfy = getComfyPrompts(prompt, workflow) ?? { pos: '', neg: '' };
+            res = { ...comfy, params: getComfyMetadataParamsText(prompt, workflow) };
+        } else if (workflow)
             res = getComfyPrompts(prompt, workflow) ?? { pos: '', neg: '' };
         else if (version === 'swarm')
             res = { ...getSwarmPrompts(prompt), params: getParams(prompt) };
@@ -55,7 +56,7 @@ export function getPrompts(prompt: string | undefined, workflow: string | undefi
                     neg: neg.trim() || get().neg,
                     ogpos: (pos && og) ? get().pos : undefined,
                     ogneg: (neg && og) ? get().neg : undefined,
-                    params: custom.params || get('params').params,
+                    params: custom.params || get().params,
                 };
             }
         } catch { /**/ }
@@ -226,7 +227,7 @@ export function getComfyWorkflowNodes(workflow: string | ComfyWorkflow | undefin
         }
     }
 
-    return workflow.nodes.reduce((acc, node) => {
+    return (workflow.nodes ?? []).reduce((acc, node) => {
         acc[node.id] = node;
         return acc;
     }, {} as Record<string, ComfyWorkflowNode>);
@@ -237,6 +238,10 @@ const SYSTEM_PROMPT_RE = /system prompt/i;
 const SEED_RE = /\bseed\b/i;
 const TEXT_INPUT_KEYS = new Set(['text', 'str', 'string', 'value']);
 const REFINE_PROMPT_RE = /refine prompt/i;
+const PROMPT_PART_SEPARATOR_RE = /\n-{3,}\n/;
+const PARAMS_TEXT_PREVIEW_KEYWORD_RE = /\b(show|display|preview)\b/i;
+const PARAMS_TEXT_PREVIEW_OMIT_MIN_LENGTH = 100;
+const PARAMS_TEXT_MAX_STRING_LENGTH = 1000;
 
 type ComfySeedEntry = {
     label: string;
@@ -298,13 +303,23 @@ function isNegativePromptTitle(title: string): boolean {
     return /negative/i.test(title);
 }
 
-function collectNumericLiteralsFromPromptNode(node: ComfyNode): number[] {
-    const values: number[] = [];
-    for (const value of Object.values(node.inputs)) {
-        if (typeof value === 'number' && Number.isFinite(value))
-            values.push(value);
+function collectNumericLiteralFields(
+    promptNode: ComfyNode | undefined,
+    workflowNode: ComfyWorkflowNode | undefined,
+): { label: string; value: number; inputKey: string; }[] {
+    if (!promptNode?.inputs)
+        return [];
+    const results: { label: string; value: number; inputKey: string; }[] = [];
+    for (const [key, value] of Object.entries(promptNode.inputs)) {
+        if (typeof value !== 'number' || !Number.isFinite(value))
+            continue;
+        results.push({
+            label: resolveLiteralLabel(workflowNode, key),
+            value,
+            inputKey: key,
+        });
     }
-    return values;
+    return results;
 }
 
 function collectNumericWidgetValues(node: ComfyWorkflowNode): number[] {
@@ -357,6 +372,27 @@ function resolveNodeTitle(
     return promptNode?.class_type ?? String(nodeId);
 }
 
+function resolveSeedEntryLabel(
+    nodeId: string | number,
+    promptNode: ComfyNode | undefined,
+    workflowNode: ComfyWorkflowNode | undefined,
+    ctx: ComfyWorkflowContext | undefined,
+): string {
+    const subgraph = workflowNode && ctx ? getSubgraphDefinition(ctx, workflowNode) : undefined;
+    const title = resolveNodeTitle(nodeId, promptNode, workflowNode, subgraph).trim();
+    if (title)
+        return title;
+    return workflowNode?.type?.trim() || promptNode?.class_type?.trim() || String(nodeId);
+}
+
+function formatComfySeedEntries(entries: ComfySeedEntry[]): string {
+    if (!entries.length)
+        return '';
+    if (entries.length === 1)
+        return entries[0].value;
+    return entries.map(entry => `${entry.label}: ${entry.value}`).join('\n');
+}
+
 function resolveInputLabel(input: ComfyWorkflowNodeInput | undefined, fallback: string): string {
     if (!input)
         return fallback;
@@ -370,14 +406,14 @@ function resolveInputLabel(input: ComfyWorkflowNodeInput | undefined, fallback: 
 }
 
 function findWorkflowInput(node: ComfyWorkflowNode | undefined, key: string): ComfyWorkflowNodeInput | undefined {
-    return node?.inputs.find(input => input.name === key || input.widget?.name === key);
+    return node?.inputs?.find(input => input.name === key || input.widget?.name === key);
 }
 
 function findInnerNode(subgraph: ComfySubgraphDefinition | undefined, innerId: string): ComfyWorkflowNode | undefined {
     if (!subgraph)
         return undefined;
     const numericId = Number(innerId);
-    return subgraph.nodes.find(node => node.id === numericId);
+    return subgraph.nodes?.find(node => node.id === numericId);
 }
 
 function resolveProxyWidgetLabel(
@@ -418,6 +454,8 @@ function getLiteralFieldsWithContext(
     promptNode: ComfyNode,
     workflowNode: ComfyWorkflowNode | undefined,
 ): ComfyMetadataFieldWithContext[] {
+    if (!promptNode.inputs)
+        return [];
     const results: ComfyMetadataFieldWithContext[] = [];
     for (const [key, value] of Object.entries(promptNode.inputs)) {
         if (!isLiteralInput(value))
@@ -446,7 +484,7 @@ function getPromotedSubgraphFieldsWithContext(
     const results: ComfyMetadataFieldWithContext[] = [];
     for (const [innerId, widgetName] of proxyWidgets) {
         const promptNode = prompt[`${containerId}:${innerId}`];
-        if (!promptNode)
+        if (!promptNode?.inputs)
             continue;
         const value = promptNode.inputs[widgetName];
         if (!isLiteralInput(value))
@@ -475,21 +513,118 @@ function draftToSection(
     };
 }
 
-function filterSectionDraft(
+function resolveNodeClassName(context: ComfyFieldContext): string {
+    return context.innerNode?.type ?? context.workflowNode?.type ?? '';
+}
+
+function shouldOmitFromParamsText(
+    field: ComfyMetadataField,
+    context: ComfyFieldContext,
+    sectionTitle: string,
+): boolean {
+    if (typeof field.value !== 'string')
+        return false;
+    if (field.value.length > PARAMS_TEXT_MAX_STRING_LENGTH)
+        return true;
+    if (field.value.length < PARAMS_TEXT_PREVIEW_OMIT_MIN_LENGTH)
+        return false;
+    const className = resolveNodeClassName(context);
+    return PARAMS_TEXT_PREVIEW_KEYWORD_RE.test(sectionTitle)
+        || (!!className && PARAMS_TEXT_PREVIEW_KEYWORD_RE.test(className));
+}
+
+function filterSectionDraftForParamsText(
     draft: ComfyMetadataSectionDraft,
-    prompts: { pos: string; neg: string; } | undefined,
+    excludedPromptValues: Set<string>,
     seedValues: Set<string>,
 ): ComfyMetadataSection | undefined {
     const fields: ComfyMetadataField[] = [];
     for (let i = 0; i < draft.fields.length; i++) {
         const field = draft.fields[i];
         const context = draft.fieldContexts[i];
-        if (!shouldExcludeMetadataField(field, prompts, seedValues, context))
+        if (shouldExcludeMetadataField(field, excludedPromptValues, seedValues, context))
+            continue;
+        if (shouldOmitFromParamsText(field, context, draft.title))
+            continue;
+        fields.push(field);
+    }
+    if (!fields.length)
+        return undefined;
+    return { title: draft.title, fields };
+}
+
+function filterSectionDraft(
+    draft: ComfyMetadataSectionDraft,
+    excludedPromptValues: Set<string>,
+    seedValues: Set<string>,
+): ComfyMetadataSection | undefined {
+    const fields: ComfyMetadataField[] = [];
+    for (let i = 0; i < draft.fields.length; i++) {
+        const field = draft.fields[i];
+        const context = draft.fieldContexts[i];
+        if (!shouldExcludeMetadataField(field, excludedPromptValues, seedValues, context))
             fields.push(field);
     }
     if (!fields.length)
         return undefined;
     return { title: draft.title, fields };
+}
+
+function buildComfyMetadataSectionDrafts(
+    prompt: ComfyPrompt,
+    ctx: ComfyWorkflowContext,
+): ComfyMetadataSectionDraft[] {
+    const drafts: ComfyMetadataSectionDraft[] = [];
+    const sortedNodes = [...(ctx.workflow.nodes ?? [])].sort((a, b) => a.order - b.order);
+
+    for (const workflowNode of sortedNodes) {
+        const proxyWidgets = getProxyWidgets(workflowNode);
+        if (proxyWidgets) {
+            const subgraph = getSubgraphDefinition(ctx, workflowNode);
+            const items = getPromotedSubgraphFieldsWithContext(workflowNode.id, workflowNode, prompt, subgraph);
+            if (!items.length)
+                continue;
+            drafts.push(draftToSection(
+                resolveNodeTitle(workflowNode.id, prompt[String(workflowNode.id)], workflowNode, subgraph),
+                items,
+            ));
+            continue;
+        }
+
+        if (isSubgraphContainer(workflowNode))
+            continue;
+
+        if (isCollapsed(workflowNode))
+            continue;
+
+        const promptNode = prompt[String(workflowNode.id)];
+        if (!promptNode)
+            continue;
+
+        const items = getLiteralFieldsWithContext(promptNode, workflowNode);
+        if (!items.length)
+            continue;
+
+        drafts.push(draftToSection(
+            resolveNodeTitle(workflowNode.id, promptNode, workflowNode),
+            items,
+        ));
+    }
+
+    return drafts;
+}
+
+function finalizeComfyMetadataSections(
+    drafts: ComfyMetadataSectionDraft[],
+    excludedPromptValues: Set<string>,
+    seedValues: Set<string>,
+    forParamsText: boolean,
+): ComfyMetadataSection[] {
+    const filter = forParamsText ? filterSectionDraftForParamsText : filterSectionDraft;
+    const sections = drafts
+        .map(draft => filter(draft, excludedPromptValues, seedValues))
+        .filter((section): section is ComfyMetadataSection => !!section);
+    return sortComfyMetadataSections(sections);
 }
 
 function isWhitespaceString(value: string | number | boolean): boolean {
@@ -500,16 +635,19 @@ function isSeedLikeInteger(value: number): boolean {
     return String(Math.abs(Math.trunc(value))).length > 4;
 }
 
-function isRandomizeWidgetNode(node: ComfyWorkflowNode | undefined): boolean {
-    return node?.widgets_values?.[1] === 'randomize';
-}
-
-function shouldTreatAsSeed(title: string, value: number, workflowNode?: ComfyWorkflowNode): boolean {
-    if (SEED_RE.test(title))
+function shouldTreatAsSeed(
+    nodeLabel: string,
+    value: number,
+    widgetLabel?: string,
+    inputKey?: string,
+): boolean {
+    if (SEED_RE.test(nodeLabel))
+        return true;
+    if (widgetLabel && SEED_RE.test(widgetLabel))
+        return true;
+    if (inputKey && SEED_RE.test(inputKey))
         return true;
     if (isSeedLikeInteger(value))
-        return true;
-    if (workflowNode && isRandomizeWidgetNode(workflowNode))
         return true;
     return false;
 }
@@ -518,13 +656,32 @@ function isPromptLikeField(field: ComfyMetadataField): boolean {
     return isPositivePromptTitle(field.label) || isNegativePromptTitle(field.label);
 }
 
-function isExcludedPromptValue(value: string, prompts: { pos: string; neg: string; } | undefined): boolean {
-    if (!prompts)
-        return false;
-    const normalized = value.trim();
-    if (!normalized)
-        return false;
-    return normalized === prompts.pos.trim() || normalized === prompts.neg.trim();
+function isPromptLikeNode(context: ComfyFieldContext): boolean {
+    for (const node of [context.innerNode, context.workflowNode]) {
+        const title = node?.title;
+        if (!title)
+            continue;
+        if (isPositivePromptTitle(title) || isNegativePromptTitle(title))
+            return true;
+    }
+    return false;
+}
+
+function shouldExcludeMetadataField(
+    field: ComfyMetadataField,
+    excludedPromptValues: Set<string>,
+    seedValues: Set<string>,
+    context: ComfyFieldContext = {},
+): boolean {
+    if (isWhitespaceString(field.value))
+        return true;
+    if (isPromptLikeField(field) || isPromptLikeNode(context))
+        return true;
+    if (typeof field.value === 'string' && excludedPromptValues.has(field.value.trim()))
+        return true;
+    if (isSeedLikeField(field, seedValues, context))
+        return true;
+    return false;
 }
 
 function isSeedLikeField(
@@ -537,27 +694,9 @@ function isSeedLikeField(
         return true;
     if (SEED_RE.test(field.label))
         return true;
+    if (field.inputKey && SEED_RE.test(field.inputKey))
+        return true;
     if (typeof field.value === 'number' && isSeedLikeInteger(field.value))
-        return true;
-    const node = context.innerNode ?? context.workflowNode;
-    if (isRandomizeWidgetNode(node) && typeof field.value === 'number')
-        return true;
-    return false;
-}
-
-function shouldExcludeMetadataField(
-    field: ComfyMetadataField,
-    prompts: { pos: string; neg: string; } | undefined,
-    seedValues: Set<string>,
-    context: ComfyFieldContext = {},
-): boolean {
-    if (isWhitespaceString(field.value))
-        return true;
-    if (isPromptLikeField(field))
-        return true;
-    if (typeof field.value === 'string' && isExcludedPromptValue(field.value, prompts))
-        return true;
-    if (isSeedLikeField(field, seedValues, context))
         return true;
     return false;
 }
@@ -580,40 +719,40 @@ function collectComfySeedEntries(
 
     for (const id of getComfyIds(prompt, nodes, SEED_RE)) {
         const workflowNode = nodes[id];
-        const title = workflowNode?.title ?? getPromptNodeTitle(prompt[id]) ?? 'Seed';
-        for (const value of collectNumericLiteralsFromPromptNode(prompt[id])) {
-            if (shouldTreatAsSeed(title, value, workflowNode))
-                add(title, value);
+        const nodeLabel = resolveSeedEntryLabel(id, prompt[id], workflowNode, ctx);
+        for (const field of collectNumericLiteralFields(prompt[id], workflowNode)) {
+            if (shouldTreatAsSeed(nodeLabel, field.value, field.label, field.inputKey))
+                add(nodeLabel, field.value);
         }
     }
 
     for (const id in prompt) {
         const promptNode = prompt[id];
         const workflowNode = nodes[id];
-        const title = getPromptNodeTitle(promptNode) || workflowNode?.title || '';
-        for (const value of collectNumericLiteralsFromPromptNode(promptNode)) {
-            if (shouldTreatAsSeed(title, value, workflowNode))
-                add(title || 'Seed', value);
+        const nodeLabel = resolveSeedEntryLabel(id, promptNode, workflowNode, ctx);
+        for (const field of collectNumericLiteralFields(promptNode, workflowNode)) {
+            if (shouldTreatAsSeed(nodeLabel, field.value, field.label, field.inputKey))
+                add(nodeLabel, field.value);
         }
     }
 
     if (!ctx)
         return entries;
 
-    const collectFromWorkflowNode = (node: ComfyWorkflowNode, fallbackTitle: string) => {
-        const title = node.title || fallbackTitle;
+    const collectFromWorkflowNode = (node: ComfyWorkflowNode) => {
+        const nodeLabel = resolveSeedEntryLabel(node.id, prompt[String(node.id)], node, ctx);
         for (const value of collectNumericWidgetValues(node)) {
-            if (shouldTreatAsSeed(title, value, node))
-                add(title || fallbackTitle || 'Seed', value);
+            if (shouldTreatAsSeed(nodeLabel, value))
+                add(nodeLabel, value);
         }
     };
 
-    for (const node of ctx.workflow.nodes)
-        collectFromWorkflowNode(node, resolveWorkflowNodeTitle(node, ctx));
+    for (const node of ctx.workflow.nodes ?? [])
+        collectFromWorkflowNode(node);
 
     for (const subgraph of ctx.subgraphsByType.values()) {
-        for (const node of subgraph.nodes)
-            collectFromWorkflowNode(node, node.title ?? subgraph.name);
+        for (const node of subgraph.nodes ?? [])
+            collectFromWorkflowNode(node);
     }
 
     return entries;
@@ -656,50 +795,10 @@ export function getComfyMetadataSections(
     if (!prompt || !ctx)
         return [];
 
-    const prompts = getComfyPrompts(prompt, ctx.workflow);
+    const excludedPromptValues = collectExcludedPromptValues(prompt, ctx);
     const seedValues = collectComfySeedValues(prompt, ctx, ctx.nodes);
-    const drafts: ComfyMetadataSectionDraft[] = [];
-    const sortedNodes = [...ctx.workflow.nodes].sort((a, b) => a.order - b.order);
-
-    for (const workflowNode of sortedNodes) {
-        const proxyWidgets = getProxyWidgets(workflowNode);
-        if (proxyWidgets) {
-            const subgraph = getSubgraphDefinition(ctx, workflowNode);
-            const items = getPromotedSubgraphFieldsWithContext(workflowNode.id, workflowNode, prompt, subgraph);
-            if (!items.length)
-                continue;
-            drafts.push(draftToSection(
-                resolveNodeTitle(workflowNode.id, prompt[String(workflowNode.id)], workflowNode, subgraph),
-                items,
-            ));
-            continue;
-        }
-
-        if (isSubgraphContainer(workflowNode))
-            continue;
-
-        if (isCollapsed(workflowNode))
-            continue;
-
-        const promptNode = prompt[String(workflowNode.id)];
-        if (!promptNode)
-            continue;
-
-        const items = getLiteralFieldsWithContext(promptNode, workflowNode);
-        if (!items.length)
-            continue;
-
-        drafts.push(draftToSection(
-            resolveNodeTitle(workflowNode.id, promptNode, workflowNode),
-            items,
-        ));
-    }
-
-    const sections = drafts
-        .map(draft => filterSectionDraft(draft, prompts, seedValues))
-        .filter((section): section is ComfyMetadataSection => !!section);
-
-    return sortComfyMetadataSections(sections);
+    const drafts = buildComfyMetadataSectionDrafts(prompt, ctx);
+    return finalizeComfyMetadataSections(drafts, excludedPromptValues, seedValues, false);
 }
 
 function formatComfyMetadataSections(sections: ComfyMetadataSection[]): string {
@@ -713,7 +812,19 @@ export function getComfyMetadataParamsText(
     prompt: string | ComfyPrompt | undefined,
     workflow: string | ComfyWorkflow | undefined,
 ): string {
-    return formatComfyMetadataSections(getComfyMetadataSections(prompt, workflow));
+    if (!prompt || !workflow)
+        return '';
+    if (typeof prompt === 'string')
+        prompt = getComfyPrompt(prompt);
+    const ctx = getComfyWorkflowContext(workflow);
+    if (!prompt || !ctx)
+        return '';
+
+    const excludedPromptValues = collectExcludedPromptValues(prompt, ctx);
+    const seedValues = collectComfySeedValues(prompt, ctx, ctx.nodes);
+    const drafts = buildComfyMetadataSectionDrafts(prompt, ctx);
+    const sections = finalizeComfyMetadataSections(drafts, excludedPromptValues, seedValues, true);
+    return formatComfyMetadataSections(sections);
 }
 
 function getComfyPromptIdsByTitle(
@@ -775,8 +886,8 @@ function getComfyIds(prompt: ComfyPrompt, nodes: Record<string, ComfyWorkflowNod
     return ids;
 }
 
-function getComfyValue(node: ComfyNode, keys: string | string[], type?: string) {
-    if (!node)
+function getComfyValue(node: ComfyNode | undefined, keys: string | string[], type?: string) {
+    if (!node?.inputs)
         return '';
     let types = [];
     if (type)
@@ -813,6 +924,20 @@ export function getComfyNegative(
     const ids = getComfyPromptIdsByTitle(prompt, nodes, ctx, isNegativePromptTitle);
     const prompts = ids.map(id => getComfyValue(prompt[id], ['negative', 'prompt', 'text', 'string', 'str', 'value'], 'string')).filter(x => x);
     return !ids.length ? '' : prompts.join('\n----------\n');
+}
+
+function collectExcludedPromptValues(prompt: ComfyPrompt, ctx: ComfyWorkflowContext): Set<string> {
+    const values = new Set<string>();
+    const addParts = (text: string) => {
+        for (const part of text.split(PROMPT_PART_SEPARATOR_RE)) {
+            const normalized = part.trim();
+            if (normalized)
+                values.add(normalized);
+        }
+    };
+    addParts(getComfyPositive(prompt, ctx.nodes, ctx));
+    addParts(getComfyNegative(prompt, ctx.nodes, ctx));
+    return values;
 }
 
 function isComfyWorkflow(workflow: ComfyWorkflow | Record<string, ComfyWorkflowNode>): workflow is ComfyWorkflow {
@@ -862,11 +987,7 @@ export function getComfySeed(prompt: string | ComfyPrompt, workflow: string | Co
         typeof workflow === 'string' || isComfyWorkflow(workflow) ? workflow : undefined,
     );
     const entries = collectComfySeedEntries(prompt, ctx, nodes);
-    if (!entries.length)
-        return '';
-    if (entries.length > 1)
-        return entries.map(entry => `${entry.label}: ${entry.value}`).join('\n');
-    return entries[0].value;
+    return formatComfySeedEntries(entries);
 }
 
 export function getComfyModel(prompt: ComfyPrompt, nodes: Record<string, ComfyWorkflowNode>) {
