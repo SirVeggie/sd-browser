@@ -91,15 +91,25 @@ export type TimedImage = {
 export type ComfyNode = {
     inputs: Record<string, (string | number | boolean | [string, number] | object)>;
     class_type: string;
+    _meta?: {
+        title?: string;
+    };
 };
 export type ComfyPrompt = Record<string, ComfyNode>;
 
-export type ComfyWorkflow = {
-    nodes: ComfyWorkflowNode[];
-    links: [number, number, number, number, number, string][];
-    groups: any[];
-    config: any;
-    version: number;
+export type ComfyProxyWidget = [string, string];
+
+export type ComfyWorkflowNodeInput = {
+    name: string;
+    type: string;
+    link?: number | null;
+    widget?: { name: string; };
+    dir?: number;
+    has_old_label?: boolean;
+    label?: string;
+    localized_name?: string;
+    old_label?: string;
+    shape?: number;
 };
 
 export type ComfyWorkflowNode = {
@@ -107,32 +117,60 @@ export type ComfyWorkflowNode = {
     type: string;
     title?: string;
     pos: [number, number];
-    size: { "0": number, "1": number; };
+    size: { "0": number, "1": number; } | [number, number];
     flags: Record<string, boolean>;
     order: number;
     mode: number;
-    inputs: {
-        name: string;
-        type: string;
-        link: number;
-        widget?: { name: string; };
-        dir?: number;
-        has_old_label?: boolean;
-        label?: string;
-        old_label?: string;
-    }[];
+    inputs: ComfyWorkflowNodeInput[];
     outputs: {
         name: string;
         type: string;
-        links: number[];
+        links: number[] | null;
         shape?: number;
         dir?: number;
         has_old_label?: boolean;
         label?: string;
+        localized_name?: string;
         old_label?: string;
         slot_index?: number;
     }[];
-    widgets_values: (string | number | boolean)[];
-    properties: Record<string, string>;
-    shape: number;
+    widgets_values: (string | number | boolean | null)[];
+    properties: ComfyWorkflowNodeProperties;
+    shape?: number;
+};
+
+export type ComfyWorkflowNodeProperties = {
+    proxyWidgets?: ComfyProxyWidget[];
+    [key: string]: unknown;
+};
+
+export type ComfySubgraphDefinition = {
+    id: string;
+    name: string;
+    nodes: ComfyWorkflowNode[];
+    inputs?: unknown[];
+    outputs?: unknown[];
+    widgets?: unknown[];
+};
+
+export type ComfyWorkflow = {
+    nodes: ComfyWorkflowNode[];
+    links: [number, number, number, number, number, string][];
+    groups: unknown[];
+    config: unknown;
+    version: number;
+    definitions?: {
+        subgraphs?: ComfySubgraphDefinition[];
+    };
+};
+
+export type ComfyMetadataField = {
+    label: string;
+    value: string | number | boolean;
+    inputKey?: string;
+};
+
+export type ComfyMetadataSection = {
+    title: string;
+    fields: ComfyMetadataField[];
 };

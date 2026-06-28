@@ -13,9 +13,7 @@
   import Button from "./Button.svelte";
   import { notify } from "$lib/components/Notifier.svelte";
   import {
-    getComfyPrompt,
-    getComfyWorkflow,
-    getComfyWorkflowNodes,
+    getComfyMetadataSections,
     getMetadataVersion,
     getModel,
     getModelHash,
@@ -163,32 +161,11 @@
     if (!workflow) return [];
 
     try {
-      const workflowData = getComfyWorkflow(workflow);
-      const nodes = getComfyWorkflowNodes(workflowData);
-      const data = getComfyPrompt(prompt);
-      const blocks: PromptFragment[] = [];
-
-      if (!nodes || !data) return [];
-
-      for (const [key, value] of Object.entries(data)) {
-        let content = "";
-        for (const [k, v] of Object.entries(value.inputs)) {
-          if (["string", "number", "boolean"].includes(typeof v))
-            content += `${k}: ${v}\n`;
-        }
-        content = content.trim();
-
-        if (content) {
-          const node = nodes[Number(key)];
-          const header = `${key} | ${node?.title ?? value.class_type}`;
-          blocks.push({
-            header,
-            content,
-          });
-        }
-      }
-
-      return blocks;
+      const sections = getComfyMetadataSections(prompt, workflow);
+      return sections.map(section => ({
+        header: section.title,
+        content: section.fields.map(field => `${field.label}: ${field.value}`).join("\n"),
+      })).filter(section => section.content);
     } catch (e) {
       console.error(e);
       notify("Failed to parse comfy metadata", "error", "comfy_parse_error");
