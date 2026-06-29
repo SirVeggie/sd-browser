@@ -136,16 +136,30 @@ export function isStreamRequest(object: any): object is StreamRequest {
 export type StreamInitResponse = {
     type: 'init';
     sessionId: string;
-    images: Omit<ClientImage, 'url'>[];
-    amount: number;
     timestamp: number;
+};
+
+export type StreamChunkResponse = {
+    type: 'chunk';
+    images: Omit<ClientImage, 'url'>[];
+    /** Running match count on the server when this chunk was emitted. */
+    matched: number;
+};
+
+export type StreamReadyResponse = {
+    type: 'ready';
+    amount: number;
 };
 
 export type StreamUpdateResponse = UpdateResponse & {
     type: 'update';
 };
 
-export type StreamEvent = StreamInitResponse | StreamUpdateResponse;
+export type StreamEvent =
+    | StreamInitResponse
+    | StreamChunkResponse
+    | StreamReadyResponse
+    | StreamUpdateResponse;
 
 export type SettingsRequest = {
     settingsJson: string;

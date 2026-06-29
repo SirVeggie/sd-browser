@@ -46,6 +46,10 @@ export function randomIndex(array: any[]) {
     return Math.floor(Math.random() * array.length);
 }
 
+export function yieldToEventLoop(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+}
+
 export function selectRandom<T>(array: T[], amount: number): T[] {
     return _.shuffle(array).slice(0, amount);
 }

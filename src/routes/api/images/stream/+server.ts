@@ -2,18 +2,33 @@ import { invalidAuth } from '$lib/server/auth.js';
 import { subscribeImageChanges } from '$lib/server/imageChangeHub';
 import { computeImageUpdate, hasUpdateChanges } from '$lib/server/imageUpdates';
 import { error } from '$lib/server/responses';
+import { explorationFromRequest, SearchStreamAborted, searchImagesStreaming } from '$lib/server/searching';
 import {
-    createSession,
+    appendSessionChunk,
+    createSessionStub,
     deleteSession,
+    finalizeSession,
     getSession,
+    imageLimit,
     patchSession,
 } from '$lib/server/searchSessions';
-import type { StreamInitResponse, StreamRequest, UpdateResponse } from '$lib/types/requests';
+import { mapServerImageToClient } from '$lib/tools/misc';
+import type {
+    StreamChunkResponse,
+    StreamInitResponse,
+    StreamReadyResponse,
+    StreamRequest,
+    UpdateResponse,
+} from '$lib/types/requests';
 import { isStreamRequest } from '$lib/types/requests';
+import type { ServerImage } from '$lib/types/images';
 
 const encoder = new TextEncoder();
 const staleCheckMs = 10_000;
 const debounceMs = 100;
+const streamYieldEvery = 50;
+const streamChunkIntervalMs = 100;
+const streamMaxChunkImages = 500;
 
 function formatEvent(data: unknown): Uint8Array {
     return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
@@ -37,10 +52,6 @@ export async function POST(e) {
         return error('Invalid request body', 400);
     }
 
-    if (query.sorting === 'random') {
-        return error('Stream not supported for random sort', 400);
-    }
-
     if (e.request.signal.aborted) {
         return error('Client disconnected', 499);
     }
@@ -50,6 +61,8 @@ export async function POST(e) {
     let staleTimer: ReturnType<typeof setInterval> | undefined;
     let unsubscribe: (() => void) | undefined;
     let closed = false;
+
+    const isAborted = () => closed || e.request.signal.aborted;
 
     const cleanup = () => {
         if (closed) return;
@@ -65,7 +78,7 @@ export async function POST(e) {
             let connectionTimestamp = Date.now();
 
             const pushIfChanged = () => {
-                if (closed || e.request.signal.aborted) return;
+                if (isAborted()) return;
                 if (!sessionId) return;
                 const session = getSession(sessionId);
                 if (!session) return;
@@ -116,41 +129,109 @@ export async function POST(e) {
 
             e.request.signal.addEventListener('abort', finish);
 
-            try {
-                if (e.request.signal.aborted) {
+            void (async () => {
+                try {
+                    if (isAborted()) {
+                        finish();
+                        return;
+                    }
+
+                    const stub = createSessionStub(query);
+                    sessionId = stub.sessionId;
+                    connectionTimestamp = stub.timestamp;
+
+                    const init: StreamInitResponse = {
+                        type: 'init',
+                        sessionId: stub.sessionId,
+                        timestamp: stub.timestamp,
+                    };
+
+                    if (!safeEnqueue(controller, init)) {
+                        finish();
+                        return;
+                    }
+
+                    const exploration = explorationFromRequest(query);
+                    const streamOptions = {
+                        yieldEvery: streamYieldEvery,
+                        chunkIntervalMs: streamChunkIntervalMs,
+                        firstChunkMaxImages: imageLimit,
+                        firstChunkMinMs: streamChunkIntervalMs,
+                        maxChunkImages: streamMaxChunkImages,
+                        isAborted,
+                    };
+                    let streamedToClient = 0;
+
+                    const onChunk = (images: ServerImage[], matched: number) => {
+                        if (isAborted()) throw new SearchStreamAborted();
+
+                        if (images.length) {
+                            appendSessionChunk(
+                                sessionId!,
+                                images.map((image) => image.id),
+                            );
+                        }
+
+                        let toSend: ServerImage[] = [];
+                        if (streamedToClient < imageLimit && images.length) {
+                            const take = Math.min(images.length, imageLimit - streamedToClient);
+                            toSend = take === images.length ? images : images.slice(0, take);
+                            streamedToClient += toSend.length;
+                        }
+
+                        const chunk: StreamChunkResponse = {
+                            type: 'chunk',
+                            images: toSend.length ? mapServerImageToClient(toSend) : [],
+                            matched,
+                        };
+                        if (!safeEnqueue(controller, chunk))
+                            throw new SearchStreamAborted();
+                    };
+
+                    const result = await searchImagesStreaming(
+                        query.search,
+                        query.filters,
+                        query.matching,
+                        exploration,
+                        query.sorting,
+                        onChunk,
+                        streamOptions,
+                    );
+
+                    if (isAborted()) {
+                        finish();
+                        return;
+                    }
+
+                    finalizeSession(sessionId, result.orderedIds);
+
+                    const ready: StreamReadyResponse = {
+                        type: 'ready',
+                        amount: result.amount,
+                    };
+
+                    if (!safeEnqueue(controller, ready)) {
+                        finish();
+                        return;
+                    }
+
+                    unsubscribe = subscribeImageChanges(schedulePush);
+                    staleTimer = setInterval(pushIfChanged, staleCheckMs);
+                } catch (err) {
+                    if (err instanceof SearchStreamAborted || isAborted()) {
+                        finish();
+                        return;
+                    }
+                    if (sessionId) deleteSession(sessionId);
+                    sessionId = undefined;
+                    if (err instanceof Error) {
+                        console.log(err.message);
+                    } else {
+                        console.error(err);
+                    }
                     finish();
-                    return;
                 }
-
-                const created = createSession(query);
-                sessionId = created.sessionId;
-                connectionTimestamp = created.timestamp;
-
-                const init: StreamInitResponse = {
-                    type: 'init',
-                    sessionId: created.sessionId,
-                    images: created.images,
-                    amount: created.amount,
-                    timestamp: created.timestamp,
-                };
-
-                if (!safeEnqueue(controller, init)) {
-                    finish();
-                    return;
-                }
-
-                unsubscribe = subscribeImageChanges(schedulePush);
-                staleTimer = setInterval(pushIfChanged, staleCheckMs);
-            } catch (err) {
-                if (sessionId) deleteSession(sessionId);
-                sessionId = undefined;
-                if (err instanceof Error) {
-                    console.log(err.message);
-                } else {
-                    console.error(err);
-                }
-                finish();
-            }
+            })();
         },
         cancel() {
             cleanup();

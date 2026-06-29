@@ -1,4 +1,4 @@
-import { parseSearchDate, validRegex, XOR } from "$lib/tools/misc";
+import { parseSearchDate, validRegex, XOR, yieldToEventLoop } from "$lib/tools/misc";
 import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
 import {
@@ -76,9 +76,210 @@ export function searchImages(
         list = sortImages(list, options.sorting);
 
     if (options.skipResults !== false)
-        list = applyResultSkip(list, search);
+        list = applyResultSkip(list, search, options.sorting);
 
     return list;
+}
+
+export type SearchStreamOptions = {
+    /** Pool IDs scanned between event-loop yields (default 50). */
+    yieldEvery?: number;
+    /** Minimum ms between SSE chunks when matches are pending (default 100). */
+    chunkIntervalMs?: number;
+    /** Max images in the first SSE chunk, or when first-chunk min ms elapses (default 1000). */
+    firstChunkMaxImages?: number;
+    /** Wait up to this many ms before first chunk unless firstChunkMaxImages is reached first (default 100). */
+    firstChunkMinMs?: number;
+    /** Max images per subsequent SSE chunk (default 500). */
+    maxChunkImages?: number;
+    isAborted?: () => boolean;
+};
+
+export class SearchStreamAborted extends Error {
+    constructor() {
+        super('Search stream aborted');
+        this.name = 'SearchStreamAborted';
+    }
+}
+
+function throwIfSearchAborted(options: SearchStreamOptions): void {
+    if (options.isAborted?.()) throw new SearchStreamAborted();
+}
+
+export type SearchStreamResult = {
+    orderedIds: string[];
+    amount: number;
+};
+
+export async function searchImagesStreaming(
+    search: string,
+    filters: string[],
+    matching: SearchMode,
+    exploration: ExplorationSettings,
+    sorting: SortingMethod,
+    onChunk: (images: ServerImage[], matched: number) => void,
+    options: SearchStreamOptions = {},
+): Promise<SearchStreamResult> {
+    if (matching === 'regex' && !validRegex(search))
+        throw new Error('Invalid regex');
+
+    const yieldEvery = options.yieldEvery ?? 50;
+    const chunkIntervalMs = options.chunkIntervalMs ?? 100;
+    const firstChunkMaxImages = options.firstChunkMaxImages ?? 1000;
+    const firstChunkMinMs = options.firstChunkMinMs ?? 100;
+    const maxChunkImages = options.maxChunkImages ?? 500;
+    await yieldToEventLoop();
+    throwIfSearchAborted(options);
+
+    const matcher = buildMatcher(search, matching, exploration);
+    const filter = buildMatcher(filters.join(' AND '), 'regex');
+    const imageList = getImageList();
+    const images = [...imageList.values()];
+    await yieldToEventLoop();
+    throwIfSearchAborted(options);
+
+    const pool = getExplorationPool(exploration, images);
+    await yieldToEventLoop();
+    throwIfSearchAborted(options);
+
+    const orderedPoolIds = orderPoolIds(pool, sorting);
+    await yieldToEventLoop();
+    throwIfSearchAborted(options);
+
+    const skipThreshold = sorting === 'random' ? 0 : getResultSkipCount(search);
+
+    const orderedIds: string[] = [];
+    let batch: ServerImage[] = [];
+    let skipped = 0;
+    let scanned = 0;
+    let lastChunkAt = 0;
+    const scanStartedAt = Date.now();
+
+    const emitFirstChunk = async () => {
+        if (!batch.length || lastChunkAt !== 0) return;
+
+        const take = Math.min(batch.length, firstChunkMaxImages);
+        const chunk = batch.splice(0, take);
+        onChunk(chunk, orderedIds.length);
+        lastChunkAt = Date.now();
+        await yieldToEventLoop();
+    };
+
+    const emitPendingChunk = async (forceAll = false) => {
+        while (batch.length) {
+            if (options.isAborted?.()) {
+                batch = [];
+                return;
+            }
+
+            const take = forceAll ? batch.length : Math.min(batch.length, maxChunkImages);
+            const chunk = batch.splice(0, take);
+            onChunk(chunk, orderedIds.length);
+            lastChunkAt = Date.now();
+            await yieldToEventLoop();
+
+            if (!forceAll && batch.length) break;
+        }
+    };
+
+    const maybeEmitByTime = async () => {
+        if (lastChunkAt === 0) {
+            if (!batch.length) return;
+            const elapsed = Date.now() - scanStartedAt;
+            if (orderedIds.length < firstChunkMaxImages && elapsed < firstChunkMinMs) return;
+            await emitFirstChunk();
+            return;
+        }
+
+        if (Date.now() - lastChunkAt < chunkIntervalMs) return;
+
+        if (batch.length) {
+            await emitPendingChunk();
+        } else if (orderedIds.length > 0) {
+            onChunk([], orderedIds.length);
+            lastChunkAt = Date.now();
+            await yieldToEventLoop();
+        }
+    };
+
+    for (const id of orderedPoolIds) {
+        if (++scanned % yieldEvery === 0) {
+            await yieldToEventLoop();
+            if (options.isAborted?.()) break;
+            await maybeEmitByTime();
+        }
+
+        const value = imageList.get(id);
+        if (!value || !matcher(value) || !filter(value)) continue;
+
+        if (skipped < skipThreshold) {
+            skipped++;
+            continue;
+        }
+
+        orderedIds.push(value.id);
+        batch.push(value);
+        await maybeEmitByTime();
+    }
+
+    if (options.isAborted?.()) {
+        return { orderedIds: [], amount: 0 };
+    }
+
+    if (lastChunkAt === 0 && batch.length)
+        await emitFirstChunk();
+
+    await emitPendingChunk(true);
+
+    if (options.isAborted?.()) {
+        return { orderedIds: [], amount: 0 };
+    }
+
+    let finalImages = orderedIds
+        .map((id) => imageList.get(id))
+        .filter((image): image is ServerImage => !!image);
+
+    if (sorting === 'date') {
+        if (options.isAborted?.()) {
+            return { orderedIds: [], amount: 0 };
+        }
+
+        const withException = applyLatestImageException(
+            finalImages,
+            images,
+            pool,
+            matcher,
+            filter,
+        );
+        const existingIds = new Set(finalImages.map((image) => image.id));
+        const added = withException.filter((image) => !existingIds.has(image.id));
+        if (added.length) {
+            if (!options.isAborted?.()) {
+                onChunk(added, withException.length);
+                await yieldToEventLoop();
+            }
+        }
+        finalImages = withException;
+    }
+
+    return {
+        orderedIds: finalImages.map((image) => image.id),
+        amount: finalImages.length,
+    };
+}
+
+function orderPoolIds(pool: Set<string>, sorting: SortingMethod): string[] {
+    const imageList = getImageList();
+    const ids = [...pool];
+
+    if (sorting === 'random')
+        return _.shuffle(ids);
+
+    const poolImages = ids
+        .map((id) => imageList.get(id))
+        .filter((image): image is ServerImage => !!image);
+
+    return sortImages(poolImages, sorting).map((image) => image.id);
 }
 
 function filterPoolImages(
@@ -229,7 +430,13 @@ export function buildMatcher(
     };
 }
 
-export function applyResultSkip(images: ServerImage[], search: string): ServerImage[] {
+export function applyResultSkip(
+    images: ServerImage[],
+    search: string,
+    sorting?: SortingMethod,
+): ServerImage[] {
+    if (sorting === 'random') return images;
+
     const skipCount = getResultSkipCount(search);
     if (!skipCount) return images;
     return images.slice(skipCount);

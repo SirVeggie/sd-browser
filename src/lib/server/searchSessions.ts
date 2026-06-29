@@ -63,7 +63,7 @@ export function runSearch(query: SessionQuery): ServerImage[] {
         exploration,
         { sorting: query.sorting, skipResults: false },
     );
-    return applyResultSkip(images, query.search);
+    return applyResultSkip(images, query.search, query.sorting);
 }
 
 export function sliceImages(
@@ -87,11 +87,44 @@ export function sliceImages(
         return result;
     }
 
-    if (sorting !== 'random') {
-        return images.slice(0, imageLimit);
+    return images.slice(0, imageLimit);
+}
+
+export function createSessionStub(query: SessionQuery): {
+    sessionId: string;
+    timestamp: number;
+} {
+    const sessionId = uuidv4();
+    const timestamp = Date.now();
+    sessions.set(sessionId, {
+        queryKey: buildQueryKey(query),
+        sorting: query.sorting,
+        orderedIds: [],
+        viewIds: new Set(),
+        timestamp,
+    });
+    return { sessionId, timestamp };
+}
+
+export function appendSessionChunk(sessionId: string, ids: string[]): void {
+    const session = sessions.get(sessionId);
+    if (!session) return;
+
+    if (ids.length === 1) {
+        session.orderedIds.push(ids[0]);
+    } else if (ids.length > 1) {
+        session.orderedIds = session.orderedIds.concat(ids);
     }
 
-    return images;
+    for (const id of ids) {
+        session.viewIds.add(id);
+    }
+}
+
+export function finalizeSession(sessionId: string, orderedIds: string[]): void {
+    const session = sessions.get(sessionId);
+    if (!session) return;
+    session.orderedIds = orderedIds;
 }
 
 export function createSession(query: SessionQuery): {

@@ -74,6 +74,7 @@
     let selecting = false;
     let bulkOpen = false;
     let bulkSearchParams: SearchParams = buildSearchParams();
+    let searchCountComplete = false;
     const selection = createSelection();
     let anchorElement: HTMLDivElement;
 
@@ -256,12 +257,6 @@
         streamAbort = undefined;
         searchSessionId = "";
         const sessionId = ++updateSessionId;
-
-        if (sorting === "random") {
-            fetchImagesWithoutStream(sessionId);
-            return;
-        }
-
         connectImageStream(sessionId);
     }
 
@@ -280,9 +275,22 @@
                 onInit: (init) => {
                     if (expectedSessionId !== updateSessionId) return;
                     searchSessionId = init.sessionId;
-                    imageStore.set(expandClientImages(init.images));
-                    imageAmountStore.set(init.amount);
+                    searchCountComplete = false;
+                    imageStore.set([]);
+                    imageAmountStore.set(0);
                     updateTime = init.timestamp;
+                },
+                onChunk: (chunk) => {
+                    if (expectedSessionId !== updateSessionId) return;
+                    imageAmountStore.set(chunk.matched);
+                    const mapped = expandClientImages(chunk.images);
+                    if (!mapped.length) return;
+                    imageStore.update((x) => x.concat(mapped));
+                },
+                onReady: (ready) => {
+                    if (expectedSessionId !== updateSessionId) return;
+                    imageAmountStore.set(ready.amount);
+                    searchCountComplete = true;
                 },
                 onUpdate: (res) => applyUpdate(res, expectedSessionId),
             },
@@ -295,28 +303,6 @@
                 connectImageStream(expectedSessionId);
             }, 2000);
         });
-    }
-
-    function fetchImagesWithoutStream(expectedSessionId: number) {
-        const search = buildSearchParams();
-
-        searchImages({
-            ...search,
-            sorting,
-            nsfw: $nsfwMode,
-            latestId: "",
-            oldestId: "",
-        })
-            .then((images) => {
-                if (expectedSessionId !== updateSessionId) return;
-                if (images.amount === -1) return;
-                imageStore.set(expandClientImages(images.images));
-                imageAmountStore.set(images.amount);
-                updateTime = images.timestamp;
-            })
-            .catch((err) => {
-                console.error(err);
-            });
     }
 
     async function fetchNext() {
@@ -344,7 +330,7 @@
             }
 
             const mapped = expandClientImages(images.images);
-            imageStore.update((x) => [...x, ...mapped]);
+            imageStore.update((x) => x.concat(mapped));
             imageAmountStore.set(images.amount);
         } catch (e: any) {
             console.error(e);
@@ -380,7 +366,7 @@
                 (z) => res.deletions.indexOf(z.id) === -1,
             );
             deletions = x.length - modified.length;
-            return [...mapped, ...modified];
+            return mapped.concat(modified);
         });
 
         imageAmountStore.set(
@@ -726,7 +712,10 @@
 <div class="anchor" bind:this={anchorElement} />
 <div class="topbar">
     <div class="quickbar">
-        <span>Images: {paginated.length} / {$imageAmountStore}</span>
+        <span class="image-count">
+            Images: {paginated.length} /
+            <span class:pending={!searchCountComplete}>{$imageAmountStore}</span>
+        </span>
 
         <label for="sorting">
             Sorting:
@@ -891,6 +880,10 @@
         font-size: 0.8em;
         color: #ddd;
         margin-bottom: 0.5em;
+
+        .image-count .pending {
+            opacity: 0.45;
+        }
     }
 
     .nav {

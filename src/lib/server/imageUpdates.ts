@@ -27,7 +27,9 @@ export function computeImageUpdate(
                 exploration,
                 { sorting: query.sorting, skipResults: false },
             );
-            resultIds = new Set(applyResultSkip(currentResult, query.search).map((image) => image.id));
+            resultIds = new Set(
+                applyResultSkip(currentResult, query.search, query.sorting).map((image) => image.id),
+            );
         }
 
         images = searchImages(
@@ -37,7 +39,7 @@ export function computeImageUpdate(
             exploration,
             { timestamp: query.timestamp, sorting: query.sorting, skipResults: false },
         );
-        images = applyResultSkip(images, query.search);
+        images = applyResultSkip(images, query.search, query.sorting);
     } catch (e) {
         if (e instanceof Error) {
             console.log(`${e.message}`);

@@ -7,8 +7,10 @@ import type {
     ImageRequest,
     ImageResponse,
     MultiActionRequest,
+    StreamChunkResponse,
     StreamEvent,
     StreamInitResponse,
+    StreamReadyResponse,
     StreamRequest,
     UpdateRequest,
     UpdateResponse,
@@ -18,6 +20,8 @@ import type { QualityMode } from '$lib/types/misc';
 
 export type StreamHandlers = {
     onInit: (init: StreamInitResponse) => void;
+    onChunk: (chunk: StreamChunkResponse) => void;
+    onReady: (ready: StreamReadyResponse) => void;
     onUpdate: (update: UpdateResponse) => void;
 };
 
@@ -133,6 +137,8 @@ export async function subscribeImageStream(
                     if (!line.startsWith('data: ')) continue;
                     const json = JSON.parse(line.slice(6)) as StreamEvent;
                     if (json.type === 'init') handlers.onInit(json);
+                    else if (json.type === 'chunk') handlers.onChunk(json);
+                    else if (json.type === 'ready') handlers.onReady(json);
                     else if (json.type === 'update') handlers.onUpdate(json);
                 }
             }
