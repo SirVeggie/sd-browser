@@ -1,8 +1,9 @@
 import { parseSearchDate, validRegex, XOR } from "$lib/tools/misc";
-import { getModelSearchText } from "$lib/tools/metadataInterpreter";
+import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
 import {
     coerceExplorationMode,
+    defaultExplorationSettings,
     searchKeywords,
     type ExplorationSettings,
     type MatchType,
@@ -11,7 +12,7 @@ import {
 } from "$lib/types/misc";
 import _ from "lodash";
 import { MetaDB } from "./db";
-import { getExplorationPool } from "./exploration";
+import { computeSimilarity, getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./filemanager";
 
 const keywordPattern = `((${searchKeywords.join('|')}) )*`;
@@ -26,6 +27,7 @@ const paramRegex = new RegExp(`^${keywordPattern}(PARAMS|PR) `, keywordFlags);
 const dateRegex = new RegExp(`^${keywordPattern}(DATE|DT) `, keywordFlags);
 const modelRegex = new RegExp(`^${keywordPattern}(MODEL|MD) `, keywordFlags);
 const annotationRegex = new RegExp(`^${keywordPattern}(ANNOTATION|AN) `, keywordFlags);
+const similarRegex = new RegExp(`^${keywordPattern}(SIMILAR|SM) `, keywordFlags);
 const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
 const andSplitRegex = /\s+AND\s+/i;
 const skipCountRegex = /^\d+$/;
@@ -40,6 +42,8 @@ type SearchPart = {
     not: RegExpMatchArray | null;
     type: MatchType;
     skip: boolean;
+    similarRef?: string;
+    similarInvalid?: boolean;
 };
 
 export type SearchOptions = {
@@ -58,7 +62,7 @@ export function searchImages(
     if (matching === 'regex' && !validRegex(search))
         throw new Error('Invalid regex');
 
-    const matcher = buildMatcher(search, matching);
+    const matcher = buildMatcher(search, matching, exploration);
     const filter = buildMatcher(filters.join(' AND '), 'regex');
     const imageList = getImageList();
     const images = [...imageList.values()];
@@ -135,7 +139,12 @@ function getNewestLibraryImage(images: ServerImage[]): ServerImage | undefined {
     return newest;
 }
 
-export function buildMatcher(search: string, matching: SearchMode): (image: ServerImage) => boolean {
+export function buildMatcher(
+    search: string,
+    matching: SearchMode,
+    exploration?: ExplorationSettings,
+): (image: ServerImage) => boolean {
+    const similaritySettings = exploration ?? defaultExplorationSettings;
     const regexes = splitSearchParts(search).map(x => {
         const raw = x.replace(removeRegex, '');
         const skip = skipRegex.test(x);
@@ -153,21 +162,50 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
         else if (dateRegex.test(x)) type = 'date';
         else if (modelRegex.test(x)) type = 'model';
         else if (annotationRegex.test(x)) type = 'annotation';
+        else if (similarRegex.test(x)) type = 'similar';
 
-        const part = {
+        let similarRef: string | undefined;
+        let similarInvalid = false;
+        if (type === 'similar') {
+            const refImage = getImageList().get(raw.trim());
+            if (!refImage) {
+                similarInvalid = true;
+            } else {
+                similarRef = similarityPromptText(refImage);
+            }
+        }
+
+        const part: SearchPart = {
             raw,
             regex: new RegExp(raw, 'is'),
             not: x.match(notRegex),
             type,
             skip,
+            similarRef,
+            similarInvalid,
         };
 
         return part;
     }).filter((x): x is SearchPart => x !== undefined)
         .sort((a, b) => getSearchPartRank(a) - getSearchPartRank(b));
 
+    if (regexes.some(x => x.similarInvalid))
+        return () => false;
+
     return (image: ServerImage) => {
         return regexes.every(x => {
+            if (x.type === 'similar') {
+                const similarity = computeSimilarity(
+                    x.similarRef!,
+                    similarityPromptText(image),
+                    similaritySettings.similarityAlgorithm,
+                );
+                const matched = similarity >= similaritySettings.similarityThreshold;
+                if (x.skip)
+                    return !matched;
+                return XOR(x.not, matched);
+            }
+
             if (x.type === 'date') {
                 if (x.raw.toLowerCase().startsWith('to ')) {
                     const end = parseSearchDate(x.raw.substring(3), 'end');
@@ -212,6 +250,7 @@ function getSearchPartRank(part: SearchPart): number {
     if (part.type === 'date') return 0;
     if (part.type === 'folder') return 1;
     if (part.type === 'model') return 2;
+    if (part.type === 'similar') return 3;
     if (part.skip) return 4;
     if (part.type === 'all') return 5;
     return 3;
@@ -248,6 +287,8 @@ function getTextByType(image: ServerImage, type: MatchType): string {
             return getModelSearchText(image.models);
         case 'annotation':
             return image.annotation ?? '';
+        case 'similar':
+            return '';
         default: {
             const _never: never = type;
             return _never;

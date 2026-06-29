@@ -15,7 +15,7 @@
         searchImages,
         updateImages,
     } from "$lib/requests/imageRequests";
-    import { expandClientImages, stringSort } from "$lib/tools/misc";
+    import { expandClientImages, formatSearchDateMinute, stringSort } from "$lib/tools/misc";
     import {
         explorationModes,
         sortingMethods,
@@ -481,6 +481,26 @@
                     name: "Open folder",
                     visible: !selecting,
                     handler: () => openFolder(id),
+                },
+                {
+                    name: "Show similar",
+                    visible: !selecting,
+                    handler() {
+                        explorationMode.set('none');
+                        searchFilter.set(`SIMILAR ${id}`);
+                        selectChange(true);
+                    },
+                },
+                {
+                    name: "Jump to",
+                    visible: !selecting,
+                    async handler() {
+                        const imageInfo = await getImageInfo(id);
+                        if (!imageInfo) return;
+                        sorting = 'date';
+                        searchFilter.set(`DT TO ${formatSearchDateMinute(imageInfo.modifiedDate)}`);
+                        selectChange(true);
+                    },
                 },
                 {
                     name: "Move",

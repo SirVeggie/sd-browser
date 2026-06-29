@@ -55,13 +55,13 @@ export const defaultExplorationSettings: ExplorationSettings = {
     similarityThreshold: 0.5,
 };
 
-const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'model', 'annotation'] as const;
+const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'model', 'annotation', 'similar'] as const;
 export type MatchType = typeof matchTypes[number];
 export function isMatchType(object: any): object is MatchType {
     return matchTypes.includes(object);
 }
 
-export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'SKIP'] as const;
+export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'SIMILAR|SM', 'SKIP'] as const;
 export type SearchKeyword = typeof searchKeywords[number];
 export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);
