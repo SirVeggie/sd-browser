@@ -3,7 +3,7 @@ import type { ServerImage } from '$lib/types/images';
 import type { SortingMethod } from '$lib/types/misc';
 import type { ImageRequest } from '$lib/types/requests';
 import { getImage } from './filemanager';
-import { applyResultSkip, explorationFromRequest, searchImages, sortImages } from './searching';
+import { applyResultSkip, applyResultTake, explorationFromRequest, searchImages, sortImages } from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 
 export const imageLimit = 1000;
@@ -61,9 +61,10 @@ export function runSearch(query: SessionQuery): ServerImage[] {
         query.filters,
         query.matching,
         exploration,
-        { sorting: query.sorting, skipResults: false },
+        { sorting: query.sorting, skipResults: false, takeResults: false },
     );
-    return applyResultSkip(images, query.search, query.sorting);
+    images = applyResultSkip(images, query.search, query.sorting);
+    return applyResultTake(images, query.search, query.sorting);
 }
 
 export function sliceImages(

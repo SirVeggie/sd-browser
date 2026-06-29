@@ -29,8 +29,9 @@ const modelRegex = new RegExp(`^${keywordPattern}(MODEL|MD) `, keywordFlags);
 const annotationRegex = new RegExp(`^${keywordPattern}(ANNOTATION|AN) `, keywordFlags);
 const similarRegex = new RegExp(`^${keywordPattern}(SIMILAR|SM) `, keywordFlags);
 const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
+const takeRegex = new RegExp(`^${keywordPattern}TAKE `, keywordFlags);
 const andSplitRegex = /\s+AND\s+/i;
-const skipCountRegex = /^\d+$/;
+const resultCountRegex = /^\d+$/;
 
 function splitSearchParts(search: string): string[] {
     return search.split(andSplitRegex);
@@ -50,6 +51,7 @@ export type SearchOptions = {
     timestamp?: number;
     sorting?: SortingMethod;
     skipResults?: boolean;
+    takeResults?: boolean;
 };
 
 export function searchImages(
@@ -77,6 +79,9 @@ export function searchImages(
 
     if (options.skipResults !== false)
         list = applyResultSkip(list, search, options.sorting);
+
+    if (options.takeResults !== false)
+        list = applyResultTake(list, search, options.sorting);
 
     return list;
 }
@@ -147,6 +152,7 @@ export async function searchImagesStreaming(
     throwIfSearchAborted(options);
 
     const skipThreshold = sorting === 'random' ? 0 : getResultSkipCount(search);
+    const takeLimit = sorting === 'random' ? 0 : getResultTakeCount(search);
 
     const orderedIds: string[] = [];
     let batch: ServerImage[] = [];
@@ -220,6 +226,9 @@ export async function searchImagesStreaming(
         orderedIds.push(value.id);
         batch.push(value);
         await maybeEmitByTime();
+
+        if (takeLimit > 0 && orderedIds.length >= takeLimit)
+            break;
     }
 
     if (options.isAborted?.()) {
@@ -349,8 +358,13 @@ export function buildMatcher(
     const regexes = splitSearchParts(search).map(x => {
         const raw = x.replace(removeRegex, '');
         const skip = skipRegex.test(x);
+        const take = takeRegex.test(x);
 
-        if (skip && skipCountRegex.test(raw.trim())) {
+        if (take) {
+            return undefined;
+        }
+
+        if (skip && resultCountRegex.test(raw.trim())) {
             return undefined;
         }
 
@@ -442,12 +456,35 @@ export function applyResultSkip(
     return images.slice(skipCount);
 }
 
+export function applyResultTake(
+    images: ServerImage[],
+    search: string,
+    sorting?: SortingMethod,
+): ServerImage[] {
+    if (sorting === 'random') return images;
+
+    const takeCount = getResultTakeCount(search);
+    if (!takeCount) return images;
+    return images.slice(0, takeCount);
+}
+
 function getResultSkipCount(search: string): number {
     return splitSearchParts(search).reduce((total, part) => {
         if (!skipRegex.test(part)) return total;
 
         const raw = part.replace(removeRegex, '').trim();
-        if (!skipCountRegex.test(raw)) return total;
+        if (!resultCountRegex.test(raw)) return total;
+
+        return total + Number(raw);
+    }, 0);
+}
+
+function getResultTakeCount(search: string): number {
+    return splitSearchParts(search).reduce((total, part) => {
+        if (!takeRegex.test(part)) return total;
+
+        const raw = part.replace(removeRegex, '').trim();
+        if (!resultCountRegex.test(raw)) return total;
 
         return total + Number(raw);
     }, 0);

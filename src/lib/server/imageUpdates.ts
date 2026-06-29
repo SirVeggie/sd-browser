@@ -1,5 +1,5 @@
 import { getDeletedImageIds, getFreshImageTimestamp } from './filemanager';
-import { applyResultSkip, explorationFromRequest, searchImages } from './searching';
+import { applyResultSkip, applyResultTake, explorationFromRequest, searchImages } from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';
 import type { UpdateRequest, UpdateResponse } from '$lib/types/requests';
@@ -25,11 +25,11 @@ export function computeImageUpdate(
                 query.filters,
                 query.matching,
                 exploration,
-                { sorting: query.sorting, skipResults: false },
+                { sorting: query.sorting, skipResults: false, takeResults: false },
             );
-            resultIds = new Set(
-                applyResultSkip(currentResult, query.search, query.sorting).map((image) => image.id),
-            );
+            let limited = applyResultSkip(currentResult, query.search, query.sorting);
+            limited = applyResultTake(limited, query.search, query.sorting);
+            resultIds = new Set(limited.map((image) => image.id));
         }
 
         images = searchImages(
@@ -37,9 +37,10 @@ export function computeImageUpdate(
             query.filters,
             query.matching,
             exploration,
-            { timestamp: query.timestamp, sorting: query.sorting, skipResults: false },
+            { timestamp: query.timestamp, sorting: query.sorting, skipResults: false, takeResults: false },
         );
         images = applyResultSkip(images, query.search, query.sorting);
+        images = applyResultTake(images, query.search, query.sorting);
     } catch (e) {
         if (e instanceof Error) {
             console.log(`${e.message}`);

@@ -104,7 +104,7 @@ Search `red` matches `scarred`
 
 ## Keywords
 
-Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT, MODEL | MD, ANNOTATION | AN, SKIP`. Keywords are case insensitive. Keywords can be in any order (except AND). Both are valid: `NOT FOLDER img2img` and `FOLDER NOT img2img`, or `not folder img2img` and `folder not img2img`.
+Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT, MODEL | MD, ANNOTATION | AN, SKIP, TAKE`. Keywords are case insensitive. Keywords can be in any order (except AND). Both are valid: `NOT FOLDER img2img` and `FOLDER NOT img2img`, or `not folder img2img` and `folder not img2img`.
 
 `AND`: Specify multiple conditions that all have to match  
 Example: `red hair AND man`
@@ -128,6 +128,9 @@ Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part 
 
 `SKIP`: Skips matching results. Use a number to skip that many results from the top, or text to remove matching positive prompts using the selected matching mode.  
 Example: `landscape AND SKIP 20` or `landscape AND SKIP blurry`
+
+`TAKE`: Limits results to the first N matching images after sorting (and after any numeric SKIP).  
+Example: `landscape AND TAKE 20` or `landscape AND SKIP 10 AND TAKE 5`
 
 ## Sorting
 - Date: Sorts images based on file modification date
