@@ -1,11 +1,16 @@
 import { invalidAuth } from '$lib/server/auth.js';
 import { error, success } from '$lib/server/responses.js';
-import { applyResultSkip, explorationFromRequest, searchImages } from '$lib/server/searching';
+import {
+    getSession,
+    sliceImages,
+    sliceSession,
+    trackSessionViewIds,
+    validateSession,
+    runSearch,
+} from '$lib/server/searchSessions';
 import { mapServerImageToClient } from '$lib/tools/misc.js';
 import { type ServerImage } from '$lib/types/images';
 import { type ImageResponse, isImageRequest } from '$lib/types/requests';
-
-const imageLimit = 1000;
 
 export async function POST(e) {
     const err = invalidAuth(e);
@@ -16,47 +21,33 @@ export async function POST(e) {
         return error('Invalid request body', 400);
 
     let images: ServerImage[] = [];
+    let amount = 0;
+
     try {
-        images = searchImages(
-            query.search,
-            query.filters,
-            query.matching,
-            explorationFromRequest(query),
-            { sorting: query.sorting, skipResults: false },
-        );
-        images = applyResultSkip(images, query.search);
-    } catch (e) {
-        if (e instanceof Error) {
-            console.log(`${e.message}`);
-            return error('Malformed search string', 200);
+        if (query.sessionId && validateSession(query.sessionId, query)) {
+            images = sliceSession(query.sessionId, query.latestId, query.oldestId);
+            amount = getSession(query.sessionId)!.orderedIds.length;
+            trackSessionViewIds(query.sessionId, images.map((image) => image.id));
         } else {
-            console.log(e);
-            return error('Malformed search string', 400);
+            images = runSearch(query);
+            amount = images.length;
+            images = sliceImages(images, query.sorting, query.latestId || undefined, query.oldestId || undefined);
         }
-    }
-
-    const firstIndex = !query.latestId ? undefined : images.findIndex(i => i.id === query.latestId);
-    const lastIndex = !query.oldestId ? undefined : images.findIndex(i => i.id === query.oldestId);
-
-    if (firstIndex === -1 || lastIndex === -1) {
-        return error('Invalid request: image id not found', 400);
-    }
-
-    let result: ServerImage[] = [];
-    if (firstIndex != undefined || lastIndex != undefined) {
-        result = images.slice(0, firstIndex ?? 0);
-        if (lastIndex) {
-            result.push(...images.slice(lastIndex + 1, lastIndex + 1 + (imageLimit - result.length)));
+    } catch (err) {
+        if (err instanceof Error) {
+            if (err.message === 'Invalid request: image id not found') {
+                return error(err.message, 400);
+            }
+            console.log(`${err.message}`);
+            return error('Malformed search string', 200);
         }
-    } else if (query.sorting !== 'random') {
-        result = images.slice(0, imageLimit);
-    } else {
-        result = images;
+        console.log(err);
+        return error('Malformed search string', 400);
     }
 
     return success({
-        images: mapServerImageToClient(result),
-        amount: images.length,
+        images: mapServerImageToClient(images),
+        amount,
         timestamp: Date.now(),
     } satisfies ImageResponse);
 }

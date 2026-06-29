@@ -1,9 +1,25 @@
 import { get } from 'svelte/store';
+import { authStore } from '$lib/stores/authStore';
 import { doGet, doPost, doServerGet, doServerPost, type FetchType } from '../tools/requests';
 import { page } from '$app/stores';
-import type { ActionRequest, ImageRequest, ImageResponse, MultiActionRequest, UpdateRequest, UpdateResponse } from '$lib/types/requests';
+import type {
+    ActionRequest,
+    ImageRequest,
+    ImageResponse,
+    MultiActionRequest,
+    StreamEvent,
+    StreamInitResponse,
+    StreamRequest,
+    UpdateRequest,
+    UpdateResponse,
+} from '$lib/types/requests';
 import { isImageInfo, type ImageInfo } from '$lib/types/images';
 import type { QualityMode } from '$lib/types/misc';
+
+export type StreamHandlers = {
+    onInit: (init: StreamInitResponse) => void;
+    onUpdate: (update: UpdateResponse) => void;
+};
 
 export async function searchImages(search: ImageRequest, fetch?: FetchType): Promise<ImageResponse> {
     let url = '/api/images';
@@ -54,6 +70,88 @@ export async function updateImages(search: UpdateRequest, fetch?: FetchType): Pr
     }
 
     return res;
+}
+
+export async function subscribeImageStream(
+    query: StreamRequest,
+    handlers: StreamHandlers,
+    signal: AbortSignal,
+): Promise<void> {
+    let url = '/api/images/stream';
+    url = get(page).url.origin + url;
+
+    let response: Response;
+    try {
+        response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                Authorization: 'Bearer ' + get(authStore).password,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(query),
+            signal,
+        });
+    } catch (err) {
+        if (signal.aborted || isAbortError(err)) return;
+        throw err;
+    }
+
+    if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Stream failed: ${response.status} ${text}`);
+    }
+
+    if (!response.body) {
+        throw new Error('Stream failed: empty response body');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+        while (true) {
+            if (signal.aborted) return;
+
+            let readResult: ReadableStreamReadResult<Uint8Array>;
+            try {
+                readResult = await reader.read();
+            } catch (err) {
+                if (signal.aborted || isAbortError(err)) return;
+                throw err;
+            }
+
+            const { done, value } = readResult;
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop() ?? '';
+
+            for (const part of parts) {
+                for (const line of part.split('\n')) {
+                    if (!line.startsWith('data: ')) continue;
+                    const json = JSON.parse(line.slice(6)) as StreamEvent;
+                    if (json.type === 'init') handlers.onInit(json);
+                    else if (json.type === 'update') handlers.onUpdate(json);
+                }
+            }
+        }
+    } finally {
+        try {
+            await reader.cancel();
+        } catch {
+            // ignore cancel errors during teardown
+        }
+    }
+}
+
+function isAbortError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    if (err.name === 'AbortError') return true;
+    // Chromium reports aborted fetch streams as TypeError: Failed to fetch / network error
+    if (err.name === 'TypeError' && /fetch|network|aborted/i.test(err.message)) return true;
+    return false;
 }
 
 export function getQualityParam(mode: QualityMode) {

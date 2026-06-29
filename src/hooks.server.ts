@@ -28,5 +28,4 @@ export async function handle({ resolve, event }) {
 // Server startup
 if (!building) {
     import("$lib/server/filemanager").then(x => x.startFileManager());
-    // import("$lib/server/websocketServer").then(x => x.startWebsocket());
 }

@@ -16,6 +16,7 @@ import { deleteTempImage, fileExists, fileUniquefy, removeBasePath, removeFolder
 import { handleMigrationEnd, handleMigrationStart } from './migration';
 import { getServerImage, hashPath, populateServerImage, readMetadata, readMetadataFromExif, readMetadataFromFile, updateImageMetadata } from './imageUtils';
 import { invalidateExplorationPools, repairExplorationCaches, repairUniqueCacheAfterDeletes, repairUniqueCacheOnAdd, verifyExplorationCaches } from './exploration';
+import { notifyImageChange } from './imageChangeHub';
 
 const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
@@ -549,6 +550,8 @@ async function addFile(file: string, hash?: string) {
     MetaDB.set(full);
     MetaCalcDB.set(image);
 
+    notifyImageChange();
+
     // try {
     //     if (genCount < genLimit) {
     //         genCount++;
@@ -612,13 +615,16 @@ async function deleteFile(file: string) {
     
     MetaDB.delete(hash);
     MetaCalcDB.delete(hash);
+
+    notifyImageChange();
 }
 
 async function renameFile(from: string, to: string) {
     let affectedModifiedDate = Number.POSITIVE_INFINITY;
     let oldImage: ServerImage | undefined;
+    let oldhash: string | undefined;
     if (isMedia(from)) {
-        const oldhash = hashPath(from);
+        oldhash = hashPath(from);
         oldImage = imageList.get(oldhash);
         if (oldImage)
             affectedModifiedDate = Math.min(affectedModifiedDate, oldImage.modifiedDate);
@@ -627,12 +633,21 @@ async function renameFile(from: string, to: string) {
         
         MetaDB.delete(oldhash);
         MetaCalcDB.delete(oldhash);
+        freshList = freshList.filter(x => x.id !== oldhash);
+        const deletionSize = deletionList.unshift({
+            id: oldhash,
+            timestamp: Date.now(),
+        });
+        if (deletionSize > freshLimit) deletionList.pop();
     }
 
     if (oldImage)
         repairUniqueCacheAfterDeletes([...imageList.values()], [oldImage]);
 
-    if (!isMedia(to)) return;
+    if (!isMedia(to)) {
+        notifyImageChange();
+        return;
+    }
     console.log(`Renamed ${from} to ${to}`);
 
     const newhash = hashPath(to);
@@ -653,9 +668,17 @@ async function renameFile(from: string, to: string) {
     repairUniqueCacheOnAdd([...imageList.values()], image);
     affectedModifiedDate = Math.min(affectedModifiedDate, image.modifiedDate);
     repairExplorationCaches([...imageList.values()], affectedModifiedDate, `renamed image ${path.basename(from)} to ${path.basename(to)}`);
+
+    const freshSize = freshList.unshift({
+        id: newhash,
+        timestamp: Date.now(),
+    });
+    if (freshSize > freshLimit) freshList.pop();
     
     MetaDB.set(full);
     MetaCalcDB.set(image);
+
+    notifyImageChange();
 }
 
 async function pollFiles() {

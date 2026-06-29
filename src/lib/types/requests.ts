@@ -61,6 +61,7 @@ export type ImageRequest = {
     similarityAlgorithm: SimilarityAlgorithm;
     similarityThreshold: number;
     nsfw: boolean;
+    sessionId?: string;
 };
 export function isImageRequest(object: any): object is ImageRequest {
     return testType(object, [
@@ -71,6 +72,7 @@ export function isImageRequest(object: any): object is ImageRequest {
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
+        (o) => o.sessionId === undefined || typeof o.sessionId === 'string',
     ]);
 }
 
@@ -117,6 +119,33 @@ export type UpdateResponse = {
 export function isUpdateResponse(object: any): object is UpdateResponse {
     return testType(object, ['additions', 'deletions', 'timestamp']);
 }
+
+export type StreamRequest = Omit<UpdateRequest, 'timestamp' | 'currentIds'>;
+export function isStreamRequest(object: any): object is StreamRequest {
+    return testType(object, [
+        'search', 'filters', 'matching', 'sorting',
+        'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
+        (o) => isSortingMethod(o.sorting),
+        (o) => typeof o.explorationMode === 'string',
+        (o) => typeof o.sparseFrequency === 'number',
+        (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
+        (o) => typeof o.similarityThreshold === 'number',
+    ]);
+}
+
+export type StreamInitResponse = {
+    type: 'init';
+    sessionId: string;
+    images: Omit<ClientImage, 'url'>[];
+    amount: number;
+    timestamp: number;
+};
+
+export type StreamUpdateResponse = UpdateResponse & {
+    type: 'update';
+};
+
+export type StreamEvent = StreamInitResponse | StreamUpdateResponse;
 
 export type SettingsRequest = {
     settingsJson: string;

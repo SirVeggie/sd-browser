@@ -13,7 +13,7 @@
         getImageInfo,
         imageAction,
         searchImages,
-        updateImages,
+        subscribeImageStream,
     } from "$lib/requests/imageRequests";
     import { expandClientImages, formatSearchDateMinute, stringSort } from "$lib/tools/misc";
     import {
@@ -46,6 +46,7 @@
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import { sleep } from "$lib/tools/sleep";
     import type { ClientImage, ImageInfo } from "$lib/types/images";
+    import type { UpdateResponse } from "$lib/types/requests";
     import { fetchFolderStructure } from "$lib/requests/miscRequests";
     import { flyoutState } from "$lib/stores/flyoutStore";
     import BulkModal from "$lib/components/BulkModal.svelte";
@@ -61,8 +62,9 @@
     let info: ImageInfo | undefined = undefined;
     let slideTimer: any;
     let slideDir: "left" | "right" = "right";
-    let updateTimer: ReturnType<typeof setTimeout> | undefined;
+    let streamAbort: AbortController | undefined;
     let updateSessionId = 0;
+    let searchSessionId = "";
     let live = false;
     let sorting: SortingMethod = "date";
     let moreTriggerVisible = false;
@@ -92,15 +94,16 @@
 
     onMount(() => {
         scrollToTop();
-        fetchImages();
-        startUpdate();
+        reconnectSearch();
         startTrigger(1000);
 
         window.addEventListener("keydown", keylistener);
 
         return () => {
             clearTimeout(inputTimer);
-            clearTimeout(updateTimer);
+            updateSessionId++;
+            streamAbort?.abort();
+            streamAbort = undefined;
             clearInterval(slideTimer);
             closeImage();
             window.removeEventListener("keydown", keylistener);
@@ -215,7 +218,6 @@
     }
 
     function inputChange() {
-        startUpdate();
         applyInput();
     }
 
@@ -225,7 +227,7 @@
             startTrigger(500);
             scrollToTop();
             currentAmount = initialAmount;
-            fetchImages();
+            reconnectSearch();
         }, 100);
     }
 
@@ -246,11 +248,56 @@
         }
 
         startTrigger(1000);
-        fetchImages();
+        reconnectSearch();
     }
 
-    function fetchImages() {
+    function reconnectSearch() {
+        streamAbort?.abort();
+        streamAbort = undefined;
+        searchSessionId = "";
         const sessionId = ++updateSessionId;
+
+        if (sorting === "random") {
+            fetchImagesWithoutStream(sessionId);
+            return;
+        }
+
+        connectImageStream(sessionId);
+    }
+
+    function connectImageStream(expectedSessionId: number) {
+        const abort = new AbortController();
+        streamAbort = abort;
+        const search = buildSearchParams();
+
+        subscribeImageStream(
+            {
+                ...search,
+                sorting,
+                nsfw: $nsfwMode,
+            },
+            {
+                onInit: (init) => {
+                    if (expectedSessionId !== updateSessionId) return;
+                    searchSessionId = init.sessionId;
+                    imageStore.set(expandClientImages(init.images));
+                    imageAmountStore.set(init.amount);
+                    updateTime = init.timestamp;
+                },
+                onUpdate: (res) => applyUpdate(res, expectedSessionId),
+            },
+            abort.signal,
+        ).catch((err) => {
+            if (abort.signal.aborted || expectedSessionId !== updateSessionId) return;
+            console.error(err);
+            setTimeout(() => {
+                if (abort.signal.aborted || expectedSessionId !== updateSessionId) return;
+                connectImageStream(expectedSessionId);
+            }, 2000);
+        });
+    }
+
+    function fetchImagesWithoutStream(expectedSessionId: number) {
         const search = buildSearchParams();
 
         searchImages({
@@ -261,7 +308,7 @@
             oldestId: "",
         })
             .then((images) => {
-                if (sessionId !== updateSessionId) return;
+                if (expectedSessionId !== updateSessionId) return;
                 if (images.amount === -1) return;
                 imageStore.set(expandClientImages(images.images));
                 imageAmountStore.set(images.amount);
@@ -286,6 +333,7 @@
                 latestId: "",
                 oldestId: lastImage.id,
                 nsfw: $nsfwMode,
+                sessionId: searchSessionId || undefined,
             });
 
             if (images.amount <= 0) return;
@@ -305,74 +353,42 @@
         }
     }
 
-    function startUpdate() {
-        clearTimeout(updateTimer);
-        updateTimer = setTimeout(updateLoop, 1000);
-    }
-
-    async function updateLoop() {
-        if (sorting !== "random") {
-            console.log("Updating images");
-            await fetchUpdate();
-        }
-        updateTimer = setTimeout(updateLoop, 1000);
-    }
-
-    async function fetchUpdate() {
+    function applyUpdate(res: UpdateResponse, expectedSessionId: number) {
+        if (expectedSessionId !== updateSessionId) return;
         if ($imageStore.length === 0) return;
-        const sessionId = updateSessionId;
-        const search = buildSearchParams();
+        if (res.timestamp === -1) return;
 
-        try {
-            const res = await updateImages({
-                ...search,
-                sorting,
-                timestamp: updateTime,
-                currentIds: $imageStore.map((image) => image.id),
-                nsfw: $nsfwMode,
-            });
+        updateTime = res.timestamp;
 
-            if (sessionId !== updateSessionId) return;
-            
-            if (res.timestamp === -1) return;
-
-            updateTime = res.timestamp;
-
-            // if there are no additions and no deletions, do nothing
-            if (!res.additions.length) {
-                if (!res.deletions.length) return;
-                const nothingToDelete = !res.deletions.some((x) =>
-                    $imageStore.some((z) => z.id === x),
-                );
-                if (nothingToDelete) return;
-            }
-
-            // ensure no duplicates
-            res.additions = res.additions.filter(
-                (x) => !$imageStore.some((z) => z.id === x.id),
+        if (!res.additions.length) {
+            if (!res.deletions.length) return;
+            const nothingToDelete = !res.deletions.some((x) =>
+                $imageStore.some((z) => z.id === x),
             );
-
-            const mapped = expandClientImages(res.additions);
-            let deletions = 0;
-
-            imageStore.update((x) => {
-                const modified = x.filter(
-                    (z) => res.deletions.indexOf(z.id) === -1,
-                );
-                deletions = x.length - modified.length;
-                return [...mapped, ...modified];
-            });
-
-            imageAmountStore.set(
-                $imageAmountStore + res.additions.length - deletions,
-            );
-        } catch (e: any) {
-            console.error(e);
+            if (nothingToDelete) return;
         }
+
+        const additions = res.additions.filter(
+            (x) => !$imageStore.some((z) => z.id === x.id),
+        );
+
+        const mapped = expandClientImages(additions);
+        let deletions = 0;
+
+        imageStore.update((x) => {
+            const modified = x.filter(
+                (z) => res.deletions.indexOf(z.id) === -1,
+            );
+            deletions = x.length - modified.length;
+            return [...mapped, ...modified];
+        });
+
+        imageAmountStore.set(
+            $imageAmountStore + additions.length - deletions,
+        );
     }
 
     function loadMore() {
-        startUpdate();
         const max = $imageStore.length;
 
         if (currentAmount < max - increment * 4) {
@@ -700,7 +716,7 @@
 
     function handleBulkComplete(refresh?: boolean) {
         if (refresh) {
-            fetchImages();
+            reconnectSearch();
         }
     }
 </script>
