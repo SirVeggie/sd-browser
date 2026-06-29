@@ -289,6 +289,16 @@ export function formatSearchDateMinute(timestamp: number): string {
     return `${year}.${month}.${day} ${hours}:${minutes}`;
 }
 
+export function parseSearchFloat(value: string): number | undefined {
+    const trimmed = value.trim();
+    if (!/^-?\d*[.,]?\d+$/.test(trimmed)) return undefined;
+
+    const parsed = Number(trimmed.replace(',', '.'));
+    if (!Number.isFinite(parsed)) return undefined;
+
+    return parsed;
+}
+
 export function parseSearchDate(value: string, boundary: DateBoundary): number {
     const trimmed = value.trim();
     if (trimmed === 'n') return Math.ceil(Date.now());

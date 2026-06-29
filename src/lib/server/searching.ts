@@ -1,4 +1,4 @@
-import { parseSearchDate, validRegex, XOR, yieldToEventLoop } from "$lib/tools/misc";
+import { parseSearchDate, parseSearchFloat, validRegex, XOR, yieldToEventLoop } from "$lib/tools/misc";
 import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
 import {
@@ -44,8 +44,27 @@ type SearchPart = {
     type: MatchType;
     skip: boolean;
     similarRef?: string;
+    similarThreshold?: number;
     similarInvalid?: boolean;
 };
+
+function parseSimilarSearchTarget(raw: string): { imageId: string; threshold?: number } {
+    const trimmed = raw.trim();
+    const lastSpace = trimmed.lastIndexOf(' ');
+    if (lastSpace <= 0) {
+        return { imageId: trimmed };
+    }
+
+    const threshold = parseSearchFloat(trimmed.slice(lastSpace + 1));
+    if (threshold === undefined) {
+        return { imageId: trimmed };
+    }
+
+    return {
+        imageId: trimmed.slice(0, lastSpace).trim(),
+        threshold,
+    };
+}
 
 export type SearchOptions = {
     timestamp?: number;
@@ -380,9 +399,12 @@ export function buildMatcher(
         else if (similarRegex.test(x)) type = 'similar';
 
         let similarRef: string | undefined;
+        let similarThreshold: number | undefined;
         let similarInvalid = false;
         if (type === 'similar') {
-            const refImage = getImageList().get(raw.trim());
+            const { imageId, threshold } = parseSimilarSearchTarget(raw);
+            similarThreshold = threshold;
+            const refImage = getImageList().get(imageId);
             if (!refImage) {
                 similarInvalid = true;
             } else {
@@ -397,6 +419,7 @@ export function buildMatcher(
             type,
             skip,
             similarRef,
+            similarThreshold,
             similarInvalid,
         };
 
@@ -415,7 +438,8 @@ export function buildMatcher(
                     similarityPromptText(image),
                     similaritySettings.similarityAlgorithm,
                 );
-                const matched = similarity >= similaritySettings.similarityThreshold;
+                const threshold = x.similarThreshold ?? similaritySettings.similarityThreshold;
+                const matched = similarity >= threshold;
                 if (x.skip)
                     return !matched;
                 return XOR(x.not, matched);
