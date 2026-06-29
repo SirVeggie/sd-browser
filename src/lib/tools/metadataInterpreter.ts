@@ -218,23 +218,7 @@ function getExplicitPrimaryModel(extra: string | undefined): string | undefined 
 }
 
 export function getModels(prompt: string | undefined, workflow: string | undefined, extra: string | undefined): string {
-    const names = [...new Set(
-        getModelCandidates(prompt, workflow, extra).map(candidate => normalizeModelFilename(candidate.model)),
-    )];
-    return JSON.stringify(names);
-}
-
-export function parseStoredModels(models: string | undefined): string[] {
-    if (!models)
-        return [];
-    try {
-        const parsed = JSON.parse(models);
-        if (!Array.isArray(parsed))
-            return [];
-        return parsed.filter((value): value is string => typeof value === 'string' && !!value.trim());
-    } catch {
-        return [];
-    }
+    return formatModels(getModelCandidates(prompt, workflow, extra));
 }
 
 function getCandidateSortRank(candidate: ModelCandidate): number {
@@ -434,9 +418,7 @@ export function formatModels(candidates: ModelCandidate[]): string {
 }
 
 export function getModelSearchText(models: string | undefined): string {
-    return parseStoredModels(models)
-        .map(model => model.replace(/\\/g, '/'))
-        .join('\n');
+    return (models ?? '').replace(/\\/g, '/');
 }
 
 export function getSeed(prompt: string | undefined, workflow: string | undefined, extra: string | undefined) {

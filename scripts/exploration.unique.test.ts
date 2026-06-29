@@ -16,7 +16,7 @@ function image(id: string, modifiedDate: number, hash: string): ServerImage {
         positive: '',
         negative: '',
         params: '',
-        models: '[]',
+        models: '',
         hash,
         annotation: '',
     };

@@ -6,7 +6,6 @@ import {
     getModels,
     getPrimaryModel,
     MULTIPLE_MODELS,
-    parseStoredModels,
     UNKNOWN_MODEL,
 } from '../src/lib/tools/metadataInterpreter.ts';
 
@@ -15,15 +14,15 @@ const comfyWorkflow = JSON.stringify({
     nodes: [{ id: 3, type: 'CheckpointLoaderSimple', title: 'Load Checkpoint', order: 0 }],
 });
 
-assert.deepEqual(
-    parseStoredModels(getModels(comfyCkpt, comfyWorkflow, undefined)),
-    ['TrueHDi_00001_.safetensors'],
+assert.equal(
+    getModels(comfyCkpt, comfyWorkflow, undefined),
+    'Load Checkpoint: TrueHDi_00001_.safetensors',
     'comfy ckpt storage',
 );
 
 assert.equal(
     getModels(undefined, undefined, JSON.stringify({ model: 'explicit.safetensors' })),
-    '["explicit.safetensors"]',
+    'explicit.safetensors',
     'extra.model storage',
 );
 
@@ -48,16 +47,16 @@ assert.equal(
 const swarmPrompt = JSON.stringify({
     sui_image_params: { model: 'swarm-model.gguf', prompt: 'test' },
 });
-assert.deepEqual(
-    parseStoredModels(getModels(swarmPrompt, undefined, undefined)),
-    ['swarm-model.gguf'],
+assert.equal(
+    getModels(swarmPrompt, undefined, undefined),
+    'swarm-model.gguf',
     'swarm model storage',
 );
 
 const a1111Prompt = 'masterpiece\nNegative prompt: bad\nSteps: 20, Model: a1111-model.safetensors, Seed: 1';
-assert.deepEqual(
-    parseStoredModels(getModels(a1111Prompt, undefined, undefined)),
-    ['a1111-model.safetensors'],
+assert.equal(
+    getModels(a1111Prompt, undefined, undefined),
+    'a1111-model.safetensors',
     'a1111 model storage',
 );
 
@@ -304,27 +303,22 @@ assert.ok(
     hfCatalogModels.includes('qwen3VLInstruct4bHeretic_v10.safetensors'),
     'hf actual clip model included',
 );
-assert.deepEqual(
-    parseStoredModels(getModels(hfCatalogPrompt, hfCatalogWorkflow, undefined)).sort(),
-    [...new Set(hfCatalogModels)].sort(),
+assert.equal(
+    getModels(hfCatalogPrompt, hfCatalogWorkflow, undefined),
+    formatModels(hfCatalogCandidates),
     'getModels matches structured comfy candidates',
 );
 
 assert.equal(
-    getModelSearchText('["one.safetensors"]'),
-    'one.safetensors',
-    'model search text single model',
+    getModelSearchText('Load LoRA: krea\\KNP_V2.safetensors'),
+    'Load LoRA: krea/KNP_V2.safetensors',
+    'model search text normalizes backslashes',
 );
 
 assert.equal(
-    getModelSearchText('["loras\\\\foo.safetensors","bar.safetensors"]'),
-    'loras/foo.safetensors\nbar.safetensors',
-    'model search text joins models with newlines',
-);
-
-assert.ok(
-    /\n/.test(getModelSearchText('["a.safetensors","b.safetensors"]')),
-    'model search text newline marks multiple models',
+    getModelSearchText('Load LoRA: krea\\KNP_V2.safetensors\nLoad VAE: qwen_image_vae.safetensors'),
+    'Load LoRA: krea/KNP_V2.safetensors\nLoad VAE: qwen_image_vae.safetensors',
+    'model search text multiline formatted string',
 );
 
 console.log('model parser tests passed');

@@ -13,7 +13,6 @@
   import Button from "./Button.svelte";
   import { notify } from "$lib/components/Notifier.svelte";
   import {
-    formatModels,
     getComfyMetadataSections,
     getMetadataVersion,
     getModelCandidates,
@@ -21,7 +20,6 @@
     getPrimaryModel,
     getPrompts,
     getSeed,
-    parseStoredModels,
     getSvNegativePrompt,
     getSvPositivePrompt,
   } from "$lib/tools/metadataInterpreter";
@@ -29,7 +27,7 @@
   import { getQualityParam, imageAction } from "$lib/requests/imageRequests";
   import { autofocus } from "../../actions/autofocus";
   import { fullscreenStyle } from "$lib/stores/styleStore";
-  import type { ClientImage, ImageInfo, ModelCandidate } from "$lib/types/images";
+  import type { ClientImage, ImageInfo } from "$lib/types/images";
 
   export let cancel: () => void;
   export let image: ClientImage | undefined;
@@ -67,7 +65,7 @@
   }
 
   function extractBasic(d: ImageInfo): string {
-    const candidates = getUiModelCandidates(d.prompt, d.workflow, d.extra, d.models);
+    const candidates = getModelCandidates(d.prompt, d.workflow, d.extra);
     const primary = getPrimaryModel(candidates, d.extra);
     const hash = getModelHash(d.prompt);
     let info = "";
@@ -100,17 +98,17 @@
   ): PromptFragment[] {
     let blocks: PromptFragment[] = [];
     const prompts = getPrompts(prompt, workflow, extra, true);
-    const candidates = getUiModelCandidates(prompt, workflow, extra, storedModels);
+    const modelsText = storedModels ?? "";
     const seed = getSeed(prompt, workflow, extra);
     const sv_pos = prompts?.ogpos || getSvPositivePrompt(prompt);
     const sv_neg = prompts?.ogneg || getSvNegativePrompt(prompt);
     const params = prompts?.params;
     const version = getMetadataVersion(prompt);
 
-    if (candidates.length > 1)
+    if (modelsText.includes("\n"))
       blocks.push({
         header: "models",
-        content: formatModels(candidates),
+        content: modelsText,
       });
     if (prompts?.pos)
       blocks.push({
@@ -159,18 +157,6 @@
         action: copyWorkflow,
       });
     return blocks;
-  }
-
-  function getUiModelCandidates(
-    prompt: string | undefined,
-    workflow: string | undefined,
-    extra: string | undefined,
-    storedModels: string | undefined,
-  ): ModelCandidate[] {
-    const candidates = getModelCandidates(prompt, workflow, extra);
-    if (candidates.length)
-      return candidates;
-    return parseStoredModels(storedModels).map(model => ({ model }));
   }
 
   function formatComfy(prompt: string, workflow?: string): PromptFragment[] {

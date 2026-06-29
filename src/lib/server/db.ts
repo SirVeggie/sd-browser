@@ -5,6 +5,13 @@ import { datapath } from './filemanager';
 import type { ImageExtraData, ServerImage, ServerImageFull, ServerImagePartial } from '$lib/types/images';
 import { deleteFileSync, fileExistsSync } from './filetools';
 
+export function sqliteTableExists(db: BetterSqlite3, table: string): boolean {
+    const result = db.prepare(
+        `SELECT count(*) as count FROM sqlite_master WHERE type = 'table' AND name = ?`,
+    ).get(table) as { count: number };
+    return !!result.count;
+}
+
 export class MetaDB {
     private static fShort = 'metadata.sqlite3';
     private static fFull = 'workflows.sqlite3';
@@ -86,6 +93,8 @@ export class MetaDB {
 
         const db = new Database(shortPath);
         try {
+            if (!sqliteTableExists(db, MetaDB.tShort))
+                return;
             const result = db.prepare(`select count(*) as count from pragma_table_info('${MetaDB.tShort}') where name = ?`).get(column) as { count: number; };
             if (!result.count) {
                 console.log(`Adding column '${column} ${definition}' to the short metadata table`);
@@ -103,6 +112,8 @@ export class MetaDB {
 
         const db = new Database(fullPath);
         try {
+            if (!sqliteTableExists(db, MetaDB.tFull))
+                return;
             const result = db.prepare(`select count(*) as count from pragma_table_info('${MetaDB.tFull}') where name = ?`).get(column) as { count: number; };
             if (!result.count) {
                 console.log(`Adding column '${column} ${definition}' to the metadata database`);
@@ -381,6 +392,8 @@ export class MetaCalcDB {
 
         const db = new Database(fullpath);
         try {
+            if (!sqliteTableExists(db, MetaCalcDB.table))
+                return;
             const result = db.prepare(`select count(*) as count from pragma_table_info('${MetaCalcDB.table}') where name = ?`).get(column) as { count: number; };
             if (!result.count) {
                 console.log(`Adding column '${column} ${definition}' to the extradata table`);
@@ -434,7 +447,7 @@ export class MetaCalcDB {
         const existing = MetaCalcDB.get(data.id);
         const annotation = data.annotation !== undefined ? data.annotation : (existing?.annotation ?? null);
         const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-        stmt.run(data.id, data.positive, data.negative, data.params, data.models ?? '[]', data.hash, annotation);
+        stmt.run(data.id, data.positive, data.negative, data.params, data.models ?? '', data.hash, annotation);
     }
 
     static setAll(data: ImageExtraData[]) {
@@ -444,7 +457,7 @@ export class MetaCalcDB {
             for (const item of data) {
                 const existing = MetaCalcDB.get(item.id);
                 const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '[]', item.hash, annotation);
+                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation);
             }
         })(data);
     }
@@ -485,7 +498,7 @@ export class MetaCalcDB {
             for (const item of data) {
                 const existing = MetaCalcDB.get(item.id);
                 const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                addstmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '[]', item.hash, annotation);
+                addstmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation);
             }
         })(data, deletions);
     }

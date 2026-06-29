@@ -36,7 +36,7 @@ export function populateServerImage(image: ServerImage, info: ImageExtraData): S
     image.positive = info.positive;
     image.negative = info.negative;
     image.params = info.params;
-    image.models = info.models ?? '[]';
+    image.models = info.models ?? '';
     image.hash = info.hash;
     image.annotation = info.annotation ?? '';
     return image;
