@@ -18,7 +18,8 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "eslint .",
-		"test:models": "node --experimental-strip-types scripts/model-parser.test.ts"
+		"test:models": "node --experimental-strip-types scripts/model-parser.test.ts",
+		"test:exploration": "node --experimental-strip-types scripts/exploration.unique.test.ts"
 	},
 	"dependencies": {
 		"@ffmpeg-installer/ffmpeg": "^1.1.0",

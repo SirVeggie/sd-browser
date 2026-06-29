@@ -41,6 +41,8 @@ Example: no stored version (treated as 0 internally) runs v1 if old files exist,
 - Dropped the extradata table so startup recreates it with the current schema (no `isUnique` column) and recalculates all rows via `getServerImage()`.
 - Exploration mode `'unique'` removed; saved client preference coerced to `'none'` via `coerceExplorationMode` in `src/lib/types/misc.ts`.
 
+**Note:** `'unique'` collapse mode was restored in a later release. No data migration is required; the MiscDB `exploration-cache:unique` entry is built on next startup when missing or stale.
+
 **Verify:** Upgrade from v1 library; extradata repopulates; exploration with old `'unique'` setting falls back to `'none'`.
 
 **Removal:** Safe once all libraries report version ≥ 2.

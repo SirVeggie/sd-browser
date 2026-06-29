@@ -3,6 +3,7 @@ import { similarityPromptText } from "$lib/tools/metadataInterpreter";
 import { calcProgress, calcTimeRemaining, updateLine } from "$lib/tools/misc";
 import type { ServerImage } from "$lib/types/images";
 import { isSimilarityAlgorithm, type ExplorationSettings, type SimilarityAlgorithm } from "$lib/types/misc";
+import { buildUniqueHashToId, repairUniqueHashToIdAfterDeletes } from "./explorationUnique";
 import { MiscDB } from "./db";
 
 type SourceState = {
@@ -27,16 +28,27 @@ type SimilarCachePayload = {
     poolIds: string[];
 };
 
-type RuntimeCache<TPayload extends SparseCachePayload | SimilarCachePayload> = {
+type UniqueCachePayload = {
+    type: 'unique';
+    sourceFingerprint: string;
+    sourceCount: number;
+    hashToId: Record<string, string>;
+};
+
+type ExplorationCachePayload = SparseCachePayload | SimilarCachePayload | UniqueCachePayload;
+
+type RuntimeCache<TPayload extends ExplorationCachePayload> = {
     payload: TPayload;
     pool: Set<string>;
 };
 
 const sparseCacheKey = 'exploration-cache:sparse';
 const similarCacheKey = 'exploration-cache:similar';
+const uniqueCacheKey = 'exploration-cache:unique';
 
 let sparseCache: RuntimeCache<SparseCachePayload> | undefined;
 let similarCache: RuntimeCache<SimilarCachePayload> | undefined;
+let uniqueCache: RuntimeCache<UniqueCachePayload> | undefined;
 
 function getSourceState(images: ServerImage[]): SourceState {
     const ids = images.map(image => image.id).sort();
@@ -51,7 +63,7 @@ function getSourceState(images: ServerImage[]): SourceState {
     };
 }
 
-function sourceMatches(payload: SparseCachePayload | SimilarCachePayload, source: SourceState) {
+function sourceMatches(payload: Pick<ExplorationCachePayload, 'sourceFingerprint' | 'sourceCount'>, source: SourceState) {
     return payload.sourceFingerprint === source.fingerprint && payload.sourceCount === source.count;
 }
 
@@ -98,9 +110,38 @@ function parseSimilarCache(raw: string | undefined): SimilarCachePayload | undef
     return undefined;
 }
 
+function isStringRecord(value: unknown): value is Record<string, string> {
+    if (!value || typeof value !== 'object')
+        return false;
+    return Object.entries(value).every(([key, entry]) => typeof key === 'string' && typeof entry === 'string');
+}
+
+function parseUniqueCache(raw: string | undefined): UniqueCachePayload | undefined {
+    if (!raw) return undefined;
+    try {
+        const parsed = JSON.parse(raw) as Partial<UniqueCachePayload>;
+        if (
+            parsed.type === 'unique' &&
+            typeof parsed.sourceFingerprint === 'string' &&
+            typeof parsed.sourceCount === 'number' &&
+            isStringRecord(parsed.hashToId)
+        ) {
+            return parsed as UniqueCachePayload;
+        }
+    } catch {
+        console.log('Failed to parse unique exploration cache from DB');
+    }
+    return undefined;
+}
+
 function poolIdsAreValid(poolIds: string[], images: ServerImage[]) {
     const ids = new Set(images.map(image => image.id));
     return poolIds.every(id => ids.has(id));
+}
+
+function hashToIdAreValid(hashToId: Record<string, string>, images: ServerImage[]) {
+    const ids = new Set(images.map(image => image.id));
+    return Object.values(hashToId).every(id => ids.has(id));
 }
 
 function cachePool<TPayload extends SparseCachePayload | SimilarCachePayload>(payload: TPayload): RuntimeCache<TPayload> {
@@ -110,43 +151,59 @@ function cachePool<TPayload extends SparseCachePayload | SimilarCachePayload>(pa
     };
 }
 
+function cacheUniquePool(payload: UniqueCachePayload): RuntimeCache<UniqueCachePayload> {
+    return {
+        payload,
+        pool: new Set(Object.values(payload.hashToId)),
+    };
+}
+
 function saveSparseCache(payload: SparseCachePayload) {
     MiscDB.set(sparseCacheKey, JSON.stringify(payload));
-    console.log(`Saved sparse exploration cache (${payload.poolIds.length}/${payload.sourceCount} images, frequency ${payload.frequency})`);
 }
 
 function saveSimilarCache(payload: SimilarCachePayload) {
     MiscDB.set(similarCacheKey, JSON.stringify(payload));
-    console.log(`Saved similar exploration cache (${payload.poolIds.length}/${payload.sourceCount} images, ${payload.algorithm}, threshold ${payload.threshold})`);
+}
+
+function saveUniqueCache(payload: UniqueCachePayload) {
+    MiscDB.set(uniqueCacheKey, JSON.stringify(payload));
 }
 
 export function verifyExplorationCaches(images: ServerImage[]): void {
     const source = getSourceState(images);
     const sparse = parseSparseCache(MiscDB.get(sparseCacheKey));
-    if (sparse && sourceMatches(sparse, source) && poolIdsAreValid(sparse.poolIds, images)) {
-        console.log(`Verified sparse exploration cache (${sparse.poolIds.length}/${source.count} images)`);
-    } else if (sparse) {
+    if (sparse && !(sourceMatches(sparse, source) && poolIdsAreValid(sparse.poolIds, images))) {
         MiscDB.delete(sparseCacheKey);
         sparseCache = undefined;
-        console.log('Removed stale sparse exploration cache after library verification');
     }
 
     const similar = parseSimilarCache(MiscDB.get(similarCacheKey));
-    if (similar && sourceMatches(similar, source) && poolIdsAreValid(similar.poolIds, images)) {
-        console.log(`Verified similar exploration cache (${similar.poolIds.length}/${source.count} images)`);
-    } else if (similar) {
+    if (similar && !(sourceMatches(similar, source) && poolIdsAreValid(similar.poolIds, images))) {
         MiscDB.delete(similarCacheKey);
         similarCache = undefined;
-        console.log('Removed stale similar exploration cache after library verification');
+    }
+
+    const unique = parseUniqueCache(MiscDB.get(uniqueCacheKey));
+    if (unique && sourceMatches(unique, source) && hashToIdAreValid(unique.hashToId, images)) {
+        uniqueCache = cacheUniquePool(unique);
+    } else {
+        if (unique) {
+            MiscDB.delete(uniqueCacheKey);
+            uniqueCache = undefined;
+        }
+        const start = Date.now();
+        console.log(`Calculating unique exploration cache for ${images.length} images`);
+        uniqueCache = buildAndSaveUniqueCache(images);
+        console.log(`Calculated unique exploration cache in ${Date.now() - start}ms`);
     }
 }
 
 export function invalidateExplorationPools(reason?: string): void {
-    const hadCache = !!sparseCache || !!similarCache;
     sparseCache = undefined;
     similarCache = undefined;
-    if (hadCache || reason)
-        console.log(`Cleared exploration runtime caches${reason ? `: ${reason}` : ''}`);
+    uniqueCache = undefined;
+    void reason;
 }
 
 export function recalculateSimilarCache(
@@ -156,7 +213,6 @@ export function recalculateSimilarCache(
 ): Set<string> {
     similarCache = undefined;
     MiscDB.delete(similarCacheKey);
-    console.log('Cleared similar exploration cache for recalculation');
     return getCachedSimilarPool(images, algorithm, threshold);
 }
 
@@ -183,6 +239,66 @@ function getSparsePayloadForRepair(): SparseCachePayload | undefined {
 
 function getSimilarPayloadForRepair(): SimilarCachePayload | undefined {
     return similarCache?.payload ?? parseSimilarCache(MiscDB.get(similarCacheKey));
+}
+
+function getUniquePayloadForRepair(): UniqueCachePayload | undefined {
+    return uniqueCache?.payload ?? parseUniqueCache(MiscDB.get(uniqueCacheKey));
+}
+
+function buildAndSaveUniqueCache(images: ServerImage[]): RuntimeCache<UniqueCachePayload> {
+    const source = getSourceState(images);
+    const payload: UniqueCachePayload = {
+        type: 'unique',
+        sourceFingerprint: source.fingerprint,
+        sourceCount: source.count,
+        hashToId: buildUniqueHashToId(images),
+    };
+    const cached = cacheUniquePool(payload);
+    saveUniqueCache(payload);
+    return cached;
+}
+
+export function repairUniqueCacheOnAdd(images: ServerImage[], added: ServerImage): void {
+    if (!added.hash)
+        return;
+
+    const existing = getUniquePayloadForRepair();
+    if (!existing) {
+        uniqueCache = buildAndSaveUniqueCache(images);
+        return;
+    }
+
+    const source = getSourceState(images);
+    const payload: UniqueCachePayload = {
+        type: 'unique',
+        sourceFingerprint: source.fingerprint,
+        sourceCount: source.count,
+        hashToId: {
+            ...existing.hashToId,
+            [added.hash]: added.id,
+        },
+    };
+    uniqueCache = cacheUniquePool(payload);
+    saveUniqueCache(payload);
+}
+
+export function repairUniqueCacheAfterDeletes(remaining: ServerImage[], deleted: ServerImage[]): void {
+    if (!deleted.length)
+        return;
+
+    const existing = getUniquePayloadForRepair();
+    if (!existing)
+        return;
+
+    const source = getSourceState(remaining);
+    const payload: UniqueCachePayload = {
+        type: 'unique',
+        sourceFingerprint: source.fingerprint,
+        sourceCount: source.count,
+        hashToId: repairUniqueHashToIdAfterDeletes(existing.hashToId, remaining, deleted),
+    };
+    uniqueCache = cacheUniquePool(payload);
+    saveUniqueCache(payload);
 }
 
 function repairSparseCache(images: ServerImage[], affectedModifiedDate: number): boolean {
@@ -214,7 +330,6 @@ function repairSparseCache(images: ServerImage[], affectedModifiedDate: number):
     };
     sparseCache = cachePool(payload);
     saveSparseCache(payload);
-    console.log(`Repaired sparse exploration cache from modified date ${affectedModifiedDate}`);
     return true;
 }
 
@@ -246,12 +361,6 @@ function repairSimilarCache(images: ServerImage[], affectedModifiedDate: number)
         startIndex = 1;
     }
 
-    const repairTotal = sorted.length - startIndex;
-    const repairLog = `Repairing similar exploration cache (${existing.algorithm}, threshold ${existing.threshold})`;
-    const repairStart = Date.now();
-    if (repairTotal > 0)
-        updateLine(`${repairLog}...`);
-
     for (let i = startIndex; i < sorted.length; i++) {
         const prompt = similarityPromptText(sorted[i]);
         const similarity = computeSimilarity(latestSelectedPrompt, prompt, existing.algorithm);
@@ -259,13 +368,7 @@ function repairSimilarCache(images: ServerImage[], affectedModifiedDate: number)
             poolIds.push(sorted[i].id);
             latestSelectedPrompt = prompt;
         }
-        const repaired = i - startIndex + 1;
-        if (repairTotal > 0 && (repaired % 1000 === 0 || repaired === repairTotal))
-            updateLine(repairLog + `: ${calcProgress(repaired, repairTotal)}% | estimate: ${calcTimeRemaining(repairStart, repaired, repairTotal)}`);
     }
-
-    if (repairTotal > 0)
-        updateLine('');
 
     const payload: SimilarCachePayload = {
         ...existing,
@@ -275,15 +378,13 @@ function repairSimilarCache(images: ServerImage[], affectedModifiedDate: number)
     };
     similarCache = cachePool(payload);
     saveSimilarCache(payload);
-    console.log(`Repaired similar exploration cache from modified date ${affectedModifiedDate}`);
     return true;
 }
 
 export function repairExplorationCaches(images: ServerImage[], affectedModifiedDate: number, reason: string): void {
-    const repairedSparse = repairSparseCache(images, affectedModifiedDate);
-    const repairedSimilar = repairSimilarCache(images, affectedModifiedDate);
-    if (repairedSparse || repairedSimilar)
-        console.log(`Repaired exploration caches from modified date ${affectedModifiedDate}: ${reason}`);
+    repairSparseCache(images, affectedModifiedDate);
+    repairSimilarCache(images, affectedModifiedDate);
+    void reason;
 }
 
 export function getExplorationPool(settings: ExplorationSettings, images: ServerImage[]): Set<string> {
@@ -291,6 +392,8 @@ export function getExplorationPool(settings: ExplorationSettings, images: Server
     switch (settings.explorationMode) {
         case 'none':
             return new Set(images.map(image => image.id));
+        case 'unique':
+            return getCachedUniquePool(images);
         case 'sparse':
             return getCachedSparsePool(images, settings.sparseFrequency);
         case 'similar':
@@ -311,12 +414,8 @@ function getCachedSparsePool(images: ServerImage[], frequency: number): Set<stri
     const persisted = parseSparseCache(MiscDB.get(sparseCacheKey));
     if (persisted && persisted.frequency === freq && sourceMatches(persisted, source) && poolIdsAreValid(persisted.poolIds, images)) {
         sparseCache = cachePool(persisted);
-        console.log(`Loaded sparse exploration cache from DB (${persisted.poolIds.length}/${source.count} images, frequency ${freq})`);
         return sparseCache.pool;
     }
-
-    if (persisted)
-        console.log('Sparse exploration cache is stale or settings changed; recalculating');
 
     const start = Date.now();
     console.log(`Calculating sparse exploration cache for ${images.length} images (frequency ${freq})`);
@@ -358,12 +457,8 @@ function getCachedSimilarPool(
         poolIdsAreValid(persisted.poolIds, images)
     ) {
         similarCache = cachePool(persisted);
-        console.log(`Loaded similar exploration cache from DB (${persisted.poolIds.length}/${source.count} images, ${algorithm}, threshold ${threshold})`);
         return similarCache.pool;
     }
-
-    if (persisted)
-        console.log('Similar exploration cache is stale or settings changed; recalculating');
 
     const start = Date.now();
     const pool = buildSimilarPool(images, algorithm, threshold);
@@ -379,6 +474,24 @@ function getCachedSimilarPool(
     console.log(`Calculated similar exploration cache in ${Date.now() - start}ms`);
     saveSimilarCache(payload);
     return similarCache.pool;
+}
+
+function getCachedUniquePool(images: ServerImage[]): Set<string> {
+    const source = getSourceState(images);
+    if (uniqueCache && sourceMatches(uniqueCache.payload, source))
+        return uniqueCache.pool;
+
+    const persisted = parseUniqueCache(MiscDB.get(uniqueCacheKey));
+    if (persisted && sourceMatches(persisted, source) && hashToIdAreValid(persisted.hashToId, images)) {
+        uniqueCache = cacheUniquePool(persisted);
+        return uniqueCache.pool;
+    }
+
+    const start = Date.now();
+    console.log(`Calculating unique exploration cache for ${images.length} images`);
+    uniqueCache = buildAndSaveUniqueCache(images);
+    console.log(`Calculated unique exploration cache in ${Date.now() - start}ms`);
+    return uniqueCache.pool;
 }
 
 function buildSparsePool(images: ServerImage[], frequency: number): Set<string> {

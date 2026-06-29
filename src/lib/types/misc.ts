@@ -23,7 +23,7 @@ export function isQualityMode(object: any): object is QualityMode {
     return qualityModes.includes(object);
 }
 
-export const explorationModes = ['none', 'similar', 'sparse'] as const;
+export const explorationModes = ['none', 'unique', 'similar', 'sparse'] as const;
 export type ExplorationMode = typeof explorationModes[number];
 export function isExplorationMode(object: any): object is ExplorationMode {
     return explorationModes.includes(object);
