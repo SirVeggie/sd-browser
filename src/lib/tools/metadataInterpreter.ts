@@ -434,11 +434,9 @@ export function formatModels(candidates: ModelCandidate[]): string {
 }
 
 export function getModelSearchText(models: string | undefined): string {
-    return parseStoredModels(models).map(model => {
-        const normalized = model.replace(/\\/g, '/');
-        const base = normalized.split('/').pop() ?? normalized;
-        return base === normalized ? normalized : `${normalized}\n${base}`;
-    }).join('\n');
+    return parseStoredModels(models)
+        .map(model => model.replace(/\\/g, '/'))
+        .join('\n');
 }
 
 export function getSeed(prompt: string | undefined, workflow: string | undefined, extra: string | undefined) {

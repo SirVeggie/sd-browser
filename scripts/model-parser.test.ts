@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
     formatModels,
     getModelCandidates,
+    getModelSearchText,
     getModels,
     getPrimaryModel,
     MULTIPLE_MODELS,
@@ -307,6 +308,23 @@ assert.deepEqual(
     parseStoredModels(getModels(hfCatalogPrompt, hfCatalogWorkflow, undefined)).sort(),
     [...new Set(hfCatalogModels)].sort(),
     'getModels matches structured comfy candidates',
+);
+
+assert.equal(
+    getModelSearchText('["one.safetensors"]'),
+    'one.safetensors',
+    'model search text single model',
+);
+
+assert.equal(
+    getModelSearchText('["loras\\\\foo.safetensors","bar.safetensors"]'),
+    'loras/foo.safetensors\nbar.safetensors',
+    'model search text joins models with newlines',
+);
+
+assert.ok(
+    /\n/.test(getModelSearchText('["a.safetensors","b.safetensors"]')),
+    'model search text newline marks multiple models',
 );
 
 console.log('model parser tests passed');

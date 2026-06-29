@@ -180,14 +180,6 @@ export function buildMatcher(search: string, matching: SearchMode): (image: Serv
                 }
             }
 
-            if (x.type === 'model') {
-                const text = getModelSearchText(image.models);
-                const matched = textMatches(text, x, matching);
-                if (x.skip)
-                    return !matched;
-                return XOR(x.not, matched);
-            }
-
             const text = getTextByType(image, x.type);
             const matched = textMatches(text, x, matching);
 
