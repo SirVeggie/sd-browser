@@ -264,6 +264,7 @@
         const abort = new AbortController();
         streamAbort = abort;
         const search = buildSearchParams();
+        let hasReceivedImages = false;
 
         subscribeImageStream(
             {
@@ -276,8 +277,6 @@
                     if (expectedSessionId !== updateSessionId) return;
                     searchSessionId = init.sessionId;
                     searchCountComplete = false;
-                    imageStore.set([]);
-                    imageAmountStore.set(0);
                     updateTime = init.timestamp;
                 },
                 onChunk: (chunk) => {
@@ -285,12 +284,22 @@
                     imageAmountStore.set(chunk.matched);
                     const mapped = expandClientImages(chunk.images);
                     if (!mapped.length) return;
+
+                    if (!hasReceivedImages) {
+                        hasReceivedImages = true;
+                        imageStore.set(mapped);
+                        return;
+                    }
+
                     imageStore.update((x) => x.concat(mapped));
                 },
                 onReady: (ready) => {
                     if (expectedSessionId !== updateSessionId) return;
                     imageAmountStore.set(ready.amount);
                     searchCountComplete = true;
+                    if (!hasReceivedImages && ready.amount === 0) {
+                        imageStore.set([]);
+                    }
                 },
                 onUpdate: (res) => applyUpdate(res, expectedSessionId),
             },
