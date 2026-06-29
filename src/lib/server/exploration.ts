@@ -267,8 +267,6 @@ export function getExplorationPool(settings: ExplorationSettings, images: Server
     switch (settings.explorationMode) {
         case 'none':
             return new Set(images.map(image => image.id));
-        case 'unique':
-            return buildUniquePool(images);
         case 'sparse':
             return getCachedSparsePool(images, settings.sparseFrequency);
         case 'similar':
@@ -358,28 +356,6 @@ function getCachedSimilarPool(
     console.log(`Calculated similar exploration cache in ${Date.now() - start}ms`);
     saveSimilarCache(payload);
     return similarCache.pool;
-}
-
-function buildUniquePool(images: ServerImage[]): Set<string> {
-    const byPrompt = new Map<string, ServerImage>();
-    const pool = new Set<string>();
-
-    for (const image of images) {
-        const prompt = simplifyPrompt(image);
-        if (!prompt) {
-            pool.add(image.id);
-            continue;
-        }
-
-        const existing = byPrompt.get(prompt);
-        if (!existing || image.modifiedDate > existing.modifiedDate)
-            byPrompt.set(prompt, image);
-    }
-
-    for (const image of byPrompt.values())
-        pool.add(image.id);
-
-    return pool;
 }
 
 function buildSparsePool(images: ServerImage[], frequency: number): Set<string> {

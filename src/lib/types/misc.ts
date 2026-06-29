@@ -23,10 +23,16 @@ export function isQualityMode(object: any): object is QualityMode {
     return qualityModes.includes(object);
 }
 
-export const explorationModes = ['none', 'unique', 'similar', 'sparse'] as const;
+export const explorationModes = ['none', 'similar', 'sparse'] as const;
 export type ExplorationMode = typeof explorationModes[number];
 export function isExplorationMode(object: any): object is ExplorationMode {
     return explorationModes.includes(object);
+}
+
+export function coerceExplorationMode(mode: unknown): ExplorationMode {
+    if (typeof mode === 'string' && isExplorationMode(mode))
+        return mode;
+    return defaultExplorationSettings.explorationMode;
 }
 
 export const similarityAlgorithms = ['token-jaccard', 'token-cosine', 'char-trigram-dice'] as const;

@@ -64,8 +64,6 @@ export class MetaDB {
         MetaDB.isSetup = true;
         MetaDB.sdb.exec(MetaDB.sqlCreate);
         MetaDB.fdb.exec(MetaDB.sqlCreateFull);
-        
-        MetaDB.ensureColumnF('extra', 'TEXT');
 
         MetaDB.stmtGetS = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE id = ?`);
         MetaDB.stmtGetF = MetaDB.fdb.prepare(`SELECT * FROM ${MetaDB.tFull} WHERE id = ?`);
@@ -77,10 +75,9 @@ export class MetaDB {
         MetaDB.stmtDeleteS = MetaDB.sdb.prepare(`DELETE FROM ${MetaDB.tShort} WHERE id = ?`);
         MetaDB.stmtDeleteF = MetaDB.fdb.prepare(`DELETE FROM ${MetaDB.tFull} WHERE id = ?`);
         MetaDB.stmtCount = MetaDB.sdb.prepare(`SELECT COUNT(*) FROM ${MetaDB.tShort}`);
-        
     }
 
-    static ensureColumnF(column: string, definition: string) {
+    static ensureColumnFull(column: string, definition: string) {
         MetaDB.setup();
         const result = MetaDB.fdb.prepare(`select count(*) as count from pragma_table_info('${MetaDB.tFull}') where name = ?`).get(column) as { count: number; };
         if (!result.count) {
@@ -307,7 +304,6 @@ export class MetaCalcDB {
         params TEXT,
         models TEXT,
         hash TEXT,
-        isUnique INTEGER,
         annotation TEXT
     )`;
 
@@ -318,7 +314,7 @@ export class MetaCalcDB {
     static setup() {
         if (MetaCalcDB.isOpen)
             return;
-
+        
         MetaCalcDB.isOpen = true;
         const fullpath = path.join(datapath, MetaCalcDB.file);
         MetaCalcDB.db = new Database(fullpath);
@@ -327,8 +323,6 @@ export class MetaCalcDB {
             return;
         MetaCalcDB.isSetup = true;
         MetaCalcDB.db.exec(MetaCalcDB.sqlCreate);
-        MetaCalcDB.ensureColumn('annotation', 'TEXT');
-        MetaCalcDB.ensureColumn('models', 'TEXT');
     }
 
     static ensureColumn(column: string, definition: string) {
@@ -382,18 +376,18 @@ export class MetaCalcDB {
         MetaCalcDB.setup();
         const existing = MetaCalcDB.get(data.id);
         const annotation = data.annotation !== undefined ? data.annotation : (existing?.annotation ?? null);
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-        stmt.run(data.id, data.positive, data.negative, data.params, data.models ?? '[]', data.hash, data.isUnique, annotation);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        stmt.run(data.id, data.positive, data.negative, data.params, data.models ?? '[]', data.hash, annotation);
     }
 
     static setAll(data: ImageExtraData[]) {
         MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
             for (const item of data) {
                 const existing = MetaCalcDB.get(item.id);
                 const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '[]', item.hash, item.isUnique, annotation);
+                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '[]', item.hash, annotation);
             }
         })(data);
     }
@@ -401,27 +395,6 @@ export class MetaCalcDB {
     static setAnnotation(id: string, annotation: string) {
         MetaCalcDB.setup();
         MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET annotation = ? WHERE id = ?`).run(annotation, id);
-    }
-
-    static setUnique(id: string, state: boolean) {
-        MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET isUnique = ? WHERE id = ?`);
-        stmt.run(state ? 1 : 0, id);
-    }
-
-    static setAllUnique(ids: string[], state: boolean) {
-        MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET isUnique = ${state ? 1 : 0} WHERE id = ?`);
-        MetaCalcDB.db.transaction((ids: string[]) => {
-            for (const id of ids) {
-                stmt.run(id);
-            }
-        })(ids);
-    }
-
-    static clearUniques(onlyUnkowns = false) {
-        MetaCalcDB.setup();
-        MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET isUnique = 0 WHERE isUnique = -1${(onlyUnkowns ? '' : ' OR isUnique = 1')}`).run();
     }
 
     static delete(id: string) {
@@ -448,14 +421,14 @@ export class MetaCalcDB {
         if (!data.length && !deletions.length)
             return;
         const delstmt = MetaCalcDB.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
-        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, isUnique, annotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[], deletions: string[]) => {
             for (const id of deletions)
                 delstmt.run(id);
             for (const item of data) {
                 const existing = MetaCalcDB.get(item.id);
                 const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                addstmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '[]', item.hash, item.isUnique, annotation);
+                addstmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '[]', item.hash, annotation);
             }
         })(data, deletions);
     }

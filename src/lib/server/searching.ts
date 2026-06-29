@@ -2,6 +2,7 @@ import { parseSearchDate, validRegex, XOR } from "$lib/tools/misc";
 import { getModelSearchText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
 import {
+    coerceExplorationMode,
     searchKeywords,
     type ExplorationSettings,
     type MatchType,
@@ -304,7 +305,7 @@ export function explorationFromRequest(request: {
     similarityThreshold: number;
 }): ExplorationSettings {
     return {
-        explorationMode: request.explorationMode,
+        explorationMode: coerceExplorationMode(request.explorationMode),
         sparseFrequency: request.sparseFrequency,
         similarityAlgorithm: request.similarityAlgorithm,
         similarityThreshold: request.similarityThreshold,

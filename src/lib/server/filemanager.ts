@@ -6,15 +6,15 @@ import cp from 'child_process';
 import fs from 'fs/promises';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
-import { calcTimeSpent, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, printLine, removeExtension, updateLine, videoFiletypes, lazy, calcProgress, calcTimeRemaining } from '$lib/tools/misc';
+import { calcTimeSpent, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, removeExtension, updateLine, videoFiletypes, lazy, calcProgress, calcTimeRemaining } from '$lib/tools/misc';
 // import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB } from './db';
 import type { ImageExtraData, ImageList, ServerImage, ServerImageFull, TimedImage } from '$lib/types/images';
 import { deleteTempImage, fileExists, fileUniquefy, removeBasePath, removeFolderFromPath, splitExtension } from './filetools';
-import { handleLegacyEnd, handleLegacyStart } from './legacy';
-import { getServerImage, hashPath, hashPrompt, populateServerImage, readMetadata, readMetadataFromExif, readMetadataFromFile, updateImageMetadata } from './imageUtils';
+import { handleMigrationEnd, handleMigrationStart } from './migration';
+import { getServerImage, hashPath, populateServerImage, readMetadata, readMetadataFromExif, readMetadataFromFile, updateImageMetadata } from './imageUtils';
 import { invalidateExplorationPools, repairExplorationCaches, verifyExplorationCaches } from './exploration';
 
 const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
@@ -22,8 +22,6 @@ const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 let watcher: Watcher | undefined;
 let imageList: ImageList = new Map();
 let freshList: TimedImage[] = [];
-let uniqueSet: Set<string> = new Set();
-let uniqueReverse: Map<string, string> = new Map();
 const nsfwList: string[] = [];
 const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
@@ -40,7 +38,7 @@ export async function remoteDebug() {
 
 //#region indexing
 export async function startFileManager() {
-    await handleLegacyStart();
+    await handleMigrationStart();
     await indexFiles();
 }
 
@@ -56,13 +54,6 @@ export async function indexFiles() {
     // eslint-disable-next-line prefer-const
     let [templist, txtmap, videomap] = await indexCachedFiles();
 
-    // initialize existing cache
-    if (imageList.size) {
-        print(`Building unique list for ${imageList.size} images...`);
-        await createUniqueListChunked();
-        updateLine(`Unique list created with ${uniqueSet.size} items\n`);
-    }
-    
     // start watcher early
     setupWatcher();
 
@@ -93,7 +84,7 @@ export async function indexFiles() {
 
     // finish up
     console.log(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}`);
-    await handleLegacyEnd();
+    handleMigrationEnd();
     cleanTempImages();
     verifyExplorationCaches([...imageList.values()]);
     console.log(`Found ${lazy(imageList.values()).filter(x => !!x.positive).count()} images with metadata`);
@@ -344,7 +335,6 @@ async function indexTxtFiles(templist: ServerImageFull[], txtmap: Map<string, st
                 fullImages.push(res);
                 extraData.push(processed);
                 imageList.set(res.id, processed);
-                addUniqueImage(processed);
                 found++;
             });
         }
@@ -384,7 +374,6 @@ async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string,
                 fullImages.push(res);
                 extraData.push(processed);
                 imageList.set(res.id, processed);
-                addUniqueImage(processed);
                 if (res.prompt || res.workflow || res.extra)
                     found++;
             });
@@ -476,7 +465,6 @@ function setupWatcher() {
         for (const [key, value] of imageList) {
             if (value.file.startsWith(dir)) {
                 oldestDeleted = Math.min(oldestDeleted, value.modifiedDate);
-                removeUniqueImage(value);
                 imageList.delete(key);
                 deleteTempImage(key);
                 deletions.push(key);
@@ -545,7 +533,6 @@ async function addFile(file: string, hash?: string) {
 
     const image = getServerImage(full);
     imageList.set(hash, image);
-    addUniqueImage(image);
     repairExplorationCaches([...imageList.values()], image.modifiedDate, `added image ${path.basename(file)}`);
     
     const amount = freshList.unshift({
@@ -605,7 +592,6 @@ async function deleteFile(file: string) {
     if (!isMedia(file)) return;
     const hash = hashPath(file);
     const image = imageList.get(hash);
-    removeUniqueImage(image);
     imageList.delete(hash);
     if (image)
         repairExplorationCaches([...imageList.values()], image.modifiedDate, `deleted image ${path.basename(file)}`);
@@ -628,7 +614,6 @@ async function renameFile(from: string, to: string) {
         const oldImage = imageList.get(oldhash);
         if (oldImage)
             affectedModifiedDate = Math.min(affectedModifiedDate, oldImage.modifiedDate);
-        removeUniqueImage(oldImage);
         imageList.delete(oldhash);
         deleteTempImage(oldhash);
         
@@ -654,7 +639,6 @@ async function renameFile(from: string, to: string) {
 
     const image = getServerImage(full);
     imageList.set(newhash, image);
-    addUniqueImage(image);
     affectedModifiedDate = Math.min(affectedModifiedDate, image.modifiedDate);
     repairExplorationCaches([...imageList.values()], affectedModifiedDate, `renamed image ${path.basename(from)} to ${path.basename(to)}`);
     
@@ -706,126 +690,6 @@ async function checkFiles() {
 }
 //#endregion
 
-//#region unique images
-async function createUniqueListChunked(rebuild = false) {
-    uniqueSet = new Set();
-    uniqueReverse = new Map();
-
-    if (!rebuild) {
-        // add known uniques
-        lazy(imageList.values()).filter(x => x.isUnique === 1).forEach(x => {
-            uniqueSet.add(x.id);
-            uniqueReverse.set(x.hash, x.id);
-        });
-
-        // handle unknowns
-        const missing = lazy(imageList.values()).filter(x => x.isUnique === -1).map(x => x.id).collect();
-        const total = missing.length;
-        const start = Date.now();
-        const batch = 1000;
-        let progress = 0;
-
-        while (missing.length) {
-            for (const id of missing.splice(0, batch)) {
-                const image = imageList.get(id)!;
-                addUniqueImage(image);
-            }
-            progress += batch;
-            updateLine(`Building unique list: ${progress}/${total} | estimate: ${calcTimeRemaining(start, progress, total)}`);
-            await sleep(10);
-        }
-        setTimeout(() => {
-            MetaCalcDB.clearUniques(true);
-        }, 1000);
-        return;
-    }
-
-    const chunksize = 1000;
-    const templist = [...imageList.values()];
-    for (let i = 0; i < templist.length; i += chunksize) {
-        const chunk = templist.slice(i, i + chunksize);
-        for (const image of chunk) {
-            if (!image.positive)
-                continue;
-            hashPrompt(image);
-            if (!uniqueReverse.has(image.hash)) {
-                uniqueReverse.set(image.hash, image.id);
-            }
-        }
-        await sleep(10);
-    }
-
-    for (const ids of [...uniqueReverse.values()]) {
-        uniqueSet.add(ids[0]);
-    }
-
-    MetaCalcDB.clearUniques(false);
-    MetaCalcDB.setAllUnique([...uniqueSet.keys()], true);
-}
-
-let uniqueSaveTimeout: NodeJS.Timeout | undefined;
-const unqiueAdds: string[] = [];
-const uniqueRems: string[] = [];
-/**
- * Mark image as unique. Image with the latest modifiedDate is marked if duplicate.
- * TODO: causes repeated DB access which is probably inefficient
- */
-export function addUniqueImage(image: ServerImage) {
-    hashPrompt(image);
-    if (!image.hash)
-        return;
-    const old = imageList.get(uniqueReverse.get(image.hash) ?? '');
-    if (old) {
-        if (image.modifiedDate < old.modifiedDate)
-            return;
-        uniqueSet.delete(old.id);
-        old.isUnique = 0;
-        uniqueRems.push(old.id);
-    }
-    uniqueReverse.set(image.hash, image.id);
-    uniqueSet.add(image.id);
-    unqiueAdds.push(image.id);
-
-    // defer db access for bulk updates
-    clearTimeout(uniqueSaveTimeout);
-    setTimeout(() => {
-        MetaCalcDB.setAllUnique(unqiueAdds, true);
-        MetaCalcDB.setAllUnique(uniqueRems, false);
-        uniqueRems.length = 0;
-        unqiueAdds.length = 0;
-    }, 1000);
-}
-
-let uniqueTimeout: NodeJS.Timeout | undefined;
-export function removeUniqueImage(image: ServerImage | undefined) {
-    if (!image)
-        return;
-    hashPrompt(image);
-    if (image.hash) {
-        if (uniqueSet.has(image.id)) {
-            uniqueSet.delete(image.id);
-            uniqueReverse.delete(image.hash);
-            MetaCalcDB.setUnique(image.id, false);
-            const ids = MetaCalcDB.getIdsByHash(image.hash);
-            const id = ids.map(x => ({ id: x, date: imageList.get(x)!.modifiedDate })).sort((a, b) => b.date - a.date)[0].id;
-            uniqueSet.add(id);
-            uniqueReverse.set(image.hash, id);
-            MetaCalcDB.setUnique(id, true);
-        }
-
-        if (uniqueSet.size !== uniqueReverse.size) {
-            printLine('uniqueSet and uniqueReverse are out of sync');
-            clearTimeout(uniqueTimeout);
-            uniqueTimeout = setTimeout(() => {
-                print('Attempting to rebuild unique list...');
-                createUniqueListChunked(true);
-                updateLine('Unique list rebuilt');
-            }, 5000);
-        }
-    }
-}
-//#endregion
-
 export function getImage(imageid: string) {
     const image = imageList.get(imageid);
     return image;
@@ -833,10 +697,6 @@ export function getImage(imageid: string) {
 
 export function getImageList() {
     return imageList;
-}
-
-export function isUnique(id: string) {
-    return uniqueSet.has(id);
 }
 
 export function getFreshImages(timestamp: number) {
@@ -918,7 +778,6 @@ export async function moveImages(ids: string | string[], folder: string) {
         try {
             await fs.rename(img.file, newPath);
             oldestMoved = Math.min(oldestMoved, img.modifiedDate);
-            removeUniqueImage(img);
             imageList.delete(id);
             deleteTextFiles(img.file);
             deleteTempImage(id);
@@ -996,7 +855,6 @@ export async function deleteImages(ids: string | string[]) {
         try {
             await fs.unlink(img.file);
             oldestDeleted = Math.min(oldestDeleted, img.modifiedDate);
-            removeUniqueImage(img);
             imageList.delete(id);
             deleteTextFiles(img.file);
             deleteTempImage(id);

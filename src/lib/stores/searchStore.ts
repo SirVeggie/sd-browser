@@ -1,6 +1,7 @@
 import { syncMemory } from "$lib/tools/syncStorage";
 import {
     defaultExplorationSettings,
+    coerceExplorationMode,
     isSimilarityAlgorithm,
     type ExplorationMode,
     type QualityMode,
@@ -47,7 +48,7 @@ export function buildSearchParams(searchText?: string): SearchParams {
         search: searchText ?? get(searchFilter),
         filters,
         matching: get(matchingMode),
-        explorationMode: get(explorationMode),
+        explorationMode: coerceExplorationMode(get(explorationMode)),
         sparseFrequency: get(sparseFrequency),
         similarityAlgorithm: isSimilarityAlgorithm(algorithm) ? algorithm : defaultExplorationSettings.similarityAlgorithm,
         similarityThreshold: get(similarityThreshold),

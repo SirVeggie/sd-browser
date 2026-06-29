@@ -1,6 +1,5 @@
 import type { ClientImage } from "./images";
 import {
-    isExplorationMode,
     isSortingMethod,
     isSimilarityAlgorithm,
     type ExplorationMode,
@@ -68,7 +67,7 @@ export function isImageRequest(object: any): object is ImageRequest {
         'search', 'filters', 'latestId', 'oldestId', 'sorting',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
         (o) => isSortingMethod(o.sorting),
-        (o) => isExplorationMode(o.explorationMode),
+        (o) => typeof o.explorationMode === 'string',
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
@@ -103,7 +102,7 @@ export function isUpdateRequest(object: any): object is UpdateRequest {
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
         (o) => isSortingMethod(o.sorting),
         (o) => Array.isArray(o.currentIds),
-        (o) => isExplorationMode(o.explorationMode),
+        (o) => typeof o.explorationMode === 'string',
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
@@ -198,7 +197,7 @@ export function isMatchRequest(object: any): object is MatchRequest {
     return testType(object, [
         'search', 'filters', 'matching',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
-        (o) => isExplorationMode(o.explorationMode),
+        (o) => typeof o.explorationMode === 'string',
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
@@ -228,7 +227,7 @@ export function isBulkRequest(object: any): object is BulkRequest {
     return testType(object, [
         'search', 'filters', 'matching', 'action',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
-        (o) => isExplorationMode(o.explorationMode),
+        (o) => typeof o.explorationMode === 'string',
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',

@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import exifr from 'exifr';
 import fs from 'fs/promises';
 import { fileExists, removeBasePath } from "./filetools";
-import { addUniqueImage, getImage, removeUniqueImage } from "./filemanager";
+import { getImage } from "./filemanager";
 import { MetaDB } from "./db";
 
 export function getServerImage(image: ServerImageFull): ServerImage {
@@ -22,7 +22,6 @@ export function getServerImage(image: ServerImageFull): ServerImage {
         params: prompts?.params ?? '',
         models: getModels(image.prompt, image.workflow, image.extra),
         hash: '',
-        isUnique: -1,
         annotation: '',
     };
     hashPrompt(result);
@@ -36,7 +35,6 @@ export function populateServerImage(image: ServerImage, info: ImageExtraData): S
     image.params = info.params;
     image.models = info.models ?? '[]';
     image.hash = info.hash;
-    image.isUnique = info.isUnique;
     image.annotation = info.annotation ?? '';
     return image;
 }
@@ -138,8 +136,11 @@ export async function updateImageMetadata(image: ServerImage, source: string) {
     }, source);
     image.preview = source;
     const newImage = getServerImage(newFull);
-    removeUniqueImage(image);
-    addUniqueImage(newImage);
+    image.positive = newImage.positive;
+    image.negative = newImage.negative;
+    image.params = newImage.params;
+    image.models = newImage.models;
+    image.hash = newImage.hash;
 }
 
 export function buildImageInfo(imageid: string): ImageInfo | undefined {

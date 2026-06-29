@@ -41,7 +41,6 @@ export type ServerImage = {
     params: string;
     models: string;
     hash: string;
-    isUnique: -1 | 0 | 1;
     annotation: string;
 };
 export function isServerImageSimple(object: any): object is ServerImage {
@@ -55,7 +54,6 @@ export type ImageExtraData = {
     params: string;
     models: string;
     hash: string;
-    isUnique: -1 | 0 | 1;
     annotation?: string | null;
 };
 
