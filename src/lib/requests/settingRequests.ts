@@ -1,7 +1,13 @@
 import { page } from "$app/stores";
 import { updateGlobalSettings } from "$lib/stores/globalSettings";
 import { doGet, doPost, doServerGet, doServerPost, type FetchType } from "$lib/tools/requests";
-import { isSettingResponse, type SettingsRequest } from "$lib/types/requests";
+import {
+    isRecalculateSimilarCacheResponse,
+    isSettingResponse,
+    type RecalculateSimilarCacheRequest,
+    type RecalculateSimilarCacheResponse,
+    type SettingsRequest,
+} from "$lib/types/requests";
 import { get } from "svelte/store";
 
 export async function pushGlobalSettings(search: SettingsRequest, fetch?: FetchType): Promise<void> {
@@ -30,4 +36,22 @@ export async function pullGlobalSettings(fetch?: FetchType) {
     }
     const settings = JSON.parse(res.settingsJson) as Record<string, any>;
     updateGlobalSettings(settings);
+}
+
+export async function recalculateSimilarCache(
+    request: RecalculateSimilarCacheRequest,
+    fetch?: FetchType,
+): Promise<RecalculateSimilarCacheResponse> {
+    if (!get(page).url)
+        throw new Error('Page not loaded');
+    let url = '/api/settings/similar-cache';
+    if (!fetch)
+        url = get(page).url.origin + url;
+    const res = await (fetch ? doPost(url, fetch, request) : doServerPost(url, request));
+
+    if ('error' in res)
+        throw new Error(res.error);
+    if (!isRecalculateSimilarCacheResponse(res))
+        throw new Error('Invalid similarity cache response');
+    return res;
 }

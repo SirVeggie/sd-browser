@@ -53,8 +53,8 @@
     div {
         position: fixed;
         top: 0;
-        left: calc(100dvw - var(--flyout-width));
         right: 0;
+        width: var(--flyout-width);
         bottom: 0;
         z-index: 50;
         overflow-y: scroll;

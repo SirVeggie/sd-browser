@@ -1,5 +1,6 @@
 import crypto from 'crypto';
-import { simplifyPrompt } from "$lib/tools/metadataInterpreter";
+import { similarityPromptText } from "$lib/tools/metadataInterpreter";
+import { calcProgress, calcTimeRemaining, updateLine } from "$lib/tools/misc";
 import type { ServerImage } from "$lib/types/images";
 import { isSimilarityAlgorithm, type ExplorationSettings, type SimilarityAlgorithm } from "$lib/types/misc";
 import { MiscDB } from "./db";
@@ -148,6 +149,17 @@ export function invalidateExplorationPools(reason?: string): void {
         console.log(`Cleared exploration runtime caches${reason ? `: ${reason}` : ''}`);
 }
 
+export function recalculateSimilarCache(
+    images: ServerImage[],
+    algorithm: SimilarityAlgorithm,
+    threshold: number,
+): Set<string> {
+    similarCache = undefined;
+    MiscDB.delete(similarCacheKey);
+    console.log('Cleared similar exploration cache for recalculation');
+    return getCachedSimilarPool(images, algorithm, threshold);
+}
+
 function sortByModifiedDate(images: ServerImage[]): ServerImage[] {
     return [...images].sort((a, b) => {
         if (a.modifiedDate !== b.modifiedDate)
@@ -224,24 +236,36 @@ function repairSimilarCache(images: ServerImage[], affectedModifiedDate: number)
         });
     const poolIds = selectedPrefix.map(image => image.id);
     let latestSelectedPrompt = selectedPrefix.length
-        ? simplifyPrompt(selectedPrefix[selectedPrefix.length - 1])
+        ? similarityPromptText(selectedPrefix[selectedPrefix.length - 1])
         : '';
     let startIndex = selectedPrefix.length ? firstIndexAtOrAfter(sorted, affectedModifiedDate) : 0;
 
     if (!selectedPrefix.length && sorted.length) {
         poolIds.push(sorted[0].id);
-        latestSelectedPrompt = simplifyPrompt(sorted[0]);
+        latestSelectedPrompt = similarityPromptText(sorted[0]);
         startIndex = 1;
     }
 
+    const repairTotal = sorted.length - startIndex;
+    const repairLog = `Repairing similar exploration cache (${existing.algorithm}, threshold ${existing.threshold})`;
+    const repairStart = Date.now();
+    if (repairTotal > 0)
+        updateLine(`${repairLog}...`);
+
     for (let i = startIndex; i < sorted.length; i++) {
-        const prompt = simplifyPrompt(sorted[i]);
+        const prompt = similarityPromptText(sorted[i]);
         const similarity = computeSimilarity(latestSelectedPrompt, prompt, existing.algorithm);
         if (similarity < existing.threshold) {
             poolIds.push(sorted[i].id);
             latestSelectedPrompt = prompt;
         }
+        const repaired = i - startIndex + 1;
+        if (repairTotal > 0 && (repaired % 1000 === 0 || repaired === repairTotal))
+            updateLine(repairLog + `: ${calcProgress(repaired, repairTotal)}% | estimate: ${calcTimeRemaining(repairStart, repaired, repairTotal)}`);
     }
+
+    if (repairTotal > 0)
+        updateLine('');
 
     const payload: SimilarCachePayload = {
         ...existing,
@@ -342,7 +366,6 @@ function getCachedSimilarPool(
         console.log('Similar exploration cache is stale or settings changed; recalculating');
 
     const start = Date.now();
-    console.log(`Calculating similar exploration cache for ${images.length} images (${algorithm}, threshold ${threshold})`);
     const pool = buildSimilarPool(images, algorithm, threshold);
     const payload: SimilarCachePayload = {
         type: 'similar',
@@ -379,34 +402,31 @@ function buildSimilarPool(
     if (sorted.length === 0)
         return pool;
 
+    const total = sorted.length;
+    const log = `Calculating similar exploration cache for ${total} images (${algorithm}, threshold ${threshold})`;
+    const tStart = Date.now();
+    updateLine(`${log}...`);
+
     pool.add(sorted[0].id);
-    let latestSelectedPrompt = simplifyPrompt(sorted[0]);
+    let latestSelectedPrompt = similarityPromptText(sorted[0]);
 
     for (let i = 1; i < sorted.length; i++) {
-        const prompt = simplifyPrompt(sorted[i]);
+        const prompt = similarityPromptText(sorted[i]);
         const similarity = computeSimilarity(latestSelectedPrompt, prompt, algorithm);
         if (similarity < threshold) {
             pool.add(sorted[i].id);
             latestSelectedPrompt = prompt;
         }
+        if (i % 1000 === 0 || i === sorted.length - 1)
+            updateLine(log + `: ${calcProgress(i + 1, total)}% | estimate: ${calcTimeRemaining(tStart, i + 1, total)}`);
     }
 
+    updateLine('');
     return pool;
 }
 
 function tokenize(text: string): string[] {
     return text.toLowerCase().split(/[\s,]+/).filter(Boolean);
-}
-
-function getTrigrams(text: string): string[] {
-    const normalized = text.toLowerCase();
-    if (normalized.length === 0)
-        return [];
-    const padded = `  ${normalized} `;
-    const trigrams: string[] = [];
-    for (let i = 0; i < padded.length - 2; i++)
-        trigrams.push(padded.slice(i, i + 3));
-    return trigrams;
 }
 
 function countMap(values: string[]): Map<string, number> {
@@ -460,36 +480,12 @@ function tokenCosine(a: string, b: string): number {
     return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-function charTrigramDice(a: string, b: string): number {
-    const trigramsA = getTrigrams(a);
-    const trigramsB = getTrigrams(b);
-    if (trigramsA.length === 0 && trigramsB.length === 0)
-        return 1;
-    if (trigramsA.length === 0 || trigramsB.length === 0)
-        return 0;
-
-    const countsA = countMap(trigramsA);
-    const countsB = countMap(trigramsB);
-    let intersection = 0;
-
-    for (const [trigram, countA] of countsA) {
-        const countB = countsB.get(trigram);
-        if (countB)
-            intersection += Math.min(countA, countB);
-    }
-
-    const total = trigramsA.length + trigramsB.length;
-    return (2 * intersection) / total;
-}
-
 export function computeSimilarity(a: string, b: string, algorithm: SimilarityAlgorithm): number {
     switch (algorithm) {
         case 'token-jaccard':
             return tokenJaccard(a, b);
         case 'token-cosine':
             return tokenCosine(a, b);
-        case 'char-trigram-dice':
-            return charTrigramDice(a, b);
         default: {
             const _never: never = algorithm;
             return _never;

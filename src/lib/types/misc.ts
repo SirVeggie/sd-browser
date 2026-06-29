@@ -35,7 +35,7 @@ export function coerceExplorationMode(mode: unknown): ExplorationMode {
     return defaultExplorationSettings.explorationMode;
 }
 
-export const similarityAlgorithms = ['token-jaccard', 'token-cosine', 'char-trigram-dice'] as const;
+export const similarityAlgorithms = ['token-jaccard', 'token-cosine'] as const;
 export type SimilarityAlgorithm = typeof similarityAlgorithms[number];
 export function isSimilarityAlgorithm(object: any): object is SimilarityAlgorithm {
     return similarityAlgorithms.includes(object);
@@ -52,7 +52,7 @@ export const defaultExplorationSettings: ExplorationSettings = {
     explorationMode: 'none',
     sparseFrequency: 25,
     similarityAlgorithm: 'token-jaccard',
-    similarityThreshold: 0.65,
+    similarityThreshold: 0.5,
 };
 
 const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'model', 'annotation'] as const;

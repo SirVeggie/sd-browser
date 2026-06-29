@@ -132,6 +132,30 @@ export function isSettingResponse(object: any): object is SettingsResponse {
     return testType(object, ['settingsJson']);
 }
 
+export type RecalculateSimilarCacheRequest = {
+    similarityAlgorithm: SimilarityAlgorithm;
+    similarityThreshold: number;
+};
+export function isRecalculateSimilarCacheRequest(object: any): object is RecalculateSimilarCacheRequest {
+    return testType(object, [
+        'similarityAlgorithm', 'similarityThreshold',
+        (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
+        (o) => typeof o.similarityThreshold === 'number',
+    ]);
+}
+
+export type RecalculateSimilarCacheResponse = {
+    poolSize: number;
+    imageCount: number;
+};
+export function isRecalculateSimilarCacheResponse(object: any): object is RecalculateSimilarCacheResponse {
+    return testType(object, [
+        'poolSize', 'imageCount',
+        (o) => typeof o.poolSize === 'number',
+        (o) => typeof o.imageCount === 'number',
+    ]);
+}
+
 export type Folder = {
     name: string;
     parent: string;

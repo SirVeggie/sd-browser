@@ -79,7 +79,7 @@
 
         --main-padding: 2em;
         --flyout-width: 0px;
-        --content-width: calc(100dvw - var(--flyout-width));
+        --content-width: calc(100% - var(--flyout-width));
         --flyout-button-reset: 1;
 
         .content {
@@ -96,8 +96,8 @@
                     --flyout-width: 50dvw;
                 }
                 @media (width < 650px) {
-                    --flyout-width: 100dvw;
-                    --content-width: 100dvw;
+                    --flyout-width: 100%;
+                    --content-width: 100%;
                 }
             }
 
@@ -108,8 +108,8 @@
                     --flyout-width: 50dvw;
                 }
                 @media (width < 1000px) {
-                    --flyout-width: 100dvw;
-                    --content-width: 100dvw;
+                    --flyout-width: 100%;
+                    --content-width: 100%;
                     --flyout-button-reset: 0;
                 }
             }
@@ -118,15 +118,15 @@
                 --flyout-width: 50dvw;
                 
                 @media (width < 1000px) {
-                    --flyout-width: 100dvw;
-                    --content-width: 100dvw;
+                    --flyout-width: 100%;
+                    --content-width: 100%;
                     --flyout-button-reset: 0;
                 }
             }
             
             &.flfull {
-                --flyout-width: 100dvw;
-                --content-width: 100dvw;
+                --flyout-width: 100%;
+                --content-width: 100%;
                 --flyout-button-reset: 0;
             }
         }

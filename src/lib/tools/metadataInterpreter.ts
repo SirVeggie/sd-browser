@@ -20,10 +20,16 @@ export function simplifyPrompt(image: ServerImage | undefined): string {
         .replace(/(, )?([^,]*)version: [^,]*/ig, '');
 }
 
+export function similarityPromptText(image: ServerImage | undefined): string {
+    if (!image)
+        return '';
+    return `${image.positive}\n${image.negative}`;
+}
+
 export function getMetadataVersion(prompt: string | undefined) {
     if (/^{"\d+":/.test(prompt ?? ''))
         return 'comfy';
-    if (/^{\s+"sui_image_params"/.test(prompt ?? ''))
+    if (/^{\s*"sui_image_params"/.test(prompt ?? ''))
         return 'swarm';
     return 'a1111';
 }
@@ -140,10 +146,7 @@ export function splitPromptParams(str: string): string[] {
 }
 
 const autoModelRegex = /Model: (.*?)(,|$)/;
-const QUOTED_MODEL_RE = /"((?:[^"\\]|\\.)*\.(?:safetensors|gguf|pt))"/gi;
-const UNQUOTED_MODEL_RE = /(?:^|[^\w./\\])((?:[\w ./\\()-])+?\.(?:safetensors|gguf|pt))(?!\w)/gi;
 const PRIMARY_EXCLUDE_RE = /vae|clip|encoder|depth|adapter|ipa|control/i;
-const MODEL_INPUT_KEYS = new Set(['ckpt_name', 'model', 'checkpoint', 'unet_name', 'vae_name', 'clip_name', 'lora_name']);
 
 export const UNKNOWN_MODEL = 'Unknown';
 export const MULTIPLE_MODELS = 'Multiple models';
@@ -160,6 +163,10 @@ function parseExtraJson(extra: string | undefined): Record<string, unknown> | un
 
 function isModelFilename(value: string): boolean {
     return /\.(safetensors|gguf|pt)$/i.test(value);
+}
+
+export function normalizeModelFilename(name: string): string {
+    return name.replace(/\\+/g, '\\').trim();
 }
 
 function addUniqueName(names: Set<string>, name: string | undefined) {
@@ -210,35 +217,11 @@ function getExplicitPrimaryModel(extra: string | undefined): string | undefined 
     return undefined;
 }
 
-export function extractModelFilenamesFromText(text: string): string[] {
-    const names = new Set<string>();
-
-    for (const match of text.matchAll(QUOTED_MODEL_RE)) {
-        let value: string;
-        try {
-            value = JSON.parse(match[0]) as string;
-        } catch {
-            value = match[1];
-        }
-        addUniqueName(names, value);
-    }
-
-    for (const match of text.matchAll(UNQUOTED_MODEL_RE))
-        addUniqueName(names, match[1]);
-
-    return [...names];
-}
-
 export function getModels(prompt: string | undefined, workflow: string | undefined, extra: string | undefined): string {
-    const names = new Set<string>();
-    for (const name of getExplicitModelNames(extra, prompt))
-        names.add(name);
-
-    const text = `${prompt ?? ''}\n${workflow ?? ''}`;
-    for (const name of extractModelFilenamesFromText(text))
-        names.add(name);
-
-    return JSON.stringify([...names]);
+    const names = [...new Set(
+        getModelCandidates(prompt, workflow, extra).map(candidate => normalizeModelFilename(candidate.model)),
+    )];
+    return JSON.stringify(names);
 }
 
 export function parseStoredModels(models: string | undefined): string[] {
@@ -305,13 +288,14 @@ function collectComfyModelCandidates(prompt: ComfyPrompt, ctx: ComfyWorkflowCont
     const seen = new Set<string>();
 
     const add = (model: string, info: Omit<ModelCandidate, 'model'>) => {
-        if (!isModelFilename(model))
+        const normalized = normalizeModelFilename(model);
+        if (!isModelFilename(normalized))
             return;
-        const key = `${info.nodeId ?? ''}:${model}:${info.inputKey ?? ''}`;
+        const key = `${info.nodeId ?? ''}:${normalized}:${info.inputKey ?? ''}`;
         if (seen.has(key))
             return;
         seen.add(key);
-        candidates.push({ model, ...info });
+        candidates.push({ model: normalized, ...info });
     };
 
     for (const id in prompt) {
@@ -322,15 +306,10 @@ function collectComfyModelCandidates(prompt: ComfyPrompt, ctx: ComfyWorkflowCont
         const className = promptNode.class_type ?? workflowNode?.type ?? '';
 
         for (const [inputKey, value] of Object.entries(promptNode.inputs ?? {})) {
-            if (typeof value !== 'string')
+            if (typeof value !== 'string' || !isModelFilename(value))
                 continue;
             const input = findWorkflowInput(workflowNode, inputKey);
             const widgetLabel = input ? resolveInputLabel(input, inputKey) : inputKey;
-            const isModelField = MODEL_INPUT_KEYS.has(inputKey.toLowerCase())
-                || MODEL_INPUT_KEYS.has(widgetLabel.toLowerCase())
-                || isModelFilename(value);
-            if (!isModelField)
-                continue;
             add(value, { nodeId: id, nodeTitle, className, inputKey, widgetLabel });
         }
     }
@@ -349,15 +328,10 @@ function collectComfyModelCandidates(prompt: ComfyPrompt, ctx: ComfyWorkflowCont
         for (const [innerId, widgetName] of proxyWidgets) {
             const promptNode = prompt[`${workflowNode.id}:${innerId}`];
             const value = promptNode?.inputs?.[widgetName];
-            if (typeof value !== 'string')
+            if (typeof value !== 'string' || !isModelFilename(value))
                 continue;
             const innerNode = findInnerNode(subgraph, innerId);
             const widgetLabel = resolveProxyWidgetLabel(subgraph, innerId, widgetName);
-            const isModelField = MODEL_INPUT_KEYS.has(widgetName.toLowerCase())
-                || MODEL_INPUT_KEYS.has(widgetLabel.toLowerCase())
-                || isModelFilename(value);
-            if (!isModelField)
-                continue;
             add(value, {
                 nodeId: `${workflowNode.id}:${innerId}`,
                 nodeTitle: innerNode?.title ?? containerTitle,
@@ -371,25 +345,22 @@ function collectComfyModelCandidates(prompt: ComfyPrompt, ctx: ComfyWorkflowCont
     return candidates;
 }
 
-function collectSimpleModelCandidates(
+function collectExplicitModelCandidates(
     extra: string | undefined,
     prompt: string | undefined,
-    text: string,
 ): ModelCandidate[] {
     const candidates: ModelCandidate[] = [];
     const seen = new Set<string>();
 
     const add = (model: string, info: Omit<ModelCandidate, 'model'> = {}) => {
-        if (!model || seen.has(model))
+        const normalized = normalizeModelFilename(model);
+        if (!normalized || !isModelFilename(normalized) || seen.has(normalized))
             return;
-        seen.add(model);
-        candidates.push({ model, ...info });
+        seen.add(normalized);
+        candidates.push({ model: normalized, ...info });
     };
 
     for (const name of getExplicitModelNames(extra, prompt))
-        add(name);
-
-    for (const name of extractModelFilenamesFromText(text))
         add(name);
 
     return candidates;
@@ -400,7 +371,6 @@ export function getModelCandidates(
     workflow: string | undefined,
     extra: string | undefined,
 ): ModelCandidate[] {
-    const text = `${prompt ?? ''}\n${workflow ?? ''}`;
     const version = getMetadataVersion(prompt);
 
     if (version === 'comfy' && prompt && workflow) {
@@ -408,24 +378,19 @@ export function getModelCandidates(
         const ctx = getComfyWorkflowContext(workflow);
         if (comfyPrompt && ctx) {
             const candidates = collectComfyModelCandidates(comfyPrompt, ctx);
-            const seen = new Set(candidates.map(candidate => candidate.model));
-            for (const name of extractModelFilenamesFromText(text)) {
-                if (!seen.has(name)) {
-                    candidates.push({ model: name });
-                    seen.add(name);
-                }
-            }
+            const seen = new Set(candidates.map(candidate => normalizeModelFilename(candidate.model)));
             for (const name of getExplicitModelNames(extra, prompt)) {
-                if (!seen.has(name)) {
-                    candidates.push({ model: name });
-                    seen.add(name);
-                }
+                const normalized = normalizeModelFilename(name);
+                if (!normalized || !isModelFilename(normalized) || seen.has(normalized))
+                    continue;
+                candidates.push({ model: normalized });
+                seen.add(normalized);
             }
             return sortModelCandidates(candidates);
         }
     }
 
-    return sortModelCandidates(collectSimpleModelCandidates(extra, prompt, text));
+    return sortModelCandidates(collectExplicitModelCandidates(extra, prompt));
 }
 
 export function getPrimaryModel(candidates: ModelCandidate[], extra: string | undefined): string {

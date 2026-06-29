@@ -44,7 +44,7 @@
         type SystemInstruction,
     } from "$lib/stores/llmStore";
     import { authLogout, authStore } from "$lib/stores/authStore";
-    import { pullGlobalSettings } from "$lib/requests/settingRequests";
+    import { pullGlobalSettings, recalculateSimilarCache } from "$lib/requests/settingRequests";
     import {
         closeContextMenu,
         openContextMenu,
@@ -62,6 +62,7 @@
     let editingInstruction: SystemInstruction | null = null;
     let modalInstructionName = "";
     let modalInstructionText = "";
+    let recalculatingSimilarCache = false;
 
     $: {
         const instructions = $llmStore.systemInstructions;
@@ -240,6 +241,24 @@
             ),
         }));
         notify(`Deleted instruction '${instruction.name}'`);
+    }
+
+    async function onRecalculateSimilarCache() {
+        if (recalculatingSimilarCache)
+            return;
+
+        recalculatingSimilarCache = true;
+        try {
+            const result = await recalculateSimilarCache({
+                similarityAlgorithm: $similarityAlgorithm,
+                similarityThreshold: $similarityThreshold,
+            });
+            notify(`Similarity cache recalculated (${result.poolSize}/${result.imageCount} images in pool)`);
+        } catch (e) {
+            notify(e instanceof Error ? e.message : 'Failed to recalculate similarity cache');
+        } finally {
+            recalculatingSimilarCache = false;
+        }
     }
 </script>
 
@@ -456,6 +475,12 @@
         <NumInput bind:value={$similarityThreshold} step="any" />
     </label>
 
+    <div class="similar-cache-action">
+        <Button on:click={onRecalculateSimilarCache}>
+            {recalculatingSimilarCache ? 'Recalculating...' : 'Recalculate similarity cache'}
+        </Button>
+    </div>
+
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         Initial amount of images loaded (default: 25)
@@ -554,6 +579,13 @@
     .gray {
         font-size: 0.8em;
         color: #aaa;
+    }
+
+    .similar-cache-action {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5em;
     }
 
     .sgroup {
