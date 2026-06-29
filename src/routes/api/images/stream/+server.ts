@@ -28,6 +28,7 @@ const staleCheckMs = 10_000;
 const debounceMs = 100;
 const streamYieldEvery = 50;
 const streamChunkIntervalMs = 100;
+const streamFirstChunkMaxImages = 200;
 const streamMaxChunkImages = 500;
 
 function formatEvent(data: unknown): Uint8Array {
@@ -155,7 +156,7 @@ export async function POST(e) {
                     const streamOptions = {
                         yieldEvery: streamYieldEvery,
                         chunkIntervalMs: streamChunkIntervalMs,
-                        firstChunkMaxImages: imageLimit,
+                        firstChunkMaxImages: streamFirstChunkMaxImages,
                         firstChunkMinMs: streamChunkIntervalMs,
                         maxChunkImages: streamMaxChunkImages,
                         isAborted,
