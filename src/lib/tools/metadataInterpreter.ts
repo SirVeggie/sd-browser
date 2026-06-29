@@ -757,6 +757,7 @@ type ComfyMetadataSectionDraft = {
     title: string;
     fields: ComfyMetadataField[];
     fieldContexts: ComfyFieldContext[];
+    nodeId?: number;
 };
 
 type ComfyMetadataFieldWithContext = {
@@ -783,7 +784,11 @@ function getLiteralFieldsWithContext(
             context: { workflowNode },
         });
     }
-    return results;
+    return results.sort((a, b) => {
+        const keyA = a.field.inputKey ?? a.field.label;
+        const keyB = b.field.inputKey ?? b.field.label;
+        return keyA.localeCompare(keyB);
+    });
 }
 
 function getPromotedSubgraphFieldsWithContext(
@@ -813,17 +818,23 @@ function getPromotedSubgraphFieldsWithContext(
             context: { workflowNode: containerNode, innerNode },
         });
     }
-    return results;
+    return results.sort((a, b) => {
+        const keyA = a.field.inputKey ?? a.field.label;
+        const keyB = b.field.inputKey ?? b.field.label;
+        return keyA.localeCompare(keyB);
+    });
 }
 
 function draftToSection(
     title: string,
     items: ComfyMetadataFieldWithContext[],
+    nodeId?: number,
 ): ComfyMetadataSectionDraft {
     return {
         title,
         fields: items.map(item => item.field),
         fieldContexts: items.map(item => item.context),
+        nodeId,
     };
 }
 
@@ -869,7 +880,7 @@ function filterSectionDraftForParamsText(
     }
     if (!fields.length)
         return undefined;
-    return { title: draft.title, fields };
+    return { title: draft.title, fields, nodeId: draft.nodeId };
 }
 
 function filterSectionDraft(
@@ -886,7 +897,7 @@ function filterSectionDraft(
     }
     if (!fields.length)
         return undefined;
-    return { title: draft.title, fields };
+    return { title: draft.title, fields, nodeId: draft.nodeId };
 }
 
 function buildComfyMetadataSectionDrafts(
@@ -894,7 +905,7 @@ function buildComfyMetadataSectionDrafts(
     ctx: ComfyWorkflowContext,
 ): ComfyMetadataSectionDraft[] {
     const drafts: ComfyMetadataSectionDraft[] = [];
-    const sortedNodes = [...(ctx.workflow.nodes ?? [])].sort((a, b) => a.order - b.order);
+    const sortedNodes = [...(ctx.workflow.nodes ?? [])].sort((a, b) => a.id - b.id);
 
     for (const workflowNode of sortedNodes) {
         const proxyWidgets = getProxyWidgets(workflowNode);
@@ -906,6 +917,7 @@ function buildComfyMetadataSectionDrafts(
             drafts.push(draftToSection(
                 resolveNodeTitle(workflowNode.id, prompt[String(workflowNode.id)], workflowNode, subgraph),
                 items,
+                workflowNode.id,
             ));
             continue;
         }
@@ -927,6 +939,7 @@ function buildComfyMetadataSectionDrafts(
         drafts.push(draftToSection(
             resolveNodeTitle(workflowNode.id, promptNode, workflowNode),
             items,
+            workflowNode.id,
         ));
     }
 
@@ -1105,9 +1118,15 @@ function isLongTextSection(section: ComfyMetadataSection): boolean {
     });
 }
 
+function compareComfyMetadataSectionNodeId(a: ComfyMetadataSection, b: ComfyMetadataSection): number {
+    const idA = a.nodeId ?? Number.MAX_SAFE_INTEGER;
+    const idB = b.nodeId ?? Number.MAX_SAFE_INTEGER;
+    return idA - idB;
+}
+
 function sortComfyMetadataSections(sections: ComfyMetadataSection[]): ComfyMetadataSection[] {
-    const longText = sections.filter(isLongTextSection);
-    const rest = sections.filter(section => !isLongTextSection(section));
+    const longText = sections.filter(isLongTextSection).sort(compareComfyMetadataSectionNodeId);
+    const rest = sections.filter(section => !isLongTextSection(section)).sort(compareComfyMetadataSectionNodeId);
     return [...longText, ...rest];
 }
 

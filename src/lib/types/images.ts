@@ -183,4 +183,5 @@ export type ComfyMetadataField = {
 export type ComfyMetadataSection = {
     title: string;
     fields: ComfyMetadataField[];
+    nodeId?: number;
 };
