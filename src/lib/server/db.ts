@@ -17,7 +17,9 @@ export class MetaDB {
         folder TEXT NOT NULL,
         modifiedDate INTEGER NOT NULL,
         createdDate INTEGER NOT NULL,
-        preview TEXT
+        preview TEXT,
+        width INTEGER,
+        height INTEGER
     )`;
     private static sqlCreateFull = `
     CREATE TABLE IF NOT EXISTS ${MetaDB.tFull} (
@@ -70,20 +72,67 @@ export class MetaDB {
         MetaDB.stmtGetRows = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE ROWID > ? AND ROWID <= ?`);
         MetaDB.stmtGetRowsShort = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE ROWID > ? AND ROWID <= ?`);
         MetaDB.stmtGetAllShort = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort}`);
-        MetaDB.stmtSetS = MetaDB.sdb.prepare(`INSERT OR REPLACE INTO ${MetaDB.tShort} (id, file, folder, modifiedDate, createdDate, preview) VALUES (?, ?, ?, ?, ?, ?)`);
+        MetaDB.stmtSetS = MetaDB.sdb.prepare(`INSERT OR REPLACE INTO ${MetaDB.tShort} (id, file, folder, modifiedDate, createdDate, preview, width, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
         MetaDB.stmtSetF = MetaDB.fdb.prepare(`INSERT OR REPLACE INTO ${MetaDB.tFull} (id, prompt, workflow, extra) VALUES (?, ?, ?, ?)`);
         MetaDB.stmtDeleteS = MetaDB.sdb.prepare(`DELETE FROM ${MetaDB.tShort} WHERE id = ?`);
         MetaDB.stmtDeleteF = MetaDB.fdb.prepare(`DELETE FROM ${MetaDB.tFull} WHERE id = ?`);
         MetaDB.stmtCount = MetaDB.sdb.prepare(`SELECT COUNT(*) FROM ${MetaDB.tShort}`);
     }
 
-    static ensureColumnFull(column: string, definition: string) {
-        MetaDB.setup();
-        const result = MetaDB.fdb.prepare(`select count(*) as count from pragma_table_info('${MetaDB.tFull}') where name = ?`).get(column) as { count: number; };
-        if (!result.count) {
-            console.log(`Adding column '${column} ${definition}' to the metadata database`);
-            MetaDB.fdb.prepare(`ALTER TABLE ${MetaDB.tFull} ADD ${column} ${definition}`).run();
+    static ensureColumnShort(column: string, definition: string) {
+        const shortPath = path.join(datapath, MetaDB.fShort);
+        if (!fileExistsSync(shortPath))
+            return;
+
+        const db = new Database(shortPath);
+        try {
+            const result = db.prepare(`select count(*) as count from pragma_table_info('${MetaDB.tShort}') where name = ?`).get(column) as { count: number; };
+            if (!result.count) {
+                console.log(`Adding column '${column} ${definition}' to the short metadata table`);
+                db.prepare(`ALTER TABLE ${MetaDB.tShort} ADD ${column} ${definition}`).run();
+            }
+        } finally {
+            db.close();
         }
+    }
+
+    static ensureColumnFull(column: string, definition: string) {
+        const fullPath = path.join(datapath, MetaDB.fFull);
+        if (!fileExistsSync(fullPath))
+            return;
+
+        const db = new Database(fullPath);
+        try {
+            const result = db.prepare(`select count(*) as count from pragma_table_info('${MetaDB.tFull}') where name = ?`).get(column) as { count: number; };
+            if (!result.count) {
+                console.log(`Adding column '${column} ${definition}' to the metadata database`);
+                db.prepare(`ALTER TABLE ${MetaDB.tFull} ADD ${column} ${definition}`).run();
+            }
+        } finally {
+            db.close();
+        }
+    }
+
+    static updateDimensions(updates: { id: string; width: number; height: number }[]) {
+        if (!updates.length)
+            return;
+        MetaDB.setup();
+        const stmt = MetaDB.sdb.prepare(`UPDATE ${MetaDB.tShort} SET width = ?, height = ? WHERE id = ?`);
+        MetaDB.sdb.transaction((items: { id: string; width: number; height: number }[]) => {
+            for (const item of items) {
+                stmt.run(item.width, item.height, item.id);
+            }
+        })(updates);
+    }
+
+    static countMissingDimensions(): number {
+        MetaDB.setup();
+        return Number(MetaDB.sdb.prepare(`SELECT COUNT(*) FROM ${MetaDB.tShort} WHERE width IS NULL OR height IS NULL`).pluck().get());
+    }
+
+    static getShortBatchMissingDimensions(limit: number): ServerImage[] {
+        MetaDB.setup();
+        return MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE width IS NULL OR height IS NULL LIMIT ?`).all(limit) as ServerImage[];
     }
 
     static dropTable(name: string) {
@@ -205,7 +254,7 @@ export class MetaDB {
 
     static set(image: ServerImageFull) {
         MetaDB.setup();
-        MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview);
+        MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview, image.width ?? null, image.height ?? null);
         MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow, image.extra);
     }
 
@@ -215,7 +264,7 @@ export class MetaDB {
         MetaDB.setup();
         MetaDB.sdb.transaction((images: ServerImageFull[]) => {
             for (const image of images) {
-                MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview);
+                MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview, image.width ?? null, image.height ?? null);
             }
         })(images);
         MetaDB.fdb.transaction((images: ServerImageFull[]) => {
@@ -258,7 +307,7 @@ export class MetaDB {
             for (const id of deletions)
                 MetaDB.stmtDeleteS.run(id);
             for (const image of images)
-                MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview);
+                MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview, image.width ?? null, image.height ?? null);
         })(deletions, images);
 
         MetaDB.fdb.transaction((deletions: string[], images: ServerImageFull[]) => {
@@ -326,11 +375,19 @@ export class MetaCalcDB {
     }
 
     static ensureColumn(column: string, definition: string) {
-        MetaCalcDB.setup();
-        const result = MetaCalcDB.db.prepare(`select count(*) as count from pragma_table_info('${MetaCalcDB.table}') where name = ?`).get(column) as { count: number; };
-        if (!result.count) {
-            console.log(`Adding column '${column} ${definition}' to the extradata table`);
-            MetaCalcDB.db.prepare(`ALTER TABLE ${MetaCalcDB.table} ADD ${column} ${definition}`).run();
+        const fullpath = path.join(datapath, MetaCalcDB.file);
+        if (!fileExistsSync(fullpath))
+            return;
+
+        const db = new Database(fullpath);
+        try {
+            const result = db.prepare(`select count(*) as count from pragma_table_info('${MetaCalcDB.table}') where name = ?`).get(column) as { count: number; };
+            if (!result.count) {
+                console.log(`Adding column '${column} ${definition}' to the extradata table`);
+                db.prepare(`ALTER TABLE ${MetaCalcDB.table} ADD ${column} ${definition}`).run();
+            }
+        } finally {
+            db.close();
         }
     }
 

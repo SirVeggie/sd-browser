@@ -13,6 +13,8 @@ export type ServerImageFull = {
     prompt: string;
     workflow: string;
     extra: string;
+    width?: number;
+    height?: number;
 };
 export function isServerImage(object: any): object is ServerImageFull {
     return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'prompt', 'workflow', 'extra']);
@@ -42,6 +44,8 @@ export type ServerImage = {
     models: string;
     hash: string;
     annotation: string;
+    width?: number;
+    height?: number;
 };
 export function isServerImageSimple(object: any): object is ServerImage {
     return testType(object, ['id', 'file', 'folder', 'modifiedDate', 'createdDate', 'preview', 'positive', 'negative', 'params', 'models']);
@@ -61,6 +65,8 @@ export type ClientImage = {
     id: string;
     url: string;
     type?: 'image' | 'video';
+    width?: number;
+    height?: number;
 };
 export function isClientImage(object: any): object is ClientImage {
     return testType(object, ['id', 'url']);
@@ -79,6 +85,8 @@ export type ImageInfo = {
     params?: string;
     models?: string;
     annotation?: string;
+    width?: number;
+    height?: number;
 };
 
 export type ModelCandidate = {

@@ -73,6 +73,7 @@
     let info = "";
     info += `Model: ${primary}`;
     if (hash) info += ` [${hash}]`;
+    if (d.width && d.height) info += `\nSize: ${d.width}x${d.height}`;
     info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
     info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
     if (d.folder) info += `\nFolder: ${d.folder}`;

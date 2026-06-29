@@ -1,8 +1,9 @@
 import { MiscDB } from '../db';
 import { migrateV1 } from './v1';
 import { migrateV2 } from './v2';
+import { migrateV3 } from './v3';
 
-export const APP_VERSION = 2;
+export const APP_VERSION = 3;
 
 function parseStoredVersion(storedVersion: string | undefined): number {
     if (!storedVersion)
@@ -31,6 +32,10 @@ export async function handleMigrationStart() {
     if (version < 2) {
         await migrateV2();
         bumpVersion(2);
+    }
+    if (version < 3) {
+        await migrateV3();
+        bumpVersion(3);
     }
 }
 

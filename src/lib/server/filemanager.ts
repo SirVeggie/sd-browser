@@ -14,7 +14,9 @@ import { MetaCalcDB, MetaDB } from './db';
 import type { ImageExtraData, ImageList, ServerImage, ServerImageFull, TimedImage } from '$lib/types/images';
 import { deleteTempImage, fileExists, fileUniquefy, removeBasePath, removeFolderFromPath, splitExtension } from './filetools';
 import { handleMigrationEnd, handleMigrationStart } from './migration';
+import { backfillImageDimensions } from './migration/v3';
 import { getServerImage, hashPath, populateServerImage, readMetadata, readMetadataFromExif, readMetadataFromFile, updateImageMetadata } from './imageUtils';
+import { populateMediaDimensions } from './imageDimensions';
 import { invalidateExplorationPools, repairExplorationCaches, repairUniqueCacheAfterDeletes, repairUniqueCacheOnAdd, verifyExplorationCaches } from './exploration';
 import { notifyImageChange } from './imageChangeHub';
 
@@ -50,6 +52,10 @@ export async function indexFiles() {
     fs.mkdir(datapath).catch(() => '');
     fs.mkdir(thumbnailPath).catch(() => '');
     fs.mkdir(compressedPath).catch(() => '');
+
+    if (MetaDB.countMissingDimensions()) {
+        await backfillImageDimensions();
+    }
 
     // read cached data
     // eslint-disable-next-line prefer-const
@@ -287,6 +293,7 @@ async function indexBasicFileData(templist: ServerImageFull[]): Promise<ServerIm
             const stats = await fs.stat(x.file);
             x.modifiedDate = stats.mtimeMs;
             x.createdDate = stats.birthtimeMs;
+            await populateMediaDimensions(x);
             if (x.modifiedDate > 0) count++;
             return x;
         } catch {

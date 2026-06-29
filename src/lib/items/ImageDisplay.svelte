@@ -25,9 +25,25 @@
     $: src = `${img.url}?${getQualityParam($thumbMode)}&defer=true&${getPreviewParam(img.type, $animatedThumb)}`;
     $: active = !!onClick;
     $: seamless = $seamlessStyle;
+    $: hasDimensions = !!(img.width && img.height);
+    $: containerStyle = hasDimensions
+        ? `aspect-ratio: ${img.width} / ${img.height}`
+        : undefined;
+    $: {
+        src;
+        hasLoaded = false;
+    }
 </script>
 
-<div class="base" class:active class:seamless class:unselect>
+<div
+    class="base"
+    class:active
+    class:seamless
+    class:unselect
+    class:has-dimensions={hasDimensions}
+    class:loaded={hasLoaded}
+    style={containerStyle}
+>
     <Clickable up={onClick} contextMenu={onContext}>
         {#if !hasLoaded}
             <div class="loading">
@@ -42,6 +58,8 @@
                 muted
                 preload="metadata"
                 class={cx(!hasLoaded && "hidden")}
+                width={hasDimensions ? img.width : undefined}
+                height={hasDimensions ? img.height : undefined}
                 on:canplay={() => (hasLoaded = true)}
             >
                 <source {src} type="video/mp4" />
@@ -51,6 +69,8 @@
                 class={cx(!hasLoaded && "hidden")}
                 {src}
                 alt={img.id}
+                width={hasDimensions ? img.width : undefined}
+                height={hasDimensions ? img.height : undefined}
                 on:load={() => (hasLoaded = true)}
             />
         {/if}
@@ -88,6 +108,43 @@
             }
         }
 
+        &.has-dimensions {
+            img,
+            video {
+                height: 100%;
+                object-fit: contain;
+
+                &.hidden {
+                    inset: 0;
+                }
+            }
+
+            .loading {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+        }
+
+        &:not(.has-dimensions) {
+            .loading {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 20em;
+                width: 100%;
+            }
+
+            &.loaded img,
+            &.loaded video {
+                height: auto;
+                position: static;
+                opacity: 1;
+            }
+        }
+
         &.active:hover,
         &.active:has(:focus-visible) {
             outline: 1px solid #fffa;
@@ -119,11 +176,6 @@
     }
 
     .loading {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 20em;
-        width: 100%;
         color: #ddd;
         font-weight: bold;
         transition: opacity 0.4s ease;

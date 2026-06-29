@@ -15,6 +15,8 @@ export function expandClientImages(images: Omit<ClientImage, 'url'>[]): ClientIm
         id: img.id,
         url: `/api/images/${img.id}`,
         type: img.type,
+        width: img.width || undefined,
+        height: img.height || undefined,
     }));
 }
 
@@ -22,6 +24,8 @@ export function mapServerImageToClient(images: ServerImage[]): Omit<ClientImage,
     return images.map(img => ({
         id: img.id,
         type: getImageType(img),
+        width: img.width || undefined,
+        height: img.height || undefined,
     }));
 }
 

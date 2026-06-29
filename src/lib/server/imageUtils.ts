@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import { fileExists, removeBasePath } from "./filetools";
 import { getImage } from "./filemanager";
 import { MetaDB } from "./db";
+import { populateMediaDimensions } from "./imageDimensions";
 
 export function getServerImage(image: ServerImageFull): ServerImage {
     const prompts = getPrompts(image.prompt, image.workflow, image.extra);
@@ -23,6 +24,8 @@ export function getServerImage(image: ServerImageFull): ServerImage {
         models: getModels(image.prompt, image.workflow, image.extra),
         hash: '',
         annotation: '',
+        width: image.width,
+        height: image.height,
     };
     hashPrompt(result);
     return result;
@@ -119,6 +122,8 @@ export async function readMetadata(image: ServerImageFull, source?: string): Pro
     } catch {
         console.log(`Failed to read metadata for ${image.file}`);
         return image;
+    } finally {
+        await populateMediaDimensions(image);
     }
 }
 
@@ -141,6 +146,8 @@ export async function updateImageMetadata(image: ServerImage, source: string) {
     image.params = newImage.params;
     image.models = newImage.models;
     image.hash = newImage.hash;
+    image.width = newFull.width;
+    image.height = newFull.height;
 }
 
 export function buildImageInfo(imageid: string): ImageInfo | undefined {
@@ -161,5 +168,7 @@ export function buildImageInfo(imageid: string): ImageInfo | undefined {
         workflow: full?.workflow,
         extra: full?.extra,
         annotation: image.annotation,
+        width: image.width || undefined,
+        height: image.height || undefined,
     };
 }

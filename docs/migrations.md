@@ -46,3 +46,23 @@ Example: no stored version (treated as 0 internally) runs v1 if old files exist,
 **Verify:** Upgrade from v1 library; extradata repopulates; exploration with old `'unique'` setting falls back to `'none'`.
 
 **Removal:** Safe once all libraries report version ≥ 2.
+
+## v2 → v3 — Image dimensions for layout stability
+
+**When:** Stored version &lt; 3.
+
+**Assumes:** v2 file layout (split sqlite files with short + workflows tables).
+
+**Code:** `src/lib/server/migration/v3.ts`, `src/lib/server/imageDimensions.ts`
+
+**What changed:**
+
+- Added nullable `width` and `height` columns to the short metadata table.
+- Full backfill on upgrade reads dimensions from each indexed file (sharp for images, ffprobe for videos).
+- Search API and `ClientImage` include dimensions when known.
+- Grid thumbnails reserve space via `aspect-ratio` when dimensions are known.
+- Full image view shows `Size: [width]x[height]` under the model line.
+
+**Verify:** Upgrade from v2 library; grid cells no longer jump on load; full view shows size for indexed images.
+
+**Removal:** Safe once all libraries report version ≥ 3.
