@@ -22,7 +22,7 @@
         type InputEvent,
         type SortingMethod,
     } from "$lib/types/misc";
-    import { onMount, tick } from "svelte";
+    import { afterUpdate, onMount, tick } from "svelte";
     import { fade } from "svelte/transition";
     import {
         nsfwMode,
@@ -36,7 +36,7 @@
         syncSearchInput,
         type SearchParams,
     } from "$lib/stores/searchStore";
-    import { imageSize, seamlessStyle } from "$lib/stores/styleStore";
+    import { imageSize, masonryLayout, seamlessStyle } from "$lib/stores/styleStore";
     import {
         closeAllContextMenus,
         type ContextMenuOption,
@@ -50,6 +50,19 @@
         INITIAL_LOAD_THROTTLE_MS,
         isNearBottom,
     } from "$lib/tools/scrollLoadMore";
+    import {
+        AUTOLOAD_SUPPRESS_AFTER_LAYOUT_MS,
+        getGridMetrics,
+        MasonryPlacer,
+        RESIZE_DEBOUNCE_IMAGE_THRESHOLD,
+        RESIZE_LAYOUT_DEBOUNCE_MS,
+        type MasonryColumn,
+    } from "$lib/tools/masonryLayout";
+    import {
+        captureScrollAnchor,
+        restoreScrollAnchor,
+        type ScrollAnchor,
+    } from "$lib/tools/scrollAnchor";
     import type { ClientImage, ImageInfo } from "$lib/types/images";
     import type { UpdateResponse } from "$lib/types/requests";
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
@@ -82,9 +95,28 @@
     const selection = createSelection();
     let anchorElement: HTMLDivElement;
     let scrollSessionStart = Date.now();
+    let scrollLoadSession = 0;
     let lastAutoLoadTime = 0;
     let scrollRaf: number | undefined;
     const loadedImageIds = new Set<string>();
+    const masonryPlacer = new MasonryPlacer();
+    let gridElement: HTMLDivElement | undefined;
+    let masonryColumns: MasonryColumn[] = [];
+    let masonryRaf: number | undefined;
+    let gridResizeObserver: ResizeObserver | undefined;
+    let observedGrid: HTMLDivElement | undefined;
+    let observedGridWidth = 0;
+    let lastColumnCount = 0;
+    let resizeDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+    let resizeAnchor: ScrollAnchor | null = null;
+    let gridResizing = false;
+    let gridRevealing = false;
+    let gridRevealVisible = false;
+    let gridRevealTimer: ReturnType<typeof setTimeout> | undefined;
+    const GRID_REVEAL_MS = 180;
+    let resizePreserveHeight = 0;
+    let resizeFrozenColumns = 0;
+    let suppressAutoLoadUntil = 0;
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !currentImage
@@ -99,7 +131,226 @@
     $: seamless = $seamlessStyle;
     $: selection.setObjects(paginated.map((x) => x.id));
     $: slideshowInterval = Math.max($slideDelay, 100);
-    $: gridStyle = `--size-offset:${parseSizeOffset($imageSize)}`;
+    $: gridStyle = buildGridStyle(
+        $imageSize,
+        gridResizing,
+        resizePreserveHeight,
+        resizeFrozenColumns,
+        $masonryLayout,
+    );
+
+    $: if (!$masonryLayout) {
+        masonryPlacer.reset("");
+        masonryColumns = [];
+    }
+
+    $: if ($masonryLayout && gridElement) {
+        paginated;
+        searchSessionId;
+        $imageSize;
+        seamless;
+        scheduleMasonryDataLayout();
+    }
+
+    $: if (gridElement && !$masonryLayout) {
+        $imageSize;
+        seamless;
+        void applyGridSettingsLayout();
+    }
+
+    function scheduleMasonryDataLayout() {
+        if (masonryRaf !== undefined) cancelAnimationFrame(masonryRaf);
+        masonryRaf = requestAnimationFrame(() => {
+            masonryRaf = undefined;
+            void updateMasonryLayout();
+        });
+    }
+
+    function suppressAutoLoadBriefly() {
+        suppressAutoLoadUntil =
+            Date.now() + AUTOLOAD_SUPPRESS_AFTER_LAYOUT_MS;
+        lastAutoLoadTime = Date.now();
+    }
+
+    async function restoreScrollAfterLayout(anchor: ScrollAnchor | null) {
+        if (!anchor) return;
+        restoreScrollAnchor(anchor);
+        await tick();
+        requestAnimationFrame(() => {
+            restoreScrollAnchor(anchor);
+        });
+    }
+
+    async function updateMasonryLayout() {
+        if (!$masonryLayout || !gridElement) return;
+        await tick();
+        await applyColumnCountChange(getGridMetrics(gridElement), true);
+    }
+
+    async function applyGridSettingsLayout() {
+        if (!gridElement || $masonryLayout) return;
+        await tick();
+        await applyColumnCountChange(getGridMetrics(gridElement), false);
+    }
+
+    async function applyColumnCountChange(
+        metrics: ReturnType<typeof getGridMetrics>,
+        masonryReflow: boolean,
+    ) {
+        if (!gridElement) return;
+
+        const columnCountChanged =
+            lastColumnCount !== 0 &&
+            metrics.columnCount !== lastColumnCount;
+
+        if (lastColumnCount === 0) {
+            if (masonryReflow) {
+                masonryColumns = masonryPlacer.layout(
+                    paginated,
+                    searchSessionId,
+                    metrics,
+                );
+            }
+            lastColumnCount = metrics.columnCount;
+            return;
+        }
+
+        if (!columnCountChanged) {
+            if (masonryReflow) {
+                masonryColumns = masonryPlacer.layout(
+                    paginated,
+                    searchSessionId,
+                    metrics,
+                );
+            }
+            return;
+        }
+
+        const anchor = captureScrollAnchor(gridElement);
+        suppressAutoLoadBriefly();
+
+        if (masonryReflow) {
+            masonryColumns = masonryPlacer.layout(
+                paginated,
+                searchSessionId,
+                metrics,
+            );
+            await tick();
+        }
+
+        await restoreScrollAfterLayout(anchor);
+        lastColumnCount = metrics.columnCount;
+    }
+
+    function buildGridStyle(
+        imageSize: string,
+        resizing: boolean,
+        preserveHeight: number,
+        frozenColumns: number,
+        masonry: boolean,
+    ) {
+        const parts = [`--size-offset:${parseSizeOffset(imageSize)}`];
+        if (resizing && preserveHeight > 0) {
+            parts.push(`min-height:${preserveHeight}px`);
+        }
+        if (resizing && !masonry && frozenColumns > 0) {
+            parts.push(`--resize-columns:${frozenColumns}`);
+        }
+        return parts.join(";");
+    }
+
+    function clearGridReveal() {
+        if (gridRevealTimer !== undefined) {
+            clearTimeout(gridRevealTimer);
+            gridRevealTimer = undefined;
+        }
+        gridRevealing = false;
+        gridRevealVisible = false;
+    }
+
+    function startGridReveal() {
+        clearGridReveal();
+        gridRevealing = true;
+        gridRevealVisible = false;
+
+        void tick().then(() => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    gridRevealVisible = true;
+                    gridRevealTimer = setTimeout(() => {
+                        gridRevealTimer = undefined;
+                        gridRevealing = false;
+                        gridRevealVisible = false;
+                    }, GRID_REVEAL_MS);
+                });
+            });
+        });
+    }
+
+    function beginGridResize() {
+        if (!gridElement || gridResizing) return;
+
+        clearGridReveal();
+        resizeAnchor = captureScrollAnchor(gridElement);
+        resizePreserveHeight = gridElement.offsetHeight;
+        resizeFrozenColumns =
+            lastColumnCount || getGridMetrics(gridElement).columnCount;
+        gridResizing = true;
+    }
+
+    function handleGridResize() {
+        if (!gridElement) return;
+        beginGridResize();
+
+        const debounceMs =
+            paginated.length <= RESIZE_DEBOUNCE_IMAGE_THRESHOLD
+                ? 80
+                : RESIZE_LAYOUT_DEBOUNCE_MS;
+
+        if (resizeDebounceTimer !== undefined) {
+            clearTimeout(resizeDebounceTimer);
+        }
+        resizeDebounceTimer = setTimeout(() => {
+            resizeDebounceTimer = undefined;
+            void finishGridResize();
+        }, debounceMs);
+    }
+
+    async function finishGridResize() {
+        if (!gridElement) return;
+
+        const metrics = getGridMetrics(gridElement);
+        const newColumnCount = metrics.columnCount;
+        const anchor = resizeAnchor;
+        const columnCountChanged =
+            lastColumnCount !== 0 && newColumnCount !== lastColumnCount;
+
+        suppressAutoLoadBriefly();
+
+        if ($masonryLayout && columnCountChanged) {
+            masonryColumns = masonryPlacer.layout(
+                paginated,
+                searchSessionId,
+                metrics,
+            );
+            await tick();
+        }
+
+        gridResizing = false;
+        resizePreserveHeight = 0;
+        resizeFrozenColumns = 0;
+        resizeAnchor = null;
+
+        await tick();
+        await restoreScrollAfterLayout(anchor);
+        lastColumnCount = newColumnCount;
+        startGridReveal();
+    }
+
+    function syncInitialColumnCount() {
+        if (!gridElement || lastColumnCount !== 0) return;
+        lastColumnCount = getGridMetrics(gridElement).columnCount;
+    }
 
     onMount(() => {
         scrollToTop();
@@ -109,8 +360,27 @@
         window.addEventListener("keydown", keylistener);
         window.addEventListener("scroll", onScroll, { passive: true });
 
+        gridResizeObserver = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (!entry) return;
+
+            const width = entry.contentRect.width;
+            if (observedGridWidth === 0) {
+                observedGridWidth = width;
+                return;
+            }
+            if (Math.abs(width - observedGridWidth) < 0.5) return;
+
+            observedGridWidth = width;
+            handleGridResize();
+        });
+
         return () => {
             clearTimeout(inputTimer);
+            if (resizeDebounceTimer !== undefined) {
+                clearTimeout(resizeDebounceTimer);
+            }
+            clearGridReveal();
             updateSessionId++;
             streamAbort?.abort();
             streamAbort = undefined;
@@ -119,7 +389,19 @@
             window.removeEventListener("keydown", keylistener);
             window.removeEventListener("scroll", onScroll);
             if (scrollRaf !== undefined) cancelAnimationFrame(scrollRaf);
+            if (masonryRaf !== undefined) cancelAnimationFrame(masonryRaf);
+            gridResizeObserver?.disconnect();
         };
+    });
+
+    afterUpdate(() => {
+        if (!gridElement || !gridResizeObserver) return;
+        if (gridElement === observedGrid) return;
+        if (observedGrid) gridResizeObserver.unobserve(observedGrid);
+        gridResizeObserver.observe(gridElement);
+        observedGrid = gridElement;
+        observedGridWidth = gridElement.getBoundingClientRect().width;
+        syncInitialColumnCount();
     });
 
     function parseSizeOffset(str: string) {
@@ -233,12 +515,14 @@
         scrollToTop();
         currentAmount = initialAmount;
         resetScrollLoadSession();
+        lastColumnCount = 0;
     }
 
     function resetScrollLoadSession() {
         scrollSessionStart = Date.now();
         lastAutoLoadTime = 0;
         loadedImageIds.clear();
+        scrollLoadSession++;
     }
 
     function onScroll() {
@@ -261,6 +545,7 @@
     }
 
     function canAutoLoadMore() {
+        if (Date.now() < suppressAutoLoadUntil) return false;
         if (!hasMoreImagesToLoad()) return false;
         if (Date.now() - lastAutoLoadTime < AUTO_LOAD_DEBOUNCE_MS) return false;
 
@@ -784,20 +1069,62 @@
     {/if}
 </div>
 
-<div class="grid" class:seamless style={gridStyle}>
-    {#each paginated as img (img.id)}
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <div id={`img_${img.id}`} class:selecting on:click={selectImg(img.id)}>
-            <ImageDisplay
-                {img}
-                unselect={selecting && !$selection.includes(img.id)}
-                onClick={!selecting && ((e) => openImage(img, e))}
-                onContext={handleImgContext(img.id)}
-                onLoaded={() => handleImageLoaded(img.id)}
-            />
-        </div>
-    {/each}
+<div
+    class="grid"
+    class:seamless
+    class:masonry={$masonryLayout}
+    class:resizing={gridResizing}
+    class:revealing={gridRevealing}
+    class:reveal-visible={gridRevealVisible}
+    style={gridStyle}
+    bind:this={gridElement}
+>
+    <div class="masonry-probe" aria-hidden="true"></div>
+    <div class="resize-overlay" aria-hidden="true" class:visible={gridResizing}>
+        <p>Adjusting layout…</p>
+    </div>
+    <div class="grid-content">
+        {#if $masonryLayout}
+            {#each masonryColumns as column (column.key)}
+                <div class="masonry-column">
+                    {#each column.items as img (img.id)}
+                        <!-- svelte-ignore a11y-no-static-element-interactions -->
+                        <!-- svelte-ignore a11y-click-events-have-key-events -->
+                        <div
+                            id={`img_${img.id}`}
+                            class:selecting
+                            on:click={selectImg(img.id)}
+                        >
+                            <ImageDisplay
+                                {img}
+                                loadSession={scrollLoadSession}
+                                unselect={selecting &&
+                                    !$selection.includes(img.id)}
+                                onClick={!selecting && ((e) => openImage(img, e))}
+                                onContext={handleImgContext(img.id)}
+                                onLoaded={() => handleImageLoaded(img.id)}
+                            />
+                        </div>
+                    {/each}
+                </div>
+            {/each}
+        {:else}
+            {#each paginated as img (img.id)}
+                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                <div id={`img_${img.id}`} class:selecting on:click={selectImg(img.id)}>
+                    <ImageDisplay
+                        {img}
+                        loadSession={scrollLoadSession}
+                        unselect={selecting && !$selection.includes(img.id)}
+                        onClick={!selecting && ((e) => openImage(img, e))}
+                        onContext={handleImgContext(img.id)}
+                        onLoaded={() => handleImageLoaded(img.id)}
+                    />
+                </div>
+            {/each}
+        {/if}
+    </div>
 </div>
 
 <div class="loader">
@@ -891,34 +1218,168 @@
     }
 
     .grid {
-        display: grid;
-        grid-template-columns: repeat(
-            auto-fill,
-            minmax(calc(200px + var(--size-offset)), 1fr)
-        );
-        gap: 0.8em;
         padding: calc(var(--main-padding) / 2) var(--main-padding);
         min-height: 100vh;
+        overflow-anchor: none;
+        position: relative;
+
+        .grid-content {
+            opacity: 1;
+            visibility: visible;
+
+            > div[id^="img_"],
+            .masonry-column > div {
+                overflow-anchor: none;
+            }
+
+            .masonry-column {
+                overflow-anchor: none;
+            }
+
+            display: grid;
+            grid-template-columns: repeat(
+                auto-fill,
+                minmax(calc(200px + var(--size-offset)), 1fr)
+            );
+            gap: 0.8em;
+        }
+
+        &.resizing .grid-content {
+            visibility: hidden;
+            opacity: 0;
+            transition: none;
+            pointer-events: none;
+        }
+
+        &.revealing .grid-content {
+            visibility: visible;
+            opacity: 0;
+            transition: none;
+            pointer-events: none;
+        }
+
+        &.revealing.reveal-visible .grid-content {
+            opacity: 1;
+            transition: opacity 180ms ease;
+            pointer-events: auto;
+        }
+
+        &.resizing:not(.masonry) .grid-content {
+            grid-template-columns: repeat(
+                var(--resize-columns, 1),
+                minmax(calc(200px + var(--size-offset)), 1fr)
+            );
+
+            @media (width > 1200px) {
+                grid-template-columns: repeat(
+                    var(--resize-columns, 1),
+                    minmax(calc(250px + var(--size-offset)), 1fr)
+                );
+            }
+
+            @media (width < 501px) {
+                grid-template-columns: repeat(
+                    var(--resize-columns, 1),
+                    minmax(calc(130px + var(--size-offset)), 1fr)
+                );
+            }
+        }
+
+        .resize-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 180ms ease;
+            z-index: 2;
+
+            p {
+                margin: 0;
+                padding: 0.5em 1em;
+                border-radius: 0.35em;
+                background-color: rgba(36, 36, 36, 0.85);
+                font-family: "Open sans", sans-serif;
+                font-size: 0.9em;
+                color: #bbb;
+            }
+
+            &.visible {
+                opacity: 1;
+            }
+        }
+
+        .masonry-probe {
+            position: absolute;
+            visibility: hidden;
+            pointer-events: none;
+            width: calc(200px + var(--size-offset));
+            height: 0;
+        }
+
+        &.masonry .grid-content {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.8em;
+
+            .masonry-column {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-width: 0;
+                gap: 0.8em;
+            }
+        }
 
         &.seamless {
-            gap: 2px;
             padding: 5px;
+
+            .grid-content {
+                gap: 2px;
+            }
+
+            &.masonry .grid-content .masonry-column {
+                gap: 2px;
+            }
         }
 
         @media (width > 1200px) {
-            grid-template-columns: repeat(
-                auto-fill,
-                minmax(calc(250px + var(--size-offset)), 1fr)
-            );
+            .grid-content {
+                grid-template-columns: repeat(
+                    auto-fill,
+                    minmax(calc(250px + var(--size-offset)), 1fr)
+                );
+            }
+
+            .masonry-probe {
+                width: calc(250px + var(--size-offset));
+            }
         }
 
         @media (width < 501px) {
-            grid-template-columns: repeat(
-                auto-fill,
-                minmax(calc(130px + var(--size-offset)), 1fr)
-            );
-            gap: 0.2em;
             padding: 5px;
+
+            .grid-content {
+                grid-template-columns: repeat(
+                    auto-fill,
+                    minmax(calc(130px + var(--size-offset)), 1fr)
+                );
+                gap: 0.2em;
+            }
+
+            .masonry-probe {
+                width: calc(130px + var(--size-offset));
+            }
+
+            &.masonry .grid-content {
+                gap: 0.2em;
+
+                .masonry-column {
+                    gap: 0.2em;
+                }
+            }
         }
     }
 

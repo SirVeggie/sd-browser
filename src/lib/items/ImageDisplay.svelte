@@ -19,6 +19,7 @@
     export let onContext: ((e: InputEvent) => void) | undefined | false =
         undefined;
     export let unselect = false;
+    export let loadSession = 0;
     export let onLoaded: (() => void) | undefined = undefined;
 
     let hasLoaded = false;
@@ -48,9 +49,10 @@
         : undefined;
     $: {
         src;
+        loadSession;
         hasLoaded = false;
     }
-    $: src, imgElement, videoElement, checkAlreadyLoaded();
+    $: loadSession, src, imgElement, videoElement, checkAlreadyLoaded();
 </script>
 
 <div

@@ -40,6 +40,7 @@
     import {
         fullscreenStyle,
         imageSize,
+        masonryLayout,
         seamlessStyle,
     } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
@@ -668,6 +669,11 @@
     <label class="checkbox">
         Seamless grid:
         <input type="checkbox" bind:checked={$seamlessStyle} />
+    </label>
+
+    <label class="checkbox">
+        Masonry layout:
+        <input type="checkbox" bind:checked={$masonryLayout} />
     </label>
 
     <span class="gray">
