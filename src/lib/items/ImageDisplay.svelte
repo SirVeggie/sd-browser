@@ -19,8 +19,25 @@
     export let onContext: ((e: InputEvent) => void) | undefined | false =
         undefined;
     export let unselect = false;
+    export let onLoaded: (() => void) | undefined = undefined;
 
     let hasLoaded = false;
+    let imgElement: HTMLImageElement | undefined;
+    let videoElement: HTMLVideoElement | undefined;
+
+    function markLoaded() {
+        if (hasLoaded) return;
+        hasLoaded = true;
+        onLoaded?.();
+    }
+
+    function checkAlreadyLoaded() {
+        if (imgElement?.complete && imgElement.naturalWidth > 0) {
+            markLoaded();
+        } else if (videoElement && videoElement.readyState >= 2) {
+            markLoaded();
+        }
+    }
 
     $: src = `${img.url}?${getQualityParam($thumbMode)}&defer=true&${getPreviewParam(img.type, $animatedThumb)}`;
     $: active = !!onClick;
@@ -33,6 +50,7 @@
         src;
         hasLoaded = false;
     }
+    $: src, imgElement, videoElement, checkAlreadyLoaded();
 </script>
 
 <div
@@ -53,6 +71,7 @@
         {#if img.type === "video" && $animatedThumb}
             <!-- svelte-ignore a11y-media-has-caption -->
             <video
+                bind:this={videoElement}
                 autoplay
                 loop
                 muted
@@ -60,18 +79,21 @@
                 class={cx(!hasLoaded && "hidden")}
                 width={hasDimensions ? img.width : undefined}
                 height={hasDimensions ? img.height : undefined}
-                on:canplay={() => (hasLoaded = true)}
+                on:canplay={markLoaded}
+                on:error={markLoaded}
             >
                 <source {src} type="video/mp4" />
             </video>
         {:else}
             <img
+                bind:this={imgElement}
                 class={cx(!hasLoaded && "hidden")}
                 {src}
                 alt={img.id}
                 width={hasDimensions ? img.width : undefined}
                 height={hasDimensions ? img.height : undefined}
-                on:load={() => (hasLoaded = true)}
+                on:load={markLoaded}
+                on:error={markLoaded}
             />
         {/if}
     </Clickable>

@@ -4,7 +4,6 @@
     import Button from "$lib/items/Button.svelte";
     import ImageDisplay from "$lib/items/ImageDisplay.svelte";
     import ImageFull from "$lib/items/ImageFull.svelte";
-    import Intersecter from "$lib/items/Intersecter.svelte";
     import Link from "$lib/items/Link.svelte";
     import SearchInput from "$lib/items/SearchInput.svelte";
     import Select from "$lib/items/Select.svelte";
@@ -23,7 +22,7 @@
         type InputEvent,
         type SortingMethod,
     } from "$lib/types/misc";
-    import { onMount } from "svelte";
+    import { onMount, tick } from "svelte";
     import { fade } from "svelte/transition";
     import {
         nsfwMode,
@@ -46,6 +45,11 @@
     import { createSelection } from "$lib/tools/selectManager";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import { sleep } from "$lib/tools/sleep";
+    import {
+        AUTO_LOAD_DEBOUNCE_MS,
+        INITIAL_LOAD_THROTTLE_MS,
+        isNearBottom,
+    } from "$lib/tools/scrollLoadMore";
     import type { ClientImage, ImageInfo } from "$lib/types/images";
     import type { UpdateResponse } from "$lib/types/requests";
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
@@ -69,9 +73,7 @@
     let searchSessionId = "";
     let live = false;
     let sorting: SortingMethod = "date";
-    let moreTriggerVisible = false;
     let triggerOverride = false;
-    let triggerTimer: any;
     let updateTime = 0;
     let selecting = false;
     let bulkOpen = false;
@@ -79,6 +81,10 @@
     let searchCountComplete = false;
     const selection = createSelection();
     let anchorElement: HTMLDivElement;
+    let scrollSessionStart = Date.now();
+    let lastAutoLoadTime = 0;
+    let scrollRaf: number | undefined;
+    const loadedImageIds = new Set<string>();
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: prevIndex = !currentImage
@@ -98,10 +104,10 @@
     onMount(() => {
         scrollToTop();
         reconnectSearch();
-        startTrigger(1000);
         fetchFolderPaths().catch(() => {});
 
         window.addEventListener("keydown", keylistener);
+        window.addEventListener("scroll", onScroll, { passive: true });
 
         return () => {
             clearTimeout(inputTimer);
@@ -111,6 +117,8 @@
             clearInterval(slideTimer);
             closeImage();
             window.removeEventListener("keydown", keylistener);
+            window.removeEventListener("scroll", onScroll);
+            if (scrollRaf !== undefined) cancelAnimationFrame(scrollRaf);
         };
     });
 
@@ -224,6 +232,54 @@
     function applySearchViewReset() {
         scrollToTop();
         currentAmount = initialAmount;
+        resetScrollLoadSession();
+    }
+
+    function resetScrollLoadSession() {
+        scrollSessionStart = Date.now();
+        lastAutoLoadTime = 0;
+        loadedImageIds.clear();
+    }
+
+    function onScroll() {
+        if (scrollRaf !== undefined) return;
+        scrollRaf = requestAnimationFrame(() => {
+            scrollRaf = undefined;
+            maybeAutoLoadMore();
+        });
+    }
+
+    function allVisibleImagesLoaded() {
+        return paginated.every((img) => loadedImageIds.has(img.id));
+    }
+
+    function hasMoreImagesToLoad() {
+        return (
+            currentAmount < $imageStore.length ||
+            currentAmount < $imageAmountStore
+        );
+    }
+
+    function canAutoLoadMore() {
+        if (!hasMoreImagesToLoad()) return false;
+        if (Date.now() - lastAutoLoadTime < AUTO_LOAD_DEBOUNCE_MS) return false;
+
+        const inInitialPeriod =
+            Date.now() - scrollSessionStart < INITIAL_LOAD_THROTTLE_MS;
+        if (inInitialPeriod && !allVisibleImagesLoaded()) return false;
+
+        return true;
+    }
+
+    function maybeAutoLoadMore() {
+        if (!canAutoLoadMore() || !isNearBottom()) return;
+        lastAutoLoadTime = Date.now();
+        loadMore();
+    }
+
+    function handleImageLoaded(id: string) {
+        loadedImageIds.add(id);
+        maybeAutoLoadMore();
     }
 
     function inputChange() {
@@ -233,21 +289,11 @@
     function applyInput() {
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
-            startTrigger(500);
             reconnectSearch();
         }, 100);
     }
 
-    function startTrigger(delay: number) {
-        moreTriggerVisible = false;
-        clearTimeout(triggerTimer);
-        triggerTimer = setTimeout(() => {
-            moreTriggerVisible = true;
-        }, delay);
-    }
-
     function selectChange(_reset?: boolean) {
-        startTrigger(1000);
         reconnectSearch();
     }
 
@@ -385,14 +431,20 @@
     function loadMore() {
         const max = $imageStore.length;
 
-        if (currentAmount < max - increment * 4) {
-            startTrigger(250);
-        } else if (currentAmount < $imageAmountStore) {
+        if (
+            currentAmount >= max - increment * 4 &&
+            currentAmount < $imageAmountStore
+        ) {
             fetchNext();
-            startTrigger(250);
         }
 
         currentAmount = Math.min(max, currentAmount + increment);
+        scheduleAutoLoadCheck();
+    }
+
+    async function scheduleAutoLoadCheck() {
+        await tick();
+        requestAnimationFrame(() => maybeAutoLoadMore());
     }
 
     function slideshowLoop(dir: string) {
@@ -733,36 +785,37 @@
 </div>
 
 <div class="grid" class:seamless style={gridStyle}>
-    {#each paginated as img (img.id)}
+    {#each paginated as img, i (img.id)}
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <div id={`img_${img.id}`} class:selecting on:click={selectImg(img.id)}>
+            <!-- debug: image index -->
+            <span class="debug-index">{i}</span>
             <ImageDisplay
                 {img}
                 unselect={selecting && !$selection.includes(img.id)}
                 onClick={!selecting && ((e) => openImage(img, e))}
                 onContext={handleImgContext(img.id)}
+                onLoaded={() => handleImageLoaded(img.id)}
             />
         </div>
     {/each}
 </div>
 
-{#if moreTriggerVisible}
-    <div class="loader">
-        {#if triggerOverride}
-            <div><p>loading...</p></div>
-        {:else if paginated.length === $imageAmountStore}
-            <div><p>You've reached the end.</p></div>
-        {:else}
-            <Intersecter onVisible={loadMore}>
-                <button on:click={loadMore}>
-                    (click here to load more images)
-                </button>
-            </Intersecter>
-        {/if}
-        <div class="spacer" />
-    </div>
-{/if}
+<div class="loader">
+    {#if triggerOverride}
+        <div><p>loading...</p></div>
+    {:else if paginated.length === $imageAmountStore}
+        <div><p>You've reached the end.</p></div>
+    {:else}
+        <div>
+            <button on:click={loadMore}>
+                (click here to load more images)
+            </button>
+        </div>
+    {/if}
+    <div class="spacer" />
+</div>
 
 <div class="spacer2" />
 
@@ -868,6 +921,26 @@
             );
             gap: 0.2em;
             padding: 5px;
+        }
+
+        /* debug: image index */
+        & > div {
+            position: relative;
+        }
+
+        .debug-index {
+            position: absolute;
+            top: 0.25em;
+            left: 0.25em;
+            z-index: 1;
+            padding: 0.1em 0.35em;
+            font-family: monospace;
+            font-size: 0.65em;
+            line-height: 1;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.65);
+            border-radius: 0.2em;
+            pointer-events: none;
         }
     }
 
