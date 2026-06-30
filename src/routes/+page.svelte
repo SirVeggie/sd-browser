@@ -785,12 +785,10 @@
 </div>
 
 <div class="grid" class:seamless style={gridStyle}>
-    {#each paginated as img, i (img.id)}
+    {#each paginated as img (img.id)}
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <div id={`img_${img.id}`} class:selecting on:click={selectImg(img.id)}>
-            <!-- debug: image index -->
-            <span class="debug-index">{i}</span>
             <ImageDisplay
                 {img}
                 unselect={selecting && !$selection.includes(img.id)}
@@ -921,26 +919,6 @@
             );
             gap: 0.2em;
             padding: 5px;
-        }
-
-        /* debug: image index */
-        & > div {
-            position: relative;
-        }
-
-        .debug-index {
-            position: absolute;
-            top: 0.25em;
-            left: 0.25em;
-            z-index: 1;
-            padding: 0.1em 0.35em;
-            font-family: monospace;
-            font-size: 0.65em;
-            line-height: 1;
-            color: #fff;
-            background: rgba(0, 0, 0, 0.65);
-            border-radius: 0.2em;
-            pointer-events: none;
         }
     }
 
