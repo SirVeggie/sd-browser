@@ -306,3 +306,27 @@ export type BulkProgressEvent = {
 } | {
     error: string;
 };
+
+export type OperationStatus = 'running' | 'complete' | 'failed';
+export type OperationType = 'extradata-recalc';
+
+export type OperationInfo = {
+    id: string;
+    type: OperationType;
+    label: string;
+    status: OperationStatus;
+    done: number;
+    total: number;
+    message?: string;
+    error?: string;
+    startedAt: number;
+    finishedAt?: number;
+};
+
+export type OperationsResponse = {
+    operations: OperationInfo[];
+};
+
+export type StartOperationResponse = {
+    operationId: string;
+};

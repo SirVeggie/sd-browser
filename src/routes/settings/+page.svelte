@@ -53,6 +53,8 @@
     } from "$lib/stores/llmStore";
     import { authLogout, authStore } from "$lib/stores/authStore";
     import { pullGlobalSettings, recalculateSimilarCache } from "$lib/requests/settingRequests";
+    import { startExtradataRecalc, getOperations } from "$lib/requests/operationRequests";
+    import { hasRunningOperation, operationStore } from "$lib/stores/operationStore";
     import {
         closeContextMenu,
         openContextMenu,
@@ -76,6 +78,9 @@
     let modalFilterName = "";
     let modalFilterText = "";
     let recalculatingSimilarCache = false;
+
+    $: extradataRecalcRunning = hasRunningOperation($operationStore, 'extradata-recalc');
+    $: extradataRecalcOp = $operationStore.find(op => op.type === 'extradata-recalc' && op.status === 'running');
 
     $: {
         const instructions = $llmStore.systemInstructions;
@@ -348,6 +353,26 @@
             recalculatingSimilarCache = false;
         }
     }
+
+    async function onRecalculateExtradata() {
+        if (extradataRecalcRunning)
+            return;
+
+        const confirmed = await askConfirmation(
+            'Recalculate extra data',
+            'Rebuild derived prompt, model, and hash fields from stored metadata? Annotations are preserved. This may take a while for large libraries.',
+        );
+        if (!confirmed)
+            return;
+
+        try {
+            await startExtradataRecalc();
+            operationStore.set(await getOperations());
+            notify('Extra data recalculation started');
+        } catch (e) {
+            notify(e instanceof Error ? e.message : 'Failed to start recalculation', 'error');
+        }
+    }
 </script>
 
 <div class="container">
@@ -509,6 +534,20 @@
             on:close={closeFilterModal}
         />
     {/if}
+
+    <div class="sgroup">
+        <span class="subsection-title">Data management</span>
+        <span class="gray">
+            Rebuild derived prompt, model, and hash fields from stored metadata.
+            Annotations are preserved.
+        </span>
+        <Button disabled={extradataRecalcRunning} on:click={onRecalculateExtradata}>
+            {extradataRecalcRunning ? 'Recalculating...' : 'Recalculate extra data'}
+        </Button>
+        {#if extradataRecalcOp}
+            <p class="gray progress-detail">{extradataRecalcOp.done} / {extradataRecalcOp.total}</p>
+        {/if}
+    </div>
 
     <div class="gray">
         Search keywords:<br /><span>

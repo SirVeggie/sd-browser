@@ -8,27 +8,26 @@ import { fileExists, removeBasePath } from "./filetools";
 import { getImage } from "./filemanager";
 import { MetaDB } from "./db";
 import { populateMediaDimensions } from "./imageDimensions";
+import { computeExtradataFromFull } from "./extradataComputeCore";
 
 export function getServerImage(image: ServerImageFull): ServerImage {
-    const prompts = getPrompts(image.prompt, image.workflow, image.extra);
-    const result: ServerImage = {
+    const extra = computeExtradataFromFull(image);
+    return {
         id: image.id,
         file: image.file,
         folder: image.folder,
         createdDate: image.createdDate,
         modifiedDate: image.modifiedDate,
         preview: image.preview,
-        positive: prompts?.pos ?? '',
-        negative: prompts?.neg ?? '',
-        params: prompts?.params ?? '',
-        models: getModels(image.prompt, image.workflow, image.extra),
-        hash: '',
-        annotation: '',
+        positive: extra.positive,
+        negative: extra.negative,
+        params: extra.params,
+        models: extra.models,
+        hash: extra.hash,
+        annotation: extra.annotation ?? '',
         width: image.width,
         height: image.height,
     };
-    hashPrompt(result);
-    return result;
 }
 
 /** Modifies given reference */

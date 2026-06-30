@@ -16,6 +16,7 @@ import { deleteTempImage, fileExists, fileUniquefy, removeBasePath, removeFolder
 import { handleMigrationEnd, handleMigrationStart } from './migration';
 import { backfillImageDimensions } from './migration/v3';
 import { getServerImage, hashPath, populateServerImage, readMetadata, readMetadataFromExif, readMetadataFromFile, updateImageMetadata } from './imageUtils';
+import { forEachExtradataBatch } from './extradataBatch';
 import { populateMediaDimensions } from './imageDimensions';
 import { invalidateExplorationPools, repairExplorationCaches, repairUniqueCacheAfterDeletes, repairUniqueCacheOnAdd, verifyExplorationCaches } from './exploration';
 import { notifyImageChange } from './imageChangeHub';
@@ -139,29 +140,17 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
         const missing = lazy(images.values()).filter(x => x.positive === undefined).collect();
         const missingAmount = missing.length;
 
-        // wait for server to start
-        if (missing.length) {
-            updateLine('');
-            await sleep(100);
+        if (missingAmount) {
+            const missingIds = missing.map(x => x.id);
+            await forEachExtradataBatch(missingIds, {
+                label: 'Calculating missing data',
+                onBatch: async (extraData) => {
+                    for (const item of extraData)
+                        populateServerImage(images.get(item.id)!, item);
+                    MetaCalcDB.setAll(extraData);
+                },
+            });
         }
-
-        const start = Date.now();
-        let remaining = '?';
-        while (missing.length) {
-            const extraData: ImageExtraData[] = [];
-            const fulls = MetaDB.getMany(missing.splice(0, 1000).map(x => x.id));
-            updateLine(`Calculating missing data: ${(missingAmount - missing.length)} / ${missingAmount} (processing) | estimate: ${remaining}`);
-            for (const full of fulls) {
-                const processed = getServerImage(full);
-                images.set(full.id, processed);
-                extraData.push(processed);
-            }
-            remaining = calcTimeRemaining(start, missingAmount - missing.length, missingAmount);
-            updateLine(`Calculating missing data: ${(missingAmount - missing.length)} / ${missingAmount} (loading)    | estimate: ${remaining}`);
-            MetaCalcDB.setAll(extraData);
-            await sleep(10);
-        }
-        updateLine('');
     } else {
         MetaCalcDB.clearAll();
     }
@@ -739,6 +728,14 @@ export function getImage(imageid: string) {
 
 export function getImageList() {
     return imageList;
+}
+
+export function refreshExtradataInMemory() {
+    for (const data of MetaCalcDB.getAll()) {
+        const image = imageList.get(data.id);
+        if (image)
+            populateServerImage(image, data);
+    }
 }
 
 export function getFreshImages(timestamp: number) {

@@ -356,8 +356,20 @@ export class MetaDB {
 export class MetaCalcDB {
     private static file = 'appdata.sqlite3';
     private static table = 'extradata';
+    private static stagingTable = 'extradata_staging';
+    private static oldTable = 'extradata_old';
     private static sqlCreate = `
     CREATE TABLE IF NOT EXISTS ${MetaCalcDB.table} (
+        id TEXT PRIMARY KEY,
+        positive TEXT,
+        negative TEXT,
+        params TEXT,
+        models TEXT,
+        hash TEXT,
+        annotation TEXT
+    )`;
+    private static sqlCreateStaging = `
+    CREATE TABLE IF NOT EXISTS ${MetaCalcDB.stagingTable} (
         id TEXT PRIMARY KEY,
         positive TEXT,
         negative TEXT,
@@ -383,6 +395,84 @@ export class MetaCalcDB {
             return;
         MetaCalcDB.isSetup = true;
         MetaCalcDB.db.exec(MetaCalcDB.sqlCreate);
+        MetaCalcDB.cleanupOrphanExtradataTables();
+    }
+
+    /** Drops leftover staging/old tables from an interrupted recalc. */
+    static cleanupOrphanExtradataTables() {
+        MetaCalcDB.setup();
+        for (const table of [MetaCalcDB.stagingTable, MetaCalcDB.oldTable]) {
+            if (sqliteTableExists(MetaCalcDB.db, table)) {
+                console.warn(`Removing orphan extradata table '${table}' from interrupted recalculation`);
+                MetaCalcDB.db.exec(`DROP TABLE IF EXISTS ${table}`);
+            }
+        }
+    }
+
+    static ensureStagingTable() {
+        MetaCalcDB.setup();
+        MetaCalcDB.db.exec(MetaCalcDB.sqlCreateStaging);
+    }
+
+    static clearStaging() {
+        MetaCalcDB.setup();
+        MetaCalcDB.ensureStagingTable();
+        MetaCalcDB.db.exec(`DELETE FROM ${MetaCalcDB.stagingTable}`);
+    }
+
+    static setAllStaging(data: ImageExtraData[]) {
+        MetaCalcDB.setup();
+        MetaCalcDB.ensureStagingTable();
+        const stmt = MetaCalcDB.db.prepare(
+            `INSERT OR REPLACE INTO ${MetaCalcDB.stagingTable} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        );
+        MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
+            for (const item of data) {
+                const existing = MetaCalcDB.get(item.id);
+                const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
+                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation);
+            }
+        }).immediate(data);
+    }
+
+    static dropStaging() {
+        MetaCalcDB.setup();
+        MetaCalcDB.db.exec(`DROP TABLE IF EXISTS ${MetaCalcDB.stagingTable}`);
+    }
+
+    static swapStagingToLive(validIds: Set<string>) {
+        MetaCalcDB.setup();
+        if (!sqliteTableExists(MetaCalcDB.db, MetaCalcDB.stagingTable))
+            throw new Error('Staging table does not exist');
+
+        MetaCalcDB.db.transaction(() => {
+            MetaCalcDB.db.exec('CREATE TEMP TABLE recalc_valid_ids (id TEXT PRIMARY KEY)');
+            const insertValid = MetaCalcDB.db.prepare('INSERT INTO recalc_valid_ids (id) VALUES (?)');
+            const validList = [...validIds];
+            for (let i = 0; i < validList.length; i += 500) {
+                const batch = validList.slice(i, i + 500);
+                for (const id of batch)
+                    insertValid.run(id);
+            }
+
+            MetaCalcDB.db.exec(
+                `DELETE FROM ${MetaCalcDB.stagingTable} WHERE id NOT IN (SELECT id FROM recalc_valid_ids)`,
+            );
+
+            MetaCalcDB.db.prepare(
+                `UPDATE ${MetaCalcDB.stagingTable} SET annotation = (
+                    SELECT annotation FROM ${MetaCalcDB.table} WHERE ${MetaCalcDB.table}.id = ${MetaCalcDB.stagingTable}.id
+                ) WHERE id IN (SELECT id FROM ${MetaCalcDB.table})`,
+            ).run();
+
+            MetaCalcDB.db.exec(`ALTER TABLE ${MetaCalcDB.table} RENAME TO ${MetaCalcDB.oldTable}`);
+            MetaCalcDB.db.exec(`ALTER TABLE ${MetaCalcDB.stagingTable} RENAME TO ${MetaCalcDB.table}`);
+            MetaCalcDB.db.exec(
+                `INSERT INTO ${MetaCalcDB.table} SELECT * FROM ${MetaCalcDB.oldTable} WHERE id NOT IN (SELECT id FROM ${MetaCalcDB.table})`,
+            );
+            MetaCalcDB.db.exec(`DROP TABLE ${MetaCalcDB.oldTable}`);
+            MetaCalcDB.db.exec('DROP TABLE recalc_valid_ids');
+        }).immediate();
     }
 
     static ensureColumn(column: string, definition: string) {
