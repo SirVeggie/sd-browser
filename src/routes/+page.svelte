@@ -220,6 +220,11 @@
         anchorElement.scrollIntoView();
     }
 
+    function applySearchViewReset() {
+        scrollToTop();
+        currentAmount = initialAmount;
+    }
+
     function inputChange() {
         applyInput();
     }
@@ -228,7 +233,6 @@
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
             startTrigger(500);
-            currentAmount = initialAmount;
             reconnectSearch();
         }, 100);
     }
@@ -241,13 +245,7 @@
         }, delay);
     }
 
-    function selectChange(reset?: boolean) {
-        if (reset) {
-            currentAmount = initialAmount;
-        } else {
-            currentAmount = Math.min(currentAmount, initialAmount);
-        }
-
+    function selectChange(_reset?: boolean) {
         startTrigger(1000);
         reconnectSearch();
     }
@@ -286,8 +284,8 @@
 
                     if (!hasReceivedImages) {
                         hasReceivedImages = true;
+                        applySearchViewReset();
                         imageStore.set(mapped);
-                        scrollToTop();
                         return;
                     }
 
@@ -298,8 +296,8 @@
                     imageAmountStore.set(ready.amount);
                     searchCountComplete = true;
                     if (!hasReceivedImages && ready.amount === 0) {
+                        applySearchViewReset();
                         imageStore.set([]);
-                        scrollToTop();
                     }
                 },
                 onUpdate: (res) => applyUpdate(res, expectedSessionId),
