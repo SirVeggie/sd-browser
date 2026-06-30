@@ -7,6 +7,7 @@
 <script lang="ts">
     import { createEventDispatcher, onMount, tick } from "svelte";
     import { alignDropdownPanel } from "$lib/tools/dropdownAlign";
+    import { bindDropdownOutsideClick } from "$lib/tools/dropdownOutsideClick";
 
     export let value = "";
     export let options: readonly SelectOption[] = [];
@@ -61,10 +62,13 @@
         open = !open;
     }
 
-    function handleDocumentClick(event: MouseEvent) {
-        if (!open || !rootEl) return;
-        if (!rootEl.contains(event.target as Node)) open = false;
-    }
+    onMount(() => {
+        return bindDropdownOutsideClick(
+            () => open,
+            () => { open = false; },
+            () => rootEl,
+        );
+    });
 
     function handleKeydown(event: KeyboardEvent) {
         if (disabled) return;
@@ -94,11 +98,6 @@
             dispatch("change", value);
         }
     }
-
-    onMount(() => {
-        document.addEventListener("click", handleDocumentClick);
-        return () => document.removeEventListener("click", handleDocumentClick);
-    });
 </script>
 
 <div class="select" bind:this={rootEl}>
@@ -128,7 +127,7 @@
             aria-labelledby={id}
             style:left="{panelLeft}px"
         >
-            {#each normalized as option (option.value)}
+            {#each normalized as option, index (option.value)}
                 <button
                     type="button"
                     class="option"
@@ -136,6 +135,7 @@
                     role="option"
                     aria-selected={option.value === value}
                     title={option.title}
+                    style="--stagger-i: {index}"
                     on:click={() => choose(option.value)}
                 >
                     {option.label}
@@ -146,6 +146,8 @@
 </div>
 
 <style lang="scss">
+    @use "./dropdownAnimations.scss" as dropdown;
+
     .select {
         position: relative;
         display: inline-flex;
@@ -215,9 +217,10 @@
         gap: 0.15em;
         min-width: max(100%, 8em);
         background: #2a2a2a;
-        border: 1px solid #444;
         border-radius: 0.35em;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+        @include dropdown.panel-animation;
+        @include dropdown.reduced-motion;
     }
 
     .option {
@@ -235,6 +238,8 @@
         white-space: nowrap;
         text-align: left;
         border-radius: 0.2em;
+        @include dropdown.option-animation;
+        @include dropdown.reduced-motion;
 
         &:hover {
             background: #ffffff10;

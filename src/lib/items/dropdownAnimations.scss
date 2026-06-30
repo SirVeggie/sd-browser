@@ -1,0 +1,42 @@
+@keyframes dropdown-panel-in {
+    from {
+        opacity: 0;
+        transform: scaleY(0.94);
+    }
+
+    to {
+        opacity: 1;
+        transform: scaleY(1);
+    }
+}
+
+@keyframes dropdown-option-in {
+    from {
+        opacity: 0;
+        transform: translateY(-0.35em);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@mixin panel-animation {
+    transform-origin: top center;
+    animation: dropdown-panel-in 0.16s ease-out both;
+}
+
+@mixin option-animation {
+    opacity: 0;
+    animation: dropdown-option-in 0.18s ease-out both;
+    animation-delay: calc(0.04s + var(--stagger-i, 0) * 0.028s);
+}
+
+@mixin reduced-motion {
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+}

@@ -6,6 +6,7 @@
         type CustomFilter,
     } from "$lib/stores/customFiltersStore";
     import { alignDropdownPanel } from "$lib/tools/dropdownAlign";
+    import { bindDropdownOutsideClick } from "$lib/tools/dropdownOutsideClick";
 
     export let onChange: (() => void) | undefined = undefined;
 
@@ -45,14 +46,12 @@
         dispatch("change");
     }
 
-    function handleDocumentClick(event: MouseEvent) {
-        if (!open || !rootEl) return;
-        if (!rootEl.contains(event.target as Node)) open = false;
-    }
-
     onMount(() => {
-        document.addEventListener("click", handleDocumentClick);
-        return () => document.removeEventListener("click", handleDocumentClick);
+        return bindDropdownOutsideClick(
+            () => open,
+            () => { open = false; },
+            () => rootEl,
+        );
     });
 </script>
 
@@ -77,15 +76,16 @@
             style:left="{panelLeft}px"
         >
             {#if filters.length === 0}
-                <span class="empty">No custom filters defined</span>
+                <span class="empty" style="--stagger-i: 0">No custom filters defined</span>
             {:else}
-                {#each filters as item (item.id)}
+                {#each filters as item, index (item.id)}
                     {@const selected = activeIds.has(item.id)}
                     <button
                         type="button"
                         class="option"
                         class:selected
                         aria-pressed={selected}
+                        style="--stagger-i: {index}"
                         on:click={() => toggle(item.id)}
                     >
                         {#if selected}
@@ -100,6 +100,8 @@
 </div>
 
 <style lang="scss">
+    @use "$lib/items/dropdownAnimations.scss" as dropdown;
+
     .filter-multi-select {
         position: relative;
         display: inline-flex;
@@ -165,9 +167,10 @@
         min-width: max(100%, 8em);
         max-width: 20em;
         background: #2a2a2a;
-        border: 1px solid #444;
         border-radius: 0.35em;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+        @include dropdown.panel-animation;
+        @include dropdown.reduced-motion;
     }
 
     .option {
@@ -185,6 +188,8 @@
         white-space: nowrap;
         text-align: left;
         border-radius: 0.2em;
+        @include dropdown.option-animation;
+        @include dropdown.reduced-motion;
 
         &:hover {
             background: #ffffff10;
@@ -219,5 +224,7 @@
         color: #999;
         font-size: 0.95em;
         padding: 0.5em 0.7em;
+        @include dropdown.option-animation;
+        @include dropdown.reduced-motion;
     }
 </style>
