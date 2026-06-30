@@ -25,6 +25,7 @@ export const nsfwFilterDefault = 'NOT FOLDER nsfw AND NOT nude|sex|seductive|und
 
 export const searchFilter = writable('');
 export const nsfwFilter = writable(nsfwFilterDefault);
+export const showNsfwFilter = writable(true);
 export const nsfwMode = writable(false);
 export const thumbMode = writable<QualityMode>('low');
 export const compressedMode = writable<QualityMode>('original');
@@ -40,7 +41,7 @@ export const slideDelay = writable(4000);
 export function buildSearchParams(searchText?: string): SearchParams {
     const filters: string[] = [];
     const algorithm = get(similarityAlgorithm);
-    if (!get(nsfwMode) && get(nsfwFilter)) filters.push(get(nsfwFilter));
+    if (get(showNsfwFilter) && !get(nsfwMode) && get(nsfwFilter)) filters.push(get(nsfwFilter));
     filters.push(...getActiveCustomFilterStrings());
     return {
         search: searchText ?? get(searchFilter),
@@ -63,6 +64,7 @@ export function syncSearchInput(input: HTMLInputElement | undefined, store: Writ
 
 export function syncSearchWithLocalStorage() {
     syncMemory('nsfwFilter', nsfwFilter, true);
+    syncMemory('showNsfwFilter', showNsfwFilter);
     syncMemory('nsfwMode', nsfwMode);
     syncMemory('webpMode', thumbMode);
     syncMemory('compressedMode', compressedMode);

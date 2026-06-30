@@ -27,6 +27,7 @@
     import { fade } from "svelte/transition";
     import {
         nsfwMode,
+        showNsfwFilter,
         searchFilter,
         explorationMode,
         compressedMode,
@@ -693,15 +694,17 @@
 
         <FilterMultiSelect onChange={() => selectChange(false)} />
 
-        <label for="nsfw">
-            NSFW:
-            <input
-                type="checkbox"
-                id="nsfw"
-                bind:checked={$nsfwMode}
-                on:change={() => selectChange(false)}
-            />
-        </label>
+        {#if $showNsfwFilter}
+            <label for="nsfw">
+                NSFW:
+                <input
+                    type="checkbox"
+                    id="nsfw"
+                    bind:checked={$nsfwMode}
+                    on:change={() => selectChange(false)}
+                />
+            </label>
+        {/if}
     </div>
 
     {#if !selecting}

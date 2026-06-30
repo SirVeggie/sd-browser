@@ -17,6 +17,7 @@
         initialImages,
         matchingMode,
         nsfwFilter,
+        showNsfwFilter,
         similarityAlgorithm,
         similarityThreshold,
         slideDelay,
@@ -559,14 +560,21 @@
         </div>
     </div>
 
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
-        NSFW filter
-        <span class="gray">
-            (Added to the search when NSFW toggle is disabled)
-        </span>
-        <Input bind:value={$nsfwFilter} />
+    <label class="checkbox">
+        Show NSFW filter:
+        <input type="checkbox" bind:checked={$showNsfwFilter} />
     </label>
+
+    {#if $showNsfwFilter}
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label>
+            NSFW filter
+            <span class="gray">
+                (Added to the search when NSFW toggle is disabled)
+            </span>
+            <Input bind:value={$nsfwFilter} />
+        </label>
+    {/if}
 
     <label for="matching">
         Matching:
