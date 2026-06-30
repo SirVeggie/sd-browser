@@ -1,4 +1,6 @@
 
+import type { CustomFiltersState } from "$lib/stores/customFiltersStore";
+
 export const sortingMethods = ['date', 'date (asc)', 'name', 'name (desc)', 'random'] as const;
 export type SortingMethod = typeof sortingMethods[number];
 export function isSortingMethod(object: any): object is SortingMethod {
@@ -69,6 +71,7 @@ export function isSearchKeyword(object: any): object is SearchKeyword {
 
 export type GlobalSettings = {
     nsfwFilter: string;
+    customFilters?: CustomFiltersState;
 }
 
 export type InputEvent = MouseEvent | KeyboardEvent | TouchEvent;

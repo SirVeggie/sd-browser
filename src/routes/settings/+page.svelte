@@ -1,5 +1,6 @@
 <script lang="ts">
     import Input from "$lib/items/Input.svelte";
+    import Select from "$lib/items/Select.svelte";
     import { onDestroy } from "svelte";
     import Link from "../../lib/items/Link.svelte";
     import {
@@ -13,7 +14,6 @@
     import {
         animatedThumb,
         compressedMode,
-        folderFilter,
         initialImages,
         matchingMode,
         nsfwFilter,
@@ -23,6 +23,11 @@
         sparseFrequency,
         thumbMode,
     } from "$lib/stores/searchStore";
+    import {
+        activeCustomFilterIds,
+        customFiltersStore,
+        type CustomFilter,
+    } from "$lib/stores/customFiltersStore";
     import {
         flyoutModes,
         qualityModes,
@@ -38,6 +43,7 @@
     } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
     import SystemInstructionModal from "$lib/components/SystemInstructionModal.svelte";
+    import CustomFilterModal from "$lib/components/CustomFilterModal.svelte";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import {
         llmStore,
@@ -57,11 +63,16 @@
     let flyoutHistoryLength = 5;
     let flyoutButtonPosition = $flyoutButtonTop ? "top" : "bottom";
     let llmOpen = false;
+    let customFiltersOpen = false;
     let selectedInstructionId = "";
     let instructionModalOpen = false;
     let editingInstruction: SystemInstruction | null = null;
     let modalInstructionName = "";
     let modalInstructionText = "";
+    let filterModalOpen = false;
+    let editingFilter: CustomFilter | null = null;
+    let modalFilterName = "";
+    let modalFilterText = "";
     let recalculatingSimilarCache = false;
 
     $: {
@@ -70,6 +81,11 @@
             selectedInstructionId = instructions[0]?.id ?? "";
         }
     }
+
+    $: instructionOptions = $llmStore.systemInstructions.map((instruction) => ({
+        value: instruction.id,
+        label: instruction.name,
+    }));
 
     $: setInput($flyoutStore.url);
 
@@ -222,6 +238,76 @@
         closeInstructionModal();
     }
 
+    function truncateFilter(text: string, max = 60): string {
+        if (text.length <= max) return text;
+        return `${text.slice(0, max)}…`;
+    }
+
+    function openAddFilter() {
+        editingFilter = null;
+        modalFilterName = "";
+        modalFilterText = "";
+        filterModalOpen = true;
+    }
+
+    function openEditFilter(filter: CustomFilter) {
+        editingFilter = filter;
+        modalFilterName = filter.name;
+        modalFilterText = filter.filter;
+        filterModalOpen = true;
+    }
+
+    function closeFilterModal() {
+        filterModalOpen = false;
+        editingFilter = null;
+    }
+
+    function saveFilter(event: CustomEvent<{ name: string; filter: string }>) {
+        const { name, filter } = event.detail;
+        const duplicate = $customFiltersStore.filters.some(
+            (item) =>
+                item.name.toLowerCase() === name.toLowerCase() &&
+                item.id !== editingFilter?.id,
+        );
+        if (duplicate) {
+            notify(`Filter name '${name}' already exists`, "warn");
+            return;
+        }
+
+        if (editingFilter) {
+            customFiltersStore.update((state) => ({
+                filters: state.filters.map((item) =>
+                    item.id === editingFilter!.id
+                        ? { ...item, name, filter }
+                        : item,
+                ),
+            }));
+            notify(`Updated filter '${name}'`);
+        } else {
+            const id = crypto.randomUUID();
+            customFiltersStore.update((state) => ({
+                filters: [...state.filters, { id, name, filter }],
+            }));
+            notify(`Added filter '${name}'`);
+        }
+
+        closeFilterModal();
+    }
+
+    async function deleteFilter(filter: CustomFilter) {
+        const confirmed = await askConfirmation(
+            "Delete filter",
+            `Delete filter '${filter.name}'?`,
+        );
+        if (!confirmed) return;
+
+        customFiltersStore.update((state) => ({
+            filters: state.filters.filter((item) => item.id !== filter.id),
+        }));
+        activeCustomFilterIds.update((ids) => ids.filter((id) => id !== filter.id));
+        notify(`Deleted filter '${filter.name}'`);
+    }
+
     async function deleteInstruction() {
         const instruction = $llmStore.systemInstructions.find(
             (item) => item.id === selectedInstructionId,
@@ -300,17 +386,14 @@
                     />
                 </label>
 
-                <label for="matching">
+                <label for="flyout-mode">
                     Styling:
-                    <select
-                        id="matching"
+                    <Select
+                        id="flyout-mode"
                         bind:value={flyoutMode}
+                        options={flyoutModes}
                         on:change={onFlyoutModeChange}
-                    >
-                        {#each flyoutModes as mode}
-                            <option value={mode}>{mode}</option>
-                        {/each}
-                    </select>
+                    />
                 </label>
 
                 <label class="checkbox">
@@ -318,17 +401,14 @@
                     <input type="checkbox" bind:checked={$flyoutButton} />
                 </label>
 
-                <label for="matching">
+                <label for="flyout-button-position">
                     Button position:
-                    <select
-                        id="matching"
+                    <Select
+                        id="flyout-button-position"
                         bind:value={flyoutButtonPosition}
+                        options={["top", "bottom"]}
                         on:change={onFlyoutButtonPositionChange}
-                    >
-                        {#each ["top", "bottom"] as mode}
-                            <option value={mode}>{mode}</option>
-                        {/each}
-                    </select>
+                    />
                 </label>
             </div>
         </div>
@@ -376,15 +456,13 @@
 
                     {#if $llmStore.systemInstructions.length}
                         <div class="instruction-controls">
-                            <label>
+                            <label for="saved-instruction">
                                 Saved instructions
-                                <select bind:value={selectedInstructionId}>
-                                    {#each $llmStore.systemInstructions as instruction (instruction.id)}
-                                        <option value={instruction.id}>
-                                            {instruction.name}
-                                        </option>
-                                    {/each}
-                                </select>
+                                <Select
+                                    id="saved-instruction"
+                                    bind:value={selectedInstructionId}
+                                    options={instructionOptions}
+                                />
                             </label>
 
                             <div class="instruction-buttons">
@@ -420,20 +498,67 @@
         />
     {/if}
 
+    {#if filterModalOpen}
+        <CustomFilterModal
+            title={editingFilter ? "Modify filter" : "Add filter"}
+            bind:name={modalFilterName}
+            bind:filter={modalFilterText}
+            on:save={saveFilter}
+            on:close={closeFilterModal}
+        />
+    {/if}
+
     <div class="gray">
         Search keywords:<br /><span>
             {searchKeywords.join(", ").replaceAll("|", " | ")}
         </span>
     </div>
 
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
-        Folder filter
-        <span class="gray">
-            (Hides images in img2img, xxx-grids and extra folders by default)
-        </span>
-        <Input bind:value={$folderFilter} />
-    </label>
+    <div class="sgroup llm-settings">
+        <button
+            type="button"
+            class="llm-summary"
+            aria-expanded={customFiltersOpen}
+            on:click={() => (customFiltersOpen = !customFiltersOpen)}
+        >
+            Custom Filters
+            <span class="chevron" class:open={customFiltersOpen} aria-hidden="true" />
+        </button>
+
+        <div class="wrapper" class:isOpen={customFiltersOpen}>
+            <div class="inner llm-inner">
+                <span class="gray subsection-title">
+                    Named filter expressions applied from the image page multi-select.
+                </span>
+
+                {#if $customFiltersStore.filters.length}
+                    <ul class="filter-list">
+                        {#each $customFiltersStore.filters as filter (filter.id)}
+                            <li class="filter-row">
+                                <div class="filter-info">
+                                    <span class="filter-name">{filter.name}</span>
+                                    <span class="filter-preview gray"
+                                        >{truncateFilter(filter.filter)}</span
+                                    >
+                                </div>
+                                <div class="filter-buttons">
+                                    <Button on:click={() => openEditFilter(filter)}>
+                                        Edit
+                                    </Button>
+                                    <Button on:click={() => deleteFilter(filter)}>
+                                        Delete
+                                    </Button>
+                                </div>
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
+
+                <Button on:click={openAddFilter}>Add filter</Button>
+            </div>
+        </div>
+    </div>
+
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label>
         NSFW filter
@@ -445,20 +570,16 @@
 
     <label for="matching">
         Matching:
-        <select id="matching" bind:value={$matchingMode}>
-            {#each searchModes as method}
-                <option value={method}>{method}</option>
-            {/each}
-        </select>
+        <Select id="matching" bind:value={$matchingMode} options={searchModes} />
     </label>
 
     <label for="similarityAlgorithm">
         Similarity algorithm:
-        <select id="similarityAlgorithm" bind:value={$similarityAlgorithm}>
-            {#each similarityAlgorithms as algorithm}
-                <option value={algorithm}>{algorithm}</option>
-            {/each}
-        </select>
+        <Select
+            id="similarityAlgorithm"
+            bind:value={$similarityAlgorithm}
+            options={similarityAlgorithms}
+        />
     </label>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->
@@ -501,20 +622,12 @@
 
     <label for="fullimage">
         Full size quality:
-        <select id="fullimage" bind:value={$compressedMode}>
-            {#each qualityModes as quality}
-                <option value={quality}>{quality}</option>
-            {/each}
-        </select>
+        <Select id="fullimage" bind:value={$compressedMode} options={qualityModes} />
     </label>
 
     <label for="thumbnail">
         Thumbnail quality:
-        <select id="thumbnail" bind:value={$thumbMode}>
-            {#each qualityModes as quality}
-                <option value={quality}>{quality}</option>
-            {/each}
-        </select>
+        <Select id="thumbnail" bind:value={$thumbMode} options={qualityModes} />
     </label>
 
     <label class="checkbox">
@@ -665,6 +778,47 @@
             flex-wrap: wrap;
         }
 
+        .filter-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+        }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: var(--gap);
+            border-top: dashed 1px #aaa4;
+            padding-top: var(--gap);
+        }
+
+        .filter-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25em;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .filter-name {
+            font-weight: 600;
+        }
+
+        .filter-preview {
+            word-break: break-all;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 1em;
+            flex-wrap: wrap;
+        }
+
         .wrapper {
             margin-top: 0;
 
@@ -752,29 +906,6 @@
         &:checked::before {
             transform: scale(1);
             opacity: 1;
-        }
-    }
-
-    select {
-        margin: 0;
-        padding: 0;
-        background-color: transparent;
-        border: none;
-        font-family: "Open sans", sans-serif;
-        font-size: 1em;
-        color: #ddd;
-        border-radius: 0.2em;
-
-        &:focus {
-            outline: none;
-        }
-
-        &:focus-visible {
-            background-color: #333;
-        }
-
-        option {
-            background-color: #222;
         }
     }
 </style>

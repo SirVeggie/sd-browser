@@ -7,6 +7,7 @@
     import Intersecter from "$lib/items/Intersecter.svelte";
     import Link from "$lib/items/Link.svelte";
     import SearchInput from "$lib/items/SearchInput.svelte";
+    import Select from "$lib/items/Select.svelte";
     import { imageAmountStore, imageStore } from "$lib/stores/imageStore";
     import {
         generateCompressedImages,
@@ -26,7 +27,6 @@
     import { fade } from "svelte/transition";
     import {
         nsfwMode,
-        folderMode,
         searchFilter,
         explorationMode,
         compressedMode,
@@ -50,6 +50,7 @@
     import { fetchFolderStructure } from "$lib/requests/miscRequests";
     import { flyoutState } from "$lib/stores/flyoutStore";
     import BulkModal from "$lib/components/BulkModal.svelte";
+    import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
 
     type ActionMode = "manual" | "auto";
 
@@ -226,7 +227,6 @@
         clearTimeout(inputTimer);
         inputTimer = setTimeout(() => {
             startTrigger(500);
-            scrollToTop();
             currentAmount = initialAmount;
             reconnectSearch();
         }, 100);
@@ -242,7 +242,6 @@
 
     function selectChange(reset?: boolean) {
         if (reset) {
-            scrollToTop();
             currentAmount = initialAmount;
         } else {
             currentAmount = Math.min(currentAmount, initialAmount);
@@ -270,7 +269,6 @@
             {
                 ...search,
                 sorting,
-                nsfw: $nsfwMode,
             },
             {
                 onInit: (init) => {
@@ -288,6 +286,7 @@
                     if (!hasReceivedImages) {
                         hasReceivedImages = true;
                         imageStore.set(mapped);
+                        scrollToTop();
                         return;
                     }
 
@@ -299,6 +298,7 @@
                     searchCountComplete = true;
                     if (!hasReceivedImages && ready.amount === 0) {
                         imageStore.set([]);
+                        scrollToTop();
                     }
                 },
                 onUpdate: (res) => applyUpdate(res, expectedSessionId),
@@ -327,7 +327,6 @@
                 sorting,
                 latestId: "",
                 oldestId: lastImage.id,
-                nsfw: $nsfwMode,
                 sessionId: searchSessionId || undefined,
             });
 
@@ -726,31 +725,23 @@
             <span class:pending={!searchCountComplete}>{$imageAmountStore}</span>
         </span>
 
-        <label for="sorting">
-            Sorting:
-            <select
-                id="sorting"
-                bind:value={sorting}
-                on:change={() => selectChange(true)}
-            >
-                {#each sortingMethods as method}
-                    <option value={method}>{method}</option>
-                {/each}
-            </select>
-        </label>
+        <Select
+            id="sorting"
+            prefix="Sorting"
+            bind:value={sorting}
+            options={sortingMethods}
+            on:change={() => selectChange(true)}
+        />
 
-        <label for="collapse">
-            Collapse:
-            <select
-                id="collapse"
-                bind:value={$explorationMode}
-                on:change={() => selectChange(true)}
-            >
-                {#each explorationModes as mode}
-                    <option value={mode}>{mode}</option>
-                {/each}
-            </select>
-        </label>
+        <Select
+            id="collapse"
+            prefix="Collapse"
+            bind:value={$explorationMode}
+            options={explorationModes}
+            on:change={() => selectChange(true)}
+        />
+
+        <FilterMultiSelect onChange={() => selectChange(false)} />
 
         <label for="nsfw">
             NSFW:
@@ -758,16 +749,6 @@
                 type="checkbox"
                 id="nsfw"
                 bind:checked={$nsfwMode}
-                on:change={() => selectChange(false)}
-            />
-        </label>
-
-        <label for="folderFilter">
-            Folder filter:
-            <input
-                type="checkbox"
-                id="folderFilter"
-                bind:checked={$folderMode}
                 on:change={() => selectChange(false)}
             />
         </label>
@@ -983,33 +964,12 @@
         }
     }
 
-    select {
-        margin: 0;
-        padding: 0;
-        background-color: transparent;
-        border: none;
-        font-family: "Open sans", sans-serif;
-        font-size: 1em;
-        color: #ddd;
-        border-radius: 0.2em;
-
-        &:focus {
-            outline: none;
-        }
-
-        &:focus-visible {
-            background-color: #333;
-        }
-
-        option {
-            background-color: #222;
-        }
-    }
-
     label {
         display: flex;
         align-items: center;
         gap: 0.5em;
+        cursor: pointer;
+        user-select: none;
     }
 
     input[type="checkbox"] {

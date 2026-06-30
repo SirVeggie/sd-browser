@@ -1,68 +1,32 @@
 # Migrations
 
-App data version is stored in `MiscDB` under the key `version`. The current version is `APP_VERSION` in `src/lib/server/migration/index.ts`.
+## Folder filter → custom filters (2026-06)
 
-Migration steps live in `src/lib/server/migration/` — one file per version (`v1.ts`, `v2.ts`, …). Each step assumes the **previous** version's on-disk state and bumps the stored version when it completes.
+### What changed
 
-The orchestrator runs steps in order by version number:
+The standalone folder filter (`folderFilter` / `folderMode`) was replaced by the custom filters system. Users can define any number of named filter expressions and toggle them from the image page multi-select.
 
-1. **Startup** (`handleMigrationStart`) — layout migrations before MetaDB opens
-2. **Data load** (`runDataMigrations`) — schema/data migrations once the image cache is loaded
-3. **End** (`handleMigrationEnd`) — sets version to `APP_VERSION` (covers fresh installs that skip data migrations)
+NSFW filtering is unchanged in the UI (checkbox + editable filter string on settings). Only request packaging was harmonized: all filtering goes through `filters[]`; the redundant `nsfw: boolean` API field was removed.
 
-Example: no stored version (treated as 0 internally) runs v1 if old files exist, bumps to `1`, then v2 during cache load, bumps to `2`.
+### Affected data
 
-## Pre-versioning → v1 — SQLite file split
+| Legacy key | Replacement |
+|------------|-------------|
+| `folderFilter` (localStorage + global settings) | `customFilters.filters[]` — built-in **Folders** entry (`id: builtin-folders`) |
+| `folderMode` (localStorage) | `activeCustomFilterIds` — includes `builtin-folders` when folder filter was enabled |
 
-**When:** No `version` key stored (pre-versioning installs).
+### Migration code
 
-**Assumes:** Pre-split layout (`data.sqlite3` + monolithic `metadata.sqlite3`). No-ops if those files are already gone.
+- Local: [`src/lib/migrations/folderFilterMigration.ts`](../src/lib/migrations/folderFilterMigration.ts) — `migrateFolderFilterToCustomFilters()`, guarded by `folderFilterMigrated` in localStorage
+- Global settings pull: `migratePulledGlobalSettings()` in the same file, called from `updateGlobalSettings()`
 
-**Code:** `src/lib/server/migration/v1.ts`
+### How to verify
 
-**What changed:** Single `data.sqlite3` and monolithic `metadata.sqlite3` were split into `appdata.sqlite3`, `metadata.sqlite3` (short rows), and `workflows.sqlite3` (prompt/workflow/extra).
+1. With legacy `folderFilter` / `folderMode` in localStorage, reload the app once — custom filters should contain a **Folders** entry with the same expression; active state should match prior `folderMode`.
+2. Image page multi-select shows **Folders** when migrated; toggling it changes results as before.
+3. NSFW checkbox still works independently; network requests send NSFW expression inside `filters[]` only (no `nsfw` field).
+4. Settings → Custom Filters: add, edit, delete entries; changes persist and sync globally.
 
-**Verify:** Upgrade from oldest layout; metadata transfers and version becomes `1`.
+### Removal
 
-**Removal:** Safe once all installs are on version ≥ 1.
-
-## v1 → v2 — Remove isUnique, recalculate extradata
-
-**When:** Stored version &lt; 2.
-
-**Assumes:** v1 file layout (split sqlite files). Extradata may use an older schema.
-
-**Recalc:** Drops the extradata table; `MetaCalcDB.setup()` recreates it from the current schema, then the existing "Calculating missing data" pass in `indexCachedFiles` rebuilds all rows via `getServerImage()`.
-
-**Code:** `src/lib/server/migration/v2.ts`
-
-**What changed:**
-
-- Dropped the extradata table so startup recreates it with the current schema (no `isUnique` column) and recalculates all rows via `getServerImage()`.
-- Exploration mode `'unique'` removed; saved client preference coerced to `'none'` via `coerceExplorationMode` in `src/lib/types/misc.ts`.
-
-**Note:** `'unique'` collapse mode was restored in a later release. No data migration is required; the MiscDB `exploration-cache:unique` entry is built on next startup when missing or stale.
-
-**Verify:** Upgrade from v1 library; extradata repopulates; exploration with old `'unique'` setting falls back to `'none'`.
-
-**Removal:** Safe once all libraries report version ≥ 2.
-
-## v2 → v3 — Image dimensions for layout stability
-
-**When:** Stored version &lt; 3.
-
-**Assumes:** v2 file layout (split sqlite files with short + workflows tables).
-
-**Code:** `src/lib/server/migration/v3.ts`, `src/lib/server/imageDimensions.ts`
-
-**What changed:**
-
-- Added nullable `width` and `height` columns to the short metadata table.
-- Full backfill on upgrade reads dimensions from each indexed file (sharp for images, ffprobe for videos).
-- Search API and `ClientImage` include dimensions when known.
-- Grid thumbnails reserve space via `aspect-ratio` when dimensions are known.
-- Full image view shows `Size: [width]x[height]` under the model line.
-
-**Verify:** Upgrade from v2 library; grid cells no longer jump on load; full view shows size for indexed images.
-
-**Removal:** Safe once all libraries report version ≥ 3.
+After all clients have migrated, legacy `folderFilter` keys can be ignored. The migration flag `folderFilterMigrated` prevents re-running local migration.

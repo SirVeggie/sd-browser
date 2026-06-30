@@ -3,6 +3,7 @@
     import Modal from "$lib/items/Modal.svelte";
     import Button from "$lib/items/Button.svelte";
     import Input from "$lib/items/Input.svelte";
+    import Select from "$lib/items/Select.svelte";
     import { bulkModalStore } from "$lib/stores/bulkStore";
     import {
         CUSTOM_INSTRUCTION_ID,
@@ -59,6 +60,15 @@
         $bulkModalStore.systemInstructionPresetId,
         $bulkModalStore.systemInstruction,
     );
+
+    $: systemInstructionOptions = [
+        ...$llmStore.systemInstructions.map((instruction) => ({
+            value: instruction.id,
+            label: instruction.name,
+            title: instruction.text,
+        })),
+        { value: CUSTOM_INSTRUCTION_ID, label: "Custom" },
+    ];
 
     $: {
         const presetId = $bulkModalStore.systemInstructionPresetId;
@@ -315,11 +325,11 @@
         {#if $bulkModalStore.action === "move" || $bulkModalStore.action === "copy"}
             <label>
                 Destination folder
-                <select bind:value={$bulkModalStore.folder} disabled={running}>
-                    {#each folders as path (path)}
-                        <option value={path}>{path}</option>
-                    {/each}
-                </select>
+                <Select
+                    bind:value={$bulkModalStore.folder}
+                    options={folders}
+                    disabled={running}
+                />
             </label>
         {/if}
 
@@ -327,11 +337,11 @@
             <div class="annotate">
                 <label>
                     Mode
-                    <select bind:value={$bulkModalStore.annotateMode} disabled={running}>
-                        <option value="generate">Generate</option>
-                        <option value="clear">Clear</option>
-                        <option value="modify">Modify</option>
-                    </select>
+                    <Select
+                        bind:value={$bulkModalStore.annotateMode}
+                        options={["generate", "clear", "modify"]}
+                        disabled={running}
+                    />
                 </label>
 
                 {#if $bulkModalStore.annotateMode === "generate"}
@@ -356,21 +366,12 @@
 
                     <label>
                         System instruction
-                        <select
+                        <Select
                             bind:value={$bulkModalStore.systemInstructionPresetId}
+                            options={systemInstructionOptions}
                             disabled={running}
                             title={systemInstructionTooltip || undefined}
-                        >
-                            {#each $llmStore.systemInstructions as instruction (instruction.id)}
-                                <option
-                                    value={instruction.id}
-                                    title={instruction.text}
-                                >
-                                    {instruction.name}
-                                </option>
-                            {/each}
-                            <option value={CUSTOM_INSTRUCTION_ID}>Custom</option>
-                        </select>
+                        />
                     </label>
 
                     {#if isCustomSystemInstruction}
@@ -564,15 +565,6 @@
             outline: none;
             border-color: #aaad;
         }
-    }
-
-    select {
-        background-color: #333;
-        color: #ddd;
-        border: 1px solid #1118;
-        border-radius: 0.5em;
-        padding: 0.5em;
-        font-family: "Open sans", sans-serif;
     }
 
     .annotate {

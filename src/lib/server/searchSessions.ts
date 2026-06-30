@@ -26,7 +26,6 @@ type SessionQuery = Pick<
     | 'sparseFrequency'
     | 'similarityAlgorithm'
     | 'similarityThreshold'
-    | 'nsfw'
 >;
 
 const sessions = new Map<string, SearchSession>();
@@ -41,7 +40,6 @@ export function buildQueryKey(query: SessionQuery): string {
         sparseFrequency: query.sparseFrequency,
         similarityAlgorithm: query.similarityAlgorithm,
         similarityThreshold: query.similarityThreshold,
-        nsfw: query.nsfw,
     });
 }
 

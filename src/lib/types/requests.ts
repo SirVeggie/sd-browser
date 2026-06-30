@@ -60,7 +60,6 @@ export type ImageRequest = {
     sparseFrequency: number;
     similarityAlgorithm: SimilarityAlgorithm;
     similarityThreshold: number;
-    nsfw: boolean;
     sessionId?: string;
 };
 export function isImageRequest(object: any): object is ImageRequest {
@@ -96,7 +95,6 @@ export type UpdateRequest = {
     similarityThreshold: number;
     timestamp: number;
     currentIds: string[];
-    nsfw: boolean;
 };
 export function isUpdateRequest(object: any): object is UpdateRequest {
     return testType(object, [
