@@ -1,5 +1,6 @@
-import Database, { type Database as DB3 } from 'better-sqlite3';
+import type { Database as DB3 } from 'better-sqlite3';
 import path from 'path';
+import { openDatabase } from '../sqlite';
 import fs from 'fs/promises';
 import type { ServerImageFull } from '$lib/types/images';
 import { calcTimeRemaining, calcTimeSpent, print, updateLine } from '$lib/tools/misc';
@@ -28,10 +29,10 @@ export async function migrateV1() {
         await fs.rename(oldData, newData);
         await fs.rename(oldFull, tempFull);
         updateLine('Transferring data: opening file access');
-        odb = new Database(path.join(datapath, 'metadata-temp.sqlite3'));
-        adb = new Database(path.join(datapath, 'appdata.sqlite3'));
-        sdb = new Database(path.join(datapath, 'metadata.sqlite3'));
-        fdb = new Database(path.join(datapath, 'workflows.sqlite3'));
+        odb = openDatabase(path.join(datapath, 'metadata-temp.sqlite3'));
+        adb = openDatabase(path.join(datapath, 'appdata.sqlite3'));
+        sdb = openDatabase(path.join(datapath, 'metadata.sqlite3'));
+        fdb = openDatabase(path.join(datapath, 'workflows.sqlite3'));
 
         updateLine('Transferring data: deleting old data');
         adb.exec('DROP TABLE IF EXISTS extradata');
@@ -84,13 +85,13 @@ export async function migrateV1() {
                 for (const image of images) {
                     stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview);
                 }
-            })(batch);
+            }).immediate(batch);
             updateLine(`Transferring data: ${fetched}/${total} (moving 2/2) | estimate: ${estimate}`);
             fdb.transaction((images: ServerImageFull[]) => {
                 for (const image of images) {
                     stmtSetF.run(image.id, image.prompt, image.workflow, '');
                 }
-            })(batch);
+            }).immediate(batch);
 
             fetched += size;
             estimate = calcTimeRemaining(start, fetched, total);

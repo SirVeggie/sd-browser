@@ -1,8 +1,8 @@
-import Database from 'better-sqlite3';
 import type { Database as BetterSqlite3 } from 'better-sqlite3';
 import path from 'path';
 import { datapath } from './filemanager';
 import { sqliteTableExists } from './db';
+import { openDatabase } from './sqlite';
 import type { ImageList, ServerImage } from '$lib/types/images';
 
 export class TestDB {
@@ -27,7 +27,7 @@ export class TestDB {
 
         TestDB.isOpen = true;
         const fullpath = path.join(datapath, TestDB.file);
-        TestDB.db = new Database(fullpath);
+        TestDB.db = openDatabase(fullpath);
 
         if (TestDB.isSetup)
             return;

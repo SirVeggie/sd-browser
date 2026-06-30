@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3';
 import type { Database as BetterSqlite3, Statement } from 'better-sqlite3';
 import path from 'path';
 import { datapath } from './filemanager';
+import { openDatabase } from './sqlite';
 import type { ImageExtraData, ServerImage, ServerImageFull, ServerImagePartial } from '$lib/types/images';
 import { deleteFileSync, fileExistsSync } from './filetools';
 
@@ -65,8 +65,8 @@ export class MetaDB {
         }
 
         MetaDB.isOpen = true;
-        MetaDB.sdb = new Database(shortPath);
-        MetaDB.fdb = new Database(fullPath);
+        MetaDB.sdb = openDatabase(shortPath);
+        MetaDB.fdb = openDatabase(fullPath);
 
         if (MetaDB.isSetup)
             return;
@@ -91,7 +91,7 @@ export class MetaDB {
         if (!fileExistsSync(shortPath))
             return;
 
-        const db = new Database(shortPath);
+        const db = openDatabase(shortPath);
         try {
             if (!sqliteTableExists(db, MetaDB.tShort))
                 return;
@@ -110,7 +110,7 @@ export class MetaDB {
         if (!fileExistsSync(fullPath))
             return;
 
-        const db = new Database(fullPath);
+        const db = openDatabase(fullPath);
         try {
             if (!sqliteTableExists(db, MetaDB.tFull))
                 return;
@@ -133,7 +133,7 @@ export class MetaDB {
             for (const item of items) {
                 stmt.run(item.width, item.height, item.id);
             }
-        })(updates);
+        }).immediate(updates);
     }
 
     static countMissingDimensions(): number {
@@ -147,8 +147,8 @@ export class MetaDB {
     }
 
     static dropTable(name: string) {
-        new Database(path.join(datapath, MetaDB.fShort)).exec('DROP TABLE IF EXISTS ' + name).close();
-        new Database(path.join(datapath, MetaDB.fFull)).exec('DROP TABLE IF EXISTS ' + name).close();
+        openDatabase(path.join(datapath, MetaDB.fShort)).exec('DROP TABLE IF EXISTS ' + name).close();
+        openDatabase(path.join(datapath, MetaDB.fFull)).exec('DROP TABLE IF EXISTS ' + name).close();
     }
 
     static close() {
@@ -277,12 +277,12 @@ export class MetaDB {
             for (const image of images) {
                 MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview, image.width ?? null, image.height ?? null);
             }
-        })(images);
+        }).immediate(images);
         MetaDB.fdb.transaction((images: ServerImageFull[]) => {
             for (const image of images) {
                 MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow, image.extra);
             }
-        })(images);
+        }).immediate(images);
     }
 
     static delete(id: string) {
@@ -297,12 +297,12 @@ export class MetaDB {
             for (const id of ids) {
                 MetaDB.stmtDeleteS.run(id);
             }
-        })(ids);
+        }).immediate(ids);
         MetaDB.fdb.transaction(ids => {
             for (const id of ids) {
                 MetaDB.stmtDeleteF.run(id);
             }
-        })(ids);
+        }).immediate(ids);
     }
 
     static setAndDeleteAll(images: ServerImageFull[], deletions: string[]) {
@@ -319,14 +319,14 @@ export class MetaDB {
                 MetaDB.stmtDeleteS.run(id);
             for (const image of images)
                 MetaDB.stmtSetS.run(image.id, image.file, image.folder, image.modifiedDate, image.createdDate, image.preview, image.width ?? null, image.height ?? null);
-        })(deletions, images);
+        }).immediate(deletions, images);
 
         MetaDB.fdb.transaction((deletions: string[], images: ServerImageFull[]) => {
             for (const id of deletions)
                 MetaDB.stmtDeleteF.run(id);
             for (const image of images)
                 MetaDB.stmtSetF.run(image.id, image.prompt, image.workflow, image.extra);
-        })(deletions, images);
+        }).immediate(deletions, images);
     }
 
     static clearAll() {
@@ -377,7 +377,7 @@ export class MetaCalcDB {
         
         MetaCalcDB.isOpen = true;
         const fullpath = path.join(datapath, MetaCalcDB.file);
-        MetaCalcDB.db = new Database(fullpath);
+        MetaCalcDB.db = openDatabase(fullpath);
 
         if (MetaCalcDB.isSetup)
             return;
@@ -390,7 +390,7 @@ export class MetaCalcDB {
         if (!fileExistsSync(fullpath))
             return;
 
-        const db = new Database(fullpath);
+        const db = openDatabase(fullpath);
         try {
             if (!sqliteTableExists(db, MetaCalcDB.table))
                 return;
@@ -459,7 +459,7 @@ export class MetaCalcDB {
                 const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
                 stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation);
             }
-        })(data);
+        }).immediate(data);
     }
 
     static setAnnotation(id: string, annotation: string) {
@@ -479,7 +479,7 @@ export class MetaCalcDB {
         MetaCalcDB.db.transaction(ids => {
             for (const id of ids)
                 stmt.run(id);
-        })(ids);
+        }).immediate(ids);
     }
 
     static setAndDeleteAll(data: ImageExtraData[], deletions: string[]) {
@@ -500,7 +500,7 @@ export class MetaCalcDB {
                 const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
                 addstmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation);
             }
-        })(data, deletions);
+        }).immediate(data, deletions);
     }
 
     static clearAll() {
@@ -532,7 +532,7 @@ export class MiscDB {
 
         MiscDB.isOpen = true;
         const fullpath = path.join(datapath, MiscDB.file);
-        MiscDB.db = new Database(fullpath);
+        MiscDB.db = openDatabase(fullpath);
 
         if (MiscDB.isSetup)
             return;
@@ -577,7 +577,7 @@ export class MiscDB {
         MiscDB.db.transaction(misc => {
             for (const [id, value] of misc)
                 stmt.run(id, value);
-        })(misc);
+        }).immediate(misc);
     }
 
     static delete(id: string) {
@@ -592,7 +592,7 @@ export class MiscDB {
         MiscDB.db.transaction(ids => {
             for (const id of ids)
                 stmt.run(id);
-        })(ids);
+        }).immediate(ids);
     }
 
     static clearAll() {

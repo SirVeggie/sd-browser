@@ -1,5 +1,5 @@
-import Database from 'better-sqlite3';
 import { MetaDB, MetaCalcDB } from '../db';
+import { openDatabase } from '../sqlite';
 import { datapath } from '../filemanager';
 import { fileExistsSync } from '../filetools';
 import path from 'path';
@@ -10,7 +10,7 @@ export async function migrateV2() {
 
     const appDataPath = path.join(datapath, 'appdata.sqlite3');
     if (fileExistsSync(appDataPath)) {
-        const db = new Database(appDataPath);
+        const db = openDatabase(appDataPath);
         try {
             db.exec(`DROP TABLE IF EXISTS extradata`);
         } catch (err) {
