@@ -16,7 +16,7 @@
         searchImages,
         subscribeImageStream,
     } from "$lib/requests/imageRequests";
-    import { expandClientImages, formatSearchDateMinute, stringSort } from "$lib/tools/misc";
+    import { expandClientImages, formatSearchDateMinute } from "$lib/tools/misc";
     import {
         explorationModes,
         sortingMethods,
@@ -47,7 +47,7 @@
     import { sleep } from "$lib/tools/sleep";
     import type { ClientImage, ImageInfo } from "$lib/types/images";
     import type { UpdateResponse } from "$lib/types/requests";
-    import { fetchFolderStructure } from "$lib/requests/miscRequests";
+    import { fetchFolderPaths } from "$lib/requests/miscRequests";
     import { flyoutState } from "$lib/stores/flyoutStore";
     import BulkModal from "$lib/components/BulkModal.svelte";
     import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
@@ -98,6 +98,7 @@
         scrollToTop();
         reconnectSearch();
         startTrigger(1000);
+        fetchFolderPaths().catch(() => {});
 
         window.addEventListener("keydown", keylistener);
 
@@ -514,11 +515,11 @@
                 },
                 {
                     name: "Move",
-                    handler: () => moveImages(id),
+                    handler: () => folderActionMenu(id, "move"),
                 },
                 {
                     name: "Copy",
-                    handler: () => copyImages(id),
+                    handler: () => folderActionMenu(id, "copy"),
                 },
                 {
                     name: "Delete",
@@ -538,71 +539,22 @@
         return async (e: InputEvent) => {
             const pos = getEventCoords(e);
             closeAllContextMenus();
-            const options = type === "move" ? await moveImages("") : await copyImages("");
+            const options = await folderActionMenu("", type);
             openContextMenu(pos, options);
         };
     }
 
-    async function moveImages(id: string): Promise<ContextMenuOption[]> {
-        const folders = (await fetchFolderStructure())
-            .sort(stringSort((x) => x.name))
-            .reverse();
-        const list: string[] = ["/"];
-
-        while (folders.length) {
-            const folder = folders.pop()!;
-            list.push(
-                `${folder.parent}/${folder.name}`
-                    .replace(/^\//, "")
-                    .replace(/\\/, "/"),
-            );
-            if (folder.subfolders) {
-                folders.push(
-                    ...folder.subfolders
-                        .sort(stringSort((x) => x.name))
-                        .reverse(),
-                );
-            }
-        }
-
-        return list.map((x) => ({
-            name: x,
+    async function folderActionMenu(
+        id: string,
+        type: "move" | "copy",
+    ): Promise<ContextMenuOption[]> {
+        const list = await fetchFolderPaths();
+        return list.map((folder) => ({
+            name: folder,
             handler: () =>
                 imageAction(selecting ? $selection : id, {
-                    type: "move",
-                    folder: x,
-                }),
-        }));
-    }
-
-    async function copyImages(id: string): Promise<ContextMenuOption[]> {
-        const folders = (await fetchFolderStructure())
-            .sort(stringSort((x) => x.name))
-            .reverse();
-        const list: string[] = ["/"];
-
-        while (folders.length) {
-            const folder = folders.pop()!;
-            list.push(
-                `${folder.parent}/${folder.name}`
-                    .replace(/^\//, "")
-                    .replace(/\\/, "/"),
-            );
-            if (folder.subfolders) {
-                folders.push(
-                    ...folder.subfolders
-                        .sort(stringSort((x) => x.name))
-                        .reverse(),
-                );
-            }
-        }
-
-        return list.map((x) => ({
-            name: x,
-            handler: () =>
-                imageAction(selecting ? $selection : id, {
-                    type: "copy",
-                    folder: x,
+                    type,
+                    folder,
                 }),
         }));
     }

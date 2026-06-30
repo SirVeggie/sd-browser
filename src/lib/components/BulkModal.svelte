@@ -12,8 +12,8 @@
     } from "$lib/stores/llmStore";
     import type { SearchParams } from "$lib/stores/searchStore";
     import { resolveSearchMatch, runBulkAction } from "$lib/requests/bulkRequests";
-    import { fetchFolderStructure } from "$lib/requests/miscRequests";
-    import { formatDurationCompact, formatTaskDuration, stringSort } from "$lib/tools/misc";
+    import { fetchFolderPaths } from "$lib/requests/miscRequests";
+    import { formatDurationCompact, formatTaskDuration } from "$lib/tools/misc";
     import type { BulkAction, BulkRequest } from "$lib/types/requests";
     import { askConfirmation } from "./Confirm.svelte";
     import { notify } from "./Notifier.svelte";
@@ -109,28 +109,7 @@
 
     async function loadFolders() {
         try {
-            const structure = (await fetchFolderStructure())
-                .sort(stringSort((x) => x.name))
-                .reverse();
-            const list: string[] = ["/"];
-
-            while (structure.length) {
-                const item = structure.pop()!;
-                list.push(
-                    `${item.parent}/${item.name}`
-                        .replace(/^\//, "")
-                        .replace(/\\/, "/"),
-                );
-                if (item.subfolders) {
-                    structure.push(
-                        ...item.subfolders
-                            .sort(stringSort((x) => x.name))
-                            .reverse(),
-                    );
-                }
-            }
-
-            folders = list;
+            folders = await fetchFolderPaths();
             if (!folders.includes($bulkModalStore.folder)) {
                 bulkModalStore.update((s) => ({ ...s, folder: folders[0] ?? "/" }));
             }

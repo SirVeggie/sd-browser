@@ -197,16 +197,11 @@ export function isRecalculateSimilarCacheResponse(object: any): object is Recalc
     ]);
 }
 
-export type Folder = {
-    name: string;
-    parent: string;
-    subfolders: Folder[];
-};
 export type FoldersResponse = {
-    folders: Folder[];
+    paths: string[];
 };
 export function isFoldersResponse(object: any): object is FoldersResponse {
-    return testType(object, ['folders']);
+    return testType(object, ['paths']);
 }
 
 export type ServerError = {

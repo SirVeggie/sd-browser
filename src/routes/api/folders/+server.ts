@@ -1,7 +1,8 @@
 import { IMG_FOLDER } from '$env/static/private';
 import { invalidAuth } from '$lib/server/auth.js';
 import { success } from '$lib/server/responses';
-import type { Folder, FoldersResponse } from '$lib/types/requests.js';
+import { stringSortSingle } from '$lib/tools/misc';
+import type { FoldersResponse } from '$lib/types/requests.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -11,49 +12,57 @@ const folderRegex = /^\.?[^.]+$/;
 export async function GET(e) {
     const err = invalidAuth(e);
     if (err) return err;
-    const result = await startRecurse();
+    const paths = await collectFolderPaths();
     return success({
-        folders: result,
+        paths,
     } as FoldersResponse);
 }
 
-async function startRecurse(): Promise<Folder[]> {
-    const result: Folder[] = [];
-
-    const files = await fs.readdir(root);
-    for (const file of files.filter(x => folderRegex.test(x))) {
-        const fullpath = path.join(root, file);
-        try {
-            const stats = await fs.stat(fullpath);
-            if (!stats.isDirectory()) continue;
-            result.push(await recurse(file, ''));
-        } catch {
-            // failed
-        }
-    }
-
-    return result;
+function formatFolderPath(parent: string, name: string): string {
+    return `${parent}/${name}`.replace(/^\//, '').replace(/\\/, '/');
 }
 
-async function recurse(name: string, parent: string): Promise<Folder> {
-    const folder: Folder = {
-        name,
-        parent,
-        subfolders: [],
-    };
+async function listSubdirs(dirPath: string): Promise<string[]> {
+    const files = await fs.readdir(dirPath);
+    const subdirs: string[] = [];
 
-    const files = await fs.readdir(path.join(root, parent, name));
+    await Promise.all(
+        files.filter((x) => folderRegex.test(x)).map(async (file) => {
+            const fullpath = path.join(dirPath, file);
+            try {
+                const stats = await fs.stat(fullpath);
+                if (stats.isDirectory()) subdirs.push(file);
+            } catch {
+                // failed
+            }
+        }),
+    );
 
-    for (const file of files.filter(x => folderRegex.test(x))) {
-        const fullpath = path.join(root, parent, name, file);
-        try {
-            const stats = await fs.stat(fullpath);
-            if (!stats.isDirectory()) continue;
-            folder.subfolders.push(await recurse(file, path.join(parent, name)));
-        } catch {
-            // failed
-        }
+    return subdirs.sort(stringSortSingle);
+}
+
+async function walkFolder(name: string, parent: string): Promise<string[]> {
+    const paths = [formatFolderPath(parent, name)];
+    const subdirs = await listSubdirs(path.join(root, parent, name));
+    const childPaths = await Promise.all(
+        subdirs.map((file) => walkFolder(file, path.join(parent, name))),
+    );
+
+    for (const child of childPaths) {
+        paths.push(...child);
     }
 
-    return folder;
+    return paths;
+}
+
+async function collectFolderPaths(): Promise<string[]> {
+    const paths: string[] = ['/'];
+    const topDirs = await listSubdirs(root);
+    const childPaths = await Promise.all(topDirs.map((file) => walkFolder(file, '')));
+
+    for (const child of childPaths) {
+        paths.push(...child);
+    }
+
+    return paths;
 }
