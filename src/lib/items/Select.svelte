@@ -22,6 +22,10 @@
     let rootEl: HTMLDivElement;
     let valueEl: HTMLSpanElement;
     let panelLeft = 0;
+    let panelTop = 0;
+    let panelMinWidth = 0;
+    let panelMaxHeight = 0;
+    let removePositionListeners: (() => void) | undefined;
 
     function normalize(option: SelectOption): {
         value: string;
@@ -39,12 +43,38 @@
         normalized.find((option) => option.value === value)?.label ?? value;
 
     $: if (open) {
-        tick().then(updatePanelAlign);
+        tick().then(() => {
+            updatePanelPosition();
+            startPositionListeners();
+        });
+    } else {
+        stopPositionListeners();
     }
 
-    function updatePanelAlign() {
+    function updatePanelPosition() {
         if (!rootEl || !valueEl) return;
-        panelLeft = alignDropdownPanel(rootEl, valueEl);
+        const rootRect = rootEl.getBoundingClientRect();
+        const fontSize = parseFloat(getComputedStyle(rootEl).fontSize);
+        const gap = fontSize * 0.35;
+        panelLeft = rootRect.left + alignDropdownPanel(rootEl, valueEl);
+        panelTop = rootRect.bottom + gap;
+        panelMinWidth = Math.max(rootRect.width, fontSize * 8);
+        panelMaxHeight = Math.max(120, window.innerHeight - panelTop - 8);
+    }
+
+    function startPositionListeners() {
+        stopPositionListeners();
+        window.addEventListener("resize", updatePanelPosition);
+        window.addEventListener("scroll", updatePanelPosition, true);
+        removePositionListeners = () => {
+            window.removeEventListener("resize", updatePanelPosition);
+            window.removeEventListener("scroll", updatePanelPosition, true);
+        };
+    }
+
+    function stopPositionListeners() {
+        removePositionListeners?.();
+        removePositionListeners = undefined;
     }
 
     function choose(next: string) {
@@ -63,11 +93,15 @@
     }
 
     onMount(() => {
-        return bindDropdownOutsideClick(
+        const removeOutsideClick = bindDropdownOutsideClick(
             () => open,
             () => { open = false; },
             () => rootEl,
         );
+        return () => {
+            removeOutsideClick();
+            stopPositionListeners();
+        };
     });
 
     function handleKeydown(event: KeyboardEvent) {
@@ -125,7 +159,7 @@
             class="panel"
             role="listbox"
             aria-labelledby={id}
-            style:left="{panelLeft}px"
+            style="left: {panelLeft}px; top: {panelTop}px; min-width: {panelMinWidth}px; max-height: {panelMaxHeight}px;"
         >
             {#each normalized as option, index (option.value)}
                 <button
@@ -209,13 +243,12 @@
     }
 
     .panel {
-        position: absolute;
-        top: calc(100% + 0.35em);
-        z-index: 10;
+        position: fixed;
+        z-index: 200;
         display: flex;
         flex-direction: column;
         gap: 0.15em;
-        min-width: max(100%, 8em);
+        overflow-y: auto;
         background: #2a2a2a;
         border-radius: 0.35em;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);

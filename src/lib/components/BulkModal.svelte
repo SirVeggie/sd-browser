@@ -302,26 +302,26 @@
         </fieldset>
 
         {#if $bulkModalStore.action === "move" || $bulkModalStore.action === "copy"}
-            <label>
-                Destination folder
+            <div class="select-field">
                 <Select
+                    prefix="Destination folder"
                     bind:value={$bulkModalStore.folder}
                     options={folders}
                     disabled={running}
                 />
-            </label>
+            </div>
         {/if}
 
         {#if $bulkModalStore.action === "annotate"}
             <div class="annotate">
-                <label>
-                    Mode
+                <div class="select-field">
                     <Select
+                        prefix="Mode"
                         bind:value={$bulkModalStore.annotateMode}
                         options={["generate", "clear", "modify"]}
                         disabled={running}
                     />
-                </label>
+                </div>
 
                 {#if $bulkModalStore.annotateMode === "generate"}
                     <hr class="separator" />
@@ -343,15 +343,15 @@
                         Include image
                     </label>
 
-                    <label>
-                        System instruction
+                    <div class="select-field">
                         <Select
+                            prefix="System instruction"
                             bind:value={$bulkModalStore.systemInstructionPresetId}
                             options={systemInstructionOptions}
                             disabled={running}
                             title={systemInstructionTooltip || undefined}
                         />
-                    </label>
+                    </div>
 
                     {#if isCustomSystemInstruction}
                         <label>
@@ -551,6 +551,10 @@
         flex-direction: column;
         gap: 0.25em;
         margin-bottom: 0.5em;
+    }
+
+    .select-field {
+        margin-bottom: 0.75em;
     }
 
     .separator {
