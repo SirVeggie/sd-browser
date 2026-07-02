@@ -34,11 +34,6 @@ const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
 let watcher: Watcher | undefined;
 
-export async function remoteDebug() {
-    const imageList = getImageList();
-    console.log(imageList.get([...imageList.keys()][10])?.positive);
-}
-
 //#region indexing
 export async function startFileManager() {
     ensurePathsExist();
