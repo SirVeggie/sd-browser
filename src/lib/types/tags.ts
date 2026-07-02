@@ -68,8 +68,14 @@ export function sortTagNames(names: string[]): string[] {
     return [...priority, ...rest];
 }
 
-export function tagsNotOnImage(registry: TagsRegistryState, imageTags: string[]): string[] {
-    const onImage = new Set(imageTags);
-    const available = registry.tags.map((tag) => tag.name).filter((name) => !onImage.has(name));
+export function tagsAddableToSelection(registry: TagsRegistryState, tagsByImage: string[][]): string[] {
+    if (!tagsByImage.length) return [];
+    const available = registry.tags
+        .map((tag) => tag.name)
+        .filter((name) => tagsByImage.some((imageTags) => !imageTags.includes(name)));
     return sortTagNames(available);
+}
+
+export function tagsNotOnImage(registry: TagsRegistryState, imageTags: string[]): string[] {
+    return tagsAddableToSelection(registry, [imageTags]);
 }

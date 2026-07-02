@@ -1,6 +1,7 @@
 import { DEFAULT_TAGS_REGISTRY, type BulkTagMode } from '$lib/types/tags';
 import { MetaCalcDB, MiscDB } from './db';
 import { getImage, refreshExtradataInMemory } from './dataIndex';
+import { notifyMetadataChange } from './imageChangeHub';
 
 const settingsKey = 'settings';
 
@@ -18,6 +19,7 @@ export function setImageTags(id: string, tags: string[]): void {
     const image = getImage(id);
     if (image)
         image.tags = tags;
+    notifyMetadataChange(id);
 }
 
 export function removeTagFromAllImages(tagName: string): number {

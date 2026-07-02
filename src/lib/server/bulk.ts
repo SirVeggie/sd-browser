@@ -1,5 +1,6 @@
 import { limitedParallelMap, updateLine } from "$lib/tools/misc";
 import type { BulkRequest } from "$lib/types/requests";
+import { notifyMetadataChange } from "./imageChangeHub";
 import { annotateImage, clearAnnotation, modifyAnnotation } from "./llm";
 import { bulkUpdateImageTags } from "./tags";
 import { copyImages, deleteImages, moveImages } from "./filemanager";
@@ -99,6 +100,7 @@ export async function runBulkAction(
             if (failures) {
                 throw new Error(`Bulk clear annotation finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
             }
+            notifyMetadataChange(ids);
             return false;
         }
 
@@ -130,6 +132,7 @@ export async function runBulkAction(
             if (failures) {
                 throw new Error(`Bulk modify annotation finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
             }
+            notifyMetadataChange(ids);
             return false;
         }
 
@@ -167,6 +170,7 @@ export async function runBulkAction(
             if (failures) {
                 throw new Error(`Bulk annotate finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
             }
+            notifyMetadataChange(ids);
             return false;
         }
 
@@ -183,7 +187,8 @@ export async function runBulkAction(
             updateLine(`Bulk tag ${request.action.mode}: ${done}/${total}`);
         }
         updateLine("");
-        return true;
+        notifyMetadataChange(ids);
+        return false;
     }
 
     throw new Error("Unknown bulk action");

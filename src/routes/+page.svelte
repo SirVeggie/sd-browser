@@ -68,7 +68,7 @@
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
     import { fetchImageTags, updateImageTags } from "$lib/requests/tagRequests";
     import { tagsStore } from "$lib/stores/tagsStore";
-    import { tagsNotOnImage } from "$lib/types/tags";
+    import { tagsAddableToSelection } from "$lib/types/tags";
     import { flyoutState } from "$lib/stores/flyoutStore";
     import BulkModal from "$lib/components/BulkModal.svelte";
     import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
@@ -856,7 +856,7 @@
                 },
                 {
                     name: "Tag as...",
-                    visible: !selecting && $tagsStore.tags.length > 0,
+                    visible: $tagsStore.tags.length > 0 && (!selecting || $selection.length > 0),
                     submenu: true,
                     handler: () => tagActionMenu(id),
                 },
@@ -942,12 +942,15 @@
 
     async function tagActionMenu(id: string): Promise<ContextMenuOption[] | void> {
         try {
-            const imageTags = await fetchImageTags(id);
-            const available = tagsNotOnImage($tagsStore, imageTags);
+            const ids = selecting ? $selection : [id];
+            if (!ids.length) return;
+
+            const tagsByImage = await Promise.all(ids.map((imageId) => fetchImageTags(imageId)));
+            const available = tagsAddableToSelection($tagsStore, tagsByImage);
             if (!available.length) {
                 return [
                     {
-                        name: "All tags on image",
+                        name: ids.length === 1 ? "All tags on image" : "All tags on selection",
                         enabled: false,
                         handler: () => {},
                     },
@@ -957,10 +960,12 @@
             return available.map((tag) => ({
                 name: tag,
                 handler: async () => {
-                    const current = await fetchImageTags(id);
-                    if (current.includes(tag))
-                        return;
-                    await updateImageTags(id, [...current, tag]);
+                    await Promise.all(ids.map(async (imageId) => {
+                        const current = await fetchImageTags(imageId);
+                        if (current.includes(tag))
+                            return;
+                        await updateImageTags(imageId, [...current, tag]);
+                    }));
                 },
             }));
         } catch (cause) {

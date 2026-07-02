@@ -1,11 +1,35 @@
-import { getDeletedImageIds, getFreshImageTimestamp } from './dataIndex';
-import { applyResultSkip, applyResultTake, explorationFromRequest, searchImages } from './searching';
+import { getDeletedImageIds, getFreshImageTimestamp, getFreshImages, getImage } from './dataIndex';
+import { applyResultSkip, applyResultTake, buildMatcher, explorationFromRequest, searchImages } from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';
 import type { UpdateRequest, UpdateResponse } from '$lib/types/requests';
 import type { SearchSession } from './searchSessions';
 
 export type ImageUpdateResult = UpdateResponse | { error: string; status?: number };
+
+function getMetadataMembershipDeletions(
+    query: UpdateRequest,
+    currentIds: readonly string[],
+    sinceTimestamp: number,
+): string[] {
+    const freshImages = getFreshImages(sinceTimestamp);
+    if (!freshImages.length) return [];
+
+    const freshIdSet = new Set(freshImages.map((image) => image.id));
+    const exploration = explorationFromRequest(query);
+    const matcher = buildMatcher(query.search, query.matching, exploration);
+    const filter = buildMatcher(query.filters.join(' AND '), 'regex');
+
+    const deletions: string[] = [];
+    for (const id of currentIds) {
+        if (!freshIdSet.has(id)) continue;
+        const image = getImage(id);
+        if (!image || !matcher(image) || !filter(image)) {
+            deletions.push(id);
+        }
+    }
+    return deletions;
+}
 
 export function computeImageUpdate(
     query: UpdateRequest,
@@ -51,7 +75,16 @@ export function computeImageUpdate(
     }
 
     const staleIds = query.currentIds.filter((id) => !resultIds.has(id));
-    const deletions = [...new Set([...getDeletedImageIds(query.timestamp), ...staleIds])];
+    const metadataDeletions = getMetadataMembershipDeletions(
+        query,
+        query.currentIds,
+        query.timestamp,
+    );
+    const deletions = [...new Set([
+        ...getDeletedImageIds(query.timestamp),
+        ...staleIds,
+        ...metadataDeletions,
+    ])];
     const timestamp = images.reduce((latest, image) => {
         return Math.max(latest, getFreshImageTimestamp(image.id) ?? latest);
     }, query.timestamp);
