@@ -1,5 +1,23 @@
 <script lang="ts" context="module">
     import { outclick } from "../../actions/outclick";
+    import { closeContextMenuChildren } from "./ContextMenuManager.svelte";
+
+    let hoverCloseTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function cancelHoverClose() {
+        if (hoverCloseTimer) {
+            clearTimeout(hoverCloseTimer);
+            hoverCloseTimer = undefined;
+        }
+    }
+
+    function scheduleHoverClose(menuId: string) {
+        cancelHoverClose();
+        hoverCloseTimer = setTimeout(() => {
+            closeContextMenuChildren(menuId);
+            hoverCloseTimer = undefined;
+        }, 200);
+    }
 </script>
 
 <script lang="ts">
@@ -17,12 +35,14 @@
     let element: HTMLDivElement;
     let position = { ...menu.position };
     let flipLeft = false;
+    let activeSubmenuOption: string | null = null;
 
     $: isSubmenu = menu.parent !== undefined;
 
     $: if (menu) {
         position = { ...menu.position };
         flipLeft = false;
+        activeSubmenuOption = null;
     }
 
     $: {
@@ -47,22 +67,22 @@
         }
     }
 
-    async function clickHandler(
-        e: MouseEvent,
+    async function openSubmenu(
+        button: HTMLButtonElement,
         menu: IContextMenu,
         option: ContextMenuOption,
     ) {
-        if (e.button !== 0) return;
-        if (!(option.enabled ?? true)) return;
-        e.stopPropagation();
-        e.preventDefault();
+        if (!(option.enabled ?? true) || !option.submenu) return;
 
-        const button = e.currentTarget as HTMLButtonElement;
         const buttonRect = button.getBoundingClientRect();
         const menuRect = element.getBoundingClientRect();
 
         const result = await option.handler();
-        if (!result) return closeContextMenu(menu.id);
+        if (!result) {
+            activeSubmenuOption = null;
+            closeContextMenuChildren(menu.id);
+            return;
+        }
         if (result === "keep") return;
 
         const subposition = {
@@ -72,6 +92,48 @@
         };
         closeContextMenuChildren(menu.id);
         openContextMenu(subposition, result, menu.id);
+    }
+
+    function optionEnter(
+        e: MouseEvent,
+        menu: IContextMenu,
+        option: ContextMenuOption,
+    ) {
+        cancelHoverClose();
+
+        if (option.submenu) {
+            if (activeSubmenuOption === option.name) return;
+            activeSubmenuOption = option.name;
+            openSubmenu(e.currentTarget as HTMLButtonElement, menu, option);
+            return;
+        }
+
+        activeSubmenuOption = null;
+        closeContextMenuChildren(menu.id);
+    }
+
+    async function clickHandler(
+        e: MouseEvent,
+        menu: IContextMenu,
+        option: ContextMenuOption,
+    ) {
+        if (e.button !== 0) return;
+        if (!(option.enabled ?? true)) return;
+        if (option.submenu) return;
+        e.stopPropagation();
+        e.preventDefault();
+
+        const result = await option.handler();
+        if (!result) return closeContextMenu(menu.id);
+        if (result === "keep") return;
+    }
+
+    function menuEnter() {
+        cancelHoverClose();
+    }
+
+    function menuLeave() {
+        scheduleHoverClose(menu.parent ?? menu.id);
     }
 </script>
 
@@ -84,12 +146,15 @@
     style="left: {position.x}px; top: {position.y}px; z-index: {100 + depth}"
     use:outclick
     on:outclick={() => closeContextMenu(menu.id)}
+    on:mouseenter={menuEnter}
+    on:mouseleave={menuLeave}
 >
     {#each menu.options as option, index (option.name)}
         {#if option.visible ?? true}
             <button
                 type="button"
                 style="--stagger-i: {index}"
+                on:mouseenter={(e) => optionEnter(e, menu, option)}
                 on:click={(e) => clickHandler(e, menu, option)}
                 class:disabled={!(option.enabled ?? true)}
                 class:has-submenu={option.submenu}
