@@ -681,22 +681,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         />
     {/if}
 
-    <div class="sgroup">
-        <span class="subsection-title">Data management</span>
-        <span class="gray">
-            Rebuild derived prompt, model, and hash fields from stored metadata.
-            Annotations and tags are preserved.
-        </span>
-        <div class="inline-action">
-            <Button disabled={extradataRecalcRunning} on:click={onRecalculateExtradata}>
-                {extradataRecalcRunning ? 'Recalculating...' : 'Recalculate extra data'}
-            </Button>
-        </div>
-        {#if extradataRecalcOp}
-            <p class="gray progress-detail">{extradataRecalcOp.done} / {extradataRecalcOp.total}</p>
-        {/if}
-    </div>
-
     <div class="tags-inline">
         <span class="subsection-title">Tags</span>
         <TagPillRow
@@ -870,6 +854,22 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             PWA fullscreen:
             <input type="checkbox" bind:checked={$fullscreenState} />
         </label>
+    </div>
+
+    <div class="sgroup">
+        <span class="subsection-title">Data management</span>
+        <span class="gray">
+            Rebuild derived prompt, model, and hash fields from stored metadata.
+            Annotations and tags are preserved.
+        </span>
+        <div class="inline-action">
+            <Button disabled={extradataRecalcRunning} on:click={onRecalculateExtradata}>
+                {extradataRecalcRunning ? 'Recalculating...' : 'Recalculate extra data'}
+            </Button>
+        </div>
+        {#if extradataRecalcOp}
+            <p class="gray progress-detail">{extradataRecalcOp.done} / {extradataRecalcOp.total}</p>
+        {/if}
     </div>
 </div>
 
