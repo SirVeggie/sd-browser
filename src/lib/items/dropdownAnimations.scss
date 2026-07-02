@@ -1,7 +1,7 @@
 @keyframes dropdown-panel-in {
     from {
         opacity: 0;
-        transform: scaleY(0.94);
+        transform: scaleY(0.6);
     }
 
     to {
@@ -30,7 +30,7 @@
 @mixin option-animation {
     opacity: 0;
     animation: dropdown-option-in 0.18s ease-out both;
-    animation-delay: calc(0.04s + var(--stagger-i, 0) * 0.028s);
+    animation-delay: calc(0.04s + var(--stagger-i, 0) * 0.02s);
 }
 
 @mixin reduced-motion {
