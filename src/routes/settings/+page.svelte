@@ -547,7 +547,7 @@
 
         <label
             class="checkbox"
-            title="Each image keeps its aspect ratio and is placed in the shortest column, like a photo wall."
+            title="Tile images by placing them in the shortest column, like a photo wall."
         >
             Masonry layout:
             <input type="checkbox" bind:checked={$masonryLayout} />
