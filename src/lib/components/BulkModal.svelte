@@ -4,6 +4,12 @@
     import Button from "$lib/items/Button.svelte";
     import Input from "$lib/items/Input.svelte";
     import Select from "$lib/items/Select.svelte";
+    import OptionSelect from "$lib/items/OptionSelect.svelte";
+    import TagPillRow from "$lib/components/TagPillRow.svelte";
+    import TagPickerPopup from "$lib/components/TagPickerPopup.svelte";
+    import TagModal from "$lib/components/TagModal.svelte";
+    import { tagsStore, upsertTagDefinition } from "$lib/stores/tagsStore";
+    import { DEFAULT_TAG_COLOR } from "$lib/types/tags";
     import { bulkModalStore } from "$lib/stores/bulkStore";
     import {
         CUSTOM_INSTRUCTION_ID,
@@ -14,9 +20,13 @@
     import { resolveSearchMatch, runBulkAction } from "$lib/requests/bulkRequests";
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
     import { formatDurationCompact, formatTaskDuration } from "$lib/tools/misc";
-    import type { BulkAction, BulkRequest } from "$lib/types/requests";
+    import type { BulkAction, BulkAnnotateMode, BulkRequest } from "$lib/types/requests";
+    import type { BulkActionType } from "$lib/stores/bulkStore";
     import { askConfirmation } from "./Confirm.svelte";
     import { notify } from "./Notifier.svelte";
+
+    const bulkActions = ["move", "copy", "delete", "annotate", "tag"] as const;
+    const tagModes = ["add", "remove", "replace"] as const;
 
     const dispatch = createEventDispatcher<{ close: void }>();
 
@@ -37,6 +47,12 @@
     let progressHovering = false;
     let tickNow = Date.now();
     let tickInterval: ReturnType<typeof setInterval> | undefined;
+
+    let tagPickerOpen = false;
+    let tagModalOpen = false;
+    let modalTagName = "";
+    let modalTagColor = DEFAULT_TAG_COLOR;
+    let tagsRowEl: HTMLDivElement | undefined;
 
     $: progressPercent = progressTotal
         ? Math.min(100, (progressDone / progressTotal) * 100)
@@ -87,6 +103,57 @@
         return ms === undefined ? "—" : formatTaskDuration(ms);
     }
 
+    function bulkActionSubtitle(
+        action: BulkActionType,
+        annotateMode: BulkAnnotateMode,
+        count: number,
+    ): string {
+        const images = `${count} image${count === 1 ? "" : "s"} matching the current filter`;
+        switch (action) {
+            case "move":
+                return `Move ${images}.`;
+            case "copy":
+                return `Copy ${images}.`;
+            case "delete":
+                return `Delete ${images}.`;
+            case "annotate":
+                switch (annotateMode) {
+                    case "generate":
+                        return `Annotate ${images}.`;
+                    case "clear":
+                        return `Clear annotations on ${images}.`;
+                    case "modify":
+                        return `Modify annotations on ${images}.`;
+                    default: {
+                        const _exhaustive: never = annotateMode;
+                        return _exhaustive;
+                    }
+                }
+            case "tag":
+                return `Tag ${images}.`;
+            default: {
+                const _exhaustive: never = action;
+                return _exhaustive;
+            }
+        }
+    }
+
+    $: subtitle = bulkActionSubtitle(
+        $bulkModalStore.action,
+        $bulkModalStore.annotateMode,
+        imageCount,
+    );
+
+    $: availableTags = $tagsStore.tags
+        .map((tag) => tag.name)
+        .filter((name) => !$bulkModalStore.selectedTags.includes(name));
+
+    $: llmConfigured = Boolean($llmStore.modelId.trim() && $llmStore.baseUrl.trim());
+    $: annotateGenerateBlocked =
+        $bulkModalStore.action === "annotate"
+        && $bulkModalStore.annotateMode === "generate"
+        && !llmConfigured;
+
     function onProgressMouseEnter() {
         progressHovering = true;
         tickNow = Date.now();
@@ -106,6 +173,53 @@
     onDestroy(() => {
         if (tickInterval) clearInterval(tickInterval);
     });
+
+    function addBulkTag(name: string) {
+        bulkModalStore.update((settings) => {
+            if (settings.selectedTags.includes(name)) return settings;
+            return { ...settings, selectedTags: [...settings.selectedTags, name] };
+        });
+    }
+
+    function removeBulkTag(name: string) {
+        bulkModalStore.update((settings) => ({
+            ...settings,
+            selectedTags: settings.selectedTags.filter((tag) => tag !== name),
+        }));
+    }
+
+    function toggleTagPicker() {
+        tagPickerOpen = !tagPickerOpen;
+    }
+
+    function closeTagPicker() {
+        tagPickerOpen = false;
+    }
+
+    function openCreateTagModal() {
+        modalTagName = "";
+        modalTagColor = DEFAULT_TAG_COLOR;
+        tagModalOpen = true;
+    }
+
+    function closeCreateTagModal() {
+        tagModalOpen = false;
+    }
+
+    async function saveNewTag(event: CustomEvent<{ name: string; color: string }>) {
+        const { name, color } = event.detail;
+        const duplicate = $tagsStore.tags.some(
+            (item) => item.name.toLowerCase() === name.toLowerCase(),
+        );
+        if (duplicate) {
+            notify(`Tag name '${name}' already exists`, "warn");
+            return;
+        }
+
+        tagsStore.update((state) => upsertTagDefinition(state, { name, color }));
+        tagModalOpen = false;
+        addBulkTag(name);
+    }
 
     async function loadFolders() {
         try {
@@ -150,6 +264,16 @@
                     resultTemplate: s.resultTemplate?.trim() || undefined,
                     appendResult: s.appendResult,
                 };
+            case "tag":
+                return {
+                    type: "tag",
+                    mode: s.tagMode,
+                    tags: s.selectedTags,
+                };
+            default: {
+                const _exhaustive: never = s.action;
+                return _exhaustive;
+            }
         }
     }
 
@@ -178,7 +302,8 @@
         if (!bulkAction) return;
 
         if (bulkAction.type === "annotate") {
-            switch (bulkAction.mode) {
+            const mode = bulkAction.mode as BulkAnnotateMode;
+            switch (mode) {
                 case "generate":
                     if (!$llmStore.modelId || !$llmStore.baseUrl) {
                         notify("Configure LLM settings first", "warn");
@@ -198,9 +323,16 @@
                 case "clear":
                     break;
                 default: {
-                    const _exhaustive: never = bulkAction.mode;
+                    const _exhaustive: never = mode;
                     return _exhaustive;
                 }
+            }
+        }
+
+        if (bulkAction.type === "tag") {
+            if (!bulkAction.tags.length) {
+                notify("Select at least one tag", "warn");
+                return;
             }
         }
 
@@ -271,34 +403,23 @@
         abortController?.abort();
         abortController = undefined;
         running = false;
+        tagPickerOpen = false;
+        tagModalOpen = false;
         dispatch("close");
     }
 </script>
 
 <Modal close={close}>
         <h1>Bulk actions</h1>
-        <p class="subtitle">
-            Apply to all {imageCount} images matching the current search filter.
-        </p>
+        <p class="subtitle">{subtitle}</p>
 
         <fieldset class="actions" disabled={running}>
             <legend>Action</legend>
-            <label class="radio">
-                <input type="radio" bind:group={$bulkModalStore.action} value="move" />
-                Move
-            </label>
-            <label class="radio">
-                <input type="radio" bind:group={$bulkModalStore.action} value="copy" />
-                Copy
-            </label>
-            <label class="radio">
-                <input type="radio" bind:group={$bulkModalStore.action} value="delete" />
-                Delete
-            </label>
-            <label class="radio">
-                <input type="radio" bind:group={$bulkModalStore.action} value="annotate" />
-                Annotate
-            </label>
+            <OptionSelect
+                options={bulkActions}
+                bind:value={$bulkModalStore.action}
+                disabled={running}
+            />
         </fieldset>
 
         {#if $bulkModalStore.action === "move" || $bulkModalStore.action === "copy"}
@@ -315,10 +436,10 @@
         {#if $bulkModalStore.action === "annotate"}
             <div class="annotate">
                 <div class="select-field">
-                    <Select
-                        prefix="Mode"
-                        bind:value={$bulkModalStore.annotateMode}
+                    <span class="field-label">Mode</span>
+                    <OptionSelect
                         options={["generate", "clear", "modify"]}
+                        bind:value={$bulkModalStore.annotateMode}
                         disabled={running}
                     />
                 </div>
@@ -326,7 +447,8 @@
                 {#if $bulkModalStore.annotateMode === "generate"}
                     <hr class="separator" />
 
-                    <label class="checkbox" title="Positive prompt only">
+                    {#if llmConfigured}
+                        <label class="checkbox" title="Positive prompt only">
                         <input
                             type="checkbox"
                             bind:checked={$bulkModalStore.includePrompt}
@@ -407,6 +529,9 @@
                         />
                         Append result
                     </label>
+                    {:else}
+                        <p class="llm-warning">Configure the LLM API in Settings before using generate mode.</p>
+                    {/if}
                 {:else if $bulkModalStore.annotateMode === "modify"}
                     <hr class="separator" />
 
@@ -426,6 +551,33 @@
                         />
                     </label>
                 {/if}
+            </div>
+        {/if}
+
+        {#if $bulkModalStore.action === "tag"}
+            <div class="tag-bulk">
+                <div class="select-field">
+                    <span class="field-label">Mode</span>
+                    <OptionSelect
+                        options={tagModes}
+                        bind:value={$bulkModalStore.tagMode}
+                        disabled={running}
+                    />
+                </div>
+
+                <div class="select-field">
+                    <span class="field-label">Tags</span>
+                    <div class="tags-row" bind:this={tagsRowEl}>
+                        <TagPillRow
+                            tags={$bulkModalStore.selectedTags}
+                            showAdd
+                            deletable
+                            disabled={running}
+                            on:add={toggleTagPicker}
+                            on:remove={(event) => removeBulkTag(event.detail)}
+                        />
+                    </div>
+                </div>
             </div>
         {/if}
 
@@ -471,12 +623,32 @@
         {/if}
 
         <div class="buttons">
-            <Button disabled={running || imageCount === 0} on:click={execute}>
+            <Button disabled={running || imageCount === 0 || annotateGenerateBlocked} on:click={execute}>
                 {running ? "Running..." : "Run"}
             </Button>
             <Button disabled={running} on:click={close}>Cancel</Button>
         </div>
 </Modal>
+
+{#if tagPickerOpen}
+    <TagPickerPopup
+        anchor={tagsRowEl ?? null}
+        tags={availableTags}
+        on:select={(event) => addBulkTag(event.detail)}
+        on:createNew={openCreateTagModal}
+        on:close={closeTagPicker}
+    />
+{/if}
+
+{#if tagModalOpen}
+    <TagModal
+        title="Add tag"
+        bind:name={modalTagName}
+        bind:color={modalTagColor}
+        on:save={saveNewTag}
+        on:close={closeCreateTagModal}
+    />
+{/if}
 
 <style lang="scss">
     h1 {
@@ -505,7 +677,7 @@
     .actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 1em;
+        padding: 0.3em 0.75em 0.75em 0.75em;
     }
 
     label {
@@ -516,8 +688,7 @@
         cursor: pointer;
         user-select: none;
 
-        &.checkbox,
-        &.radio {
+        &.checkbox {
             flex-direction: row;
             align-items: center;
         }
@@ -526,6 +697,13 @@
     .hint {
         font-size: 0.8em;
         color: #aaa;
+    }
+
+    .llm-warning {
+        margin: 0;
+        font-size: 0.9em;
+        color: #e8a060;
+        line-height: 1.4;
     }
 
     textarea {
@@ -555,6 +733,23 @@
 
     .select-field {
         margin-bottom: 0.75em;
+    }
+
+    .field-label {
+        display: block;
+        margin-bottom: 0.35em;
+        color: #ccc;
+    }
+
+    .tag-bulk {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25em;
+        margin-bottom: 0.5em;
+    }
+
+    .tags-row {
+        position: relative;
     }
 
     .separator {
@@ -651,8 +846,7 @@
         margin-top: 1.5em;
     }
 
-    input[type="checkbox"],
-    input[type="radio"] {
+    input[type="checkbox"] {
         appearance: none;
         background-color: #333;
         border-radius: 0.2em;
@@ -686,11 +880,4 @@
         }
     }
 
-    input[type="radio"] {
-        border-radius: 50%;
-
-        &::before {
-            border-radius: 50%;
-        }
-    }
 </style>

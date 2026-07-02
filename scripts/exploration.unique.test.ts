@@ -19,6 +19,7 @@ function image(id: string, modifiedDate: number, hash: string): ServerImage {
         models: '',
         hash,
         annotation: '',
+        tags: [],
     };
 }
 

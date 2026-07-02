@@ -229,6 +229,8 @@ export type BulkLlmConfig = {
 
 export type BulkAnnotateMode = 'generate' | 'clear' | 'modify';
 
+export type BulkTagMode = 'add' | 'remove' | 'replace';
+
 export type BulkAnnotateOptions = {
     type: 'annotate';
     mode: BulkAnnotateMode;
@@ -242,7 +244,13 @@ export type BulkAnnotateOptions = {
     appendResult: boolean;
 };
 
-export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOptions;
+export type BulkTagOptions = {
+    type: 'tag';
+    mode: BulkTagMode;
+    tags: string[];
+};
+
+export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOptions | BulkTagOptions;
 
 export type MatchRequest = {
     search: string;

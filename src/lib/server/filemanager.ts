@@ -1,5 +1,5 @@
-import { IMG_FOLDER } from '$env/static/private';
 import { env } from '$env/dynamic/private';
+import { compressedPath, datapath, ensurePathsExist, imgFolder, thumbnailPath } from './paths';
 import path from 'path';
 import os from 'os';
 import cp from 'child_process';
@@ -20,6 +20,7 @@ import { forEachExtradataBatch } from './extradataBatch';
 import { populateMediaDimensions } from './imageDimensions';
 import { invalidateExplorationPools, repairExplorationCaches, repairUniqueCacheAfterDeletes, repairUniqueCacheOnAdd, verifyExplorationCaches } from './exploration';
 import { notifyImageChange } from './imageChangeHub';
+import { ensureDefaultTagsRegistry } from './tags';
 
 const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
@@ -31,9 +32,7 @@ const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
 const freshLimit = 1000;
 
-export const datapath = './localData';
-export const thumbnailPath = path.join(datapath, 'thumbnails');
-export const compressedPath = path.join(datapath, 'compressed');
+export { compressedPath, datapath, thumbnailPath } from './paths';
 export let generationDisabled = false;
 
 export async function remoteDebug() {
@@ -42,17 +41,15 @@ export async function remoteDebug() {
 
 //#region indexing
 export async function startFileManager() {
+    ensurePathsExist();
     await handleMigrationStart();
+    ensureDefaultTagsRegistry();
     await indexFiles();
 }
 
 export async function indexFiles() {
-    console.log(`Indexing files in ${IMG_FOLDER}`);
+    console.log(`Indexing files in ${imgFolder}`);
     const startTimestamp = Date.now();
-
-    fs.mkdir(datapath).catch(() => '');
-    fs.mkdir(thumbnailPath).catch(() => '');
-    fs.mkdir(compressedPath).catch(() => '');
 
     if (MetaDB.countMissingDimensions()) {
         await backfillImageDimensions();
@@ -102,7 +99,7 @@ export async function indexFiles() {
 async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, string>, Map<string, string>]> {
     const templist: ServerImageFull[] = [];
     const images: ImageList = new Map();
-    const dirs: string[] = [IMG_FOLDER];
+    const dirs: string[] = [imgFolder];
     const set = new Set<string>();
     const videomap: Map<string, string> = new Map();
     const txtmap: Map<string, string> = new Map();
@@ -428,7 +425,7 @@ function setupWatcher() {
     };
 
     if (watcher) watcher.close();
-    watcher = new Watcher(IMG_FOLDER, options);
+    watcher = new Watcher(imgFolder, options);
 
     watcher.on('add', async file => {
         addFile(file);
@@ -685,7 +682,7 @@ async function pollFiles() {
 }
 
 async function checkFiles() {
-    const dirs: string[] = [IMG_FOLDER];
+    const dirs: string[] = [imgFolder];
     const images = new Set([...imageList.keys()]);
 
     while (dirs.length > 0) {
@@ -800,7 +797,7 @@ export function markFavorite(ids: string | string[], favorite: boolean) {
 export async function moveImages(ids: string | string[], folder: string) {
     if (typeof ids === 'string') ids = [ids];
 
-    const targetFolder = path.join(IMG_FOLDER, folder.replace(/^\/?/, ''));
+    const targetFolder = path.join(imgFolder, folder.replace(/^\/?/, ''));
 
     let failcount = 0;
     let moved = 0;
@@ -847,7 +844,7 @@ export async function moveImages(ids: string | string[], folder: string) {
 export async function copyImages(ids: string | string[], folder: string) {
     if (typeof ids === 'string') ids = [ids];
 
-    const targetFolder = path.join(IMG_FOLDER, folder.replace(/^\/?/, ''));
+    const targetFolder = path.join(imgFolder, folder.replace(/^\/?/, ''));
 
     let failcount = 0;
     for (const id of ids) {

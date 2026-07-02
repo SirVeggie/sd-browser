@@ -46,6 +46,8 @@
     import NumInput from "$lib/items/NumInput.svelte";
     import SystemInstructionModal from "$lib/components/SystemInstructionModal.svelte";
     import CustomFilterModal from "$lib/components/CustomFilterModal.svelte";
+    import TagModal from "$lib/components/TagModal.svelte";
+    import TagPillRow from "$lib/components/TagPillRow.svelte";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import {
         llmStore,
@@ -55,6 +57,14 @@
     import { pullGlobalSettings, recalculateSimilarCache } from "$lib/requests/settingRequests";
     import { startExtradataRecalc, getOperations } from "$lib/requests/operationRequests";
     import { hasRunningOperation, operationStore } from "$lib/stores/operationStore";
+    import { deleteTagFromImages } from "$lib/requests/tagRequests";
+    import {
+        removeTagDefinition,
+        tagsStore,
+        upsertTagDefinition,
+    } from "$lib/stores/tagsStore";
+    import type { TagDefinition } from "$lib/types/tags";
+
     import {
         closeContextMenu,
         openContextMenu,
@@ -78,6 +88,10 @@
     let modalFilterName = "";
     let modalFilterText = "";
     let recalculatingSimilarCache = false;
+    let tagModalOpen = false;
+    let editingTag: TagDefinition | null = null;
+    let modalTagName = "";
+    let modalTagColor = "#5b9cf5";
 
     $: extradataRecalcRunning = hasRunningOperation($operationStore, 'extradata-recalc');
     $: extradataRecalcOp = $operationStore.find(op => op.type === 'extradata-recalc' && op.status === 'running');
@@ -245,11 +259,6 @@
         closeInstructionModal();
     }
 
-    function truncateFilter(text: string, max = 60): string {
-        if (text.length <= max) return text;
-        return `${text.slice(0, max)}…`;
-    }
-
     function openAddFilter() {
         editingFilter = null;
         modalFilterName = "";
@@ -336,6 +345,63 @@
         notify(`Deleted instruction '${instruction.name}'`);
     }
 
+    function openAddTag() {
+        editingTag = null;
+        modalTagName = "";
+        modalTagColor = "#5b9cf5";
+        tagModalOpen = true;
+    }
+
+    function openEditTag(tag: TagDefinition) {
+        editingTag = tag;
+        modalTagName = tag.name;
+        modalTagColor = tag.color;
+        tagModalOpen = true;
+    }
+
+    function closeTagModal() {
+        tagModalOpen = false;
+        editingTag = null;
+    }
+
+    function saveTag(event: CustomEvent<{ name: string; color: string }>) {
+        const { name, color } = event.detail;
+        const duplicate = $tagsStore.tags.some(
+            (item) => item.name.toLowerCase() === name.toLowerCase() && item.name !== editingTag?.name,
+        );
+        if (duplicate) {
+            notify(`Tag name '${name}' already exists`, "warn");
+            return;
+        }
+
+        if (editingTag && editingTag.name !== name) {
+            notify("Rename tags from settings by deleting and re-adding", "warn");
+            return;
+        }
+
+        tagsStore.update((state) => upsertTagDefinition(state, { name, color }));
+        notify(editingTag ? `Updated tag '${name}'` : `Added tag '${name}'`);
+        closeTagModal();
+    }
+
+    async function deleteTag(tag: TagDefinition) {
+        const confirmed = await askConfirmation(
+            "Delete tag",
+            `Delete tag '${tag.name}' and remove it from all images?`,
+        );
+        if (!confirmed) return;
+
+        try {
+            const removedFrom = await deleteTagFromImages(tag.name);
+            tagsStore.update((state) => removeTagDefinition(state, tag.name));
+            notify(`Deleted tag '${tag.name}' (removed from ${removedFrom} images)`);
+            closeTagModal();
+        } catch (cause) {
+            console.error(cause);
+            notify(cause instanceof Error ? cause.message : "Failed to delete tag", "warn");
+        }
+    }
+
     async function onRecalculateSimilarCache() {
         if (recalculatingSimilarCache)
             return;
@@ -384,13 +450,21 @@
         {/if}
     </div>
 
-    <div class="gray">
-        Keyboard shortcuts:<br />
-        <div class="list">
-            <span>Esc: Cancel</span>
-            <span>Arrows: Browse images</span>
-            <span>Space: toggle slideshow</span>
-            <span>F: toggle flyout</span>
+    <div class="help-row">
+        <div class="gray help-block">
+            Keyboard shortcuts:<br />
+            <div class="list">
+                <span>Esc: Cancel</span>
+                <span>Arrows: Browse images</span>
+                <span>Space: toggle slideshow</span>
+                <span>F: toggle flyout</span>
+            </div>
+        </div>
+
+        <div class="gray help-block">
+            Search keywords:<br /><span>
+                {searchKeywords.join(", ").replaceAll("|", " | ")}
+            </span>
         </div>
     </div>
 
@@ -441,6 +515,45 @@
         </div>
     </div>
 
+    <div class="settings-group">
+        <span class="gray"> Visual style settings </span>
+
+        <label
+            class="checkbox"
+            title="Opens the full image view edge-to-edge."
+        >
+            Maximize fullscreen image size:
+            <input type="checkbox" bind:checked={$fullscreenStyle} />
+        </label>
+
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label
+            title="Adjusts thumbnail column width. Use pixels (e.g. -100) or a CSS length expression (e.g. 10vw + 50px). Negative values make thumbnails smaller; positive values make them larger."
+        >
+            Image grid size offset:
+            <Input
+                bind:value={$imageSize}
+                placeholder="-100 (pixels) or 10vw + 50px"
+            />
+        </label>
+
+        <label
+            class="checkbox"
+            title="Tightens the gallery grid with smaller gaps and padding."
+        >
+            Seamless grid:
+            <input type="checkbox" bind:checked={$seamlessStyle} />
+        </label>
+
+        <label
+            class="checkbox"
+            title="Each image keeps its aspect ratio and is placed in the shortest column, like a photo wall."
+        >
+            Masonry layout:
+            <input type="checkbox" bind:checked={$masonryLayout} />
+        </label>
+    </div>
+
     <div class="sgroup llm-settings">
         <button
             type="button"
@@ -482,34 +595,33 @@
                     <span class="subsection-title">System instructions</span>
 
                     {#if $llmStore.systemInstructions.length}
-                        <div class="instruction-controls">
-                            <label for="saved-instruction">
-                                Saved instructions
-                                <Select
-                                    id="saved-instruction"
-                                    bind:value={selectedInstructionId}
-                                    options={instructionOptions}
-                                />
-                            </label>
-
-                            <div class="instruction-buttons">
-                                <Button
-                                    disabled={!selectedInstructionId}
-                                    on:click={openEditInstruction}
-                                >
-                                    Modify
-                                </Button>
-                                <Button
-                                    disabled={!selectedInstructionId}
-                                    on:click={deleteInstruction}
-                                >
-                                    Delete
-                                </Button>
-                            </div>
-                        </div>
+                        <label for="saved-instruction">
+                            Instruction:
+                            <Select
+                                id="saved-instruction"
+                                bind:value={selectedInstructionId}
+                                options={instructionOptions}
+                            />
+                        </label>
                     {/if}
 
-                    <Button on:click={openAddInstruction}>Add instruction</Button>
+                    <div class="instruction-buttons">
+                        {#if $llmStore.systemInstructions.length}
+                            <Button
+                                disabled={!selectedInstructionId}
+                                on:click={openEditInstruction}
+                            >
+                                Modify
+                            </Button>
+                            <Button
+                                disabled={!selectedInstructionId}
+                                on:click={deleteInstruction}
+                            >
+                                Delete
+                            </Button>
+                        {/if}
+                        <Button on:click={openAddInstruction}>Add new</Button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -535,24 +647,47 @@
         />
     {/if}
 
+    {#if tagModalOpen}
+        <TagModal
+            title={editingTag ? "Modify tag" : "Add tag"}
+            bind:name={modalTagName}
+            bind:color={modalTagColor}
+            canDelete={!!editingTag}
+            on:save={saveTag}
+            on:delete={() => editingTag && deleteTag(editingTag)}
+            on:close={closeTagModal}
+        />
+    {/if}
+
     <div class="sgroup">
         <span class="subsection-title">Data management</span>
         <span class="gray">
             Rebuild derived prompt, model, and hash fields from stored metadata.
-            Annotations are preserved.
+            Annotations and tags are preserved.
         </span>
-        <Button disabled={extradataRecalcRunning} on:click={onRecalculateExtradata}>
-            {extradataRecalcRunning ? 'Recalculating...' : 'Recalculate extra data'}
-        </Button>
+        <div class="inline-action">
+            <Button disabled={extradataRecalcRunning} on:click={onRecalculateExtradata}>
+                {extradataRecalcRunning ? 'Recalculating...' : 'Recalculate extra data'}
+            </Button>
+        </div>
         {#if extradataRecalcOp}
             <p class="gray progress-detail">{extradataRecalcOp.done} / {extradataRecalcOp.total}</p>
         {/if}
     </div>
 
-    <div class="gray">
-        Search keywords:<br /><span>
-            {searchKeywords.join(", ").replaceAll("|", " | ")}
-        </span>
+    <div class="tags-inline">
+        <span class="subsection-title">Tags</span>
+        <TagPillRow
+            tags={$tagsStore.tags.map((tag) => tag.name)}
+            showAdd
+            clickable
+            compact
+            on:add={openAddTag}
+            on:edit={(event) => {
+                const tag = $tagsStore.tags.find((item) => item.name === event.detail);
+                if (tag) openEditTag(tag);
+            }}
+        />
     </div>
 
     <div class="sgroup llm-settings">
@@ -567,166 +702,153 @@
         </button>
 
         <div class="wrapper" class:isOpen={customFiltersOpen}>
-            <div class="inner llm-inner">
-                <span class="gray subsection-title">
-                    Named filter expressions applied from the image page multi-select.
-                </span>
-
+            <div class="inner llm-inner custom-filters-inner">
                 {#if $customFiltersStore.filters.length}
                     <ul class="filter-list">
                         {#each $customFiltersStore.filters as filter (filter.id)}
-                            <li class="filter-row">
-                                <div class="filter-info">
+                            <li class="filter-card">
+                                <div class="filter-header">
                                     <span class="filter-name">{filter.name}</span>
-                                    <span class="filter-preview gray"
-                                        >{truncateFilter(filter.filter)}</span
-                                    >
+                                    <div class="filter-actions">
+                                        <button
+                                            type="button"
+                                            class="filter-edit"
+                                            on:click={() => openEditFilter(filter)}
+                                        >
+                                            edit
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="filter-delete"
+                                            aria-label="Delete filter {filter.name}"
+                                            on:click={() => deleteFilter(filter)}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="filter-buttons">
-                                    <Button on:click={() => openEditFilter(filter)}>
-                                        Edit
-                                    </Button>
-                                    <Button on:click={() => deleteFilter(filter)}>
-                                        Delete
-                                    </Button>
-                                </div>
+                                <code class="filter-expression" title={filter.filter}
+                                    >{filter.filter}</code
+                                >
                             </li>
                         {/each}
                     </ul>
                 {/if}
 
-                <Button on:click={openAddFilter}>Add filter</Button>
+                <div class="inline-action">
+                    <Button on:click={openAddFilter}>Add filter</Button>
+                </div>
             </div>
         </div>
     </div>
 
-    <label class="checkbox">
-        Show NSFW filter:
-        <input type="checkbox" bind:checked={$showNsfwFilter} />
-    </label>
+    <div class="settings-group">
+        <label class="checkbox">
+            Show NSFW filter:
+            <input type="checkbox" bind:checked={$showNsfwFilter} />
+        </label>
 
-    {#if $showNsfwFilter}
+        {#if $showNsfwFilter}
+            <!-- svelte-ignore a11y-label-has-associated-control -->
+            <label>
+                NSFW filter
+                <span class="gray">
+                    (Added to the search when NSFW toggle is disabled)
+                </span>
+                <Input bind:value={$nsfwFilter} />
+            </label>
+        {/if}
+
+        <label for="matching">
+            Matching:
+            <Select id="matching" bind:value={$matchingMode} options={searchModes} />
+        </label>
+
+        <label for="similarityAlgorithm">
+            Similarity algorithm:
+            <Select
+                id="similarityAlgorithm"
+                bind:value={$similarityAlgorithm}
+                options={similarityAlgorithms}
+            />
+        </label>
+
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>
-            NSFW filter
-            <span class="gray">
-                (Added to the search when NSFW toggle is disabled)
-            </span>
-            <Input bind:value={$nsfwFilter} />
+            Sparse frequency (every Nth image)
+            <NumInput bind:value={$sparseFrequency} />
         </label>
-    {/if}
 
-    <label for="matching">
-        Matching:
-        <Select id="matching" bind:value={$matchingMode} options={searchModes} />
-    </label>
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label
+            title="Prompt similarity cutoff (0–1) for similar exploration. Images are included when their prompt similarity to the previous selection is below this value. Lower values keep only more distinct images; higher values allow more similar prompts."
+        >
+            Similarity threshold
+            <NumInput bind:value={$similarityThreshold} step="any" />
+        </label>
 
-    <label for="similarityAlgorithm">
-        Similarity algorithm:
-        <Select
-            id="similarityAlgorithm"
-            bind:value={$similarityAlgorithm}
-            options={similarityAlgorithms}
-        />
-    </label>
+        <div class="similar-cache-action">
+            <Button on:click={onRecalculateSimilarCache}>
+                {recalculatingSimilarCache ? 'Recalculating...' : 'Recalculate similarity cache'}
+            </Button>
+        </div>
 
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
-        Sparse frequency (every Nth image)
-        <NumInput bind:value={$sparseFrequency} />
-    </label>
-
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label
-        title="Prompt similarity cutoff (0–1) for similar exploration. Images are included when their prompt similarity to the previous selection is below this value. Lower values keep only more distinct images; higher values allow more similar prompts."
-    >
-        Similarity threshold
-        <NumInput bind:value={$similarityThreshold} step="any" />
-    </label>
-
-    <div class="similar-cache-action">
-        <Button on:click={onRecalculateSimilarCache}>
-            {recalculatingSimilarCache ? 'Recalculating...' : 'Recalculate similarity cache'}
-        </Button>
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label>
+            Initial amount of images loaded (default: 50)
+            <NumInput bind:value={$initialImages} />
+        </label>
     </div>
 
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
-        Initial amount of images loaded (default: 25)
-        <NumInput bind:value={$initialImages} />
-    </label>
+    <div class="settings-group">
+        <span class="gray">
+            Image quality settings:
+            <br />
+            When using locally, recommended to use original and low
+            <br />
+            When using remotely, recommended to use medium and low for faster loading
+            <br />
+            Setting thumbnails to low allows for smoother scrolling even locally
+            <br />
+            * medium and low are slightly slower when seeing an image for the first time
+        </span>
 
-    <span class="gray">
-        Image quality settings:
-        <br />
-        When using locally, recommended to use original and low
-        <br />
-        When using remotely, recommended to use medium and low for faster loading
-        <br />
-        Setting thumbnails to low allows for smoother scrolling even locally
-        <br />
-        * medium and low are slightly slower when seeing an image for the first time
-    </span>
+        <label for="fullimage">
+            Full size quality:
+            <Select id="fullimage" bind:value={$compressedMode} options={qualityModes} />
+        </label>
 
-    <label for="fullimage">
-        Full size quality:
-        <Select id="fullimage" bind:value={$compressedMode} options={qualityModes} />
-    </label>
+        <label for="thumbnail">
+            Thumbnail quality:
+            <Select id="thumbnail" bind:value={$thumbMode} options={qualityModes} />
+        </label>
 
-    <label for="thumbnail">
-        Thumbnail quality:
-        <Select id="thumbnail" bind:value={$thumbMode} options={qualityModes} />
-    </label>
+        <label class="checkbox">
+            Animate thumbnail for videos:
+            <input type="checkbox" bind:checked={$animatedThumb} />
+        </label>
 
-    <label class="checkbox">
-        Animate thumbnail for videos:
-        <input type="checkbox" bind:checked={$animatedThumb} />
-    </label>
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label>
+            Slideshow interval (milliseconds)
+            <NumInput bind:value={$slideDelay} />
+        </label>
+    </div>
 
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
-        Slideshow interval (milliseconds)
-        <NumInput bind:value={$slideDelay} />
-    </label>
+    <div class="settings-group">
+        <span class="gray">
+            PWA fullscreen:
+            <br />
+            Enable this setting before adding to homescreen to disable mobile UI elements
+            <br />
+            Results depend on browser support (status bar, taskbar on tablets)
+        </span>
 
-    <span class="gray"> Visual style settings </span>
-
-    <label class="checkbox">
-        Maximize fullscreen image size:
-        <input type="checkbox" bind:checked={$fullscreenStyle} />
-    </label>
-
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
-        Image grid size offset:
-        <Input
-            bind:value={$imageSize}
-            placeholder="-100 (pixels) or 10vw + 50px"
-        />
-    </label>
-
-    <label class="checkbox">
-        Seamless grid:
-        <input type="checkbox" bind:checked={$seamlessStyle} />
-    </label>
-
-    <label class="checkbox">
-        Masonry layout:
-        <input type="checkbox" bind:checked={$masonryLayout} />
-    </label>
-
-    <span class="gray">
-        PWA fullscreen:
-        <br />
-        Enable this setting before adding to homescreen to disable mobile UI elements
-        <br />
-        Results depend on browser support (status bar, taskbar on tablets)
-    </span>
-
-    <label class="checkbox">
-        PWA fullscreen:
-        <input type="checkbox" bind:checked={$fullscreenState} />
-    </label>
+        <label class="checkbox">
+            PWA fullscreen:
+            <input type="checkbox" bind:checked={$fullscreenState} />
+        </label>
+    </div>
 </div>
 
 <style lang="scss">
@@ -735,6 +857,12 @@
         display: flex;
         flex-direction: column;
         gap: 1.5em;
+    }
+
+    .settings-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75em;
     }
 
     .buttons :global(.disabled) {
@@ -747,6 +875,25 @@
         color: #aaa;
     }
 
+    .help-row {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: 2em;
+        row-gap: 1em;
+        align-items: flex-start;
+    }
+
+    .help-block {
+        flex: 0 0 auto;
+    }
+
+    .help-block + .help-block {
+        flex: 1 1 auto;
+        min-width: min(100%, 50%);
+        max-width: 100%;
+        overflow-wrap: break-word;
+    }
+
     .similar-cache-action {
         display: flex;
         flex-direction: column;
@@ -754,8 +901,22 @@
         gap: 0.5em;
     }
 
+    .inline-action {
+        align-self: flex-start;
+    }
+
+    .tags-inline {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5em;
+
+        .subsection-title {
+            color: #ccc;
+        }
+    }
+
     .sgroup {
-        --gap: 10px;
+        --gap: 6px;
         display: flex;
         flex-direction: column;
         gap: var(--gap);
@@ -764,6 +925,7 @@
         outline-offset: 10px;
         border-radius: 5px;
         padding: 10px;
+        margin-block: 0.75em;
     }
 
     .llm-settings {
@@ -819,16 +981,14 @@
             color: #ccc;
         }
 
-        .instruction-controls {
-            display: flex;
-            flex-direction: column;
-            gap: var(--gap);
-        }
-
         .instruction-buttons {
             display: flex;
             gap: 1em;
             flex-wrap: wrap;
+        }
+
+        .custom-filters-inner {
+            gap: 0.75em;
         }
 
         .filter-list {
@@ -837,39 +997,101 @@
             padding: 0;
             display: flex;
             flex-direction: column;
-            gap: var(--gap);
+            gap: 0.5em;
         }
 
-        .filter-row {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: var(--gap);
-            border-top: dashed 1px #aaa4;
-            padding-top: var(--gap);
-        }
-
-        .filter-info {
+        .filter-card {
             display: flex;
             flex-direction: column;
-            gap: 0.25em;
+            gap: 0.3em;
+            padding: 0.2em 0.4em 0.4em 0.4em;
+            border-radius: 4px;
+            background: #ffffff06;
+            border: 1px solid #aaa2;
             min-width: 0;
-            flex: 1;
+        }
+
+        .filter-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5em;
+            min-width: 0;
+            padding-left: 0.2em;
         }
 
         .filter-name {
-            font-weight: 600;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            font-weight: 500;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .filter-preview {
-            word-break: break-all;
-        }
-
-        .filter-buttons {
+        .filter-actions {
             display: flex;
-            gap: 1em;
-            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.15em;
+            flex-shrink: 0;
+        }
+
+        .filter-edit,
+        .filter-delete {
+            appearance: none;
+            border: none;
+            background: none;
+            padding: 0;
+            font: inherit;
+            font-family: "Open sans", sans-serif;
+            line-height: 1;
+            cursor: pointer;
+            color: #888;
+            transition: color 0.15s ease;
+
+            &:focus {
+                outline: none;
+            }
+
+            &:focus-visible {
+                outline: 1px solid rgb(63, 187, 236);
+                outline-offset: 2px;
+            }
+        }
+
+        .filter-edit {
+            font-size: 0.85em;
+            padding: 0.15em 0.35em;
+
+            &:hover {
+                color: rgb(63, 187, 236);
+            }
+        }
+
+        .filter-delete {
+            font-size: 1.15em;
+            padding: 0.1em 0.25em;
+
+            &:hover {
+                color: #e55;
+            }
+        }
+
+        .filter-expression {
+            display: block;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas,
+                monospace;
+            font-size: 0.8em;
+            color: #aaa;
+            background: #00000033;
+            border-radius: 3px;
+            padding: 0.35em 0.5em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .wrapper {

@@ -66,6 +66,9 @@
     import type { ClientImage, ImageInfo } from "$lib/types/images";
     import type { UpdateResponse } from "$lib/types/requests";
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
+    import { fetchImageTags, updateImageTags } from "$lib/requests/tagRequests";
+    import { tagsStore } from "$lib/stores/tagsStore";
+    import { tagsNotOnImage } from "$lib/types/tags";
     import { flyoutState } from "$lib/stores/flyoutStore";
     import BulkModal from "$lib/components/BulkModal.svelte";
     import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
@@ -850,6 +853,11 @@
                     },
                 },
                 {
+                    name: "Tag as...",
+                    visible: !selecting && $tagsStore.tags.length > 0,
+                    handler: () => tagActionMenu(id),
+                },
+                {
                     name: "Move",
                     handler: () => folderActionMenu(id, "move"),
                 },
@@ -893,6 +901,30 @@
                     folder,
                 }),
         }));
+    }
+
+    async function tagActionMenu(id: string): Promise<ContextMenuOption[] | void> {
+        try {
+            const imageTags = await fetchImageTags(id);
+            const available = tagsNotOnImage($tagsStore, imageTags);
+            if (!available.length) {
+                notify("All registry tags are on this image", "warn");
+                return;
+            }
+
+            return available.map((tag) => ({
+                name: tag,
+                handler: async () => {
+                    const current = await fetchImageTags(id);
+                    if (current.includes(tag))
+                        return;
+                    await updateImageTags(id, [...current, tag]);
+                },
+            }));
+        } catch (cause) {
+            console.error(cause);
+            notify(cause instanceof Error ? cause.message : "Failed to load tags", "warn");
+        }
     }
 
     function getEventCoords(e: InputEvent) {

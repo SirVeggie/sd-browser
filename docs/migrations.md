@@ -31,13 +31,53 @@ NSFW filtering is unchanged in the UI (checkbox + editable filter string on sett
 
 After all clients have migrated, legacy `folderFilter` keys can be ignored. The migration flag `folderFilterMigrated` prevents re-running local migration.
 
+## Image tags (v4, 2026-07)
+
+### What changed
+
+First-class image tags were added: a global tag registry (name + color), per-image tag assignments stored in `extradata.tags`, `TAG` search, settings management, full-image editing, and bulk tag operations.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| `MiscDB` global settings key `tags` | Tag registry: `{ tags: [{ name, color }] }` — seeded with `favourite` (#e6b422) and `nsfw` (#e0528f) on startup when missing (`ensureDefaultTagsRegistry()` in `filemanager.ts`); client store starts empty until settings load |
+| `extradata.tags` | Comma-separated list of tag name strings per image |
+| App version | Bumped from `3` to `4` |
+
+Missing, null, or invalid `extradata.tags` values are treated as `[]`.
+
+### Migration code
+
+- Version bump and column add: [`src/lib/server/migration/v4.ts`](../src/lib/server/migration/v4.ts), wired from [`src/lib/server/migration/index.ts`](../src/lib/server/migration/index.ts)
+- Default tag registry seed: [`src/lib/server/tags.ts`](../src/lib/server/tags.ts) `ensureDefaultTagsRegistry()`, called from [`src/lib/server/filemanager.ts`](../src/lib/server/filemanager.ts) after migrations start
+- DB read/write and preservation: [`src/lib/server/db.ts`](../src/lib/server/db.ts) `MetaCalcDB`
+- Tag helpers: [`src/lib/server/tags.ts`](../src/lib/server/tags.ts)
+
+During manual extradata recalculation, `tags` are preserved the same way as annotations (`set`, `setAll`, `setAllStaging`, `swapStagingToLive`).
+
+Deleting a tag in Settings removes it from the registry and strips it from all images via `POST /api/settings/tags`.
+
+### How to verify
+
+1. Upgrade from v3 — `extradata` gains a `tags` column; existing rows behave as untagged.
+2. Settings — add, edit color, delete tags inline between Search keywords and Custom Filters; registry syncs globally. Fresh installs get default tags `favourite` and `nsfw` on first server startup when the registry is missing (not from client defaults).
+3. Full image view — add/remove tags from registry; changes persist after reload.
+4. Search — `TAG name`, `NOT TAG name`, and regex `TAG pattern` match assigned tags; unknown exact tag names highlight red in the search box.
+5. Bulk → Tag — add/remove/replace on matching images; gallery refreshes after completion.
+6. Manual extradata recalc — tag assignments unchanged after swap.
+
+### Removal
+
+After all clients are on v4+, no further migration steps are required for tags.
+
 ## Manual extradata recalculation
 
 This is not a version migration. It is a user-triggered rebuild of derived fields stored in `MetaCalcDB` (`extradata` table).
 
 ### What it does
 
-Rebuilds `positive`, `negative`, `params`, `models`, and `hash` from raw metadata via `getServerImage()`. LLM/user **annotations are preserved**.
+Rebuilds `positive`, `negative`, `params`, `models`, and `hash` from raw metadata via `getServerImage()`. LLM/user **annotations and tags are preserved**.
 
 Use when parser logic changed without a schema version bump, or to repair inconsistent derived data.
 
@@ -67,5 +107,5 @@ Use when parser logic changed without a schema version bump, or to repair incons
 
 1. Settings → Data management → **Recalculate extra data** — global progress banner shows `done / total`.
 2. Browse/search during recalc — gallery remains usable; old derived data until swap completes.
-3. After completion — search/similarity reflect new hashes; annotations unchanged.
+3. After completion — search/similarity reflect new hashes; annotations and tags unchanged.
 4. `npm run build:worker` produces `build/workers/extradataCompute.js` for production worker threads.

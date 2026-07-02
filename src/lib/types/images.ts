@@ -44,6 +44,7 @@ export type ServerImage = {
     models: string;
     hash: string;
     annotation: string;
+    tags: string[];
     width?: number;
     height?: number;
 };
@@ -59,6 +60,7 @@ export type ImageExtraData = {
     models: string;
     hash: string;
     annotation?: string | null;
+    tags?: string[] | null;
 };
 
 export type ClientImage = {
@@ -85,6 +87,7 @@ export type ImageInfo = {
     params?: string;
     models?: string;
     annotation?: string;
+    tags?: string[];
     width?: number;
     height?: number;
 };

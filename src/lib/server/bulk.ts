@@ -1,6 +1,7 @@
 import { limitedParallelMap, updateLine } from "$lib/tools/misc";
 import type { BulkRequest } from "$lib/types/requests";
 import { annotateImage, clearAnnotation, modifyAnnotation } from "./llm";
+import { bulkUpdateImageTags } from "./tags";
 import { copyImages, deleteImages, moveImages } from "./filemanager";
 import { explorationFromRequest, searchImages } from "./searching";
 
@@ -171,6 +172,18 @@ export async function runBulkAction(
 
         const _exhaustive: never = annotateOptions.mode;
         throw new Error(`Unknown annotate mode: ${_exhaustive}`);
+    }
+
+    if (request.action.type === "tag") {
+        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+            const chunk = ids.slice(i, i + CHUNK_SIZE);
+            bulkUpdateImageTags(chunk, request.action.mode, request.action.tags);
+            done += chunk.length;
+            onProgress(done, total);
+            updateLine(`Bulk tag ${request.action.mode}: ${done}/${total}`);
+        }
+        updateLine("");
+        return true;
     }
 
     throw new Error("Unknown bulk action");

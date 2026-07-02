@@ -1,5 +1,6 @@
 
 import type { CustomFiltersState } from "$lib/stores/customFiltersStore";
+import type { TagsRegistryState } from "$lib/types/tags";
 
 export const sortingMethods = ['date', 'date (asc)', 'name', 'name (desc)', 'random'] as const;
 export type SortingMethod = typeof sortingMethods[number];
@@ -57,13 +58,13 @@ export const defaultExplorationSettings: ExplorationSettings = {
     similarityThreshold: 0.5,
 };
 
-const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'model', 'annotation', 'similar'] as const;
+const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'model', 'annotation', 'tag', 'similar'] as const;
 export type MatchType = typeof matchTypes[number];
 export function isMatchType(object: any): object is MatchType {
     return matchTypes.includes(object);
 }
 
-export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'SIMILAR|SM', 'SKIP', 'TAKE'] as const;
+export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'SKIP', 'TAKE'] as const;
 export type SearchKeyword = typeof searchKeywords[number];
 export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);
@@ -72,6 +73,7 @@ export function isSearchKeyword(object: any): object is SearchKeyword {
 export type GlobalSettings = {
     nsfwFilter: string;
     customFilters?: CustomFiltersState;
+    tags?: TagsRegistryState;
 }
 
 export type InputEvent = MouseEvent | KeyboardEvent | TouchEvent;

@@ -1,5 +1,8 @@
 <script lang="ts">
     import { searchKeywords } from "$lib/types/misc";
+    import { tagsStore } from "$lib/stores/tagsStore";
+    import { tagRegistryNames } from "$lib/types/tags";
+    import { getUnknownExactTagRanges, segmentOverlapsRange } from "$lib/tools/tagSearch";
 
     export let placeholder = "";
     export let value = "";
@@ -8,6 +11,7 @@
     type Segment = {
         text: string;
         keyword: boolean;
+        unknownTag: boolean;
     };
 
     const keywordAliases = new Set([
@@ -19,7 +23,7 @@
 
     let scrollLeft = 0;
 
-    $: segments = getSegments(value);
+    $: segments = getSegments(value, tagRegistryNames($tagsStore));
 
     async function clear() {
         value = "";
@@ -34,12 +38,18 @@
         scrollLeft = element?.scrollLeft ?? 0;
     }
 
-    function getSegments(text: string): Segment[] {
+    function getSegments(text: string, registryNames: Set<string>): Segment[] {
+        const unknownRanges = getUnknownExactTagRanges(text, registryNames);
+        let offset = 0;
         return Array.from(text.matchAll(tokenRegex), match => {
             const token = match[0];
+            const segmentStart = offset;
+            const segmentEnd = offset + token.length;
+            offset = segmentEnd;
             return {
                 text: token,
                 keyword: keywordAliases.has(token.toLowerCase()),
+                unknownTag: segmentOverlapsRange(segmentStart, segmentEnd, unknownRanges),
             };
         });
     }
@@ -51,7 +61,10 @@
             <div class="highlightText" style:transform={`translateX(${-scrollLeft}px)`}>
                 {#if value}
                     {#each segments as segment}
-                        <span class:keyword={segment.keyword}>{segment.text}</span>
+                        <span
+                            class:keyword={segment.keyword}
+                            class:unknown-tag={segment.unknownTag}
+                        >{segment.text}</span>
                     {/each}
                 {:else}
                     <span class="placeholder">{placeholder}</span>
@@ -135,6 +148,10 @@
 
     .keyword {
         color: #8fd3ff;
+    }
+
+    .unknown-tag {
+        color: #f0a0a0;
     }
 
     .placeholder {

@@ -25,6 +25,12 @@
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode } from "$lib/stores/searchStore";
   import { getQualityParam, imageAction } from "$lib/requests/imageRequests";
+  import { updateImageTags } from "$lib/requests/tagRequests";
+  import TagPillRow from "$lib/components/TagPillRow.svelte";
+  import TagPickerPopup from "$lib/components/TagPickerPopup.svelte";
+  import TagModal from "$lib/components/TagModal.svelte";
+  import { tagsStore, upsertTagDefinition } from "$lib/stores/tagsStore";
+  import { DEFAULT_TAG_COLOR } from "$lib/types/tags";
   import { autofocus } from "../../actions/autofocus";
   import { fullscreenStyle } from "$lib/stores/styleStore";
   import type { ClientImage, ImageInfo } from "$lib/types/images";
@@ -44,6 +50,17 @@
   let hiddenElementWorkflow: HTMLDivElement;
 
   let showOriginal = false;
+  let tagPickerOpen = false;
+  let tagModalOpen = false;
+  let modalTagName = "";
+  let modalTagColor = DEFAULT_TAG_COLOR;
+  let imageTags: string[] = [];
+  let tagsRowEl: HTMLDivElement | undefined;
+
+  $: if (data) imageTags = data.tags ?? [];
+  $: availableTags = $tagsStore.tags
+    .map((tag) => tag.name)
+    .filter((name) => !imageTags.includes(name));
 
   $: full = $fullscreenStyle;
   $: imageUrl = image?.id
@@ -177,7 +194,13 @@
 
   function handleEsc(e: KeyboardEvent) {
     if (!image?.id) return;
-    if (e.key === "Escape") cancel();
+    if (e.key === "Escape") {
+      if (tagPickerOpen) {
+        tagPickerOpen = false;
+        return;
+      }
+      cancel();
+    }
   }
 
   function prevent(e: Event) {
@@ -249,6 +272,59 @@
     }).then(cancel);
   }
 
+  async function persistImageTags(next: string[]) {
+    if (!image?.id) return;
+    try {
+      imageTags = await updateImageTags(image.id, next);
+      if (data) data = { ...data, tags: imageTags };
+    } catch (cause) {
+      console.error(cause);
+      notify(cause instanceof Error ? cause.message : "Failed to update tags", "warn");
+    }
+  }
+
+  async function removeImageTag(name: string) {
+    await persistImageTags(imageTags.filter((tag) => tag !== name));
+  }
+
+  async function addImageTag(name: string) {
+    if (imageTags.includes(name)) return;
+    await persistImageTags([...imageTags, name]);
+  }
+
+  function openCreateTagModal() {
+    modalTagName = "";
+    modalTagColor = DEFAULT_TAG_COLOR;
+    tagModalOpen = true;
+  }
+
+  function closeCreateTagModal() {
+    tagModalOpen = false;
+  }
+
+  async function saveNewTag(event: CustomEvent<{ name: string; color: string }>) {
+    const { name, color } = event.detail;
+    const duplicate = $tagsStore.tags.some(
+      (item) => item.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (duplicate) {
+      notify(`Tag name '${name}' already exists`, "warn");
+      return;
+    }
+
+    tagsStore.update((state) => upsertTagDefinition(state, { name, color }));
+    tagModalOpen = false;
+    await addImageTag(name);
+  }
+
+  function toggleTagPicker() {
+    tagPickerOpen = !tagPickerOpen;
+  }
+
+  function closeTagPicker() {
+    tagPickerOpen = false;
+  }
+
   function showOriginalImage() {
     showOriginal = true;
     notify("Showing original quality image");
@@ -309,6 +385,16 @@
                   {/if}
                 </div>
               </div>
+              <div class="tags-row" bind:this={tagsRowEl} on:click={prevent}>
+                <TagPillRow
+                  tags={imageTags}
+                  showAdd
+                  deletable
+                  compact
+                  on:add={toggleTagPicker}
+                  on:remove={(event) => removeImageTag(event.detail)}
+                />
+              </div>
               {#each promptInfo as info}
                 <div class="extra">
                   <h1 class="header">
@@ -327,6 +413,15 @@
         </div>
       </div>
     </div>
+    {#if tagPickerOpen}
+      <TagPickerPopup
+        anchor={tagsRowEl ?? null}
+        tags={availableTags}
+        on:select={(event) => addImageTag(event.detail)}
+        on:createNew={openCreateTagModal}
+        on:close={closeTagPicker}
+      />
+    {/if}
   </div>
   <div class="fallback" bind:this={hiddenElementFull}>{fullPrompt}</div>
   <div class="fallback" bind:this={hiddenElementPos}>{prompts?.pos ?? ""}</div>
@@ -336,6 +431,15 @@
   <div class="fallback" bind:this={hiddenElementParams}>{paramsPrompt}</div>
   <div class="fallback" bind:this={hiddenElementAnnotation}>{annotationText}</div>
   <div class="fallback" bind:this={hiddenElementWorkflow}>{workflowPrompt}</div>
+  {#if tagModalOpen}
+    <TagModal
+      title="Add tag"
+      bind:name={modalTagName}
+      bind:color={modalTagColor}
+      on:save={saveNewTag}
+      on:close={closeCreateTagModal}
+    />
+  {/if}
 {/if}
 
 <svelte:window on:keydown={handleEsc} />
@@ -435,8 +539,9 @@
       margin: 0;
       width: 0;
       min-width: calc(100% - 2em);
+      --section-pad-x: 1em;
 
-      & > div {
+      & > div:not(.tags-row) {
         // background-color: #123a;
         background-color: #4444;
         line-height: 1.3em;
@@ -444,6 +549,12 @@
         margin: 1em 0;
         overflow: hidden;
         border: 1px solid #fff1;
+      }
+
+      .tags-row {
+        position: relative;
+        padding: 0 var(--section-pad-x);
+        margin: 0;
       }
 
       p {
@@ -455,14 +566,14 @@
 
       .basic {
         display: flex;
-        padding: 0.7em 1em;
+        padding: 0.7em var(--section-pad-x);
         border-radius: 0.5em;
         margin: 1em 0;
       }
 
       .extra {
         p {
-          padding: 0.5em 0.7em;
+          padding: 0.5em var(--section-pad-x);
         }
       }
 
@@ -477,7 +588,7 @@
         font-size: 0.8em;
         font-weight: normal;
         background-color: #112a;
-        padding: 0.2em 0.7em;
+        padding: 0.2em var(--section-pad-x);
 
         button {
           background-color: transparent;

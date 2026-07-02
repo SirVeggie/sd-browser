@@ -9,5 +9,7 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-**/localData
+**/localData*
+**/devLocalData
+**/devImages
 test_images

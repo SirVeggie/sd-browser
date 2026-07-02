@@ -25,6 +25,7 @@ export function getServerImage(image: ServerImageFull): ServerImage {
         models: extra.models,
         hash: extra.hash,
         annotation: extra.annotation ?? '',
+        tags: extra.tags ?? [],
         width: image.width,
         height: image.height,
     };
@@ -38,6 +39,10 @@ export function populateServerImage(image: ServerImage, info: ImageExtraData): S
     image.models = info.models ?? '';
     image.hash = info.hash;
     image.annotation = info.annotation ?? '';
+    if (info.tags !== undefined)
+        image.tags = info.tags ?? [];
+    else if (image.tags === undefined)
+        image.tags = [];
     return image;
 }
 
@@ -167,6 +172,7 @@ export function buildImageInfo(imageid: string): ImageInfo | undefined {
         workflow: full?.workflow,
         extra: full?.extra,
         annotation: image.annotation,
+        tags: image.tags ?? [],
         width: image.width || undefined,
         height: image.height || undefined,
     };

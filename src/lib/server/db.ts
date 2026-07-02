@@ -1,8 +1,9 @@
 import type { Database as BetterSqlite3, Statement } from 'better-sqlite3';
 import path from 'path';
-import { datapath } from './filemanager';
+import { datapath } from './paths';
 import { openDatabase } from './sqlite';
 import type { ImageExtraData, ServerImage, ServerImageFull, ServerImagePartial } from '$lib/types/images';
+import type { BulkTagMode } from '$lib/types/tags';
 import { deleteFileSync, fileExistsSync } from './filetools';
 
 export function sqliteTableExists(db: BetterSqlite3, table: string): boolean {
@@ -366,7 +367,8 @@ export class MetaCalcDB {
         params TEXT,
         models TEXT,
         hash TEXT,
-        annotation TEXT
+        annotation TEXT,
+        tags TEXT
     )`;
     private static sqlCreateStaging = `
     CREATE TABLE IF NOT EXISTS ${MetaCalcDB.stagingTable} (
@@ -376,12 +378,28 @@ export class MetaCalcDB {
         params TEXT,
         models TEXT,
         hash TEXT,
-        annotation TEXT
+        annotation TEXT,
+        tags TEXT
     )`;
 
     private static isOpen = false;
     private static isSetup = false;
     private static db: BetterSqlite3;
+
+    private static mapRow(row: Record<string, unknown>): ImageExtraData {
+        const copy = { ...row };
+        copy.tags = row.tags ? (row.tags as string).split(',') : [];
+        return copy as ImageExtraData;
+    }
+
+    private static resolveStored(item: ImageExtraData, existing?: ImageExtraData) {
+        const annotation = item.annotation !== undefined ? item.annotation : existing?.annotation ?? null;
+        const rawTags = item.tags !== undefined ? item.tags : existing?.tags;
+        return {
+            annotation,
+            tags: rawTags?.join(',') ?? null,
+        };
+    }
 
     static setup() {
         if (MetaCalcDB.isOpen)
@@ -424,13 +442,12 @@ export class MetaCalcDB {
         MetaCalcDB.setup();
         MetaCalcDB.ensureStagingTable();
         const stmt = MetaCalcDB.db.prepare(
-            `INSERT OR REPLACE INTO ${MetaCalcDB.stagingTable} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT OR REPLACE INTO ${MetaCalcDB.stagingTable} (id, positive, negative, params, models, hash, annotation, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         );
         MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
             for (const item of data) {
-                const existing = MetaCalcDB.get(item.id);
-                const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation);
+                const { annotation, tags } = MetaCalcDB.resolveStored(item, MetaCalcDB.get(item.id));
+                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation, tags);
             }
         }).immediate(data);
     }
@@ -462,6 +479,12 @@ export class MetaCalcDB {
             MetaCalcDB.db.prepare(
                 `UPDATE ${MetaCalcDB.stagingTable} SET annotation = (
                     SELECT annotation FROM ${MetaCalcDB.table} WHERE ${MetaCalcDB.table}.id = ${MetaCalcDB.stagingTable}.id
+                ) WHERE id IN (SELECT id FROM ${MetaCalcDB.table})`,
+            ).run();
+
+            MetaCalcDB.db.prepare(
+                `UPDATE ${MetaCalcDB.stagingTable} SET tags = (
+                    SELECT tags FROM ${MetaCalcDB.table} WHERE ${MetaCalcDB.table}.id = ${MetaCalcDB.stagingTable}.id
                 ) WHERE id IN (SELECT id FROM ${MetaCalcDB.table})`,
             ).run();
 
@@ -503,12 +526,14 @@ export class MetaCalcDB {
 
     static get(id: string): ImageExtraData | undefined {
         MetaCalcDB.setup();
-        return MetaCalcDB.db.prepare(`SELECT * FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as ImageExtraData | undefined;
+        const row = MetaCalcDB.db.prepare(`SELECT * FROM ${MetaCalcDB.table} WHERE id = ?`).get(id) as Record<string, unknown> | undefined;
+        return row ? MetaCalcDB.mapRow(row) : undefined;
     }
 
     static getAll(): ImageExtraData[] {
         MetaCalcDB.setup();
-        return MetaCalcDB.db.prepare(`SELECT * FROM ${MetaCalcDB.table}`).all() as ImageExtraData[];
+        const rows = MetaCalcDB.db.prepare(`SELECT * FROM ${MetaCalcDB.table}`).all() as Record<string, unknown>[];
+        return rows.map(MetaCalcDB.mapRow);
     }
 
     static getAllIds(): string[] {
@@ -522,7 +547,7 @@ export class MetaCalcDB {
         const stmt = MetaCalcDB.db.prepare(`SELECT * FROM ${MetaCalcDB.table} WHERE ROWID > ? AND ROWID <= ?`);
         let fetched = 0;
         while (fetched < amount) {
-            yield stmt.all(fetched, fetched + batch) as ImageExtraData[];
+            yield (stmt.all(fetched, fetched + batch) as Record<string, unknown>[]).map(MetaCalcDB.mapRow);
             fetched += batch;
         }
     }
@@ -534,20 +559,18 @@ export class MetaCalcDB {
 
     static set(data: ImageExtraData) {
         MetaCalcDB.setup();
-        const existing = MetaCalcDB.get(data.id);
-        const annotation = data.annotation !== undefined ? data.annotation : (existing?.annotation ?? null);
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-        stmt.run(data.id, data.positive, data.negative, data.params, data.models ?? '', data.hash, annotation);
+        const { annotation, tags } = MetaCalcDB.resolveStored(data, MetaCalcDB.get(data.id));
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        stmt.run(data.id, data.positive, data.negative, data.params, data.models ?? '', data.hash, annotation, tags);
     }
 
     static setAll(data: ImageExtraData[]) {
         MetaCalcDB.setup();
-        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
             for (const item of data) {
-                const existing = MetaCalcDB.get(item.id);
-                const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation);
+                const { annotation, tags } = MetaCalcDB.resolveStored(item, MetaCalcDB.get(item.id));
+                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation, tags);
             }
         }).immediate(data);
     }
@@ -555,6 +578,56 @@ export class MetaCalcDB {
     static setAnnotation(id: string, annotation: string) {
         MetaCalcDB.setup();
         MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET annotation = ? WHERE id = ?`).run(annotation, id);
+    }
+
+    static setTags(id: string, tags: string[]) {
+        MetaCalcDB.setup();
+        MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET tags = ? WHERE id = ?`).run(tags.join(','), id);
+    }
+
+    static removeTagFromAll(tagName: string): number {
+        MetaCalcDB.setup();
+        const rows = MetaCalcDB.getAll();
+        let updated = 0;
+        const stmt = MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET tags = ? WHERE id = ?`);
+        MetaCalcDB.db.transaction((items: ImageExtraData[]) => {
+            for (const item of items) {
+                const currentTags = item.tags ?? [];
+                const tags = currentTags.filter((tag) => tag !== tagName);
+                if (tags.length === currentTags.length)
+                    continue;
+                stmt.run(tags.join(','), item.id);
+                updated++;
+            }
+        }).immediate(rows);
+        return updated;
+    }
+
+    static bulkUpdateTags(ids: string[], mode: BulkTagMode, tagNames: string[]) {
+        MetaCalcDB.setup();
+        const stmt = MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET tags = ? WHERE id = ?`);
+        MetaCalcDB.db.transaction((imageIds: string[]) => {
+            for (const id of imageIds) {
+                const existing = MetaCalcDB.get(id)?.tags ?? [];
+                let next: string[];
+                switch (mode) {
+                    case 'add':
+                        next = [...new Set([...existing, ...tagNames])];
+                        break;
+                    case 'remove':
+                        next = existing.filter((tag) => !tagNames.includes(tag));
+                        break;
+                    case 'replace':
+                        next = [...tagNames];
+                        break;
+                    default: {
+                        const _never: never = mode;
+                        throw new Error(`Unknown bulk tag mode: ${_never}`);
+                    }
+                }
+                stmt.run(next.join(','), id);
+            }
+        }).immediate(ids);
     }
 
     static delete(id: string) {
@@ -581,14 +654,13 @@ export class MetaCalcDB {
         if (!data.length && !deletions.length)
             return;
         const delstmt = MetaCalcDB.db.prepare(`DELETE FROM ${MetaCalcDB.table} WHERE id = ?`);
-        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        const addstmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
         MetaCalcDB.db.transaction((data: ImageExtraData[], deletions: string[]) => {
             for (const id of deletions)
                 delstmt.run(id);
             for (const item of data) {
-                const existing = MetaCalcDB.get(item.id);
-                const annotation = item.annotation !== undefined ? item.annotation : (existing?.annotation ?? null);
-                addstmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation);
+                const { annotation, tags } = MetaCalcDB.resolveStored(item, MetaCalcDB.get(item.id));
+                addstmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation, tags);
             }
         }).immediate(data, deletions);
     }

@@ -1,12 +1,12 @@
-import { IMG_FOLDER } from '$env/static/private';
 import { invalidAuth } from '$lib/server/auth.js';
+import { imgFolder } from '$lib/server/paths';
 import { success } from '$lib/server/responses';
 import { stringSortSingle } from '$lib/tools/misc';
 import type { FoldersResponse } from '$lib/types/requests.js';
 import fs from 'fs/promises';
 import path from 'path';
 
-const root = IMG_FOLDER;
+const root = imgFolder;
 const folderRegex = /^\.?[^.]+$/;
 
 export async function GET(e) {

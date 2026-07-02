@@ -1,7 +1,6 @@
-import { IMG_FOLDER } from '$env/static/private';
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import { compressedPath, thumbnailPath } from './filemanager';
+import { compressedPath, imgFolder, thumbnailPath } from './paths';
 import path from 'path';
 
 export async function fileExists(file: string): Promise<boolean> {
@@ -55,11 +54,11 @@ export function splitExtension(file: string): [string, string] {
 }
 
 /**
- * Remove IMG_FOLDER from the file path
+ * Remove the image root folder from the file path
  */
 export function removeBasePath(filepath: string) {
     filepath = filepath.replace(/(\/|\\)+$/, '');
-    return filepath.replace(IMG_FOLDER, '');
+    return filepath.replace(imgFolder, '');
 }
 
 /**

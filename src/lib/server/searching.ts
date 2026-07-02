@@ -1,4 +1,5 @@
 import { parseSearchDate, parseSearchFloat, validRegex, XOR, yieldToEventLoop } from "$lib/tools/misc";
+import { isExactTagTerm } from "$lib/types/tags";
 import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
 import {
@@ -27,6 +28,7 @@ const paramRegex = new RegExp(`^${keywordPattern}(PARAMS|PR) `, keywordFlags);
 const dateRegex = new RegExp(`^${keywordPattern}(DATE|DT) `, keywordFlags);
 const modelRegex = new RegExp(`^${keywordPattern}(MODEL|MD) `, keywordFlags);
 const annotationRegex = new RegExp(`^${keywordPattern}(ANNOTATION|AN) `, keywordFlags);
+const tagRegex = new RegExp(`^${keywordPattern}TAG `, keywordFlags);
 const similarRegex = new RegExp(`^${keywordPattern}(SIMILAR|SM) `, keywordFlags);
 const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
 const takeRegex = new RegExp(`^${keywordPattern}TAKE `, keywordFlags);
@@ -43,6 +45,7 @@ type SearchPart = {
     not: RegExpMatchArray | null;
     type: MatchType;
     skip: boolean;
+    tagExact?: boolean;
     similarRef?: string;
     similarThreshold?: number;
     similarInvalid?: boolean;
@@ -396,6 +399,7 @@ export function buildMatcher(
         else if (dateRegex.test(x)) type = 'date';
         else if (modelRegex.test(x)) type = 'model';
         else if (annotationRegex.test(x)) type = 'annotation';
+        else if (tagRegex.test(x)) type = 'tag';
         else if (similarRegex.test(x)) type = 'similar';
 
         let similarRef: string | undefined;
@@ -412,12 +416,15 @@ export function buildMatcher(
             }
         }
 
+        const searchRaw = type === 'tag' ? raw.trim() : raw;
+        const tagExact = type === 'tag' ? isExactTagTerm(searchRaw) : undefined;
         const part: SearchPart = {
-            raw,
-            regex: new RegExp(raw, 'is'),
+            raw: searchRaw,
+            regex: type === 'tag' && tagExact ? /(?:)/ : new RegExp(searchRaw, 'is'),
             not: x.match(notRegex),
             type,
             skip,
+            tagExact,
             similarRef,
             similarThreshold,
             similarInvalid,
@@ -455,6 +462,13 @@ export function buildMatcher(
                     const end = dates[1] ? parseSearchDate(dates[1], 'end') : undefined;
                     return image.modifiedDate >= start && (end === undefined || image.modifiedDate <= end);
                 }
+            }
+
+            if (x.type === 'tag') {
+                const matched = tagMatches(image.tags ?? [], x);
+                if (x.skip)
+                    return !matched;
+                return XOR(x.not, matched);
             }
 
             const text = getTextByType(image, x.type);
@@ -524,6 +538,13 @@ function getSearchPartRank(part: SearchPart): number {
     return 3;
 }
 
+function tagMatches(tags: string[], part: SearchPart): boolean {
+    if (part.tagExact)
+        return tags.some((tag) => tag === part.raw);
+    const regex = new RegExp(part.raw, 'is');
+    return tags.some((tag) => regex.test(tag));
+}
+
 function textMatches(text: string, part: SearchPart, matching: SearchMode): boolean {
     if (matching === 'contains') {
         return text.toLowerCase().includes(part.raw.toLowerCase());
@@ -555,6 +576,8 @@ function getTextByType(image: ServerImage, type: MatchType): string {
             return getModelSearchText(image.models);
         case 'annotation':
             return image.annotation ?? '';
+        case 'tag':
+            return (image.tags ?? []).join('\n');
         case 'similar':
             return '';
         default: {

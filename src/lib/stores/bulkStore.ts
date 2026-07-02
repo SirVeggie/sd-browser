@@ -1,14 +1,18 @@
 import { CUSTOM_INSTRUCTION_ID } from "$lib/stores/llmStore";
 import { writable } from "svelte/store";
 
-export type BulkActionType = "move" | "copy" | "delete" | "annotate";
+export type BulkActionType = "move" | "copy" | "delete" | "annotate" | "tag";
 
 export type BulkAnnotateMode = "generate" | "clear" | "modify";
+
+export type BulkTagMode = "add" | "remove" | "replace";
 
 export type BulkModalSettings = {
     action: BulkActionType;
     folder: string;
     annotateMode: BulkAnnotateMode;
+    tagMode: BulkTagMode;
+    selectedTags: string[];
     includeImage: boolean;
     includePrompt: boolean;
     systemInstructionPresetId: string;
@@ -24,6 +28,8 @@ export const bulkModalDefaults: BulkModalSettings = {
     action: "move",
     folder: "/",
     annotateMode: "generate",
+    tagMode: "add",
+    selectedTags: [],
     includeImage: false,
     includePrompt: true,
     systemInstructionPresetId: CUSTOM_INSTRUCTION_ID,
@@ -47,6 +53,8 @@ export function syncBulkModalWithLocalStorage() {
             ...bulkModalDefaults,
             ...value,
             annotateMode,
+            tagMode: value.tagMode ?? "add",
+            selectedTags: value.selectedTags ?? [],
             systemInstructionPresetId:
                 value.systemInstructionPresetId ?? CUSTOM_INSTRUCTION_ID,
         });
