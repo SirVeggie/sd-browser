@@ -1,30 +1,14 @@
 <script lang="ts" context="module">
     import { outclick } from "../../actions/outclick";
-    import { closeContextMenuChildren } from "./ContextMenuManager.svelte";
-
-    let hoverCloseTimer: ReturnType<typeof setTimeout> | undefined;
-
-    function cancelHoverClose() {
-        if (hoverCloseTimer) {
-            clearTimeout(hoverCloseTimer);
-            hoverCloseTimer = undefined;
-        }
-    }
-
-    function scheduleHoverClose(menuId: string) {
-        cancelHoverClose();
-        hoverCloseTimer = setTimeout(() => {
-            closeContextMenuChildren(menuId);
-            hoverCloseTimer = undefined;
-        }, 200);
-    }
 </script>
 
 <script lang="ts">
     import {
+        cancelContextMenuHoverClose,
         closeContextMenu,
         closeContextMenuChildren,
         openContextMenu,
+        scheduleContextMenuHoverClose,
         type ContextMenuOption,
         type IContextMenu,
     } from "./ContextMenuManager.svelte";
@@ -36,6 +20,10 @@
     let position = { ...menu.position };
     let flipLeft = false;
     let activeSubmenuOption: string | null = null;
+
+    const finePointerHover =
+        typeof matchMedia !== "undefined" &&
+        matchMedia("(hover: hover) and (pointer: fine)").matches;
 
     $: isSubmenu = menu.parent !== undefined;
 
@@ -99,7 +87,9 @@
         menu: IContextMenu,
         option: ContextMenuOption,
     ) {
-        cancelHoverClose();
+        if (!finePointerHover) return;
+
+        cancelContextMenuHoverClose();
 
         if (option.submenu) {
             if (activeSubmenuOption === option.name) return;
@@ -119,9 +109,16 @@
     ) {
         if (e.button !== 0) return;
         if (!(option.enabled ?? true)) return;
-        if (option.submenu) return;
         e.stopPropagation();
         e.preventDefault();
+
+        if (option.submenu) {
+            cancelContextMenuHoverClose();
+            if (activeSubmenuOption === option.name) return;
+            activeSubmenuOption = option.name;
+            await openSubmenu(e.currentTarget as HTMLButtonElement, menu, option);
+            return;
+        }
 
         const result = await option.handler();
         if (!result) return closeContextMenu(menu.id);
@@ -129,11 +126,13 @@
     }
 
     function menuEnter() {
-        cancelHoverClose();
+        if (!finePointerHover) return;
+        cancelContextMenuHoverClose();
     }
 
     function menuLeave() {
-        scheduleHoverClose(menu.parent ?? menu.id);
+        if (!finePointerHover) return;
+        scheduleContextMenuHoverClose(menu.parent ?? menu.id);
     }
 </script>
 
@@ -144,6 +143,9 @@
     class:flip-left={flipLeft}
     class:disabled={!menu.options.filter((x) => x.visible ?? true).length}
     style="left: {position.x}px; top: {position.y}px; z-index: {100 + depth}"
+    role="menu"
+    aria-label={isSubmenu ? "Submenu" : "Context menu"}
+    tabindex="-1"
     use:outclick
     on:outclick={() => closeContextMenu(menu.id)}
     on:mouseenter={menuEnter}
@@ -153,7 +155,13 @@
         {#if option.visible ?? true}
             <button
                 type="button"
+                role="menuitem"
                 style="--stagger-i: {index}"
+                disabled={!(option.enabled ?? true)}
+                aria-haspopup={option.submenu ? "menu" : undefined}
+                aria-expanded={option.submenu
+                    ? activeSubmenuOption === option.name
+                    : undefined}
                 on:mouseenter={(e) => optionEnter(e, menu, option)}
                 on:click={(e) => clickHandler(e, menu, option)}
                 class:disabled={!(option.enabled ?? true)}
@@ -224,15 +232,16 @@
         @include dropdown.option-animation;
         @include dropdown.reduced-motion;
 
-        &:hover:not(.disabled) {
+        &:hover:not(.disabled):not(:disabled) {
             background: #ffffff10;
         }
 
-        &:active:not(.disabled) {
+        &:active:not(.disabled):not(:disabled) {
             background: #ffffff14;
         }
 
-        &.disabled {
+        &.disabled,
+        &:disabled {
             color: #999;
             cursor: default;
         }

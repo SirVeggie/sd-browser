@@ -66,6 +66,23 @@
         );
     }
 
+    let hoverCloseTimer: ReturnType<typeof setTimeout> | undefined;
+
+    export function cancelContextMenuHoverClose() {
+        if (hoverCloseTimer) {
+            clearTimeout(hoverCloseTimer);
+            hoverCloseTimer = undefined;
+        }
+    }
+
+    export function scheduleContextMenuHoverClose(menuId: string) {
+        cancelContextMenuHoverClose();
+        hoverCloseTimer = setTimeout(() => {
+            closeContextMenuChildren(menuId);
+            hoverCloseTimer = undefined;
+        }, 200);
+    }
+
     export function closeAllContextMenus() {
         menuStore.set([]);
         window.removeEventListener("keydown", handleEsc);
