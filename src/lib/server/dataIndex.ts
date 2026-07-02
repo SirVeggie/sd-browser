@@ -6,8 +6,6 @@ const freshLimit = 1000;
 
 let imageList: ImageList = new Map();
 let freshList: TimedImage[] = [];
-const nsfwList: string[] = [];
-const favoriteList: string[] = [];
 const deletionList: TimedImage[] = [];
 
 export let generationDisabled = false;
@@ -86,30 +84,4 @@ export function getDeletedImageIds(timestamp: number) {
         res.push(deletion.id);
     }
     return res;
-}
-
-export function markNsfw(ids: string | string[], nsfw: boolean) {
-    if (typeof ids === 'string') ids = [ids];
-
-    for (const id of ids) {
-        const index = nsfwList.indexOf(id);
-        if (nsfw && index === -1) {
-            nsfwList.push(id);
-        } else if (!nsfw && index !== -1) {
-            nsfwList.splice(index, 1);
-        }
-    }
-}
-
-export function markFavorite(ids: string | string[], favorite: boolean) {
-    if (typeof ids === 'string') ids = [ids];
-
-    for (const id of ids) {
-        const index = favoriteList.indexOf(id);
-        if (favorite && index === -1) {
-            favoriteList.push(id);
-        } else if (!favorite && index !== -1) {
-            favoriteList.splice(index, 1);
-        }
-    }
 }

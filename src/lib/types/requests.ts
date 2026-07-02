@@ -9,7 +9,7 @@ import {
     testType,
 } from "./misc";
 
-export type ActionRequest = NsfwAction | FavoriteAction | MoveAction | CopyAction | DeleteAction | OpenAction;
+export type ActionRequest = MoveAction | CopyAction | DeleteAction | OpenAction;
 export function isActionRequest(object: any): object is ActionRequest {
     return testType(object, ['type']);
 }
@@ -20,16 +20,6 @@ export type MultiActionRequest = {
 export function isMultiActionRequest(object: any): object is MultiActionRequest {
     return testType(object, ['ids', 'type']);
 }
-
-export type NsfwAction = {
-    type: 'nsfw';
-    state: boolean;
-};
-
-export type FavoriteAction = {
-    type: 'favorite';
-    state: boolean;
-};
 
 export type MoveAction = {
     type: 'move';

@@ -1,4 +1,3 @@
-import { markFavorite, markNsfw } from '$lib/server/dataIndex.js';
 import { deleteImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 import { isActionRequest } from '$lib/types/requests';
@@ -9,15 +8,11 @@ export async function POST(e) {
     if (!isActionRequest(action)) {
         return error('Invalid request body', 400);
     }
-    
-    if (action.type === 'nsfw') {
-        markNsfw(id, action.state);
-        return success();
-    } else if (action.type === 'favorite') {
-        markFavorite(id, action.state);
-        return success();
-    } else if (action.type === 'delete') {
+
+    if (action.type === 'delete') {
         deleteImages(id);
         return success();
     }
+
+    return error('Invalid request body', 400);
 }
