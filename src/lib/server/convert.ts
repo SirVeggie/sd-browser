@@ -1,7 +1,4 @@
-import { Readable, PassThrough } from 'stream';
 import sharp from 'sharp';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import { compressedPath, getImage, thumbnailPath } from './filemanager';
 import path from 'path';
 import fs from 'fs/promises';
@@ -9,100 +6,33 @@ import { backgroundTasks } from './background';
 import { sleep } from '$lib/tools/sleep';
 import { skipGeneration } from '$lib/tools/misc';
 
-ffmpeg.setFfmpegPath(ffmpegPath.path);
+const WEBP_FAST: sharp.WebpOptions = { effort: 0 };
 
 export async function encodeImageForLlm(imagepath: string): Promise<Buffer> {
     return sharp(imagepath).jpeg({ quality: 80 }).toBuffer();
 }
 
-export function convertImage(image: Readable, outputFormat: string): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-        const chunks: Buffer[] = [];
-        const passthrough = new PassThrough();
-        ffmpeg(image)
-            // .outputOption('-quality 10')
-            .outputFormat(outputFormat)
-            .on('error', reject)
-            .stream(passthrough, { end: true });
-        passthrough.on('data', data => chunks.push(data));
-        passthrough.on('error', reject);
-        passthrough.on('end', () => {
-            const originalImage = Buffer.concat(chunks as any);
-            const editedImage = originalImage
-                // copy everything after the last 4 bytes into the 4th position
-                .copyWithin(4, -4)
-                // trim off the extra last 4 bytes ffmpeg added
-                .subarray(0, -4);
-            return resolve(editedImage);
-        });
-    });
-}
-
-export function readCompressedImage(imagepath: string, quality: number, size?: number): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-        const chunks: Buffer[] = [];
-        const passthrough = new PassThrough();
-        (!size ? ffmpeg(imagepath) : ffmpeg(imagepath).size(`${size}x?`))
-            .outputOptions([`-quality ${quality}`, '-compression_level 0'])
-            .on('error', reject)
-            .outputFormat('webp')
-            .stream(passthrough, { end: true });
-        passthrough.on('error', reject);
-        passthrough.on('data', data => chunks.push(data));
-        passthrough.on('end', () => {
-            const originalImage = Buffer.concat(chunks as any);
-            const editedImage = originalImage
-                // copy everything after the last 4 bytes into the 4th position
-                .copyWithin(4, -4)
-                // trim off the extra last 4 bytes ffmpeg added
-                .subarray(0, -4);
-            return resolve(editedImage);
-        });
-    });
-}
-
-export function bufferToStream(buffer: Buffer): Readable {
-    const readable = new Readable();
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    readable._read = () => { };
-    readable.push(buffer);
-    readable.push(null);
-    return readable;
-}
-
-// export async function readImageAsWebp(imagepath: string) {
-//     const buffer = await fs.readFile(imagepath);
-//     const stream = bufferToStream(buffer);
-//     return await convertImage(stream, 'webp');
-// }
-
 export function generateThumbnailTask(imagepath: string, outputpath: string): Promise<string> {
     return backgroundTasks.addWork(() => generateThumbnail(imagepath, outputpath), true);
 }
 
-export function generateThumbnail(imagepath: string, outputpath: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-        ffmpeg(imagepath)
-            .outputOptions(['-quality 80', '-compression_level 0'])
-            .size('460x?')
-            .on('error', reject)
-            .on('end', () => resolve(outputpath))
-            .saveToFile(outputpath);
-    });
+export async function generateThumbnail(imagepath: string, outputpath: string): Promise<string> {
+    await sharp(imagepath)
+        .resize({ width: 460 })
+        .webp({ quality: 80, ...WEBP_FAST })
+        .toFile(outputpath);
+    return outputpath;
 }
 
 export function generateCompressedTask(imagepath: string, outputpath: string): Promise<string> {
     return backgroundTasks.addWork(() => generateCompressed(imagepath, outputpath), true);
 }
 
-export function generateCompressed(imagepath: string, outputpath: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-        ffmpeg(imagepath)
-            .outputOptions(['-quality 90', '-compression_level 0'])
-            .on('error', reject)
-            .on('end', () => resolve(outputpath))
-            .saveToFile(outputpath);
-    });
+export async function generateCompressed(imagepath: string, outputpath: string): Promise<string> {
+    await sharp(imagepath)
+        .webp({ quality: 90, ...WEBP_FAST })
+        .toFile(outputpath);
+    return outputpath;
 }
 
 export async function generateCompressedFromId(id: string, file?: string) {
@@ -136,7 +66,7 @@ export async function generateThumbnailFromId(id: string, file?: string) {
 }
 
 function handleGenerationError(output: string) {
-    return async (error: any) => {
+    return async (error: unknown) => {
         console.error(error);
         await sleep(200);
         await fs.unlink(output).catch(() => undefined);
