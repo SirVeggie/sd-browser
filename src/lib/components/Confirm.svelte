@@ -2,7 +2,7 @@
     import Button from "$lib/items/Button.svelte";
     import Modal from "$lib/items/Modal.svelte";
     import { RePromise } from "$lib/tools/RePromise";
-    import { uniqueId } from "lodash";
+    import uniqueId from "lodash/uniqueId";
     import { cubicOut } from "svelte/easing";
     import { writable } from "svelte/store";
     import { fade } from "svelte/transition";

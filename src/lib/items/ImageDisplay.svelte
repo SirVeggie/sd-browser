@@ -8,7 +8,7 @@
         getPreviewParam,
         getQualityParam,
     } from "$lib/requests/imageRequests";
-    import { seamlessStyle } from "$lib/stores/styleStore";
+    import { imageSpacing } from "$lib/stores/styleStore";
     import type { ClientImage } from "$lib/types/images";
 
     export let img: ClientImage;
@@ -42,7 +42,8 @@
 
     $: src = `${img.url}?${getQualityParam($thumbMode)}&defer=true&${getPreviewParam(img.type, $animatedThumb)}`;
     $: active = !!onClick;
-    $: seamless = $seamlessStyle;
+    $: spacingCompact = $imageSpacing === "compact";
+    $: spacingMosaic = $imageSpacing === "mosaic";
     $: hasDimensions = !!(img.width && img.height);
     $: containerStyle = hasDimensions
         ? `aspect-ratio: ${img.width} / ${img.height}`
@@ -58,7 +59,8 @@
 <div
     class="base"
     class:active
-    class:seamless
+    class:spacing-compact={spacingCompact}
+    class:spacing-mosaic={spacingMosaic}
     class:unselect
     class:has-dimensions={hasDimensions}
     class:loaded={hasLoaded}
@@ -69,6 +71,8 @@
             <div class="loading">
                 <SpinLine color="#444" />
             </div>
+        {:else}
+            <div class="overlay"/>
         {/if}
         {#if img.type === "video" && $animatedThumb}
             <!-- svelte-ignore a11y-media-has-caption -->
@@ -122,6 +126,7 @@
         video {
             width: 100%;
             display: block;
+            transform: scale(1.01);
             transition:
                 transform 0.4s ease,
                 opacity 0.4s ease;
@@ -130,6 +135,15 @@
                 opacity: 0;
                 position: absolute;
             }
+        }
+        
+        .overlay {
+            position: absolute;
+            top: 0; bottom: 0; left: 0; right: 0;
+            z-index: 1;
+            pointer-events: none;
+            display: none;
+            transition: outline 0.4s ease;
         }
 
         &.has-dimensions {
@@ -169,11 +183,32 @@
             }
         }
 
+        &.spacing-mosaic {
+            border-radius: 0;
+            box-shadow: none;
+            background-color: transparent;
+            outline-offset: -1px;
+            
+            &.active:hover {
+                outline: 1px solid transparent;
+                // box-shadow: inset ;
+                .overlay {
+                    outline: 1px solid white;
+                }
+            }
+            
+            .overlay {
+                display: block;
+                outline: 1px solid transparent;
+                outline-offset: -1px;
+            }
+        }
+
         &.active:hover,
         &.active:has(:focus-visible) {
             outline: 1px solid #fffa;
 
-            &:not(.seamless) {
+            &:not(.spacing-compact):not(.spacing-mosaic) {
                 @media (width > 500px) {
                     transform: translateY(-0.5em);
                 }

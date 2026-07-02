@@ -36,7 +36,7 @@
         syncSearchInput,
         type SearchParams,
     } from "$lib/stores/searchStore";
-    import { imageSize, masonryLayout, seamlessStyle } from "$lib/stores/styleStore";
+    import { imageFlow, imageSize, imageSpacing } from "$lib/stores/styleStore";
     import {
         closeAllContextMenus,
         type ContextMenuOption,
@@ -131,33 +131,35 @@
     $: rightArrow = live || (nextIndex >= 0 && nextIndex < paginated.length);
     $: leftArrow = (rightArrow || nextIndex == paginated.length) && !live;
     $: newestImage = paginated[0];
-    $: seamless = $seamlessStyle;
+    $: spacingCompact = $imageSpacing === "compact";
+    $: spacingMosaic = $imageSpacing === "mosaic";
     $: selection.setObjects(paginated.map((x) => x.id));
     $: slideshowInterval = Math.max($slideDelay, 100);
+    $: masonryEnabled = $imageFlow === "masonry";
     $: gridStyle = buildGridStyle(
         $imageSize,
         gridResizing,
         resizePreserveHeight,
         resizeFrozenColumns,
-        $masonryLayout,
+        masonryEnabled,
     );
 
-    $: if (!$masonryLayout) {
+    $: if (!masonryEnabled) {
         masonryPlacer.reset("");
         masonryColumns = [];
     }
 
-    $: if ($masonryLayout && gridElement) {
+    $: if (masonryEnabled && gridElement) {
         paginated;
         searchSessionId;
         $imageSize;
-        seamless;
+        $imageSpacing;
         scheduleMasonryDataLayout();
     }
 
-    $: if (gridElement && !$masonryLayout) {
+    $: if (gridElement && !masonryEnabled) {
         $imageSize;
-        seamless;
+        $imageSpacing;
         void applyGridSettingsLayout();
     }
 
@@ -185,13 +187,13 @@
     }
 
     async function updateMasonryLayout() {
-        if (!$masonryLayout || !gridElement) return;
+        if (!masonryEnabled || !gridElement) return;
         await tick();
         await applyColumnCountChange(getGridMetrics(gridElement), true);
     }
 
     async function applyGridSettingsLayout() {
-        if (!gridElement || $masonryLayout) return;
+        if (!gridElement || masonryEnabled) return;
         await tick();
         await applyColumnCountChange(getGridMetrics(gridElement), false);
     }
@@ -330,7 +332,7 @@
 
         suppressAutoLoadBriefly();
 
-        if ($masonryLayout && columnCountChanged) {
+        if (masonryEnabled && columnCountChanged) {
             masonryColumns = masonryPlacer.layout(
                 paginated,
                 searchSessionId,
@@ -1111,8 +1113,9 @@
 
 <div
     class="grid"
-    class:seamless
-    class:masonry={$masonryLayout}
+    class:spacing-compact={spacingCompact}
+    class:spacing-mosaic={spacingMosaic}
+    class:masonry={masonryEnabled}
     class:resizing={gridResizing}
     class:revealing={gridRevealing}
     class:reveal-visible={gridRevealVisible}
@@ -1124,7 +1127,7 @@
         <p>Adjusting layout…</p>
     </div>
     <div class="grid-content">
-        {#if $masonryLayout}
+        {#if masonryEnabled}
             {#each masonryColumns as column (column.key)}
                 <div class="masonry-column">
                     {#each column.items as img (img.id)}
@@ -1219,7 +1222,7 @@
         position: sticky;
         top: 0;
         background-color: #242424;
-        z-index: 1;
+        z-index: 2;
         padding-inline: calc(var(--main-padding) / 1);
         padding-top: calc(var(--main-padding) / 4);
         box-shadow: 0 35px 10px -32px rgba(0, 0, 0, 0.5);
@@ -1373,7 +1376,7 @@
             }
         }
 
-        &.seamless {
+        &.spacing-compact {
             padding: 5px;
 
             .grid-content {
@@ -1382,6 +1385,22 @@
 
             &.masonry .grid-content .masonry-column {
                 gap: 2px;
+            }
+        }
+
+        &.spacing-mosaic {
+            padding: 0;
+
+            .grid-content {
+                gap: 0;
+            }
+
+            &.masonry .grid-content {
+                gap: 0;
+
+                .masonry-column {
+                    gap: 0;
+                }
             }
         }
 
@@ -1418,6 +1437,38 @@
 
                 .masonry-column {
                     gap: 0.2em;
+                }
+            }
+
+            &.spacing-compact {
+                padding: 5px;
+
+                .grid-content {
+                    gap: 2px;
+                }
+
+                &.masonry .grid-content {
+                    gap: 2px;
+
+                    .masonry-column {
+                        gap: 2px;
+                    }
+                }
+            }
+
+            &.spacing-mosaic {
+                padding: 0;
+
+                .grid-content {
+                    gap: 0;
+                }
+
+                &.masonry .grid-content {
+                    gap: 0;
+
+                    .masonry-column {
+                        gap: 0;
+                    }
                 }
             }
         }

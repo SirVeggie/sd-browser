@@ -1,5 +1,5 @@
 import type { ClientImage, ServerImage } from "$lib/types/images";
-import { shuffle } from "lodash";
+import shuffle from "lodash/shuffle";
 import rl from "readline";
 
 export const imageFiletypes = ['png', 'jpg', 'jpeg', 'webp'] as const;

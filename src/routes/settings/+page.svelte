@@ -39,9 +39,9 @@
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import {
         fullscreenStyle,
+        imageFlow,
         imageSize,
-        masonryLayout,
-        seamlessStyle,
+        imageSpacing,
     } from "$lib/stores/styleStore";
     import NumInput from "$lib/items/NumInput.svelte";
     import SystemInstructionModal from "$lib/components/SystemInstructionModal.svelte";
@@ -107,6 +107,17 @@
         value: instruction.id,
         label: instruction.name,
     }));
+
+    const imageFlowOptions = [
+        { value: "grid", label: "Grid" },
+        { value: "masonry", label: "Masonry" },
+    ] as const;
+
+    const imageSpacingOptions = [
+        { value: "classic", label: "Classic" },
+        { value: "compact", label: "Compact" },
+        { value: "mosaic", label: "Mosaic" },
+    ] as const;
 
     $: setInput($flyoutStore.url);
 
@@ -538,19 +549,30 @@
         </label>
 
         <label
-            class="checkbox"
-            title="Tightens the gallery grid with smaller gaps and padding."
+            for="image-spacing"
+            title="Classic: Standard grid spacing with rounded thumbnails.
+Compact: Tightens the gallery grid with smaller gaps and padding.
+Mosaic: No gaps or rounded corners; images meet edge to edge."
         >
-            Seamless grid:
-            <input type="checkbox" bind:checked={$seamlessStyle} />
+            Image spacing:
+            <Select
+                id="image-spacing"
+                bind:value={$imageSpacing}
+                options={imageSpacingOptions}
+            />
         </label>
 
         <label
-            class="checkbox"
-            title="Tile images by placing them in the shortest column, like a photo wall."
+            for="image-flow"
+            title="Grid: Classic grid layout. Can leave gaps between images.
+Masonry: Tile images by placing them in the shortest column, like a photo wall."
         >
-            Masonry layout:
-            <input type="checkbox" bind:checked={$masonryLayout} />
+            Image flow:
+            <Select
+                id="image-flow"
+                bind:value={$imageFlow}
+                options={imageFlowOptions}
+            />
         </label>
     </div>
 

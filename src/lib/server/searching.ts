@@ -11,7 +11,7 @@ import {
     type SearchMode,
     type SortingMethod,
 } from "$lib/types/misc";
-import { shuffle } from "lodash";
+import shuffle from "lodash/shuffle";
 import { MetaDB } from "./db";
 import { computeSimilarity, getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./dataIndex";

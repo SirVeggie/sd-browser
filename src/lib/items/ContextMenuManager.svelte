@@ -1,5 +1,5 @@
 <script lang="ts" context="module">
-    import { uniqueId } from "lodash";
+    import uniqueId from "lodash/uniqueId";
     import { writable } from "svelte/store";
 
     export type ContextReturn = void | "keep" | ContextMenuOption[];
