@@ -1,6 +1,6 @@
 import { DEFAULT_TAGS_REGISTRY, type BulkTagMode } from '$lib/types/tags';
 import { MetaCalcDB, MiscDB } from './db';
-import { getImage, refreshExtradataInMemory } from './filemanager';
+import { getImage, refreshExtradataInMemory } from './dataIndex';
 
 const settingsKey = 'settings';
 

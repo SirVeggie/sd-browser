@@ -14,7 +14,7 @@ import {
 import _ from "lodash";
 import { MetaDB } from "./db";
 import { computeSimilarity, getExplorationPool } from "./exploration";
-import { getFreshImages, getImageList } from "./filemanager";
+import { getFreshImages, getImageList } from "./dataIndex";
 
 const keywordPattern = `((${searchKeywords.join('|')}) )*`;
 const keywordFlags = 'i';

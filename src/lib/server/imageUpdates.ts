@@ -1,4 +1,4 @@
-import { getDeletedImageIds, getFreshImageTimestamp } from './filemanager';
+import { getDeletedImageIds, getFreshImageTimestamp } from './dataIndex';
 import { applyResultSkip, applyResultTake, explorationFromRequest, searchImages } from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';

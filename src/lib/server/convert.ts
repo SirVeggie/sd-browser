@@ -1,5 +1,6 @@
 import sharp from 'sharp';
-import { compressedPath, getImage, thumbnailPath } from './filemanager';
+import { compressedPath, thumbnailPath } from './paths';
+import { getImage } from './dataIndex';
 import path from 'path';
 import fs from 'fs/promises';
 import { backgroundTasks } from './background';

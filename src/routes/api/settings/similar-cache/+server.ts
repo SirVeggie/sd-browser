@@ -1,6 +1,6 @@
 import { invalidAuth } from '$lib/server/auth';
 import { recalculateSimilarCache } from '$lib/server/exploration';
-import { getImageList } from '$lib/server/filemanager';
+import { getImageList } from '$lib/server/dataIndex';
 import { error, success } from '$lib/server/responses';
 import { isRecalculateSimilarCacheRequest } from '$lib/types/requests';
 

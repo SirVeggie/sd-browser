@@ -1,4 +1,5 @@
-import { deleteImages, markFavorite, markNsfw } from '$lib/server/filemanager.js';
+import { markFavorite, markNsfw } from '$lib/server/dataIndex.js';
+import { deleteImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 import { isActionRequest } from '$lib/types/requests';
 

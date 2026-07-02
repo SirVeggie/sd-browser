@@ -1,6 +1,6 @@
 import { backgroundTasks } from '$lib/server/background.js';
 import { generateCompressedFromId } from '$lib/server/convert.js';
-import { generationDisabled } from '$lib/server/filemanager.js';
+import { generationDisabled } from '$lib/server/dataIndex';
 import { error, success } from '$lib/server/responses.js';
 
 export async function POST(e) {

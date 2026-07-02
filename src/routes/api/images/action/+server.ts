@@ -1,4 +1,5 @@
-import { copyImages, deleteImages, markFavorite, markNsfw, moveImages, openExplorer } from '$lib/server/filemanager.js';
+import { markFavorite, markNsfw } from '$lib/server/dataIndex.js';
+import { copyImages, deleteImages, moveImages, openExplorer } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 import { isMultiActionRequest } from '$lib/types/requests';
 

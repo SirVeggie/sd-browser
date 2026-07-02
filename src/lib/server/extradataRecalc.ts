@@ -7,7 +7,7 @@ import {
     startOperation,
     updateProgress,
 } from './operations';
-import { refreshExtradataInMemory, getImageList } from './filemanager';
+import { getImageList, refreshExtradataInMemory } from './dataIndex';
 import { invalidateExplorationPools } from './exploration';
 
 const explorationCacheKeys = [

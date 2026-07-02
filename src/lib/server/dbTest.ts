@@ -1,6 +1,6 @@
 import type { Database as BetterSqlite3 } from 'better-sqlite3';
 import path from 'path';
-import { datapath } from './filemanager';
+import { datapath } from './paths';
 import { sqliteTableExists } from './db';
 import { openDatabase } from './sqlite';
 import type { ImageList, ServerImage } from '$lib/types/images';

@@ -1,6 +1,6 @@
 import { MetaCalcDB } from "./db";
 import { encodeImageForLlm } from "./convert";
-import { getImage } from "./filemanager";
+import { getImage } from "./dataIndex";
 import { applyResultTransform } from "$lib/tools/misc";
 import type { BulkAnnotateOptions, BulkLlmConfig } from "$lib/types/requests";
 

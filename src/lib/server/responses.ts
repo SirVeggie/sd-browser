@@ -1,6 +1,7 @@
 import { readFile, unlink } from "fs/promises";
 import { generateCompressed, generateCompressedTask, generateThumbnail, generateThumbnailTask } from "./convert";
-import { compressedPath, generationDisabled, getImage, thumbnailPath } from "./filemanager";
+import { generationDisabled, getImage } from "./dataIndex";
+import { compressedPath, thumbnailPath } from "./paths";
 import path from "path";
 import { getImageType, skipGeneration } from "$lib/tools/misc";
 import type { ServerError } from "$lib/types/requests";

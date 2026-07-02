@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ServerImage } from '$lib/types/images';
 import type { SortingMethod } from '$lib/types/misc';
 import type { ImageRequest } from '$lib/types/requests';
-import { getImage } from './filemanager';
+import { getImage } from './dataIndex';
 import { applyResultSkip, applyResultTake, explorationFromRequest, searchImages, sortImages } from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 

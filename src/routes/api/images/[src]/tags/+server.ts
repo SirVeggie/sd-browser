@@ -1,4 +1,5 @@
 import { invalidAuth } from '$lib/server/auth';
+import { getImage } from '$lib/server/dataIndex';
 import { buildImageInfo } from '$lib/server/imageUtils';
 import { error, success } from '$lib/server/responses';
 import { setImageTags } from '$lib/server/tags';
@@ -20,7 +21,7 @@ export async function GET(e) {
     const err = invalidAuth(e);
     if (err) return err;
 
-    const info = buildImageInfo(e.params.src);
+    const info = buildImageInfo(getImage(e.params.src));
     if (!info)
         return error('Image not found', 404);
 
@@ -31,7 +32,7 @@ export async function POST(e) {
     const err = invalidAuth(e);
     if (err) return err;
 
-    const info = buildImageInfo(e.params.src);
+    const info = buildImageInfo(getImage(e.params.src));
     if (!info)
         return error('Image not found', 404);
 

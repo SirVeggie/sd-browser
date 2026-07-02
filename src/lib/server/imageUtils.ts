@@ -5,7 +5,6 @@ import crypto from 'crypto';
 import exifr from 'exifr';
 import fs from 'fs/promises';
 import { fileExists, removeBasePath } from "./filetools";
-import { getImage } from "./filemanager";
 import { MetaDB } from "./db";
 import { populateMediaDimensions } from "./imageDimensions";
 import { computeExtradataFromFull } from "./extradataComputeCore";
@@ -154,11 +153,10 @@ export async function updateImageMetadata(image: ServerImage, source: string) {
     image.height = newFull.height;
 }
 
-export function buildImageInfo(imageid: string): ImageInfo | undefined {
-    const image = getImage(imageid);
+export function buildImageInfo(image: ServerImage | undefined): ImageInfo | undefined {
     if (!image)
         return undefined;
-    const full = MetaDB.get(imageid);
+    const full = MetaDB.get(image.id);
     return {
         id: image.id,
         createdDate: image.createdDate,
