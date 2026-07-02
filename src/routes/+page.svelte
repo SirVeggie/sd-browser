@@ -893,13 +893,45 @@
         };
     }
 
+    function normalizeFolderPath(folder: string): string {
+        const normalized = folder.replace(/\\/g, "/");
+        return normalized === "" || normalized === "/" ? "/" : normalized;
+    }
+
+    async function getImageFolderPaths(ids: string[]): Promise<string[]> {
+        const folders = await Promise.all(
+            ids.map(async (imageId) => {
+                const info = await getImageInfo(imageId);
+                return info ? normalizeFolderPath(info.folder) : undefined;
+            }),
+        );
+        return folders.filter((folder): folder is string => folder !== undefined);
+    }
+
+    function formatFolderDisplay(folder: string): string {
+        if (folder === "/") return folder;
+        return folder.replace(/\//g, " > ");
+    }
+
     async function folderActionMenu(
         id: string,
         type: "move" | "copy",
     ): Promise<ContextMenuOption[]> {
+        const ids = selecting ? $selection : id ? [id] : [];
         const list = await fetchFolderPaths();
-        return list.map((folder) => ({
-            name: folder,
+
+        let folders = list;
+        if (type === "move" && ids.length > 0) {
+            const imageFolders = await getImageFolderPaths(ids);
+            const uniqueFolders = new Set(imageFolders);
+            if (uniqueFolders.size === 1) {
+                const currentFolder = [...uniqueFolders][0];
+                folders = list.filter((folder) => folder !== currentFolder);
+            }
+        }
+
+        return folders.map((folder) => ({
+            name: formatFolderDisplay(folder),
             handler: () =>
                 imageAction(selecting ? $selection : id, {
                     type,

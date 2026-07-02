@@ -12,7 +12,7 @@ import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB } from './db';
 import type { ImageExtraData, ImageList, ServerImage, ServerImageFull } from '$lib/types/images';
-import { deleteTempImage, fileExists, fileUniquefy, removeBasePath, removeFolderFromPath, splitExtension } from './filetools';
+import { deleteTempImage, fileExists, fileUniquefy, folderFromDir, folderFromFile, removeBasePath, removeFolderFromPath, splitExtension } from './filetools';
 import { handleMigrationEnd, handleMigrationStart } from './migration';
 import { backfillImageDimensions } from './migration/v3';
 import { getServerImage, hashPath, populateServerImage, readMetadata, readMetadataFromExif, readMetadataFromFile, updateImageMetadata } from './imageUtils';
@@ -160,7 +160,7 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
     while (dirs.length > 0) {
         const dir = dirs.pop();
         if (!dir) continue;
-        const dirShort = removeBasePath(dir).replace(/^(\/|\\)/, '');
+        const dirShort = folderFromDir(dir);
         const files = await fs.readdir(dir);
 
         for (const file of files.filter(x => isVideo(x))) {
@@ -172,7 +172,9 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
             videomap.set(partial, "");
 
             if (images.has(hash)) {
-                images.get(hash)!.file = fullpath;
+                const image = images.get(hash)!;
+                image.file = fullpath;
+                image.folder = folderFromFile(fullpath);
                 checkSet.delete(hash);
                 continue;
             }
@@ -205,7 +207,9 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
             }
 
             if (images.has(hash)) {
-                images.get(hash)!.file = fullpath;
+                const image = images.get(hash)!;
+                image.file = fullpath;
+                image.folder = folderFromFile(fullpath);
                 checkSet.delete(hash);
                 continue;
             }
@@ -250,6 +254,25 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
 
     replaceImageList(images);
     updateLine(`Found ${found - images.size} new images${(foundtxt ? ` and ${foundtxtnew} txt files` : '')}\n`);
+
+    const folderRepairs: ServerImageFull[] = [];
+    for (const image of images.values()) {
+        const folder = folderFromFile(image.file);
+        if (image.folder === folder)
+            continue;
+        image.folder = folder;
+        const full = MetaDB.get(image.id);
+        if (full) {
+            full.folder = folder;
+            full.file = image.file;
+            folderRepairs.push(full);
+        }
+    }
+    if (folderRepairs.length) {
+        MetaDB.setAll(folderRepairs);
+        console.log(`Repaired folder path for ${folderRepairs.length} images`);
+    }
+
     deleteMissingImages(checkSet);
     return [templist, txtmap, videomap];
 }
@@ -515,7 +538,7 @@ async function addFile(file: string, hash?: string) {
     console.log(`Added ${file}`);
     const full = await readMetadata({
         id: hash,
-        folder: path.basename(path.dirname(file)),
+        folder: folderFromFile(file),
         file,
         modifiedDate: 0,
         createdDate: 0,
@@ -630,7 +653,7 @@ async function renameFile(from: string, to: string) {
     const newhash = hashPath(to);
     const full = await readMetadata({
         id: newhash,
-        folder: path.basename(path.dirname(to)),
+        folder: folderFromFile(to),
         file: to,
         modifiedDate: 0,
         createdDate: 0,

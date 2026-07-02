@@ -190,6 +190,8 @@
         overflow-y: auto;
         min-width: 7.5em;
         max-height: calc(100vh - 16px);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-weight: 500;
 
         position: fixed;
 

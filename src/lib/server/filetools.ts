@@ -58,7 +58,26 @@ export function splitExtension(file: string): [string, string] {
  */
 export function removeBasePath(filepath: string) {
     filepath = filepath.replace(/(\/|\\)+$/, '');
-    return filepath.replace(imgFolder, '');
+    const root = path.resolve(imgFolder);
+    const resolved = path.resolve(filepath);
+    if (resolved === root)
+        return '';
+    const relative = path.relative(root, resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative))
+        return filepath.replace(imgFolder, '');
+    return relative;
+}
+
+/**
+ * Relative folder path under the image root (empty string for root).
+ * Uses forward slashes to match /api/folders paths.
+ */
+export function folderFromDir(dir: string): string {
+    return removeBasePath(dir).replace(/^(\/|\\)/, '').replace(/\\/g, '/');
+}
+
+export function folderFromFile(file: string): string {
+    return folderFromDir(path.dirname(file));
 }
 
 /**

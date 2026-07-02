@@ -1,5 +1,6 @@
 import { getModels, getPrompts, simplifyPrompt } from "$lib/tools/metadataInterpreter";
 import type { ImageExtraData, ImageInfo, ServerImage, ServerImageFull } from "$lib/types/images";
+import { folderFromFile } from "./filetools";
 import { isMetadataFiletype, isVideo } from '$lib/tools/misc';
 import crypto from 'crypto';
 import exifr from 'exifr';
@@ -14,7 +15,7 @@ export function getServerImage(image: ServerImageFull): ServerImage {
     return {
         id: image.id,
         file: image.file,
-        folder: image.folder,
+        folder: folderFromFile(image.file),
         createdDate: image.createdDate,
         modifiedDate: image.modifiedDate,
         preview: image.preview,
@@ -134,7 +135,7 @@ export async function updateImageMetadata(image: ServerImage, source: string) {
     const newFull = await readMetadata({
         id: image.id,
         file: image.file,
-        folder: image.folder,
+        folder: folderFromFile(image.file),
         createdDate: image.createdDate,
         modifiedDate: image.modifiedDate,
         preview: image.preview,
@@ -161,7 +162,7 @@ export function buildImageInfo(image: ServerImage | undefined): ImageInfo | unde
         id: image.id,
         createdDate: image.createdDate,
         modifiedDate: image.modifiedDate,
-        folder: image.folder,
+        folder: folderFromFile(image.file),
         positive: image.positive,
         negative: image.negative,
         params: image.params,
