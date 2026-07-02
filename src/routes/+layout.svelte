@@ -118,6 +118,7 @@
                 @media (width < 650px) {
                     --flyout-width: 100%;
                     --content-width: 100%;
+                    --flyout-button-reset: 0;
                 }
             }
 
