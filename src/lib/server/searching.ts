@@ -11,7 +11,7 @@ import {
     type SearchMode,
     type SortingMethod,
 } from "$lib/types/misc";
-import _ from "lodash";
+import { shuffle } from "lodash";
 import { MetaDB } from "./db";
 import { computeSimilarity, getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./dataIndex";
@@ -304,7 +304,7 @@ function orderPoolIds(pool: Set<string>, sorting: SortingMethod): string[] {
     const ids = [...pool];
 
     if (sorting === 'random')
-        return _.shuffle(ids);
+        return shuffle(ids);
 
     const poolImages = ids
         .map((id) => imageList.get(id))
@@ -614,7 +614,7 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
         case 'name (desc)':
             return [...images].sort(createComparer<ServerImage>(x => x.file, false));
         case 'random':
-            return _.shuffle(images);
+            return shuffle(images);
         default: {
             const _never: never = sort;
             return _never;

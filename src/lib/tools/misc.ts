@@ -1,5 +1,5 @@
 import type { ClientImage, ServerImage } from "$lib/types/images";
-import _ from "lodash";
+import { shuffle } from "lodash";
 import rl from "readline";
 
 export const imageFiletypes = ['png', 'jpg', 'jpeg', 'webp'] as const;
@@ -51,7 +51,7 @@ export function yieldToEventLoop(): Promise<void> {
 }
 
 export function selectRandom<T>(array: T[], amount: number): T[] {
-    return _.shuffle(array).slice(0, amount);
+    return shuffle(array).slice(0, amount);
 }
 
 export async function limitedParallelMap<T, U>(

@@ -1,5 +1,5 @@
 <script lang="ts" context="module">
-    import _ from "lodash";
+    import { uniqueId } from "lodash";
     import { writable } from "svelte/store";
 
     export type ContextReturn = void | "keep" | ContextMenuOption[];
@@ -31,7 +31,7 @@
         parent?: string,
     ) {
         window.addEventListener("keydown", handleEsc);
-        const id = _.uniqueId(`${parent ?? "contextmenu"}_`);
+        const id = uniqueId(`${parent ?? "contextmenu"}_`);
         menuStore.update((menus) => {
             menus.push({ id, options, position, parent });
             return menus;
