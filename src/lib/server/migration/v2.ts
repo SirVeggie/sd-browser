@@ -1,6 +1,6 @@
 import { MetaDB, MetaCalcDB } from '../db';
 import { openDatabase } from '../sqlite';
-import { datapath } from '../filemanager';
+import { datapath } from '../paths';
 import { fileExistsSync } from '../filetools';
 import path from 'path';
 

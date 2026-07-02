@@ -5,7 +5,7 @@ import fs from 'fs/promises';
 import type { ServerImageFull } from '$lib/types/images';
 import { calcTimeRemaining, calcTimeSpent, print, updateLine } from '$lib/tools/misc';
 import { sleep } from '$lib/tools/sleep';
-import { datapath } from '../filemanager';
+import { datapath } from '../paths';
 import { deleteFile, fileExists } from '../filetools';
 
 /** Pre-versioning → v1: split monolithic sqlite files into the current layout. */

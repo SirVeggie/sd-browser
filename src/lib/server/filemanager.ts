@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import { compressedPath, datapath, ensurePathsExist, imgFolder, thumbnailPath } from './paths';
+import { compressedPath, ensurePathsExist, imgFolder, thumbnailPath } from './paths';
 import path from 'path';
 import os from 'os';
 import cp from 'child_process';
