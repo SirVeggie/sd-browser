@@ -1272,7 +1272,6 @@
         flex-wrap: wrap;
         align-items: center;
         user-select: none;
-        font-family: "Open sans", sans-serif;
         font-size: 0.8em;
         color: #ddd;
         margin-bottom: 0.5em;
@@ -1376,7 +1375,6 @@
                 padding: 0.5em 1em;
                 border-radius: 0.35em;
                 background-color: rgba(36, 36, 36, 0.85);
-                font-family: "Open sans", sans-serif;
                 font-size: 0.9em;
                 color: #bbb;
             }
@@ -1540,7 +1538,6 @@
         button {
             background-color: transparent;
             border: none;
-            font-family: "Open sans", sans-serif;
             font-size: 1em;
             color: #ddd;
             display: block;

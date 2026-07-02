@@ -101,7 +101,6 @@
 
     input,
     .highlight {
-        font-family: "Open sans", sans-serif;
         font-size: 13.3333px;
         line-height: normal;
         width: 100%;

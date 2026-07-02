@@ -60,6 +60,12 @@
 
 <svelte:head>
     <title>SD Browser</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400&family=Source+Sans+3:wght@400&display=swap"
+        rel="stylesheet"
+    />
     {#if $fullscreenState}
         <link rel="manifest" href={`${assets}/manifest2.json`} />
     {:else}

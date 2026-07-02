@@ -964,7 +964,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             background: none;
             color: inherit;
             font: inherit;
-            font-family: "Open sans", sans-serif;
             cursor: pointer;
             user-select: none;
             text-align: left;
@@ -1043,8 +1042,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         }
 
         .filter-name {
-            font-family: "Segoe UI", system-ui, sans-serif;
-            font-weight: 500;
             min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1065,7 +1062,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             background: none;
             padding: 0;
             font: inherit;
-            font-family: "Open sans", sans-serif;
             line-height: 1;
             cursor: pointer;
             color: #888;

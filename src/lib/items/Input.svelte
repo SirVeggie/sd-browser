@@ -52,7 +52,6 @@
     }
 
     input {
-        font-family: "Open sans", sans-serif;
         width: 100%;
         // height: 2.2em;
         background-color: #333;

@@ -84,7 +84,6 @@
 	}
 
 	.notification {
-		font-family: 'Open sans', sans-serif;
 		color: #ddd;
 		display: flex;
 		justify-content: flex-end;

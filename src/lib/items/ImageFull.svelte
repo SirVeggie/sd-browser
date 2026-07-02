@@ -486,7 +486,6 @@
         flex-direction: column;
         align-items: center;
         color: #ddd;
-        font-family: "Open sans", sans-serif;
         font-size: 2em;
       }
 
@@ -586,7 +585,6 @@
       .header {
         margin: 0;
         font-size: 0.8em;
-        font-weight: normal;
         background-color: #112a;
         padding: 0.2em var(--section-pad-x);
 

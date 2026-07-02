@@ -115,7 +115,6 @@
         padding: 0;
         border: none;
         background: none;
-        font-family: "Open sans", sans-serif;
         font-size: 1em;
         color: #ddd;
         cursor: pointer;
@@ -181,7 +180,6 @@
         padding: 0.5em 0.7em 0.5em 1em;
         border: none;
         background: none;
-        font-family: inherit;
         font-size: inherit;
         color: #ddd;
         cursor: pointer;

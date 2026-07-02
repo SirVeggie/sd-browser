@@ -56,7 +56,7 @@
         color: #eee;
         border-radius: 999px;
         padding: var(--tag-pad-y) var(--tag-pad-x);
-        font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+        font-family: var(--font-tag);
         font-size: var(--tag-font-size);
         letter-spacing: 0.2px;
         line-height: 17px;
@@ -105,7 +105,6 @@
                 justify-content: center;
                 color: #fdd;
                 font-size: 14px;
-                font-weight: 600;
                 line-height: 1;
             }
         }

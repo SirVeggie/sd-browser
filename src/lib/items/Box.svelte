@@ -8,7 +8,6 @@
 
 <style lang="scss">
     div {
-        font-family: "Open sans", sans-serif;
         width: 100px;
         height: 100px;
         background-color: #333;

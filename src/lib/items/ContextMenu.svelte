@@ -190,8 +190,6 @@
         overflow-y: auto;
         min-width: 7.5em;
         max-height: calc(100vh - 16px);
-        font-family: "Segoe UI", system-ui, sans-serif;
-        font-weight: 500;
 
         position: fixed;
 
@@ -225,7 +223,6 @@
         background-color: transparent;
         white-space: nowrap;
         padding: 0.38em 0.55em;
-        font-family: inherit;
         font-size: 0.92em;
         text-align: start;
         width: 100%;

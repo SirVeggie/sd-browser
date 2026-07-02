@@ -107,7 +107,6 @@
 
 <style lang="scss">
     .base {
-        font-family: "Open sans", sans-serif;
         position: relative;
         display: block;
         background-color: #333;
@@ -236,7 +235,6 @@
 
     .loading {
         color: #ddd;
-        font-weight: bold;
         transition: opacity 0.4s ease;
     }
 </style>

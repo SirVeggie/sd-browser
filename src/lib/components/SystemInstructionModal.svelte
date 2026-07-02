@@ -65,7 +65,6 @@
     }
 
     textarea {
-        font-family: "Open sans", sans-serif;
         width: 100%;
         min-width: min(500px, 80vw);
         background-color: #333;
