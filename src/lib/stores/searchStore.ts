@@ -70,9 +70,9 @@ export function syncSearchWithLocalStorage() {
     syncMemory('compressedMode', compressedMode);
     syncMemory('animatedThumb', animatedThumb);
     syncMemory('explorationMode', explorationMode);
-    syncMemory('sparseFrequency', sparseFrequency);
-    syncMemory('similarityAlgorithm', similarityAlgorithm);
-    syncMemory('similarityThreshold', similarityThreshold);
+    syncMemory('sparseFrequency', sparseFrequency, true);
+    syncMemory('similarityAlgorithm', similarityAlgorithm, true);
+    syncMemory('similarityThreshold', similarityThreshold, true);
     syncMemory('matchingMode', matchingMode);
     syncMemory('initialImages', initialImages);
     syncMemory('slideDelay', slideDelay);

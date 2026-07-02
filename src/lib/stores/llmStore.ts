@@ -1,3 +1,4 @@
+import { syncMemory } from "$lib/tools/syncStorage";
 import { writable } from "svelte/store";
 
 export type SystemInstruction = {
@@ -36,17 +37,5 @@ export function resolveSystemInstruction(
 }
 
 export function syncLlmWithLocalStorage() {
-    const name = "llmSettings";
-    if (localStorage.getItem(name)) {
-        const value = JSON.parse(localStorage.getItem(name) || "");
-        llmStore.set({
-            ...llmStoreDefaults,
-            ...value,
-            systemInstructions: value.systemInstructions ?? [],
-        });
-    }
-
-    llmStore.subscribe((x) => {
-        localStorage.setItem(name, JSON.stringify(x));
-    });
+    syncMemory("llmSettings", llmStore, true);
 }
