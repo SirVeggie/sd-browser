@@ -3,10 +3,16 @@
     import { writable } from "svelte/store";
 
     export type ContextReturn = void | "keep" | ContextMenuOption[];
+    export type ContextMenuPosition = {
+        x: number;
+        y: number;
+        /** Parent menu left edge; used to flip submenus when they overflow the viewport. */
+        parentLeft?: number;
+    };
     export type IContextMenu = {
         id: string;
         options: ContextMenuOption[];
-        position: { x: number; y: number };
+        position: ContextMenuPosition;
         parent?: string;
     };
     export type ContextMenuOption = {
@@ -14,12 +20,13 @@
         handler: () => ContextReturn | Promise<ContextReturn>;
         visible?: boolean;
         enabled?: boolean;
+        submenu?: boolean;
     };
 
     const menuStore = writable<IContextMenu[]>([]);
 
     export function openContextMenu(
-        position: { x: number; y: number },
+        position: ContextMenuPosition,
         options: ContextMenuOption[],
         parent?: string,
     ) {
@@ -69,8 +76,8 @@
     import ContextMenu from "./ContextMenu.svelte";
 </script>
 
-{#each $menuStore as menu (menu.id)}
-    <ContextMenu {menu} />
+{#each $menuStore as menu, index (menu.id)}
+    <ContextMenu {menu} depth={index} />
 {/each}
 
 <svelte:window on:blur={() => closeAllContextMenus()} />

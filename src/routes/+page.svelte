@@ -855,14 +855,17 @@
                 {
                     name: "Tag as...",
                     visible: !selecting && $tagsStore.tags.length > 0,
+                    submenu: true,
                     handler: () => tagActionMenu(id),
                 },
                 {
                     name: "Move",
+                    submenu: true,
                     handler: () => folderActionMenu(id, "move"),
                 },
                 {
                     name: "Copy",
+                    submenu: true,
                     handler: () => folderActionMenu(id, "copy"),
                 },
                 {
@@ -908,8 +911,13 @@
             const imageTags = await fetchImageTags(id);
             const available = tagsNotOnImage($tagsStore, imageTags);
             if (!available.length) {
-                notify("All registry tags are on this image", "warn");
-                return;
+                return [
+                    {
+                        name: "All tags on image",
+                        enabled: false,
+                        handler: () => {},
+                    },
+                ];
             }
 
             return available.map((tag) => ({
