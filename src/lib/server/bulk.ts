@@ -9,6 +9,7 @@ import { bulkUpdateImageTags } from "./tags";
 import { copyImages, deleteImages, moveImages } from "./filemanager";
 import { explorationFromRequest, searchImagesAsync } from "./searching";
 import { getSession, validateSession } from "./searchSessions";
+import { getImage } from "./dataIndex";
 
 const CHUNK_SIZE = 100;
 const BULK_FAILURE_ABORT_RATIO = 0.5;
@@ -62,6 +63,13 @@ async function resolveBulkImageIds(request: BulkRequest): Promise<string[]> {
         { sorting: request.sorting },
     );
     return images.images.map((image) => image.id);
+}
+
+function filterVectorizeWorkIds(ids: string[], force: boolean): string[] {
+    return ids.filter((id) => {
+        if (!getImage(id)) return false;
+        return force || !EmbeddingDB.hasImageEmbedding(id);
+    });
 }
 
 export async function runBulkAction(
@@ -256,12 +264,26 @@ export async function runBulkAction(
                 throw new Error("Embedding settings are incomplete");
             }
 
+            const workIds = filterVectorizeWorkIds(ids, vectorizeOptions.force);
+            const workTotal = workIds.length;
+            onProgress(completed, workTotal);
+
+            if (workTotal === 0) {
+                updateLine("");
+                return false;
+            }
+
             const batchSize = Math.max(1, request.embedding.apiBatch || 1);
             const mediaMarker = await fetchMediaMarkerForConfig(request.embedding);
+            const skipped = ids.length - workTotal;
 
-            console.log(`Bulk vectorize: ${batchSize} images per API request`);
-            for (let i = 0; i < ids.length; i += batchSize) {
-                const chunk = ids.slice(i, i + batchSize);
+            console.log(
+                `Bulk vectorize: ${workTotal} images to embed`
+                + (skipped ? ` (${skipped} already embedded, skipped)` : "")
+                + `, ${batchSize} per API request`,
+            );
+            for (let i = 0; i < workIds.length; i += batchSize) {
+                const chunk = workIds.slice(i, i + batchSize);
                 const taskStart = Date.now();
                 const batchFailures = await vectorizeImageBatch(chunk, request.embedding, {
                     force: vectorizeOptions.force,
@@ -278,10 +300,10 @@ export async function runBulkAction(
                 }
                 totalTaskDurationMs += Date.now() - taskStart;
                 completed += chunk.length;
-                onProgress(completed, total, bulkProgressStats(tracker, totalTaskDurationMs));
-                updateLine(`Bulk vectorize: completed ${completed}/${total}`);
+                onProgress(completed, workTotal, bulkProgressStats(tracker, totalTaskDurationMs));
+                updateLine(`Bulk vectorize: completed ${completed}/${workTotal}`);
 
-                if (shouldAbortBulkRun(tracker.failures, total)) {
+                if (shouldAbortBulkRun(tracker.failures, workTotal)) {
                     updateLine("");
                     throwBulkAborted(tracker);
                 }
@@ -290,7 +312,7 @@ export async function runBulkAction(
             updateLine("");
             if (tracker.failures) {
                 throw new Error(
-                    `Bulk vectorize finished with ${tracker.failures}/${total} failures:\n${tracker.errors.slice(0, 5).join("\n")}`,
+                    `Bulk vectorize finished with ${tracker.failures}/${workTotal} failures:\n${tracker.errors.slice(0, 5).join("\n")}`,
                 );
             }
             return false;
