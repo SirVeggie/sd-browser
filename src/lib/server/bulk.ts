@@ -8,6 +8,7 @@ import { annotateImage, clearAnnotation, modifyAnnotation } from "./llm";
 import { bulkUpdateImageTags } from "./tags";
 import { copyImages, deleteImages, moveImages } from "./filemanager";
 import { explorationFromRequest, searchImagesAsync } from "./searching";
+import { getSession, validateSession } from "./searchSessions";
 
 const CHUNK_SIZE = 100;
 const BULK_FAILURE_ABORT_RATIO = 0.5;
@@ -45,17 +46,29 @@ function bulkProgressStats(
     };
 }
 
-export async function runBulkAction(
-    request: BulkRequest,
-    onProgress: (done: number, total: number, stats?: BulkProgressStats) => void,
-): Promise<boolean> {
+async function resolveBulkImageIds(request: BulkRequest): Promise<string[]> {
+    if (request.sessionId && validateSession(request.sessionId, request)) {
+        const session = getSession(request.sessionId);
+        if (session?.complete && session.orderedIds.length) {
+            return [...session.orderedIds];
+        }
+    }
+
     const images = await searchImagesAsync(
         request.search,
         request.filters,
         request.matching,
         explorationFromRequest(request),
+        { sorting: request.sorting },
     );
-    const ids = images.images.map((image) => image.id);
+    return images.images.map((image) => image.id);
+}
+
+export async function runBulkAction(
+    request: BulkRequest,
+    onProgress: (done: number, total: number, stats?: BulkProgressStats) => void,
+): Promise<boolean> {
+    const ids = await resolveBulkImageIds(request);
     const total = ids.length;
     let done = 0;
 

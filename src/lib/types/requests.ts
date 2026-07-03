@@ -288,10 +288,12 @@ export type BulkRequest = {
     search: string;
     filters: string[];
     matching: SearchMode;
+    sorting: SortingMethod;
     explorationMode: ExplorationMode;
     sparseFrequency: number;
     similarityAlgorithm: SimilarityAlgorithm;
     similarityThreshold: number;
+    sessionId?: string;
     action: BulkAction;
     llm?: BulkLlmConfig;
     embedding?: BulkEmbeddingConfig;
@@ -299,12 +301,14 @@ export type BulkRequest = {
 
 export function isBulkRequest(object: any): object is BulkRequest {
     return testType(object, [
-        'search', 'filters', 'matching', 'action',
+        'search', 'filters', 'matching', 'sorting', 'action',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
+        (o) => isSortingMethod(o.sorting),
         (o) => typeof o.explorationMode === 'string',
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
+        (o) => o.sessionId === undefined || typeof o.sessionId === 'string',
         (o) => typeof o.action?.type === 'string',
     ]);
 }

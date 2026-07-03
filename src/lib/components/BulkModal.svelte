@@ -22,6 +22,7 @@
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
     import { formatDurationCompact, formatTaskDuration } from "$lib/tools/misc";
     import type { BulkAction, BulkAnnotateMode, BulkRequest, BulkVectorizeMode } from "$lib/types/requests";
+    import type { SortingMethod } from "$lib/types/misc";
     import type { BulkActionType } from "$lib/stores/bulkStore";
     import { askConfirmation } from "./Confirm.svelte";
     import { notify } from "./Notifier.svelte";
@@ -33,6 +34,8 @@
 
     export let imageCount = 0;
     export let searchParams: SearchParams;
+    export let searchSessionId = "";
+    export let sorting: SortingMethod;
     export let onComplete: (refresh?: boolean) => void = () => {};
 
     let abortController: AbortController | undefined;
@@ -306,6 +309,8 @@
     function buildRequest(bulkAction: BulkAction): BulkRequest {
         const request: BulkRequest = {
             ...searchParams,
+            sorting,
+            sessionId: searchSessionId || undefined,
             action: bulkAction,
         };
 

@@ -15,6 +15,7 @@ export type SearchSession = {
     orderedIds: string[];
     viewIds: Set<string>;
     timestamp: number;
+    complete?: boolean;
     imgSearchContext?: ImgSearchContext;
     imgSearchError?: string;
 };
@@ -128,6 +129,7 @@ export function finalizeSession(sessionId: string, orderedIds: string[]): void {
     const session = sessions.get(sessionId);
     if (!session) return;
     session.orderedIds = orderedIds;
+    session.complete = true;
 }
 
 export async function createSession(query: SessionQuery): Promise<{
@@ -146,6 +148,7 @@ export async function createSession(query: SessionQuery): Promise<{
         orderedIds: images.map((image) => image.id),
         viewIds: new Set(page.map((image) => image.id)),
         timestamp,
+        complete: true,
         imgSearchError,
     };
     sessions.set(sessionId, session);

@@ -1248,6 +1248,8 @@
     <BulkModal
         imageCount={$imageAmountStore}
         searchParams={bulkSearchParams}
+        searchSessionId={searchSessionId}
+        {sorting}
         on:close={() => (bulkOpen = false)}
         onComplete={handleBulkComplete}
     />

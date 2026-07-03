@@ -659,7 +659,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             aria-expanded={embeddingOpen}
             on:click={() => (embeddingOpen = !embeddingOpen)}
         >
-            Embedding API settings
+            Embedding settings
             <span class="chevron" class:open={embeddingOpen} aria-hidden="true" />
         </button>
 

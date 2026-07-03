@@ -20,7 +20,7 @@ export const embeddingStoreDefaults: EmbeddingSettings = {
     baseUrl: "http://localhost:8080",
     apiKey: "",
     modelId: "",
-    apiBatch: 4,
+    apiBatch: 32,
     searchTemplate: "",
 };
 
