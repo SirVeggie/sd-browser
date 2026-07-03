@@ -216,24 +216,26 @@ function parseImgSearchPart(part: string): {
     queryText: string;
     threshold?: number;
     k?: number;
+    disableTemplate?: boolean;
 } {
     if (imgOnlyRegex.test(part)) {
         return { presenceOnly: true, queryText: '' };
     }
 
     let raw = part.replace(removeRegex, '');
-    if (raw === 'IMG') {
-        raw = '';
-    } else if (raw.startsWith('IMG ')) {
-        raw = raw.slice(4);
+    let disableTemplate = false;
+
+    if (/^~\s*/.test(raw)) {
+        disableTemplate = true;
+        raw = raw.replace(/^~\s*/, '');
     }
 
     const { text: queryText, threshold, k } = parseSearchTargetWithOptionalImgLimit(raw);
     if (!queryText) {
-        return { presenceOnly: true, queryText: '' };
+        return { presenceOnly: true, queryText: '', disableTemplate };
     }
 
-    return { presenceOnly: false, queryText, threshold, k };
+    return { presenceOnly: false, queryText, threshold, k, disableTemplate };
 }
 
 export async function resolveImgSearchContext(
@@ -252,7 +254,7 @@ export async function resolveImgSearchContext(
 
         hasImgParts = true;
 
-        const { presenceOnly, queryText, threshold, k } = parseImgSearchPart(part);
+        const { presenceOnly, queryText, threshold, k, disableTemplate } = parseImgSearchPart(part);
         if (presenceOnly) {
             context.parts.set(index, { presence: true });
             continue;
@@ -266,7 +268,10 @@ export async function resolveImgSearchContext(
 
         try {
             const settings = getServerEmbeddingSettings();
-            const embedText = formatEmbeddingSearchQuery(queryText, settings.searchTemplate);
+            const embedText = formatEmbeddingSearchQuery(
+                queryText,
+                disableTemplate ? '' : settings.searchTemplate,
+            );
             const queryEmbedding = await embedQuery(settings, embedText);
             const effectiveThreshold = threshold ?? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
             const matchScores = EmbeddingDB.findSimilarImage(queryEmbedding, effectiveThreshold, k);
