@@ -15,6 +15,7 @@ import shuffle from "lodash/shuffle";
 import { MetaDB } from "./db";
 import { EmbeddingDB, EmbeddingDimensionMismatchError } from "./embeddingDb";
 import { embedQuery, getServerEmbeddingSettings, isServerEmbeddingConfigured } from "./embeddings";
+import { formatEmbeddingSearchQuery } from "$lib/types/embeddings";
 import { computeSimilarity, getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./dataIndex";
 
@@ -35,7 +36,7 @@ const similarRegex = new RegExp(`^${keywordPattern}(SIMILAR|SM) `, keywordFlags)
 const imgRegex = new RegExp(`^${keywordPattern}IMG `, keywordFlags);
 const imgOnlyRegex = new RegExp(`^${keywordPattern}IMG$`, keywordFlags);
 /** Default similarity cutoff for IMG text queries (text query vs image embeddings). */
-const IMAGE_EMBEDDING_SIMILARITY_THRESHOLD = 0.1;
+const IMAGE_EMBEDDING_SIMILARITY_THRESHOLD = 0.08;
 const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
 const takeRegex = new RegExp(`^${keywordPattern}TAKE `, keywordFlags);
 const andSplitRegex = /\s+AND\s+/i;
@@ -263,7 +264,8 @@ export async function resolveImgSearchContext(
 
         try {
             const settings = getServerEmbeddingSettings();
-            const queryEmbedding = await embedQuery(settings, queryText);
+            const embedText = formatEmbeddingSearchQuery(queryText, settings.searchTemplate);
+            const queryEmbedding = await embedQuery(settings, embedText);
             const effectiveThreshold = threshold ?? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
             const matchScores = EmbeddingDB.findSimilarImage(queryEmbedding, effectiveThreshold, k);
             combinedMatchScores = mergeImgMatchScores(combinedMatchScores, matchScores);

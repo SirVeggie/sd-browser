@@ -713,6 +713,15 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                     Batch size
                     <NumInput bind:value={$embeddingStore.apiBatch} />
                 </label>
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    Search template
+                    <Input
+                        bind:value={$embeddingStore.searchTemplate}
+                        placeholder={'This is a photo of {label}.'}
+                    />
+                </label>
             </div>
         </div>
     </div>

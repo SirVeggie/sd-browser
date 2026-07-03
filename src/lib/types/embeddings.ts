@@ -11,6 +11,8 @@ export type EmbeddingSettings = {
     apiKey: string;
     modelId: string;
     apiBatch: number;
+    /** When set, IMG search text is sent as template with `{label}` replaced by the query. */
+    searchTemplate: string;
 };
 
 export const embeddingStoreDefaults: EmbeddingSettings = {
@@ -19,7 +21,17 @@ export const embeddingStoreDefaults: EmbeddingSettings = {
     apiKey: "",
     modelId: "",
     apiBatch: 4,
+    searchTemplate: "",
 };
+
+export function formatEmbeddingSearchQuery(label: string, template: string): string {
+    const trimmedLabel = label.trim();
+    const trimmedTemplate = template.trim();
+    if (!trimmedTemplate) {
+        return trimmedLabel;
+    }
+    return trimmedTemplate.replaceAll("{label}", trimmedLabel);
+}
 
 type StoredEmbeddingSettings = Partial<EmbeddingSettings> & {
     /** @deprecated Renamed to apiBatch */

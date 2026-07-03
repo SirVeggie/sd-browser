@@ -325,6 +325,7 @@
                 apiKey: $embeddingStore.apiKey || undefined,
                 modelId: $embeddingStore.modelId,
                 apiBatch: Math.max(1, $embeddingStore.apiBatch || 1),
+                searchTemplate: $embeddingStore.searchTemplate,
             };
         }
 
