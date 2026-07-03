@@ -6,6 +6,8 @@ import { openDatabase } from './sqlite';
 const META_TABLE = 'embedding_meta';
 const VEC_TABLE = 'image_embeddings';
 const DIMENSIONS_KEY = 'dimensions';
+/** sqlite-vec vec0 KNN hard limit; queries with k above this fail at runtime. */
+const VEC0_KNN_MAX = 4096;
 
 export class EmbeddingDimensionMismatchError extends Error {
     readonly expected: number;
@@ -278,7 +280,8 @@ export class EmbeddingDB {
         const maxDistance = k !== undefined ? 1 : (1 - threshold);
         const queryBuffer = embeddingToBuffer(query);
         const count = (EmbeddingDB.stmtCount!.get() as { count: number }).count;
-        const limit = k !== undefined ? Math.max(1, k) : Math.max(1, count);
+        const requested = k !== undefined ? Math.max(1, k) : Math.max(1, count);
+        const limit = Math.min(requested, VEC0_KNN_MAX);
         const rows = EmbeddingDB.stmtFindSimilar.all(
             queryBuffer,
             limit,

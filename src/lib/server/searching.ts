@@ -52,7 +52,6 @@ type SearchPart = {
     regex: RegExp;
     not: RegExpMatchArray | null;
     type: MatchType;
-    skip: boolean;
     tagExact?: boolean;
     similarRef?: string;
     similarThreshold?: number;
@@ -648,20 +647,18 @@ export function buildMatcher(
     const searchParts = splitSearchParts(search);
     const regexes = searchParts.map((x, partIndex) => {
         const raw = x.replace(removeRegex, '');
-        const skip = skipRegex.test(x);
         const take = takeRegex.test(x);
 
         if (take) {
             return undefined;
         }
 
-        if (skip && resultCountRegex.test(raw.trim())) {
+        if (skipRegex.test(x)) {
             return undefined;
         }
 
         let type: MatchType = 'positive';
-        if (skip) type = 'positive';
-        else if (allRegex.test(x)) type = 'all';
+        if (allRegex.test(x)) type = 'all';
         else if (negativeRegex.test(x)) type = 'negative';
         else if (folderRegex.test(x)) type = 'folder';
         else if (paramRegex.test(x)) type = 'params';
@@ -724,7 +721,6 @@ export function buildMatcher(
             regex: type === 'tag' && tagExact ? /(?:)/ : new RegExp(searchRaw, 'is'),
             not: x.match(notRegex),
             type,
-            skip,
             tagExact,
             similarRef,
             similarThreshold,
@@ -757,8 +753,6 @@ export function buildMatcher(
                 );
                 const threshold = x.similarThreshold ?? similaritySettings.similarityThreshold;
                 const matched = similarity >= threshold;
-                if (x.skip)
-                    return !matched;
                 return XOR(x.not, matched);
             }
 
@@ -766,15 +760,11 @@ export function buildMatcher(
                 const matched = x.imgPresence
                     ? (embeddedImageIds?.has(image.id) ?? false)
                     : (x.imgMatchIds?.has(image.id) ?? false);
-                if (x.skip)
-                    return !matched;
                 return XOR(x.not, matched);
             }
 
             if (x.type === 'id') {
                 const matched = x.idTargets!.has(image.id);
-                if (x.skip)
-                    return !matched;
                 return XOR(x.not, matched);
             }
 
@@ -792,16 +782,11 @@ export function buildMatcher(
 
             if (x.type === 'tag') {
                 const matched = tagMatches(image.tags ?? [], x);
-                if (x.skip)
-                    return !matched;
                 return XOR(x.not, matched);
             }
 
             const text = getTextByType(image, x.type);
             const matched = textMatches(text, x, matching);
-
-            if (x.skip)
-                return !matched;
 
             return XOR(x.not, matched);
         });
@@ -851,13 +836,16 @@ function getResultTakeCount(search: string): number {
 }
 
 function getSearchPartRank(part: SearchPart): number {
-    if (part.type === 'date') return 0;
-    if (part.type === 'folder') return 1;
-    if (part.type === 'model') return 2;
-    if (part.type === 'similar' || part.type === 'img' || part.type === 'id') return 3;
-    if (part.skip) return 4;
-    if (part.type === 'all') return 5;
-    return 3;
+    if (part.type === 'id') return 0;
+    if (part.type === 'date') return 1;
+    if (part.type === 'folder' || part.type === 'tag') return 2;
+    if (part.type === 'model') return 3;
+    if (part.type === 'positive' || part.type === 'negative' || part.type === 'annotation') return 4;
+    if (part.type === 'params') return 5;
+    if (part.type === 'similar') return 6;
+    if (part.type === 'img') return 7;
+    if (part.type === 'all') return 8;
+    return 4;
 }
 
 function tagMatches(tags: string[], part: SearchPart): boolean {
