@@ -33,6 +33,7 @@ const modelRegex = new RegExp(`^${keywordPattern}(MODEL|MD) `, keywordFlags);
 const annotationRegex = new RegExp(`^${keywordPattern}(ANNOTATION|AN) `, keywordFlags);
 const tagRegex = new RegExp(`^${keywordPattern}TAG `, keywordFlags);
 const similarRegex = new RegExp(`^${keywordPattern}(SIMILAR|SM) `, keywordFlags);
+const idRegex = new RegExp(`^${keywordPattern}ID `, keywordFlags);
 const imgRegex = new RegExp(`^${keywordPattern}IMG `, keywordFlags);
 const imgOnlyRegex = new RegExp(`^${keywordPattern}IMG$`, keywordFlags);
 /** Default similarity cutoff for IMG text queries (text query vs image embeddings). */
@@ -59,6 +60,8 @@ type SearchPart = {
     imgPresence?: boolean;
     imgMatchIds?: Set<string>;
     imgInvalid?: boolean;
+    idTargets?: Set<string>;
+    idInvalid?: boolean;
 };
 
 export type ImgSearchContext = {
@@ -292,6 +295,10 @@ export async function resolveImgSearchContext(
 function parseSimilarSearchTarget(raw: string): { imageId: string; threshold?: number } {
     const { text, threshold } = parseSearchTargetWithOptionalThreshold(raw);
     return { imageId: text, threshold };
+}
+
+function parseIdSearchTarget(raw: string): string[] {
+    return raw.split(/[,\|]\s*/).map((id) => id.trim()).filter(Boolean);
 }
 
 export type SearchOptions = {
@@ -663,6 +670,7 @@ export function buildMatcher(
         else if (annotationRegex.test(x)) type = 'annotation';
         else if (tagRegex.test(x)) type = 'tag';
         else if (similarRegex.test(x)) type = 'similar';
+        else if (idRegex.test(x)) type = 'id';
         else if (imgRegex.test(x) || imgOnlyRegex.test(x)) type = 'img';
 
         let similarRef: string | undefined;
@@ -676,6 +684,18 @@ export function buildMatcher(
                 similarInvalid = true;
             } else {
                 similarRef = similarityPromptText(refImage);
+            }
+        }
+
+        let idTargets: Set<string> | undefined;
+        let idInvalid = false;
+        if (type === 'id') {
+            const imageIds = parseIdSearchTarget(raw);
+            const imageList = getImageList();
+            if (imageIds.length === 0 || imageIds.some((id) => !imageList.has(id))) {
+                idInvalid = true;
+            } else {
+                idTargets = new Set(imageIds);
             }
         }
 
@@ -712,13 +732,15 @@ export function buildMatcher(
             imgPresence,
             imgMatchIds,
             imgInvalid,
+            idTargets,
+            idInvalid,
         };
 
         return part;
     }).filter((x): x is SearchPart => x !== undefined)
         .sort((a, b) => getSearchPartRank(a) - getSearchPartRank(b));
 
-    if (regexes.some(x => x.similarInvalid || x.imgInvalid))
+    if (regexes.some(x => x.similarInvalid || x.imgInvalid || x.idInvalid))
         return () => false;
 
     const embeddedImageIds = regexes.some(x => x.imgPresence)
@@ -744,6 +766,13 @@ export function buildMatcher(
                 const matched = x.imgPresence
                     ? (embeddedImageIds?.has(image.id) ?? false)
                     : (x.imgMatchIds?.has(image.id) ?? false);
+                if (x.skip)
+                    return !matched;
+                return XOR(x.not, matched);
+            }
+
+            if (x.type === 'id') {
+                const matched = x.idTargets!.has(image.id);
                 if (x.skip)
                     return !matched;
                 return XOR(x.not, matched);
@@ -825,7 +854,7 @@ function getSearchPartRank(part: SearchPart): number {
     if (part.type === 'date') return 0;
     if (part.type === 'folder') return 1;
     if (part.type === 'model') return 2;
-    if (part.type === 'similar' || part.type === 'img') return 3;
+    if (part.type === 'similar' || part.type === 'img' || part.type === 'id') return 3;
     if (part.skip) return 4;
     if (part.type === 'all') return 5;
     return 3;
@@ -875,6 +904,8 @@ function getTextByType(image: ServerImage, type: MatchType): string {
             return '';
         case 'img':
             return '';
+        case 'id':
+            return image.id;
         default: {
             const _never: never = type;
             return _never;
