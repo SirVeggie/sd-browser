@@ -433,9 +433,8 @@ export async function searchImagesStreaming(
     await yieldToEventLoop();
     throwIfSearchAborted(options);
 
-    const sortingForPagination = imgSortScores?.size ? undefined : sorting;
-    const skipThreshold = sortingForPagination === 'random' ? 0 : getResultSkipCount(search);
-    const takeLimit = sortingForPagination === 'random' ? 0 : getResultTakeCount(search);
+    const skipThreshold = getResultSkipCount(search);
+    const takeLimit = getResultTakeCount(search);
 
     const orderedIds: string[] = [];
     let batch: ServerImage[] = [];
@@ -785,8 +784,6 @@ export function applyResultSkip(
     search: string,
     sorting?: SortingMethod,
 ): ServerImage[] {
-    if (sorting === 'random') return images;
-
     const skipCount = getResultSkipCount(search);
     if (!skipCount) return images;
     return images.slice(skipCount);
@@ -797,8 +794,6 @@ export function applyResultTake(
     search: string,
     sorting?: SortingMethod,
 ): ServerImage[] {
-    if (sorting === 'random') return images;
-
     const takeCount = getResultTakeCount(search);
     if (!takeCount) return images;
     return images.slice(0, takeCount);
