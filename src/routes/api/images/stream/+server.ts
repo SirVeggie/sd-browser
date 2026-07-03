@@ -2,7 +2,7 @@ import { invalidAuth } from '$lib/server/auth.js';
 import { subscribeImageChanges } from '$lib/server/imageChangeHub';
 import { computeImageUpdate, hasUpdateChanges } from '$lib/server/imageUpdates';
 import { error } from '$lib/server/responses';
-import { explorationFromRequest, SearchStreamAborted, searchImagesStreaming } from '$lib/server/searching';
+import { explorationFromRequest, resolveImgSearchContext, SearchStreamAborted, searchImagesStreaming } from '$lib/server/searching';
 import {
     appendSessionChunk,
     createSessionStub,
@@ -11,6 +11,7 @@ import {
     getSession,
     imageLimit,
     patchSession,
+    setSessionImgSearchContext,
 } from '$lib/server/searchSessions';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type {
@@ -78,13 +79,13 @@ export async function POST(e) {
         start(controller) {
             let connectionTimestamp = Date.now();
 
-            const pushIfChanged = () => {
+            const pushIfChanged = async () => {
                 if (isAborted()) return;
                 if (!sessionId) return;
                 const session = getSession(sessionId);
                 if (!session) return;
 
-                const result = computeImageUpdate(
+                const result = await computeImageUpdate(
                     {
                         ...query,
                         timestamp: connectionTimestamp,
@@ -153,6 +154,8 @@ export async function POST(e) {
                     }
 
                     const exploration = explorationFromRequest(query);
+                    const imgSearchContext = await resolveImgSearchContext(query.search);
+                    setSessionImgSearchContext(sessionId!, imgSearchContext);
                     const streamOptions = {
                         yieldEvery: streamYieldEvery,
                         chunkIntervalMs: streamChunkIntervalMs,
@@ -197,6 +200,7 @@ export async function POST(e) {
                         query.sorting,
                         onChunk,
                         streamOptions,
+                        imgSearchContext,
                     );
 
                     if (isAborted()) {
@@ -209,6 +213,7 @@ export async function POST(e) {
                     const ready: StreamReadyResponse = {
                         type: 'ready',
                         amount: result.amount,
+                        imgSearchError: imgSearchContext?.error,
                     };
 
                     if (!safeEnqueue(controller, ready)) {

@@ -16,7 +16,7 @@ export async function POST(e) {
         return error('Invalid request: timestamp required', 400);
     }
 
-    const result = computeImageUpdate(query);
+    const result = await computeImageUpdate(query);
     if ('error' in result) {
         return error(result.error, result.status ?? 400);
     }

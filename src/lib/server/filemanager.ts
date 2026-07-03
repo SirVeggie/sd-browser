@@ -11,6 +11,7 @@ import { calcTimeSpent, isImage, isMedia, isTxt, isVideo, limitedParallelMap, pr
 import { sleep } from '$lib/tools/sleep';
 import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB } from './db';
+import { EmbeddingDB } from './embeddingDb';
 import type { ImageExtraData, ImageList, ServerImage, ServerImageFull } from '$lib/types/images';
 import { deleteTempImage, fileExists, fileUniquefy, folderFromDir, folderFromFile, removeBasePath, removeFolderFromPath, splitExtension } from './filetools';
 import { handleMigrationEnd, handleMigrationStart } from './migration';
@@ -128,6 +129,7 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
 
         updateLine('Deleting obsolete data...');
         MetaCalcDB.deleteAll(deleted);
+        EmbeddingDB.deleteAll(deleted);
 
         updateLine('Verifying cache...');
         const missing = lazy(images.values()).filter(x => x.positive === undefined).collect();
@@ -283,6 +285,7 @@ function deleteMissingImages(set: Set<string>) {
         invalidateExplorationPools(`removed ${deletions.length} missing images during indexing`);
     MetaDB.deleteAll(deletions);
     MetaCalcDB.deleteAll(deletions);
+    EmbeddingDB.deleteAll(deletions);
 }
 
 async function indexBasicFileData(templist: ServerImageFull[]): Promise<ServerImageFull[]> {
@@ -492,6 +495,7 @@ function setupWatcher() {
         }
         MetaDB.deleteAll(deletions);
         MetaCalcDB.deleteAll(deletions);
+        EmbeddingDB.deleteAll(deletions);
     });
 
     if (pollingInterval > 0) {
@@ -619,6 +623,7 @@ async function deleteFile(file: string) {
     
     MetaDB.delete(hash);
     MetaCalcDB.delete(hash);
+    EmbeddingDB.deleteImage(hash);
 
     notifyImageChange();
 }
@@ -637,6 +642,7 @@ async function renameFile(from: string, to: string) {
         
         MetaDB.delete(oldhash);
         MetaCalcDB.delete(oldhash);
+        EmbeddingDB.deleteImage(oldhash);
         removeFreshImage(oldhash);
         recordDeletion(oldhash);
     }
@@ -813,6 +819,7 @@ export async function deleteImages(ids: string | string[]) {
     let deleted = 0;
     let oldestDeleted = Number.POSITIVE_INFINITY;
     const deletedImages: ServerImage[] = [];
+    const deletedIds: string[] = [];
     for (const id of ids) {
         const img = getImageList().get(id);
         if (!img) continue;
@@ -824,6 +831,7 @@ export async function deleteImages(ids: string | string[]) {
             deleteTextFiles(img.file);
             deleteTempImage(id);
             deletedImages.push(img);
+            deletedIds.push(id);
             deleted++;
         } catch {
             failcount++;
@@ -845,6 +853,8 @@ export async function deleteImages(ids: string | string[]) {
         repairUniqueCacheAfterDeletes([...getImageList().values()], deletedImages);
     if (deleted)
         repairExplorationCaches([...getImageList().values()], oldestDeleted, `deleted ${deleted} images`);
+    if (deletedIds.length)
+        EmbeddingDB.deleteAll(deletedIds);
 }
 
 async function deleteTextFiles(imagepath: string) {

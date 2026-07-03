@@ -16,16 +16,17 @@
         llmStore,
         resolveSystemInstruction,
     } from "$lib/stores/llmStore";
+    import { embeddingStore, isEmbeddingConfigured } from "$lib/stores/embeddingStore";
     import type { SearchParams } from "$lib/stores/searchStore";
     import { resolveSearchMatch, runBulkAction } from "$lib/requests/bulkRequests";
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
     import { formatDurationCompact, formatTaskDuration } from "$lib/tools/misc";
-    import type { BulkAction, BulkAnnotateMode, BulkRequest } from "$lib/types/requests";
+    import type { BulkAction, BulkAnnotateMode, BulkRequest, BulkVectorizeMode } from "$lib/types/requests";
     import type { BulkActionType } from "$lib/stores/bulkStore";
     import { askConfirmation } from "./Confirm.svelte";
     import { notify } from "./Notifier.svelte";
 
-    const bulkActions = ["move", "copy", "delete", "annotate", "tag"] as const;
+    const bulkActions = ["move", "copy", "delete", "annotate", "tag", "vectorize"] as const;
     const tagModes = ["add", "remove", "replace"] as const;
 
     const dispatch = createEventDispatcher<{ close: void }>();
@@ -43,6 +44,7 @@
     let bulkStartTime = 0;
     let totalTaskDurationMs = 0;
     let progressFailures = 0;
+    let progressLastError = "";
     let effectiveTaskMsAtProgress = 0;
     let progressHovering = false;
     let tickNow = Date.now();
@@ -58,7 +60,7 @@
         ? Math.min(100, (progressDone / progressTotal) * 100)
         : 0;
 
-    $: showProgressStats = running && $bulkModalStore.action === "annotate";
+    $: showProgressStats = running && ($bulkModalStore.action === "annotate" || $bulkModalStore.action === "vectorize");
     $: elapsedMs = bulkStartTime
         ? (progressHovering ? tickNow : Date.now()) - bulkStartTime
         : 0;
@@ -106,6 +108,7 @@
     function bulkActionSubtitle(
         action: BulkActionType,
         annotateMode: BulkAnnotateMode,
+        vectorizeMode: BulkVectorizeMode,
         count: number,
     ): string {
         const images = `${count} image${count === 1 ? "" : "s"} matching the current filter`;
@@ -131,6 +134,17 @@
                 }
             case "tag":
                 return `Tag ${images}.`;
+            case "vectorize":
+                switch (vectorizeMode) {
+                    case "embed":
+                        return `Vectorize ${images}.`;
+                    case "clear":
+                        return `Clear embeddings on ${images}.`;
+                    default: {
+                        const _exhaustive: never = vectorizeMode;
+                        return _exhaustive;
+                    }
+                }
             default: {
                 const _exhaustive: never = action;
                 return _exhaustive;
@@ -141,6 +155,7 @@
     $: subtitle = bulkActionSubtitle(
         $bulkModalStore.action,
         $bulkModalStore.annotateMode,
+        $bulkModalStore.vectorizeMode,
         imageCount,
     );
 
@@ -149,10 +164,15 @@
         .filter((name) => !$bulkModalStore.selectedTags.includes(name));
 
     $: llmConfigured = Boolean($llmStore.modelId.trim() && $llmStore.baseUrl.trim());
+    $: embeddingConfigured = isEmbeddingConfigured($embeddingStore);
     $: annotateGenerateBlocked =
         $bulkModalStore.action === "annotate"
         && $bulkModalStore.annotateMode === "generate"
         && !llmConfigured;
+    $: vectorizeBlocked =
+        $bulkModalStore.action === "vectorize"
+        && $bulkModalStore.vectorizeMode === "embed"
+        && !embeddingConfigured;
 
     function onProgressMouseEnter() {
         progressHovering = true;
@@ -270,6 +290,12 @@
                     mode: s.tagMode,
                     tags: s.selectedTags,
                 };
+            case "vectorize":
+                return {
+                    type: "vectorize",
+                    mode: s.vectorizeMode,
+                    force: s.vectorizeForce,
+                };
             default: {
                 const _exhaustive: never = s.action;
                 return _exhaustive;
@@ -289,6 +315,16 @@
                 apiKey: $llmStore.apiKey || undefined,
                 modelId: $llmStore.modelId,
                 parallelCalls: Math.max(1, $llmStore.parallelCalls || 1),
+            };
+        }
+
+        if (bulkAction.type === "vectorize" && bulkAction.mode === "embed") {
+            request.embedding = {
+                apiType: $embeddingStore.apiType,
+                baseUrl: $embeddingStore.baseUrl,
+                apiKey: $embeddingStore.apiKey || undefined,
+                modelId: $embeddingStore.modelId,
+                apiBatch: Math.max(1, $embeddingStore.apiBatch || 1),
             };
         }
 
@@ -336,10 +372,18 @@
             }
         }
 
+        if (bulkAction.type === "vectorize" && bulkAction.mode === "embed") {
+            if (!embeddingConfigured) {
+                notify("Configure embedding API settings first", "warn");
+                return;
+            }
+        }
+
         running = true;
         progressDone = 0;
         totalTaskDurationMs = 0;
         progressFailures = 0;
+        progressLastError = "";
         effectiveTaskMsAtProgress = 0;
         abortController = new AbortController();
         let refresh = false;
@@ -378,6 +422,9 @@
                         if (event.failures !== undefined) {
                             progressFailures = event.failures;
                         }
+                        if (event.lastError) {
+                            progressLastError = event.lastError;
+                        }
                     } else if ("complete" in event) {
                         refresh = !!event.refresh;
                     }
@@ -392,6 +439,9 @@
         } catch (e: any) {
             if (e?.name === "AbortError") return;
             console.error(e);
+            if (e?.message && typeof e.message === "string") {
+                progressLastError = e.message;
+            }
             notify(e?.message ?? "Bulk action failed", "warn");
         } finally {
             running = false;
@@ -403,13 +453,20 @@
         abortController?.abort();
         abortController = undefined;
         running = false;
+        progressFailures = 0;
+        progressLastError = "";
         tagPickerOpen = false;
         tagModalOpen = false;
         dispatch("close");
     }
+
+    function dismissModal() {
+        if (running) return;
+        close();
+    }
 </script>
 
-<Modal close={close}>
+<Modal close={dismissModal}>
         <h1>Bulk actions</h1>
         <p class="subtitle">{subtitle}</p>
 
@@ -581,7 +638,38 @@
             </div>
         {/if}
 
-        {#if running}
+        {#if $bulkModalStore.action === "vectorize"}
+            <div class="vectorize">
+                <div class="select-field">
+                    <span class="field-label">Mode</span>
+                    <OptionSelect
+                        options={["embed", "clear"]}
+                        bind:value={$bulkModalStore.vectorizeMode}
+                        disabled={running}
+                    />
+                </div>
+
+                {#if $bulkModalStore.vectorizeMode === "embed"}
+                    {#if embeddingConfigured}
+                        <label class="checkbox">
+                            <input
+                                type="checkbox"
+                                bind:checked={$bulkModalStore.vectorizeForce}
+                                disabled={running}
+                            />
+                            Force recompute existing embeddings
+                        </label>
+                        <p class="hint">Embeds each image file for semantic search via IMG.</p>
+                    {:else}
+                        <p class="llm-warning">Configure the embedding API in Settings before vectorizing.</p>
+                    {/if}
+                {:else}
+                    <p class="hint">Removes stored image embeddings for matching images.</p>
+                {/if}
+            </div>
+        {/if}
+
+        {#if running || progressFailures > 0}
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div
                 class="progress-wrap"
@@ -589,9 +677,20 @@
                 on:mouseenter={onProgressMouseEnter}
                 on:mouseleave={onProgressMouseLeave}
             >
-                <div class="progress">
-                    <div class="bar" style={`width: ${progressPercent}%`} />
-                </div>
+                {#if progressFailures > 0}
+                    <p class="bulk-error-summary">
+                        {#if !running && progressLastError}
+                            {progressFailures} {progressFailures === 1 ? "error" : "errors"} — {progressLastError}
+                        {:else}
+                            {progressFailures} {progressFailures === 1 ? "error" : "errors"}
+                        {/if}
+                    </p>
+                {/if}
+                {#if running}
+                    <div class="progress">
+                        <div class="bar" style={`width: ${progressPercent}%`} />
+                    </div>
+                {/if}
                 {#if showProgressStats && progressHovering}
                     <div class="progress-stats" role="tooltip">
                         <div class="stat">
@@ -623,7 +722,7 @@
         {/if}
 
         <div class="buttons">
-            <Button disabled={running || imageCount === 0 || annotateGenerateBlocked} on:click={execute}>
+            <Button disabled={running || imageCount === 0 || annotateGenerateBlocked || vectorizeBlocked} on:click={execute}>
                 {running ? "Running..." : "Run"}
             </Button>
             <Button disabled={running} on:click={close}>Cancel</Button>
@@ -730,6 +829,13 @@
         margin-bottom: 0.5em;
     }
 
+    .vectorize {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25em;
+        margin-bottom: 0.5em;
+    }
+
     .select-field {
         margin-bottom: 0.75em;
     }
@@ -764,6 +870,13 @@
         &.has-stats {
             cursor: help;
         }
+    }
+
+    .bulk-error-summary {
+        margin: 0 0 0.5em;
+        font-size: 0.9em;
+        line-height: 1.4;
+        color: #f07070;
     }
 
     .progress {

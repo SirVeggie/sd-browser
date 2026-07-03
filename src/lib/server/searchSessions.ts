@@ -3,7 +3,8 @@ import type { ServerImage } from '$lib/types/images';
 import type { SortingMethod } from '$lib/types/misc';
 import type { ImageRequest } from '$lib/types/requests';
 import { getImage } from './dataIndex';
-import { applyResultSkip, applyResultTake, explorationFromRequest, searchImages, sortImages } from './searching';
+import type { ImgSearchContext } from './searching';
+import { applyResultSkip, applyResultTake, explorationFromRequest, searchImagesAsync, sortImages, type SearchImagesResult } from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 
 export const imageLimit = 1000;
@@ -14,6 +15,8 @@ export type SearchSession = {
     orderedIds: string[];
     viewIds: Set<string>;
     timestamp: number;
+    imgSearchContext?: ImgSearchContext;
+    imgSearchError?: string;
 };
 
 type SessionQuery = Pick<
@@ -52,17 +55,18 @@ function resolveImages(ids: string[]): ServerImage[] {
     return images;
 }
 
-export function runSearch(query: SessionQuery): ServerImage[] {
+export async function runSearch(query: SessionQuery): Promise<SearchImagesResult> {
     const exploration = explorationFromRequest(query);
-    let images = searchImages(
+    const { images, imgSearchError } = await searchImagesAsync(
         query.search,
         query.filters,
         query.matching,
         exploration,
         { sorting: query.sorting, skipResults: false, takeResults: false },
     );
-    images = applyResultSkip(images, query.search, query.sorting);
-    return applyResultTake(images, query.search, query.sorting);
+    let result = applyResultSkip(images, query.search, query.sorting);
+    result = applyResultTake(result, query.search, query.sorting);
+    return { images: result, imgSearchError };
 }
 
 export function sliceImages(
@@ -126,13 +130,13 @@ export function finalizeSession(sessionId: string, orderedIds: string[]): void {
     session.orderedIds = orderedIds;
 }
 
-export function createSession(query: SessionQuery): {
+export async function createSession(query: SessionQuery): Promise<{
     sessionId: string;
     images: ReturnType<typeof mapServerImageToClient>;
     amount: number;
     timestamp: number;
-} {
-    const images = runSearch(query);
+}> {
+    const { images, imgSearchError } = await runSearch(query);
     const sessionId = uuidv4();
     const timestamp = Date.now();
     const page = sliceImages(images, query.sorting);
@@ -142,6 +146,7 @@ export function createSession(query: SessionQuery): {
         orderedIds: images.map((image) => image.id),
         viewIds: new Set(page.map((image) => image.id)),
         timestamp,
+        imgSearchError,
     };
     sessions.set(sessionId, session);
 
@@ -209,6 +214,18 @@ export function trackSessionViewIds(sessionId: string, ids: string[]): void {
     for (const id of ids) {
         session.viewIds.add(id);
     }
+}
+
+export function setSessionImgSearchContext(sessionId: string, imgSearchContext: ImgSearchContext | undefined): void {
+    const session = sessions.get(sessionId);
+    if (session) {
+        session.imgSearchContext = imgSearchContext;
+        session.imgSearchError = imgSearchContext?.error;
+    }
+}
+
+export function getSessionImgSearchError(session: SearchSession | undefined): string | undefined {
+    return session?.imgSearchContext?.error ?? session?.imgSearchError;
 }
 
 export function deleteSession(sessionId: string): void {

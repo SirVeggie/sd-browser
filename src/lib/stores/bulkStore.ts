@@ -1,17 +1,21 @@
 import { CUSTOM_INSTRUCTION_ID } from "$lib/stores/llmStore";
+import type { BulkVectorizeMode } from "$lib/types/requests";
 import { writable } from "svelte/store";
 
-export type BulkActionType = "move" | "copy" | "delete" | "annotate" | "tag";
+export type BulkActionType = "move" | "copy" | "delete" | "annotate" | "tag" | "vectorize";
 
 export type BulkAnnotateMode = "generate" | "clear" | "modify";
 
 export type BulkTagMode = "add" | "remove" | "replace";
+
+export type { BulkVectorizeMode };
 
 export type BulkModalSettings = {
     action: BulkActionType;
     folder: string;
     annotateMode: BulkAnnotateMode;
     tagMode: BulkTagMode;
+    vectorizeMode: BulkVectorizeMode;
     selectedTags: string[];
     includeImage: boolean;
     includePrompt: boolean;
@@ -22,6 +26,7 @@ export type BulkModalSettings = {
     resultRegex: string;
     resultTemplate: string;
     appendResult: boolean;
+    vectorizeForce: boolean;
 };
 
 export const bulkModalDefaults: BulkModalSettings = {
@@ -39,6 +44,8 @@ export const bulkModalDefaults: BulkModalSettings = {
     resultRegex: "",
     resultTemplate: "",
     appendResult: false,
+    vectorizeMode: "embed",
+    vectorizeForce: false,
 };
 
 export const bulkModalStore = writable<BulkModalSettings>({ ...bulkModalDefaults });

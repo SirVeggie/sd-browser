@@ -1,6 +1,6 @@
 import { invalidAuth } from '$lib/server/auth.js';
 import { error, success } from '$lib/server/responses.js';
-import { explorationFromRequest, searchImages } from '$lib/server/searching';
+import { explorationFromRequest, searchImagesAsync } from '$lib/server/searching';
 import { isMatchRequest, type MatchResponse } from '$lib/types/requests';
 
 export async function POST(e) {
@@ -13,7 +13,7 @@ export async function POST(e) {
     }
 
     try {
-        const images = searchImages(
+        const { images } = await searchImagesAsync(
             query.search,
             query.filters,
             query.matching,

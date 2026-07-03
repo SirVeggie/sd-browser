@@ -13,6 +13,8 @@ import {
 } from "$lib/types/misc";
 import shuffle from "lodash/shuffle";
 import { MetaDB } from "./db";
+import { EmbeddingDB, EmbeddingDimensionMismatchError } from "./embeddingDb";
+import { embedQuery, getServerEmbeddingSettings, isServerEmbeddingConfigured } from "./embeddings";
 import { computeSimilarity, getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./dataIndex";
 
@@ -30,6 +32,10 @@ const modelRegex = new RegExp(`^${keywordPattern}(MODEL|MD) `, keywordFlags);
 const annotationRegex = new RegExp(`^${keywordPattern}(ANNOTATION|AN) `, keywordFlags);
 const tagRegex = new RegExp(`^${keywordPattern}TAG `, keywordFlags);
 const similarRegex = new RegExp(`^${keywordPattern}(SIMILAR|SM) `, keywordFlags);
+const imgRegex = new RegExp(`^${keywordPattern}IMG `, keywordFlags);
+const imgOnlyRegex = new RegExp(`^${keywordPattern}IMG$`, keywordFlags);
+/** Default similarity cutoff for IMG text queries (text query vs image embeddings). */
+const IMAGE_EMBEDDING_SIMILARITY_THRESHOLD = 0.1;
 const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
 const takeRegex = new RegExp(`^${keywordPattern}TAKE `, keywordFlags);
 const andSplitRegex = /\s+AND\s+/i;
@@ -49,24 +55,189 @@ type SearchPart = {
     similarRef?: string;
     similarThreshold?: number;
     similarInvalid?: boolean;
+    imgPresence?: boolean;
+    imgMatchIds?: Set<string>;
+    imgInvalid?: boolean;
 };
 
-function parseSimilarSearchTarget(raw: string): { imageId: string; threshold?: number } {
+export type ImgSearchContext = {
+    parts: Map<number, {
+        presence: boolean;
+        matchIds?: Set<string>;
+        invalid?: boolean;
+    }>;
+    /** Combined similarity scores for IMG text queries (best match first). */
+    matchScores?: Map<string, number>;
+    /** User-facing message when a text IMG query could not run. */
+    error?: string;
+};
+
+export const IMG_SEARCH_UNCONFIGURED_MESSAGE =
+    'Configure the embedding API in Settings before using IMG search';
+
+export function formatImgSearchFailure(cause: unknown): string {
+    if (cause instanceof EmbeddingDimensionMismatchError)
+        return cause.message;
+
+    if (cause instanceof Error) {
+        if (cause.name === 'TimeoutError' || /timed out/i.test(cause.message))
+            return 'Embedding API request timed out';
+
+        if (/fetch failed|network|ECONNREFUSED|ENOTFOUND|ECONNRESET|socket hang up/i.test(cause.message))
+            return 'Could not reach the embedding API';
+
+        if (cause.message.startsWith('Embedding request failed'))
+            return cause.message;
+
+        if (cause.message)
+            return cause.message;
+    }
+
+    return 'IMG search failed';
+}
+
+function mergeImgMatchScores(
+    existing: Map<string, number> | undefined,
+    next: Map<string, number>,
+): Map<string, number> {
+    if (!existing) {
+        return new Map(next);
+    }
+
+    const merged = new Map<string, number>();
+    for (const [id, score] of next) {
+        if (!existing.has(id))
+            continue;
+        merged.set(id, Math.min(existing.get(id)!, score));
+    }
+    return merged;
+}
+
+function sortImagesByMatchScores(images: ServerImage[], scores: Map<string, number>): ServerImage[] {
+    return [...images].sort((a, b) => {
+        const scoreA = scores.get(a.id) ?? -Infinity;
+        const scoreB = scores.get(b.id) ?? -Infinity;
+        return scoreB - scoreA;
+    });
+}
+
+function orderPoolIdsByMatchScores(pool: Set<string>, scores: Map<string, number>): string[] {
+    return [...pool].sort((a, b) => {
+        const scoreA = scores.get(a);
+        const scoreB = scores.get(b);
+        if (scoreA !== undefined && scoreB !== undefined)
+            return scoreB - scoreA;
+        if (scoreA !== undefined)
+            return -1;
+        if (scoreB !== undefined)
+            return 1;
+        return 0;
+    });
+}
+
+function parseSearchTargetWithOptionalThreshold(raw: string): { text: string; threshold?: number } {
     const trimmed = raw.trim();
+    if (!trimmed) {
+        return { text: '' };
+    }
+
     const lastSpace = trimmed.lastIndexOf(' ');
     if (lastSpace <= 0) {
-        return { imageId: trimmed };
+        return { text: trimmed };
     }
 
     const threshold = parseSearchFloat(trimmed.slice(lastSpace + 1));
     if (threshold === undefined) {
-        return { imageId: trimmed };
+        return { text: trimmed };
     }
 
     return {
-        imageId: trimmed.slice(0, lastSpace).trim(),
+        text: trimmed.slice(0, lastSpace).trim(),
         threshold,
     };
+}
+
+function isImgSearchPart(part: string): boolean {
+    return imgRegex.test(part) || imgOnlyRegex.test(part);
+}
+
+function parseImgSearchPart(part: string): { presenceOnly: boolean; queryText: string; threshold?: number } {
+    if (imgOnlyRegex.test(part)) {
+        return { presenceOnly: true, queryText: '' };
+    }
+
+    let raw = part.replace(removeRegex, '');
+    if (raw === 'IMG') {
+        raw = '';
+    } else if (raw.startsWith('IMG ')) {
+        raw = raw.slice(4);
+    }
+
+    const { text: queryText, threshold } = parseSearchTargetWithOptionalThreshold(raw);
+    if (!queryText) {
+        return { presenceOnly: true, queryText: '' };
+    }
+
+    return { presenceOnly: false, queryText, threshold };
+}
+
+export async function resolveImgSearchContext(
+    search: string,
+): Promise<ImgSearchContext | undefined> {
+    const parts = splitSearchParts(search);
+    const context: ImgSearchContext = { parts: new Map() };
+    let hasImgParts = false;
+    let combinedMatchScores: Map<string, number> | undefined;
+    let error: string | undefined;
+
+    for (let index = 0; index < parts.length; index++) {
+        const part = parts[index];
+        if (!isImgSearchPart(part))
+            continue;
+
+        hasImgParts = true;
+
+        const { presenceOnly, queryText, threshold } = parseImgSearchPart(part);
+        if (presenceOnly) {
+            context.parts.set(index, { presence: true });
+            continue;
+        }
+
+        if (!isServerEmbeddingConfigured()) {
+            context.parts.set(index, { presence: false, invalid: true });
+            error ??= IMG_SEARCH_UNCONFIGURED_MESSAGE;
+            continue;
+        }
+
+        try {
+            const settings = getServerEmbeddingSettings();
+            const queryEmbedding = await embedQuery(settings, queryText);
+            const effectiveThreshold = threshold ?? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
+            const matchScores = EmbeddingDB.findSimilarImage(queryEmbedding, effectiveThreshold);
+            combinedMatchScores = mergeImgMatchScores(combinedMatchScores, matchScores);
+            context.parts.set(index, {
+                presence: false,
+                matchIds: new Set(matchScores.keys()),
+            });
+        } catch (cause) {
+            console.error(formatImgSearchFailure(cause));
+            context.parts.set(index, { presence: false, invalid: true });
+            error ??= formatImgSearchFailure(cause);
+        }
+    }
+
+    if (combinedMatchScores?.size)
+        context.matchScores = combinedMatchScores;
+
+    if (error)
+        context.error = error;
+
+    return hasImgParts ? context : undefined;
+}
+
+function parseSimilarSearchTarget(raw: string): { imageId: string; threshold?: number } {
+    const { text, threshold } = parseSearchTargetWithOptionalThreshold(raw);
+    return { imageId: text, threshold };
 }
 
 export type SearchOptions = {
@@ -82,30 +253,57 @@ export function searchImages(
     matching: SearchMode,
     exploration: ExplorationSettings,
     options: SearchOptions = {},
+    imgSearchContext?: ImgSearchContext,
 ) {
     if (matching === 'regex' && !validRegex(search))
         throw new Error('Invalid regex');
 
-    const matcher = buildMatcher(search, matching, exploration);
+    const matcher = buildMatcher(search, matching, exploration, imgSearchContext);
     const filter = buildMatcher(filters.join(' AND '), 'regex');
     const imageList = getImageList();
     const images = [...imageList.values()];
     const pool = getExplorationPool(exploration, images);
     let list = filterPoolImages(pool, matcher, filter, options.timestamp);
 
-    if (options.sorting === 'date')
-        list = applyLatestImageException(list, images, pool, matcher, filter, options.timestamp);
+    const imgSortScores = imgSearchContext?.matchScores;
+    const sortingForPagination = imgSortScores?.size ? undefined : options.sorting;
 
-    if (options.sorting)
-        list = sortImages(list, options.sorting);
+    if (imgSortScores?.size) {
+        list = sortImagesByMatchScores(list, imgSortScores);
+    } else {
+        if (options.sorting === 'date')
+            list = applyLatestImageException(list, images, pool, matcher, filter, options.timestamp);
+
+        if (options.sorting)
+            list = sortImages(list, options.sorting);
+    }
 
     if (options.skipResults !== false)
-        list = applyResultSkip(list, search, options.sorting);
+        list = applyResultSkip(list, search, sortingForPagination);
 
     if (options.takeResults !== false)
-        list = applyResultTake(list, search, options.sorting);
+        list = applyResultTake(list, search, sortingForPagination);
 
     return list;
+}
+
+export type SearchImagesResult = {
+    images: ServerImage[];
+    imgSearchError?: string;
+};
+
+export async function searchImagesAsync(
+    search: string,
+    filters: string[],
+    matching: SearchMode,
+    exploration: ExplorationSettings,
+    options: SearchOptions = {},
+): Promise<SearchImagesResult> {
+    const imgSearchContext = await resolveImgSearchContext(search);
+    return {
+        images: searchImages(search, filters, matching, exploration, options, imgSearchContext),
+        imgSearchError: imgSearchContext?.error,
+    };
 }
 
 export type SearchStreamOptions = {
@@ -146,6 +344,7 @@ export async function searchImagesStreaming(
     sorting: SortingMethod,
     onChunk: (images: ServerImage[], matched: number) => void,
     options: SearchStreamOptions = {},
+    imgSearchContext?: ImgSearchContext,
 ): Promise<SearchStreamResult> {
     if (matching === 'regex' && !validRegex(search))
         throw new Error('Invalid regex');
@@ -158,7 +357,11 @@ export async function searchImagesStreaming(
     await yieldToEventLoop();
     throwIfSearchAborted(options);
 
-    const matcher = buildMatcher(search, matching, exploration);
+    const resolvedImgSearchContext = imgSearchContext ?? await resolveImgSearchContext(search);
+    await yieldToEventLoop();
+    throwIfSearchAborted(options);
+
+    const matcher = buildMatcher(search, matching, exploration, resolvedImgSearchContext);
     const filter = buildMatcher(filters.join(' AND '), 'regex');
     const imageList = getImageList();
     const images = [...imageList.values()];
@@ -169,12 +372,16 @@ export async function searchImagesStreaming(
     await yieldToEventLoop();
     throwIfSearchAborted(options);
 
-    const orderedPoolIds = orderPoolIds(pool, sorting);
+    const imgSortScores = resolvedImgSearchContext?.matchScores;
+    const orderedPoolIds = imgSortScores?.size
+        ? orderPoolIdsByMatchScores(pool, imgSortScores)
+        : orderPoolIds(pool, sorting);
     await yieldToEventLoop();
     throwIfSearchAborted(options);
 
-    const skipThreshold = sorting === 'random' ? 0 : getResultSkipCount(search);
-    const takeLimit = sorting === 'random' ? 0 : getResultTakeCount(search);
+    const sortingForPagination = imgSortScores?.size ? undefined : sorting;
+    const skipThreshold = sortingForPagination === 'random' ? 0 : getResultSkipCount(search);
+    const takeLimit = sortingForPagination === 'random' ? 0 : getResultTakeCount(search);
 
     const orderedIds: string[] = [];
     let batch: ServerImage[] = [];
@@ -270,7 +477,7 @@ export async function searchImagesStreaming(
         .map((id) => imageList.get(id))
         .filter((image): image is ServerImage => !!image);
 
-    if (sorting === 'date') {
+    if (sorting === 'date' && !imgSortScores?.size) {
         if (options.isAborted?.()) {
             return { orderedIds: [], amount: 0 };
         }
@@ -375,9 +582,11 @@ export function buildMatcher(
     search: string,
     matching: SearchMode,
     exploration?: ExplorationSettings,
+    imgSearchContext?: ImgSearchContext,
 ): (image: ServerImage) => boolean {
     const similaritySettings = exploration ?? defaultExplorationSettings;
-    const regexes = splitSearchParts(search).map(x => {
+    const searchParts = splitSearchParts(search);
+    const regexes = searchParts.map((x, partIndex) => {
         const raw = x.replace(removeRegex, '');
         const skip = skipRegex.test(x);
         const take = takeRegex.test(x);
@@ -401,6 +610,7 @@ export function buildMatcher(
         else if (annotationRegex.test(x)) type = 'annotation';
         else if (tagRegex.test(x)) type = 'tag';
         else if (similarRegex.test(x)) type = 'similar';
+        else if (imgRegex.test(x) || imgOnlyRegex.test(x)) type = 'img';
 
         let similarRef: string | undefined;
         let similarThreshold: number | undefined;
@@ -416,6 +626,24 @@ export function buildMatcher(
             }
         }
 
+        let imgPresence = false;
+        let imgMatchIds: Set<string> | undefined;
+        let imgInvalid = false;
+
+        const imgPart = imgSearchContext?.parts.get(partIndex);
+        if (type === 'img') {
+            const { presenceOnly, queryText } = parseImgSearchPart(x);
+            if (imgPart?.invalid) {
+                imgInvalid = true;
+            } else if (presenceOnly || imgPart?.presence) {
+                imgPresence = true;
+            } else if (imgPart?.matchIds) {
+                imgMatchIds = imgPart.matchIds;
+            } else if (queryText && !imgSearchContext) {
+                imgInvalid = true;
+            }
+        }
+
         const searchRaw = type === 'tag' ? raw.trim() : raw;
         const tagExact = type === 'tag' ? isExactTagTerm(searchRaw) : undefined;
         const part: SearchPart = {
@@ -428,14 +656,21 @@ export function buildMatcher(
             similarRef,
             similarThreshold,
             similarInvalid,
+            imgPresence,
+            imgMatchIds,
+            imgInvalid,
         };
 
         return part;
     }).filter((x): x is SearchPart => x !== undefined)
         .sort((a, b) => getSearchPartRank(a) - getSearchPartRank(b));
 
-    if (regexes.some(x => x.similarInvalid))
+    if (regexes.some(x => x.similarInvalid || x.imgInvalid))
         return () => false;
+
+    const embeddedImageIds = regexes.some(x => x.imgPresence)
+        ? EmbeddingDB.getAllImageIds()
+        : undefined;
 
     return (image: ServerImage) => {
         return regexes.every(x => {
@@ -447,6 +682,15 @@ export function buildMatcher(
                 );
                 const threshold = x.similarThreshold ?? similaritySettings.similarityThreshold;
                 const matched = similarity >= threshold;
+                if (x.skip)
+                    return !matched;
+                return XOR(x.not, matched);
+            }
+
+            if (x.type === 'img') {
+                const matched = x.imgPresence
+                    ? (embeddedImageIds?.has(image.id) ?? false)
+                    : (x.imgMatchIds?.has(image.id) ?? false);
                 if (x.skip)
                     return !matched;
                 return XOR(x.not, matched);
@@ -532,7 +776,7 @@ function getSearchPartRank(part: SearchPart): number {
     if (part.type === 'date') return 0;
     if (part.type === 'folder') return 1;
     if (part.type === 'model') return 2;
-    if (part.type === 'similar') return 3;
+    if (part.type === 'similar' || part.type === 'img') return 3;
     if (part.skip) return 4;
     if (part.type === 'all') return 5;
     return 3;
@@ -579,6 +823,8 @@ function getTextByType(image: ServerImage, type: MatchType): string {
         case 'tag':
             return (image.tags ?? []).join('\n');
         case 'similar':
+            return '';
+        case 'img':
             return '';
         default: {
             const _never: never = type;

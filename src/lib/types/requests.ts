@@ -1,4 +1,5 @@
 import type { ClientImage } from "./images";
+import type { EmbeddingSettings } from "./embeddings";
 import {
     isSortingMethod,
     isSimilarityAlgorithm,
@@ -69,6 +70,7 @@ export type ImageResponse = {
     images: Omit<ClientImage, 'url'>[];
     amount: number;
     timestamp: number;
+    imgSearchError?: string;
 };
 export function isImageResponse(object: any): object is ImageResponse {
     return testType(object, ['imageIds', 'amount']);
@@ -137,6 +139,7 @@ export type StreamChunkResponse = {
 export type StreamReadyResponse = {
     type: 'ready';
     amount: number;
+    imgSearchError?: string;
 };
 
 export type StreamUpdateResponse = UpdateResponse & {
@@ -240,7 +243,19 @@ export type BulkTagOptions = {
     tags: string[];
 };
 
-export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOptions | BulkTagOptions;
+export type BulkEmbeddingConfig = Omit<EmbeddingSettings, 'apiKey'> & {
+    apiKey?: string;
+};
+
+export type BulkVectorizeMode = 'embed' | 'clear';
+
+export type BulkVectorizeOptions = {
+    type: 'vectorize';
+    mode: BulkVectorizeMode;
+    force: boolean;
+};
+
+export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOptions | BulkTagOptions | BulkVectorizeOptions;
 
 export type MatchRequest = {
     search: string;
@@ -279,6 +294,7 @@ export type BulkRequest = {
     similarityThreshold: number;
     action: BulkAction;
     llm?: BulkLlmConfig;
+    embedding?: BulkEmbeddingConfig;
 };
 
 export function isBulkRequest(object: any): object is BulkRequest {
@@ -298,6 +314,7 @@ export type BulkProgressEvent = {
     total: number;
     totalTaskDurationMs?: number;
     failures?: number;
+    lastError?: string;
 } | {
     complete: true;
     refresh?: boolean;

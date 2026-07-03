@@ -8,6 +8,7 @@ import { syncStyleWithLocalStorage } from "$lib/stores/styleStore";
 import { syncBulkModalWithLocalStorage } from "$lib/stores/bulkStore";
 import { syncTagsWithLocalStorage } from "$lib/stores/tagsStore";
 import { syncLlmWithLocalStorage } from "$lib/stores/llmStore";
+import { syncEmbeddingWithLocalStorage } from "$lib/stores/embeddingStore";
 import { migrateFolderFilterToCustomFilters } from "$lib/migrations/folderFilterMigration";
 import { subscribeAuth } from "$lib/tools/requests";
 
@@ -23,6 +24,7 @@ export async function load() {
         syncFullscreenWithLocalStorage();
         syncStyleWithLocalStorage();
         syncLlmWithLocalStorage();
+        syncEmbeddingWithLocalStorage();
         syncBulkModalWithLocalStorage();
         syncTagsWithLocalStorage();
     }

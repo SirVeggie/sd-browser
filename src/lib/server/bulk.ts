@@ -1,29 +1,61 @@
 import { limitedParallelMap, updateLine } from "$lib/tools/misc";
 import type { BulkRequest } from "$lib/types/requests";
+import { isEmbeddingConfigured } from "$lib/types/embeddings";
 import { notifyMetadataChange } from "./imageChangeHub";
+import { vectorizeImageBatch, fetchMediaMarkerForConfig } from "./embeddings";
+import { EmbeddingDB } from "./embeddingDb";
 import { annotateImage, clearAnnotation, modifyAnnotation } from "./llm";
 import { bulkUpdateImageTags } from "./tags";
 import { copyImages, deleteImages, moveImages } from "./filemanager";
-import { explorationFromRequest, searchImages } from "./searching";
+import { explorationFromRequest, searchImagesAsync } from "./searching";
 
 const CHUNK_SIZE = 100;
+const BULK_FAILURE_ABORT_RATIO = 0.5;
 
 type BulkProgressStats = {
     totalTaskDurationMs: number;
     failures: number;
+    lastError?: string;
 };
+
+type BulkFailureTracker = {
+    failures: number;
+    errors: string[];
+    lastError?: string;
+};
+
+function shouldAbortBulkRun(failures: number, total: number): boolean {
+    return failures > total * BULK_FAILURE_ABORT_RATIO;
+}
+
+function throwBulkAborted(tracker: BulkFailureTracker): never {
+    throw new Error(
+        `Stopped after ${tracker.failures} errors (>50% failure rate): ${tracker.lastError ?? "Unknown error"}`,
+    );
+}
+
+function bulkProgressStats(
+    tracker: BulkFailureTracker,
+    totalTaskDurationMs: number,
+): BulkProgressStats {
+    return {
+        totalTaskDurationMs,
+        failures: tracker.failures,
+        lastError: tracker.lastError,
+    };
+}
 
 export async function runBulkAction(
     request: BulkRequest,
     onProgress: (done: number, total: number, stats?: BulkProgressStats) => void,
 ): Promise<boolean> {
-    const images = searchImages(
+    const images = await searchImagesAsync(
         request.search,
         request.filters,
         request.matching,
         explorationFromRequest(request),
     );
-    const ids = images.map((image) => image.id);
+    const ids = images.images.map((image) => image.id);
     const total = ids.length;
     let done = 0;
 
@@ -189,6 +221,70 @@ export async function runBulkAction(
         updateLine("");
         notifyMetadataChange(ids);
         return false;
+    }
+
+    if (request.action.type === "vectorize") {
+        const vectorizeOptions = request.action;
+        let completed = 0;
+        let totalTaskDurationMs = 0;
+
+        if (vectorizeOptions.mode === "clear") {
+            console.log(`Bulk clear embeddings: ${ids.length} images`);
+            EmbeddingDB.deleteAll(ids);
+            onProgress(total, total);
+            updateLine("");
+            return false;
+        }
+
+        if (vectorizeOptions.mode === "embed") {
+            const tracker: BulkFailureTracker = { failures: 0, errors: [] };
+
+            if (!request.embedding?.baseUrl || !isEmbeddingConfigured(request.embedding)) {
+                throw new Error("Embedding settings are incomplete");
+            }
+
+            const batchSize = Math.max(1, request.embedding.apiBatch || 1);
+            const mediaMarker = await fetchMediaMarkerForConfig(request.embedding);
+
+            console.log(`Bulk vectorize: ${batchSize} images per API request`);
+            for (let i = 0; i < ids.length; i += batchSize) {
+                const chunk = ids.slice(i, i + batchSize);
+                const taskStart = Date.now();
+                const batchFailures = await vectorizeImageBatch(chunk, request.embedding, {
+                    force: vectorizeOptions.force,
+                    mediaMarker,
+                });
+                if (batchFailures.length) {
+                    const message = batchFailures[0]!.message;
+                    tracker.lastError = message;
+                    tracker.failures += batchFailures.length;
+                    for (const failure of batchFailures) {
+                        tracker.errors.push(`${failure.id}: ${message}`);
+                    }
+                    console.error(`Bulk vectorize failed (${batchFailures.length} images): ${message}`);
+                }
+                totalTaskDurationMs += Date.now() - taskStart;
+                completed += chunk.length;
+                onProgress(completed, total, bulkProgressStats(tracker, totalTaskDurationMs));
+                updateLine(`Bulk vectorize: completed ${completed}/${total}`);
+
+                if (shouldAbortBulkRun(tracker.failures, total)) {
+                    updateLine("");
+                    throwBulkAborted(tracker);
+                }
+            }
+
+            updateLine("");
+            if (tracker.failures) {
+                throw new Error(
+                    `Bulk vectorize finished with ${tracker.failures}/${total} failures:\n${tracker.errors.slice(0, 5).join("\n")}`,
+                );
+            }
+            return false;
+        }
+
+        const _exhaustive: never = vectorizeOptions.mode;
+        throw new Error(`Unknown vectorize mode: ${_exhaustive}`);
     }
 
     throw new Error("Unknown bulk action");

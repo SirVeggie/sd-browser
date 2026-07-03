@@ -53,6 +53,8 @@
         llmStore,
         type SystemInstruction,
     } from "$lib/stores/llmStore";
+    import { embeddingStore } from "$lib/stores/embeddingStore";
+    import { embeddingApiTypeOptions } from "$lib/types/embeddings";
     import { authLogout, authStore } from "$lib/stores/authStore";
     import { pullGlobalSettings, recalculateSimilarCache } from "$lib/requests/settingRequests";
     import { startExtradataRecalc, getOperations } from "$lib/requests/operationRequests";
@@ -77,6 +79,7 @@
     let flyoutHistoryLength = 5;
     let flyoutButtonPosition = $flyoutButtonTop ? "top" : "bottom";
     let llmOpen = false;
+    let embeddingOpen = false;
     let customFiltersOpen = false;
     let selectedInstructionId = "";
     let instructionModalOpen = false;
@@ -649,6 +652,71 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         </div>
     </div>
 
+    <div class="sgroup llm-settings">
+        <button
+            type="button"
+            class="llm-summary"
+            aria-expanded={embeddingOpen}
+            on:click={() => (embeddingOpen = !embeddingOpen)}
+        >
+            Embedding API settings
+            <span class="chevron" class:open={embeddingOpen} aria-hidden="true" />
+        </button>
+
+        <div class="wrapper" class:isOpen={embeddingOpen}>
+            <div class="inner llm-inner">
+                {#if $embeddingStore.apiType === "llama-cpp"}
+                    <p class="embedding-warning">
+                        Requires an embedding API with multimodal support (image + text), such as llama.cpp with a vision model.
+                    </p>
+                {:else}
+                    <p class="embedding-warning">
+                        Requires an sv-embed server with multimodal support (image + text).
+                    </p>
+                {/if}
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label for="embedding-api-type">
+                    API type:
+                    <Select
+                        id="embedding-api-type"
+                        bind:value={$embeddingStore.apiType}
+                        options={embeddingApiTypeOptions}
+                    />
+                </label>
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    Base URL
+                    <Input
+                        bind:value={$embeddingStore.baseUrl}
+                        placeholder={$embeddingStore.apiType === "sv-embed" ? "http://localhost:8000" : "http://localhost:8080"}
+                    />
+                </label>
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    API key (optional)
+                    <Input password bind:value={$embeddingStore.apiKey} />
+                </label>
+
+                {#if $embeddingStore.apiType === "llama-cpp"}
+                    <!-- svelte-ignore a11y-label-has-associated-control -->
+                    <label>
+                        Model ID
+                        <Input bind:value={$embeddingStore.modelId} />
+                    </label>
+                {/if}
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    Batch size
+                    <NumInput bind:value={$embeddingStore.apiBatch} />
+                </label>
+            </div>
+        </div>
+    </div>
+
     {#if instructionModalOpen}
         <SystemInstructionModal
             title={editingInstruction ? "Modify instruction" : "Add instruction"}
@@ -988,6 +1056,20 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             display: flex;
             flex-direction: column;
             gap: var(--gap);
+        }
+
+        .hint-inline {
+            margin: 0;
+            font-size: 0.85em;
+            color: #aaa;
+            line-height: 1.4;
+        }
+
+        .embedding-warning {
+            margin: 0;
+            font-size: 0.9em;
+            color: #e8a060;
+            line-height: 1.4;
         }
 
         .llm-subsection {

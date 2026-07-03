@@ -2,6 +2,7 @@ import { invalidAuth } from '$lib/server/auth.js';
 import { error, success } from '$lib/server/responses.js';
 import {
     getSession,
+    getSessionImgSearchError,
     sliceImages,
     sliceSession,
     trackSessionViewIds,
@@ -22,14 +23,19 @@ export async function POST(e) {
 
     let images: ServerImage[] = [];
     let amount = 0;
+    let imgSearchError: string | undefined;
 
     try {
         if (query.sessionId && validateSession(query.sessionId, query)) {
+            const session = getSession(query.sessionId);
             images = sliceSession(query.sessionId, query.latestId, query.oldestId);
-            amount = getSession(query.sessionId)!.orderedIds.length;
+            amount = session!.orderedIds.length;
+            imgSearchError = getSessionImgSearchError(session);
             trackSessionViewIds(query.sessionId, images.map((image) => image.id));
         } else {
-            images = runSearch(query);
+            const searchResult = await runSearch(query);
+            images = searchResult.images;
+            imgSearchError = searchResult.imgSearchError;
             amount = images.length;
             images = sliceImages(images, query.sorting, query.latestId || undefined, query.oldestId || undefined);
         }
@@ -49,5 +55,6 @@ export async function POST(e) {
         images: mapServerImageToClient(images),
         amount,
         timestamp: Date.now(),
+        imgSearchError,
     } satisfies ImageResponse);
 }

@@ -87,6 +87,7 @@
     let streamAbort: AbortController | undefined;
     let updateSessionId = 0;
     let searchSessionId = "";
+    let lastImgSearchNotifyKey = "";
     let live = false;
     let sorting: SortingMethod = "date";
     let triggerOverride = false;
@@ -595,6 +596,17 @@
         connectImageStream(sessionId);
     }
 
+    function maybeNotifyImgSearchError(error: string | undefined, search: string) {
+        if (!error) {
+            lastImgSearchNotifyKey = "";
+            return;
+        }
+        const key = `${search}\0${error}`;
+        if (key === lastImgSearchNotifyKey) return;
+        lastImgSearchNotifyKey = key;
+        notify(error, "warn");
+    }
+
     function connectImageStream(expectedSessionId: number) {
         const abort = new AbortController();
         streamAbort = abort;
@@ -632,6 +644,7 @@
                     if (expectedSessionId !== updateSessionId) return;
                     imageAmountStore.set(ready.amount);
                     searchCountComplete = true;
+                    maybeNotifyImgSearchError(ready.imgSearchError, search.search);
                     if (!hasReceivedImages && ready.amount === 0) {
                         applySearchViewReset();
                         imageStore.set([]);

@@ -1,5 +1,6 @@
 import { getDeletedImageIds, getFreshImageTimestamp, getFreshImages, getImage } from './dataIndex';
-import { applyResultSkip, applyResultTake, buildMatcher, explorationFromRequest, searchImages } from './searching';
+import { applyResultSkip, applyResultTake, buildMatcher, explorationFromRequest, resolveImgSearchContext, searchImages } from './searching';
+import type { ImgSearchContext } from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';
 import type { UpdateRequest, UpdateResponse } from '$lib/types/requests';
@@ -11,13 +12,14 @@ function getMetadataMembershipDeletions(
     query: UpdateRequest,
     currentIds: readonly string[],
     sinceTimestamp: number,
+    imgSearchContext?: ImgSearchContext,
 ): string[] {
     const freshImages = getFreshImages(sinceTimestamp);
     if (!freshImages.length) return [];
 
     const freshIdSet = new Set(freshImages.map((image) => image.id));
     const exploration = explorationFromRequest(query);
-    const matcher = buildMatcher(query.search, query.matching, exploration);
+    const matcher = buildMatcher(query.search, query.matching, exploration, imgSearchContext);
     const filter = buildMatcher(query.filters.join(' AND '), 'regex');
 
     const deletions: string[] = [];
@@ -31,15 +33,18 @@ function getMetadataMembershipDeletions(
     return deletions;
 }
 
-export function computeImageUpdate(
+export async function computeImageUpdate(
     query: UpdateRequest,
     session?: SearchSession,
-): ImageUpdateResult {
+): Promise<ImageUpdateResult> {
     let images: ServerImage[] = [];
     let resultIds: Set<string>;
+    let imgSearchContext: ImgSearchContext | undefined;
 
     try {
         const exploration = explorationFromRequest(query);
+        imgSearchContext = session?.imgSearchContext
+            ?? await resolveImgSearchContext(query.search);
 
         if (session) {
             resultIds = new Set(session.orderedIds);
@@ -50,6 +55,7 @@ export function computeImageUpdate(
                 query.matching,
                 exploration,
                 { sorting: query.sorting, skipResults: false, takeResults: false },
+                imgSearchContext,
             );
             let limited = applyResultSkip(currentResult, query.search, query.sorting);
             limited = applyResultTake(limited, query.search, query.sorting);
@@ -62,6 +68,7 @@ export function computeImageUpdate(
             query.matching,
             exploration,
             { timestamp: query.timestamp, sorting: query.sorting, skipResults: false, takeResults: false },
+            imgSearchContext,
         );
         images = applyResultSkip(images, query.search, query.sorting);
         images = applyResultTake(images, query.search, query.sorting);
@@ -79,6 +86,7 @@ export function computeImageUpdate(
         query,
         query.currentIds,
         query.timestamp,
+        imgSearchContext,
     );
     const deletions = [...new Set([
         ...getDeletedImageIds(query.timestamp),
