@@ -126,8 +126,8 @@ Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part 
 
 `DATE`: Uses special date syntax to restrict search to some time frame (examples above)
 
-`SKIP`: Skips the first N results after sorting. Use `NOT` to exclude matching prompts instead.  
-Example: `landscape AND SKIP 20` or `landscape AND NOT blurry`
+`SKIP`: Skips the first N results after sorting.  
+Example: `landscape AND SKIP 20`
 
 `TAKE`: Limits results to the first N matching images after sorting (and after any numeric SKIP).  
 Example: `landscape AND TAKE 20` or `landscape AND SKIP 10 AND TAKE 5`
