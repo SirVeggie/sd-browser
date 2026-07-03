@@ -95,6 +95,8 @@ export class EmbeddingDB {
     private static stmtSetImage: Statement<unknown[], unknown> | undefined;
     private static stmtDeleteImage: Statement<unknown[], unknown> | undefined;
     private static stmtFindSimilar: Statement<unknown[], unknown> | undefined;
+    private static stmtFindSimilarIn: Statement<unknown[], unknown> | undefined;
+    private static stmtFindSimilarNotIn: Statement<unknown[], unknown> | undefined;
     private static stmtSelectAllIds: Statement<unknown[], unknown> | undefined;
     private static stmtCount: Statement<unknown[], unknown> | undefined;
 
@@ -130,6 +132,8 @@ export class EmbeddingDB {
             EmbeddingDB.stmtSetImage = undefined;
             EmbeddingDB.stmtDeleteImage = undefined;
             EmbeddingDB.stmtFindSimilar = undefined;
+            EmbeddingDB.stmtFindSimilarIn = undefined;
+            EmbeddingDB.stmtFindSimilarNotIn = undefined;
             EmbeddingDB.stmtSelectAllIds = undefined;
             EmbeddingDB.stmtCount = undefined;
             return;
@@ -150,6 +154,24 @@ export class EmbeddingDB {
             WHERE embedding MATCH ?
               AND k = ?
               AND distance <= ?
+            ORDER BY distance
+        `);
+        EmbeddingDB.stmtFindSimilarIn = EmbeddingDB.db.prepare(`
+            SELECT id, (1.0 - distance) AS similarity
+            FROM ${VEC_TABLE}
+            WHERE embedding MATCH ?
+              AND k = ?
+              AND distance <= ?
+              AND id IN (SELECT value FROM json_each(?))
+            ORDER BY distance
+        `);
+        EmbeddingDB.stmtFindSimilarNotIn = EmbeddingDB.db.prepare(`
+            SELECT id, (1.0 - distance) AS similarity
+            FROM ${VEC_TABLE}
+            WHERE embedding MATCH ?
+              AND k = ?
+              AND distance <= ?
+              AND id NOT IN (SELECT value FROM json_each(?))
             ORDER BY distance
         `);
         EmbeddingDB.stmtSelectAllIds = EmbeddingDB.db.prepare(`SELECT id FROM ${VEC_TABLE}`);
@@ -196,6 +218,8 @@ export class EmbeddingDB {
         EmbeddingDB.stmtSetImage = undefined;
         EmbeddingDB.stmtDeleteImage = undefined;
         EmbeddingDB.stmtFindSimilar = undefined;
+        EmbeddingDB.stmtFindSimilarIn = undefined;
+        EmbeddingDB.stmtFindSimilarNotIn = undefined;
         EmbeddingDB.stmtSelectAllIds = undefined;
         EmbeddingDB.stmtCount = undefined;
         EmbeddingDB.db.close();
@@ -270,7 +294,12 @@ export class EmbeddingDB {
         EmbeddingDB.prepareStatements();
     }
 
-    static findSimilarImage(query: Float32Array, threshold: number, k?: number): Map<string, number> {
+    static findSimilarImage(
+        query: Float32Array,
+        threshold: number,
+        k?: number,
+        candidateIds?: Set<string>,
+    ): Map<string, number> {
         EmbeddingDB.setup();
         if (!EmbeddingDB.stmtFindSimilar)
             return new Map();
@@ -280,13 +309,54 @@ export class EmbeddingDB {
         const maxDistance = k !== undefined ? 1 : (1 - threshold);
         const queryBuffer = embeddingToBuffer(query);
         const count = (EmbeddingDB.stmtCount!.get() as { count: number }).count;
+        if (!count)
+            return new Map();
+
+        if (candidateIds !== undefined) {
+            if (!candidateIds.size)
+                return new Map();
+            if (candidateIds.size >= count)
+                candidateIds = undefined;
+        }
+
         const requested = k !== undefined ? Math.max(1, k) : Math.max(1, count);
         const limit = Math.min(requested, VEC0_KNN_MAX);
-        const rows = EmbeddingDB.stmtFindSimilar.all(
-            queryBuffer,
-            limit,
-            maxDistance,
-        ) as { id: string; similarity: number }[];
+
+        let rows: { id: string; similarity: number }[];
+        if (candidateIds === undefined) {
+            rows = EmbeddingDB.stmtFindSimilar.all(
+                queryBuffer,
+                limit,
+                maxDistance,
+            ) as { id: string; similarity: number }[];
+        } else {
+            const useNotIn = candidateIds.size > count / 2;
+            const filterIdsJson = useNotIn
+                ? idsToJsonFilter(EmbeddingDB.getAllImageIds(), candidateIds)
+                : idsToJsonFilter(candidateIds);
+            const stmt = useNotIn ? EmbeddingDB.stmtFindSimilarNotIn : EmbeddingDB.stmtFindSimilarIn;
+            if (!stmt)
+                return new Map();
+            rows = stmt.all(
+                queryBuffer,
+                limit,
+                maxDistance,
+                filterIdsJson,
+            ) as { id: string; similarity: number }[];
+        }
+
         return new Map(rows.map((row) => [row.id, row.similarity]));
     }
+}
+
+function idsToJsonFilter(ids: Iterable<string>, exclude?: Set<string>): string {
+    if (exclude) {
+        const filtered: string[] = [];
+        for (const id of ids) {
+            if (!exclude.has(id))
+                filtered.push(id);
+        }
+        return JSON.stringify(filtered);
+    }
+    return JSON.stringify([...ids]);
 }

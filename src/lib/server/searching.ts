@@ -116,26 +116,27 @@ function mergeImgMatchScores(
     return merged;
 }
 
-function sortImagesByMatchScores(images: ServerImage[], scores: Map<string, number>): ServerImage[] {
-    return [...images].sort((a, b) => {
-        const scoreA = scores.get(a.id) ?? -Infinity;
-        const scoreB = scores.get(b.id) ?? -Infinity;
-        return scoreB - scoreA;
-    });
+function removeImgMatchScores(
+    existing: Map<string, number> | undefined,
+    excludedIds: Set<string>,
+): Map<string, number> | undefined {
+    if (!existing)
+        return undefined;
+
+    const remaining = new Map(existing);
+    for (const id of excludedIds) {
+        remaining.delete(id);
+    }
+    return remaining;
 }
 
-function orderPoolIdsByMatchScores(pool: Set<string>, scores: Map<string, number>): string[] {
-    return [...pool].sort((a, b) => {
-        const scoreA = scores.get(a);
-        const scoreB = scores.get(b);
-        if (scoreA !== undefined && scoreB !== undefined)
-            return scoreB - scoreA;
-        if (scoreA !== undefined)
-            return -1;
-        if (scoreB !== undefined)
-            return 1;
-        return 0;
-    });
+function subtractIds(ids: Set<string>, excludedIds: Set<string>): Set<string> {
+    const remaining = new Set<string>();
+    for (const id of ids) {
+        if (!excludedIds.has(id))
+            remaining.add(id);
+    }
+    return remaining;
 }
 
 function parseImgQueryNumber(value: string): { threshold?: number; k?: number } | undefined {
@@ -211,6 +212,92 @@ function isImgSearchPart(part: string): boolean {
     return imgRegex.test(part) || imgOnlyRegex.test(part);
 }
 
+function isStructuralSearchPart(part: string): boolean {
+    return skipRegex.test(part) || takeRegex.test(part);
+}
+
+function buildNonImgSearchQuery(search: string): string {
+    return splitSearchParts(search)
+        .filter((part) => !isImgSearchPart(part) && !isStructuralSearchPart(part))
+        .join(' AND ');
+}
+
+function isTextImgSearchPart(part: string): boolean {
+    const parsed = parseImgSearchPart(part);
+    return !parsed.presenceOnly && Boolean(parsed.queryText);
+}
+
+function hasTextImgSearch(search: string): boolean {
+    return splitSearchParts(search).some((part) => isImgSearchPart(part) && isTextImgSearchPart(part));
+}
+
+function hasPositiveImgTextSearch(search: string): boolean {
+    return splitSearchParts(search).some((part) => {
+        if (!isImgSearchPart(part) || notRegex.test(part))
+            return false;
+        return isTextImgSearchPart(part);
+    });
+}
+
+function getResultWindow(search: string): { skip: number; take: number } {
+    return {
+        skip: getResultSkipCount(search),
+        take: getResultTakeCount(search),
+    };
+}
+
+type SearchAbortOptions = {
+    isAborted?: () => boolean;
+    signal?: AbortSignal;
+};
+
+function throwIfSearchAborted(options: SearchAbortOptions): void {
+    if (options.isAborted?.() || options.signal?.aborted)
+        throw new SearchStreamAborted();
+}
+
+async function maybeYieldAndThrowIfAborted(
+    index: number,
+    options: SearchAbortOptions,
+): Promise<void> {
+    if (index % 500 !== 0)
+        return;
+    await yieldToEventLoop();
+    throwIfSearchAborted(options);
+}
+
+async function buildEmbeddingSearchCandidates(
+    baseCandidateIds: Set<string>,
+    priorImgMatchIds?: Set<string>,
+    options: SearchAbortOptions = {},
+): Promise<Set<string>> {
+    throwIfSearchAborted(options);
+    const embeddedIds = EmbeddingDB.getAllImageIds();
+    const candidates = new Set<string>();
+    let index = 0;
+    for (const id of baseCandidateIds) {
+        await maybeYieldAndThrowIfAborted(++index, options);
+        if (embeddedIds.has(id))
+            candidates.add(id);
+    }
+
+    if (!priorImgMatchIds)
+        return candidates;
+
+    const narrowed = new Set<string>();
+    index = 0;
+    for (const id of candidates) {
+        await maybeYieldAndThrowIfAborted(++index, options);
+        if (priorImgMatchIds.has(id))
+            narrowed.add(id);
+    }
+    return narrowed;
+}
+
+export type ImgSearchResolveOptions = {
+    baseCandidateIds?: Set<string>;
+} & SearchAbortOptions;
+
 function parseImgSearchPart(part: string): {
     presenceOnly: boolean;
     queryText: string;
@@ -240,20 +327,24 @@ function parseImgSearchPart(part: string): {
 
 export async function resolveImgSearchContext(
     query: string,
+    options: ImgSearchResolveOptions,
 ): Promise<ImgSearchContext | undefined> {
     const parts = splitSearchParts(query);
     const context: ImgSearchContext = { parts: new Map() };
     let hasImgParts = false;
     let combinedMatchScores: Map<string, number> | undefined;
+    let refinedCandidateIds: Set<string> | undefined;
     let error: string | undefined;
 
     for (let index = 0; index < parts.length; index++) {
+        throwIfSearchAborted(options);
         const part = parts[index];
         if (!isImgSearchPart(part))
             continue;
 
         hasImgParts = true;
 
+        const isNegatedImgPart = Boolean(part.match(notRegex));
         const { presenceOnly, queryText, threshold, k, disableTemplate } = parseImgSearchPart(part);
         if (presenceOnly) {
             context.parts.set(index, { presence: true });
@@ -267,20 +358,58 @@ export async function resolveImgSearchContext(
         }
 
         try {
+            const currentCandidateIds = refinedCandidateIds
+                ?? options.baseCandidateIds
+                ?? EmbeddingDB.getAllImageIds();
+            const candidateIds = await buildEmbeddingSearchCandidates(
+                currentCandidateIds,
+                undefined,
+                options,
+            );
+            if (!candidateIds.size) {
+                context.parts.set(index, {
+                    presence: false,
+                    matchIds: new Set(),
+                });
+                refinedCandidateIds = candidateIds;
+                if (!isNegatedImgPart)
+                    combinedMatchScores = mergeImgMatchScores(combinedMatchScores, new Map());
+                continue;
+            }
+
             const settings = getServerEmbeddingSettings();
             const embedText = formatEmbeddingSearchQuery(
                 queryText,
                 disableTemplate ? '' : settings.searchTemplate,
             );
-            const queryEmbedding = await embedQuery(settings, embedText);
+            throwIfSearchAborted(options);
+            const queryEmbedding = await embedQuery(settings, embedText, { signal: options.signal });
+            throwIfSearchAborted(options);
             const effectiveThreshold = threshold ?? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
-            const matchScores = EmbeddingDB.findSimilarImage(queryEmbedding, effectiveThreshold, k);
-            combinedMatchScores = mergeImgMatchScores(combinedMatchScores, matchScores);
+            const matchScores = EmbeddingDB.findSimilarImage(
+                queryEmbedding,
+                effectiveThreshold,
+                k,
+                candidateIds,
+            );
+            throwIfSearchAborted(options);
+            const matchIds = new Set(matchScores.keys());
+            refinedCandidateIds = isNegatedImgPart
+                ? subtractIds(candidateIds, matchIds)
+                : matchIds;
+            if (!isNegatedImgPart)
+                combinedMatchScores = mergeImgMatchScores(combinedMatchScores, matchScores);
+            else
+                combinedMatchScores = removeImgMatchScores(combinedMatchScores, matchIds);
             context.parts.set(index, {
                 presence: false,
-                matchIds: new Set(matchScores.keys()),
+                matchIds,
             });
         } catch (cause) {
+            if (options.isAborted?.() || options.signal?.aborted)
+                throw new SearchStreamAborted();
+            if (cause instanceof Error && cause.name === 'AbortError')
+                throw new SearchStreamAborted();
             console.error(formatImgSearchFailure(cause));
             context.parts.set(index, { presence: false, invalid: true });
             error ??= formatImgSearchFailure(cause);
@@ -312,40 +441,176 @@ export type SearchOptions = {
     takeResults?: boolean;
 };
 
-export function searchImages(
+type SearchPlanBase = {
+    search: string;
+    matching: SearchMode;
+    exploration: ExplorationSettings;
+    sorting: SortingMethod;
+    imageList: Map<string, ServerImage>;
+    images: ServerImage[];
+    pool: Set<string>;
+    matcher: (image: ServerImage) => boolean;
+    imgSearchContext?: ImgSearchContext;
+};
+
+export type SearchPlan = SearchPlanBase & (
+    | {
+        kind: 'stream-scan';
+        orderedIds: string[];
+    }
+    | {
+        kind: 'img-ranked';
+        orderedIds: string[];
+        imgSearchContext: ImgSearchContext;
+    }
+);
+
+async function buildBaseCandidateIds(
     search: string,
     matching: SearchMode,
     exploration: ExplorationSettings,
-    options: SearchOptions = {},
+    imageList: Map<string, ServerImage>,
+    pool: Set<string>,
+    options: SearchAbortOptions = {},
+): Promise<Set<string>> {
+    const nonImgQuery = buildNonImgSearchQuery(search);
+    if (!nonImgQuery.trim())
+        return new Set(pool);
+
+    const matcher = buildMatcher(nonImgQuery, matching, exploration);
+    const candidateIds = new Set<string>();
+    let index = 0;
+    for (const id of pool) {
+        await maybeYieldAndThrowIfAborted(++index, options);
+        const image = imageList.get(id);
+        if (image && matcher(image))
+            candidateIds.add(id);
+    }
+    return candidateIds;
+}
+
+function orderIdsByMatchScores(scores: Map<string, number>): string[] {
+    return [...scores.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([id]) => id);
+}
+
+export async function buildSearchPlan(
+    search: string,
+    matching: SearchMode,
+    exploration: ExplorationSettings,
+    sorting: SortingMethod,
     imgSearchContext?: ImgSearchContext,
-) {
+    options: SearchAbortOptions = {},
+): Promise<SearchPlan> {
     if (matching === 'regex' && search && !validRegex(search))
         throw new Error('Invalid regex');
 
-    const matcher = buildMatcher(search, matching, exploration, imgSearchContext);
+    throwIfSearchAborted(options);
     const imageList = getImageList();
     const images = [...imageList.values()];
     const pool = getExplorationPool(exploration, images);
-    let list = filterPoolImages(pool, matcher, options.timestamp);
+    throwIfSearchAborted(options);
 
-    const imgSortScores = imgSearchContext?.matchScores;
-    const sortingForPagination = imgSortScores?.size ? undefined : options.sorting;
-
-    if (imgSortScores?.size) {
-        list = sortImagesByMatchScores(list, imgSortScores);
-    } else {
-        if (options.sorting === 'date')
-            list = applyLatestImageException(list, images, pool, matcher, options.timestamp);
-
-        if (options.sorting)
-            list = sortImages(list, options.sorting);
+    if (hasPositiveImgTextSearch(search)) {
+        const baseCandidateIds = await buildBaseCandidateIds(
+            search,
+            matching,
+            exploration,
+            imageList,
+            pool,
+            options,
+        );
+        throwIfSearchAborted(options);
+        const resolvedImgSearchContext = imgSearchContext
+            ?? await resolveImgSearchContext(search, { baseCandidateIds, ...options });
+        throwIfSearchAborted(options);
+        const matcher = buildMatcher(search, matching, exploration, resolvedImgSearchContext);
+        return {
+            kind: 'img-ranked',
+            search,
+            matching,
+            exploration,
+            sorting,
+            imageList,
+            images,
+            pool,
+            matcher,
+            imgSearchContext: resolvedImgSearchContext ?? { parts: new Map() },
+            orderedIds: resolvedImgSearchContext?.matchScores
+                ? orderIdsByMatchScores(resolvedImgSearchContext.matchScores)
+                : [],
+        };
     }
 
-    if (options.skipResults !== false)
-        list = applyResultSkip(list, search, sortingForPagination);
+    const baseCandidateIds = hasTextImgSearch(search)
+        ? await buildBaseCandidateIds(
+            search,
+            matching,
+            exploration,
+            imageList,
+            pool,
+            options,
+        )
+        : pool;
+    throwIfSearchAborted(options);
+    const resolvedImgSearchContext = imgSearchContext
+        ?? await resolveImgSearchContext(search, { baseCandidateIds, ...options });
+    const matcher = buildMatcher(search, matching, exploration, resolvedImgSearchContext);
+    return {
+        kind: 'stream-scan',
+        search,
+        matching,
+        exploration,
+        sorting,
+        imageList,
+        images,
+        pool,
+        matcher,
+        imgSearchContext: resolvedImgSearchContext,
+        orderedIds: orderPoolIds(pool, sorting),
+    };
+}
 
-    if (options.takeResults !== false)
-        list = applyResultTake(list, search, sortingForPagination);
+export function collectSearchPlanImages(
+    plan: SearchPlan,
+    options: SearchOptions = {},
+): ServerImage[] {
+    if (plan.matching === 'regex' && plan.search && !validRegex(plan.search))
+        throw new Error('Invalid regex');
+
+    const freshIds = options.timestamp
+        ? new Set(getFreshImages(options.timestamp).map((image) => image.id))
+        : undefined;
+    const list: ServerImage[] = [];
+
+    for (const id of plan.orderedIds) {
+        if (freshIds && !freshIds.has(id))
+            continue;
+        const image = plan.imageList.get(id);
+        if (image && plan.matcher(image))
+            list.push(image);
+    }
+
+    if (plan.kind === 'stream-scan' && plan.sorting === 'date') {
+        const withException = applyLatestImageException(
+            list,
+            plan.images,
+            plan.pool,
+            plan.matcher,
+            options.timestamp,
+        );
+        list.splice(0, list.length, ...withException);
+    }
+
+    if (options.skipResults !== false || options.takeResults !== false) {
+        const skipped = options.skipResults !== false
+            ? applyResultSkip(list, plan.search)
+            : list;
+        return options.takeResults !== false
+            ? applyResultTake(skipped, plan.search)
+            : skipped;
+    }
 
     return list;
 }
@@ -353,6 +618,7 @@ export function searchImages(
 export type SearchImagesResult = {
     images: ServerImage[];
     imgSearchError?: string;
+    imgSearchContext?: ImgSearchContext;
 };
 
 export async function searchImagesAsync(
@@ -361,10 +627,11 @@ export async function searchImagesAsync(
     exploration: ExplorationSettings,
     options: SearchOptions = {},
 ): Promise<SearchImagesResult> {
-    const imgSearchContext = await resolveImgSearchContext(search);
+    const plan = await buildSearchPlan(search, matching, exploration, options.sorting ?? 'date');
     return {
-        images: searchImages(search, matching, exploration, options, imgSearchContext),
-        imgSearchError: imgSearchContext?.error,
+        images: collectSearchPlanImages(plan, options),
+        imgSearchError: plan.imgSearchContext?.error,
+        imgSearchContext: plan.imgSearchContext,
     };
 }
 
@@ -380,6 +647,7 @@ export type SearchStreamOptions = {
     /** Max images per subsequent SSE chunk (default 500). */
     maxChunkImages?: number;
     isAborted?: () => boolean;
+    signal?: AbortSignal;
 };
 
 export class SearchStreamAborted extends Error {
@@ -389,13 +657,10 @@ export class SearchStreamAborted extends Error {
     }
 }
 
-function throwIfSearchAborted(options: SearchStreamOptions): void {
-    if (options.isAborted?.()) throw new SearchStreamAborted();
-}
-
 export type SearchStreamResult = {
     orderedIds: string[];
     amount: number;
+    imgSearchContext?: ImgSearchContext;
 };
 
 export async function searchImagesStreaming(
@@ -418,29 +683,11 @@ export async function searchImagesStreaming(
     await yieldToEventLoop();
     throwIfSearchAborted(options);
 
-    const resolvedImgSearchContext = imgSearchContext ?? await resolveImgSearchContext(search);
+    const plan = await buildSearchPlan(search, matching, exploration, sorting, imgSearchContext, options);
     await yieldToEventLoop();
     throwIfSearchAborted(options);
 
-    const matcher = buildMatcher(search, matching, exploration, resolvedImgSearchContext);
-    const imageList = getImageList();
-    const images = [...imageList.values()];
-    await yieldToEventLoop();
-    throwIfSearchAborted(options);
-
-    const pool = getExplorationPool(exploration, images);
-    await yieldToEventLoop();
-    throwIfSearchAborted(options);
-
-    const imgSortScores = resolvedImgSearchContext?.matchScores;
-    const orderedPoolIds = imgSortScores?.size
-        ? orderPoolIdsByMatchScores(pool, imgSortScores)
-        : orderPoolIds(pool, sorting);
-    await yieldToEventLoop();
-    throwIfSearchAborted(options);
-
-    const skipThreshold = getResultSkipCount(search);
-    const takeLimit = getResultTakeCount(search);
+    const { skip: skipThreshold, take: takeLimit } = getResultWindow(search);
 
     const orderedIds: string[] = [];
     let batch: ServerImage[] = [];
@@ -496,15 +743,15 @@ export async function searchImagesStreaming(
         }
     };
 
-    for (const id of orderedPoolIds) {
+    for (const id of plan.orderedIds) {
         if (++scanned % yieldEvery === 0) {
             await yieldToEventLoop();
             if (options.isAborted?.()) break;
             await maybeEmitByTime();
         }
 
-        const value = imageList.get(id);
-        if (!value || !matcher(value)) continue;
+        const value = plan.imageList.get(id);
+        if (!value || !plan.matcher(value)) continue;
 
         if (skipped < skipThreshold) {
             skipped++;
@@ -533,19 +780,19 @@ export async function searchImagesStreaming(
     }
 
     let finalImages = orderedIds
-        .map((id) => imageList.get(id))
+        .map((id) => plan.imageList.get(id))
         .filter((image): image is ServerImage => !!image);
 
-    if (sorting === 'date' && !imgSortScores?.size) {
+    if (plan.kind === 'stream-scan' && sorting === 'date') {
         if (options.isAborted?.()) {
             return { orderedIds: [], amount: 0 };
         }
 
         const withException = applyLatestImageException(
             finalImages,
-            images,
-            pool,
-            matcher,
+            plan.images,
+            plan.pool,
+            plan.matcher,
         );
         const existingIds = new Set(finalImages.map((image) => image.id));
         const added = withException.filter((image) => !existingIds.has(image.id));
@@ -561,6 +808,7 @@ export async function searchImagesStreaming(
     return {
         orderedIds: finalImages.map((image) => image.id),
         amount: finalImages.length,
+        imgSearchContext: plan.imgSearchContext,
     };
 }
 
@@ -576,31 +824,6 @@ function orderPoolIds(pool: Set<string>, sorting: SortingMethod): string[] {
         .filter((image): image is ServerImage => !!image);
 
     return sortImages(poolImages, sorting).map((image) => image.id);
-}
-
-function filterPoolImages(
-    pool: Set<string>,
-    matcher: (image: ServerImage) => boolean,
-    timestamp?: number,
-): ServerImage[] {
-    const imageList = getImageList();
-    const list: ServerImage[] = [];
-
-    if (timestamp) {
-        for (const value of getFreshImages(timestamp)) {
-            if (pool.has(value.id) && matcher(value))
-                list.push(value);
-        }
-        return list;
-    }
-
-    for (const id of pool) {
-        const value = imageList.get(id);
-        if (value && matcher(value))
-            list.push(value);
-    }
-
-    return list;
 }
 
 function applyLatestImageException(
@@ -793,7 +1016,6 @@ export function buildMatcher(
 export function applyResultSkip(
     images: ServerImage[],
     search: string,
-    sorting?: SortingMethod,
 ): ServerImage[] {
     const skipCount = getResultSkipCount(search);
     if (!skipCount) return images;
@@ -803,7 +1025,6 @@ export function applyResultSkip(
 export function applyResultTake(
     images: ServerImage[],
     search: string,
-    sorting?: SortingMethod,
 ): ServerImage[] {
     const takeCount = getResultTakeCount(search);
     if (!takeCount) return images;

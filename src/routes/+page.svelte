@@ -9,10 +9,10 @@
     import Select from "$lib/items/Select.svelte";
     import { imageAmountStore, imageStore } from "$lib/stores/imageStore";
     import {
+        fetchImagePage,
         generateCompressedImages,
         getImageInfo,
         imageAction,
-        searchImages,
         subscribeImageStream,
     } from "$lib/requests/imageRequests";
     import { expandClientImages, formatSearchDateMinute } from "$lib/tools/misc";
@@ -80,9 +80,9 @@
     let currentAmount = initialAmount;
     let currentImage: ClientImage | undefined = undefined;
     let inputElement: HTMLInputElement;
-    let inputTimer: any;
+    let inputTimer: ReturnType<typeof setTimeout> | undefined;
     let info: ImageInfo | undefined = undefined;
-    let slideTimer: any;
+    let slideTimer: ReturnType<typeof setInterval> | undefined;
     let slideDir: "left" | "right" = "right";
     let streamAbort: AbortController | undefined;
     let updateSessionId = 0;
@@ -90,8 +90,7 @@
     let lastImgSearchNotifyKey = "";
     let live = false;
     let sorting: SortingMethod = "date";
-    let triggerOverride = false;
-    let updateTime = 0;
+    let fetchingNextPage = false;
     let selecting = false;
     let bulkOpen = false;
     let bulkSearchParams: SearchParams = buildSearchParams();
@@ -390,7 +389,7 @@
             updateSessionId++;
             streamAbort?.abort();
             streamAbort = undefined;
-            clearInterval(slideTimer);
+            stopSlideshow(false);
             closeImage();
             window.removeEventListener("keydown", keylistener);
             window.removeEventListener("scroll", onScroll);
@@ -447,11 +446,7 @@
         currentImage = undefined;
         info = undefined;
         live = false;
-        if (slideTimer) {
-            clearInterval(slideTimer);
-            slideTimer = undefined;
-            notify("Slideshow stopped");
-        }
+        stopSlideshow();
     }
 
     function openLive() {
@@ -463,7 +458,7 @@
 
     function goLeft(mode?: ActionMode) {
         if (leftArrow && prevIndex < 0) {
-            if (!mode || typeof mode !== "string" || mode === "manual") {
+            if (mode !== "auto") {
                 openLive();
             } else {
                 return false;
@@ -584,7 +579,7 @@
         }, 100);
     }
 
-    function selectChange(_reset?: boolean) {
+    function selectChange() {
         reconnectSearch();
     }
 
@@ -592,6 +587,7 @@
         streamAbort?.abort();
         streamAbort = undefined;
         searchSessionId = "";
+        fetchingNextPage = false;
         const sessionId = ++updateSessionId;
         connectImageStream(sessionId);
     }
@@ -623,7 +619,6 @@
                     if (expectedSessionId !== updateSessionId) return;
                     searchSessionId = init.sessionId;
                     searchCountComplete = false;
-                    updateTime = init.timestamp;
                 },
                 onChunk: (chunk) => {
                     if (expectedSessionId !== updateSessionId) return;
@@ -664,44 +659,41 @@
     }
 
     async function fetchNext() {
-        const search = buildSearchParams();
         if ($imageStore.length === 0) return;
+        if (!searchSessionId) return;
+        if (fetchingNextPage) return;
+        const sessionId = searchSessionId;
         const lastImage = $imageStore[$imageStore.length - 1];
 
-        triggerOverride = true;
+        fetchingNextPage = true;
 
         try {
-            const images = await searchImages({
-                ...search,
-                sorting,
+            const images = await fetchImagePage({
                 latestId: "",
                 oldestId: lastImage.id,
-                sessionId: searchSessionId || undefined,
+                sessionId,
             });
+            
+            if (sessionId !== searchSessionId) return;
+            if (images.amount <= 0 || images.images.length === 0) return;
 
-            if (images.amount <= 0) return;
-            // TODO: is this check even useful?
-            if ($imageStore.some((x) => x.id === images.images[0].id)) {
-                console.log("Duplicate image found");
-                return;
-            }
-
-            const mapped = expandClientImages(images.images);
+            const existingIds = new Set($imageStore.map((image) => image.id));
+            const mapped = expandClientImages(
+                images.images.filter((image) => !existingIds.has(image.id)),
+            );
+            if (!mapped.length) return;
             imageStore.update((x) => x.concat(mapped));
             imageAmountStore.set(images.amount);
-        } catch (e: any) {
+        } catch (e) {
             console.error(e);
         } finally {
-            triggerOverride = false;
+            fetchingNextPage = false;
         }
     }
 
     function applyUpdate(res: UpdateResponse, expectedSessionId: number) {
         if (expectedSessionId !== updateSessionId) return;
-        if ($imageStore.length === 0) return;
         if (res.timestamp === -1) return;
-
-        updateTime = res.timestamp;
 
         if (!res.additions.length) {
             if (!res.deletions.length) return;
@@ -750,7 +742,7 @@
         requestAnimationFrame(() => maybeAutoLoadMore());
     }
 
-    function slideshowLoop(dir: string) {
+    function slideshowLoop(dir: "left" | "right") {
         if (dir === "right") {
             goRight();
         } else {
@@ -766,7 +758,7 @@
     function slideshowWait() {
         if (prevIndex >= 0) {
             clearInterval(slideTimer);
-            slideTimer = setInterval(slideshowLoop, slideshowInterval);
+            slideTimer = setInterval(() => slideshowLoop("left"), slideshowInterval);
             goLeft("auto");
         }
     }
@@ -787,6 +779,8 @@
     }
 
     function keylistener(e: KeyboardEvent) {
+        if (isTextInputActive()) return;
+
         if (e.key === "ArrowLeft") {
             goLeft();
         } else if (e.key === "ArrowRight") {
@@ -795,18 +789,21 @@
             if (!currentImage) return;
             e.preventDefault();
             if (slideTimer) {
-                clearInterval(slideTimer);
-                slideTimer = undefined;
-                notify("Slideshow stopped");
+                stopSlideshow();
             } else {
                 startSlideshow();
             }
         } else if (e.key === "f") {
-            const active = document.activeElement;
-            if (active?.tagName !== "INPUT") {
-                flyoutState.set(!$flyoutState);
-            }
+            flyoutState.set(!$flyoutState);
         }
+    }
+
+    function isTextInputActive() {
+        const active = document.activeElement;
+        return active instanceof HTMLInputElement
+            || active instanceof HTMLTextAreaElement
+            || active instanceof HTMLSelectElement
+            || (active instanceof HTMLElement && active.isContentEditable);
     }
 
     function handleEsc(e: KeyboardEvent) {
@@ -853,7 +850,7 @@
                     handler() {
                         explorationMode.set('none');
                         searchFilter.set(`SIMILAR ${id}`);
-                        selectChange(true);
+                        selectChange();
                     },
                 },
                 {
@@ -864,7 +861,7 @@
                         if (!imageInfo) return;
                         sorting = 'date';
                         searchFilter.set(`DT TO ${formatSearchDateMinute(imageInfo.modifiedDate)}`);
-                        selectChange(true);
+                        selectChange();
                     },
                 },
                 {
@@ -1110,7 +1107,7 @@
             prefix="Sorting"
             bind:value={sorting}
             options={sortingMethods}
-            on:change={() => selectChange(true)}
+            on:change={selectChange}
         />
 
         <Select
@@ -1118,10 +1115,10 @@
             prefix="Collapse"
             bind:value={$explorationMode}
             options={explorationModes}
-            on:change={() => selectChange(true)}
+            on:change={selectChange}
         />
 
-        <FilterMultiSelect onChange={() => selectChange(false)} />
+        <FilterMultiSelect onChange={selectChange} />
 
         {#if $showNsfwFilter}
             <label for="nsfw">
@@ -1130,7 +1127,7 @@
                     type="checkbox"
                     id="nsfw"
                     bind:checked={$nsfwMode}
-                    on:change={() => selectChange(false)}
+                    on:change={selectChange}
                 />
             </label>
         {/if}
@@ -1221,7 +1218,7 @@
 </div>
 
 <div class="loader">
-    {#if triggerOverride}
+    {#if fetchingNextPage}
         <div><p>loading...</p></div>
     {:else if paginated.length === $imageAmountStore}
         <div><p>You've reached the end.</p></div>

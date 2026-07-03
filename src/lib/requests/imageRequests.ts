@@ -4,7 +4,7 @@ import { doGet, doPost, doServerGet, doServerPost, type FetchType } from '../too
 import { page } from '$app/stores';
 import type {
     ActionRequest,
-    ImageRequest,
+    ImagePageRequest,
     ImageResponse,
     MultiActionRequest,
     StreamChunkResponse,
@@ -25,11 +25,11 @@ export type StreamHandlers = {
     onUpdate: (update: UpdateResponse) => void;
 };
 
-export async function searchImages(search: ImageRequest, fetch?: FetchType): Promise<ImageResponse> {
+export async function fetchImagePage(request: ImagePageRequest, fetch?: FetchType): Promise<ImageResponse> {
     let url = '/api/images';
     if (!fetch)
         url = get(page).url.origin + url;
-    const res = await (fetch ? doPost(url, fetch, search) : doServerPost(url, search));
+    const res = await (fetch ? doPost(url, fetch, request) : doServerPost(url, request));
 
     if ('error' in res) {
         if (res.error === 'Malformed search string') {

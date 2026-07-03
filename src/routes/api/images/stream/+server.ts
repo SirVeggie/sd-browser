@@ -2,7 +2,7 @@ import { invalidAuth } from '$lib/server/auth.js';
 import { subscribeImageChanges } from '$lib/server/imageChangeHub';
 import { computeImageUpdate, hasUpdateChanges } from '$lib/server/imageUpdates';
 import { error } from '$lib/server/responses';
-import { explorationFromRequest, resolveImgSearchContext, SearchStreamAborted, searchImagesStreaming } from '$lib/server/searching';
+import { explorationFromRequest, SearchStreamAborted, searchImagesStreaming } from '$lib/server/searching';
 import {
     appendSessionChunk,
     createSessionStub,
@@ -154,8 +154,6 @@ export async function POST(e) {
                     }
 
                     const exploration = explorationFromRequest(query);
-                    const imgSearchContext = await resolveImgSearchContext(query.search);
-                    setSessionImgSearchContext(sessionId!, imgSearchContext);
                     const streamOptions = {
                         yieldEvery: streamYieldEvery,
                         chunkIntervalMs: streamChunkIntervalMs,
@@ -163,6 +161,7 @@ export async function POST(e) {
                         firstChunkMinMs: streamChunkIntervalMs,
                         maxChunkImages: streamMaxChunkImages,
                         isAborted,
+                        signal: e.request.signal,
                     };
                     let streamedToClient = 0;
 
@@ -199,7 +198,6 @@ export async function POST(e) {
                         query.sorting,
                         onChunk,
                         streamOptions,
-                        imgSearchContext,
                     );
 
                     if (isAborted()) {
@@ -208,11 +206,12 @@ export async function POST(e) {
                     }
 
                     finalizeSession(sessionId, result.orderedIds);
+                    setSessionImgSearchContext(sessionId!, result.imgSearchContext);
 
                     const ready: StreamReadyResponse = {
                         type: 'ready',
                         amount: result.amount,
-                        imgSearchError: imgSearchContext?.error,
+                        imgSearchError: result.imgSearchContext?.error,
                     };
 
                     if (!safeEnqueue(controller, ready)) {

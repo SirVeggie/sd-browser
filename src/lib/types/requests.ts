@@ -40,28 +40,17 @@ export type OpenAction = {
     type: 'open';
 };
 
-export type ImageRequest = {
-    search: string;
+export type ImagePageRequest = {
+    sessionId: string;
     latestId: string;
     oldestId: string;
-    matching: SearchMode;
-    sorting: SortingMethod;
-    explorationMode: ExplorationMode;
-    sparseFrequency: number;
-    similarityAlgorithm: SimilarityAlgorithm;
-    similarityThreshold: number;
-    sessionId?: string;
 };
-export function isImageRequest(object: any): object is ImageRequest {
+export function isImagePageRequest(object: any): object is ImagePageRequest {
     return testType(object, [
-        'search', 'latestId', 'oldestId', 'sorting',
-        'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
-        (o) => isSortingMethod(o.sorting),
-        (o) => typeof o.explorationMode === 'string',
-        (o) => typeof o.sparseFrequency === 'number',
-        (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
-        (o) => typeof o.similarityThreshold === 'number',
-        (o) => o.sessionId === undefined || typeof o.sessionId === 'string',
+        'sessionId', 'latestId', 'oldestId',
+        (o) => typeof o.sessionId === 'string',
+        (o) => typeof o.latestId === 'string',
+        (o) => typeof o.oldestId === 'string',
     ]);
 }
 

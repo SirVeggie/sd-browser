@@ -1,11 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ServerImage } from '$lib/types/images';
 import type { SortingMethod } from '$lib/types/misc';
-import type { ImageRequest } from '$lib/types/requests';
+import type { StreamRequest } from '$lib/types/requests';
 import { getImage } from './dataIndex';
 import type { ImgSearchContext } from './searching';
-import { applyResultSkip, applyResultTake, explorationFromRequest, searchImagesAsync, sortImages, type SearchImagesResult } from './searching';
-import { mapServerImageToClient } from '$lib/tools/misc';
+import { sortImages } from './searching';
 
 export const imageLimit = 1000;
 
@@ -21,7 +20,7 @@ export type SearchSession = {
 };
 
 type SessionQuery = Pick<
-    ImageRequest,
+    StreamRequest,
     | 'search'
     | 'matching'
     | 'sorting'
@@ -52,19 +51,6 @@ function resolveImages(ids: string[]): ServerImage[] {
         if (image) images.push(image);
     }
     return images;
-}
-
-export async function runSearch(query: SessionQuery): Promise<SearchImagesResult> {
-    const exploration = explorationFromRequest(query);
-    const { images, imgSearchError } = await searchImagesAsync(
-        query.search,
-        query.matching,
-        exploration,
-        { sorting: query.sorting, skipResults: false, takeResults: false },
-    );
-    let result = applyResultSkip(images, query.search, query.sorting);
-    result = applyResultTake(result, query.search, query.sorting);
-    return { images: result, imgSearchError };
 }
 
 export function sliceImages(
@@ -129,35 +115,6 @@ export function finalizeSession(sessionId: string, orderedIds: string[]): void {
     session.complete = true;
 }
 
-export async function createSession(query: SessionQuery): Promise<{
-    sessionId: string;
-    images: ReturnType<typeof mapServerImageToClient>;
-    amount: number;
-    timestamp: number;
-}> {
-    const { images, imgSearchError } = await runSearch(query);
-    const sessionId = uuidv4();
-    const timestamp = Date.now();
-    const page = sliceImages(images, query.sorting);
-    const session: SearchSession = {
-        queryKey: buildQueryKey(query),
-        sorting: query.sorting,
-        orderedIds: images.map((image) => image.id),
-        viewIds: new Set(page.map((image) => image.id)),
-        timestamp,
-        complete: true,
-        imgSearchError,
-    };
-    sessions.set(sessionId, session);
-
-    return {
-        sessionId,
-        images: mapServerImageToClient(page),
-        amount: images.length,
-        timestamp,
-    };
-}
-
 export function getSession(sessionId: string): SearchSession | undefined {
     return sessions.get(sessionId);
 }
@@ -193,9 +150,7 @@ export function patchSession(
     if (additions.length) {
         const additionSet = new Set(additions);
         ids = ids.filter((id) => !additionSet.has(id));
-        const newImages = resolveImages(additions);
-        const merged = sortImages([...resolveImages(ids), ...newImages], session.sorting);
-        ids = merged.map((image) => image.id);
+        ids = sortSessionIds([...ids, ...additions], session);
     }
 
     session.orderedIds = ids;
@@ -206,6 +161,25 @@ export function patchSession(
     for (const id of additions) {
         session.viewIds.add(id);
     }
+}
+
+function sortSessionIds(ids: string[], session: SearchSession): string[] {
+    const imgSortScores = session.imgSearchContext?.matchScores;
+    if (imgSortScores?.size) {
+        return [...ids].sort((a, b) => {
+            const scoreA = imgSortScores.get(a);
+            const scoreB = imgSortScores.get(b);
+            if (scoreA !== undefined && scoreB !== undefined)
+                return scoreB - scoreA;
+            if (scoreA !== undefined)
+                return -1;
+            if (scoreB !== undefined)
+                return 1;
+            return 0;
+        });
+    }
+
+    return sortImages(resolveImages(ids), session.sorting).map((image) => image.id);
 }
 
 export function trackSessionViewIds(sessionId: string, ids: string[]): void {

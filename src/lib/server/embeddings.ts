@@ -245,6 +245,7 @@ async function postEmbeddingRequest<T>(
     url: string,
     body: Record<string, unknown>,
     parseResponse: (data: unknown) => T,
+    options: { signal?: AbortSignal } = {},
 ): Promise<T> {
     let response: Response;
     try {
@@ -252,9 +253,14 @@ async function postEmbeddingRequest<T>(
             method: "POST",
             headers: embeddingHeaders(config),
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(EMBEDDING_REQUEST_TIMEOUT_MS),
+            signal: options.signal
+                ? AbortSignal.any([AbortSignal.timeout(EMBEDDING_REQUEST_TIMEOUT_MS), options.signal])
+                : AbortSignal.timeout(EMBEDDING_REQUEST_TIMEOUT_MS),
         });
     } catch (cause) {
+        if (cause instanceof Error && cause.name === "AbortError") {
+            throw cause;
+        }
         if (cause instanceof Error && cause.name === "TimeoutError") {
             throw new Error(`Embedding request timed out after ${EMBEDDING_REQUEST_TIMEOUT_MS / 1000}s`);
         }
@@ -273,12 +279,17 @@ async function postEmbeddingRequest<T>(
     return parseResponse(data);
 }
 
-async function requestLlamaQueryEmbedding(config: EmbeddingApiConfig, text: string): Promise<Float32Array> {
+async function requestLlamaQueryEmbedding(
+    config: EmbeddingApiConfig,
+    text: string,
+    options: { signal?: AbortSignal } = {},
+): Promise<Float32Array> {
     return postEmbeddingRequest(
         config,
         resolveLlamaEmbeddingUrl(config),
         buildLlamaEmbeddingRequestBody(config, [{ prompt_string: text }]),
         parseLlamaEmbeddingResponse,
+        options,
     );
 }
 
@@ -319,7 +330,11 @@ async function requestLlamaImageEmbedding(
     return embedding;
 }
 
-async function requestSvEmbedBatch(config: EmbeddingApiConfig, inputs: SvEmbedInput[]): Promise<Float32Array[]> {
+async function requestSvEmbedBatch(
+    config: EmbeddingApiConfig,
+    inputs: SvEmbedInput[],
+    options: { signal?: AbortSignal } = {},
+): Promise<Float32Array[]> {
     if (inputs.length === 0) {
         return [];
     }
@@ -329,11 +344,16 @@ async function requestSvEmbedBatch(config: EmbeddingApiConfig, inputs: SvEmbedIn
         resolveSvEmbedUrl(config),
         buildSvEmbedRequestBody(inputs),
         (data) => parseSvEmbedBatchResponse(data, inputs.length),
+        options,
     );
 }
 
-async function requestSvEmbed(config: EmbeddingApiConfig, inputs: SvEmbedInput[]): Promise<Float32Array> {
-    const [embedding] = await requestSvEmbedBatch(config, inputs);
+async function requestSvEmbed(
+    config: EmbeddingApiConfig,
+    inputs: SvEmbedInput[],
+    options: { signal?: AbortSignal } = {},
+): Promise<Float32Array> {
+    const [embedding] = await requestSvEmbedBatch(config, inputs, options);
     return embedding;
 }
 
@@ -349,13 +369,14 @@ export async function fetchMediaMarkerForConfig(config: EmbeddingRequestConfig):
 export async function embedQuery(
     config: EmbeddingRequestConfig,
     text: string,
+    options: { signal?: AbortSignal } = {},
 ): Promise<Float32Array> {
     const api = toApiConfig(config);
     switch (api.apiType) {
         case "llama-cpp":
-            return requestLlamaQueryEmbedding(api, text);
+            return requestLlamaQueryEmbedding(api, text, options);
         case "sv-embed":
-            return requestSvEmbed(api, [{ type: "text", text }]);
+            return requestSvEmbed(api, [{ type: "text", text }], options);
         default: {
             const _exhaustive: never = api.apiType;
             throw new Error(`Unknown embedding API type: ${_exhaustive}`);

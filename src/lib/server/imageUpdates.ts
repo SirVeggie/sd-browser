@@ -1,6 +1,5 @@
 import { getDeletedImageIds, getFreshImageTimestamp, getFreshImages, getImage } from './dataIndex';
-import { applyResultSkip, applyResultTake, buildMatcher, explorationFromRequest, resolveImgSearchContext, searchImages } from './searching';
-import type { ImgSearchContext } from './searching';
+import { buildSearchPlan, collectSearchPlanImages, explorationFromRequest } from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';
 import type { UpdateRequest, UpdateResponse } from '$lib/types/requests';
@@ -9,17 +8,14 @@ import type { SearchSession } from './searchSessions';
 export type ImageUpdateResult = UpdateResponse | { error: string; status?: number };
 
 function getMetadataMembershipDeletions(
-    query: UpdateRequest,
     currentIds: readonly string[],
     sinceTimestamp: number,
-    imgSearchContext?: ImgSearchContext,
+    matcher: (image: ServerImage) => boolean,
 ): string[] {
     const freshImages = getFreshImages(sinceTimestamp);
     if (!freshImages.length) return [];
 
     const freshIdSet = new Set(freshImages.map((image) => image.id));
-    const exploration = explorationFromRequest(query);
-    const matcher = buildMatcher(query.search, query.matching, exploration, imgSearchContext);
 
     const deletions: string[] = [];
     for (const id of currentIds) {
@@ -38,37 +34,46 @@ export async function computeImageUpdate(
 ): Promise<ImageUpdateResult> {
     let images: ServerImage[] = [];
     let resultIds: Set<string>;
-    let imgSearchContext: ImgSearchContext | undefined;
 
     try {
         const exploration = explorationFromRequest(query);
-        imgSearchContext = session?.imgSearchContext
-            ?? await resolveImgSearchContext(query.search);
+        const plan = await buildSearchPlan(
+            query.search,
+            query.matching,
+            exploration,
+            query.sorting,
+            session?.imgSearchContext,
+        );
 
         if (session) {
             resultIds = new Set(session.orderedIds);
         } else {
-            const currentResult = searchImages(
-                query.search,
-                query.matching,
-                exploration,
-                { sorting: query.sorting, skipResults: false, takeResults: false },
-                imgSearchContext,
-            );
-            let limited = applyResultSkip(currentResult, query.search, query.sorting);
-            limited = applyResultTake(limited, query.search, query.sorting);
+            const limited = collectSearchPlanImages(plan);
             resultIds = new Set(limited.map((image) => image.id));
         }
 
-        images = searchImages(
-            query.search,
-            query.matching,
-            exploration,
-            { timestamp: query.timestamp, sorting: query.sorting, skipResults: false, takeResults: false },
-            imgSearchContext,
+        images = collectSearchPlanImages(plan, { timestamp: query.timestamp });
+
+        const metadataDeletions = getMetadataMembershipDeletions(
+            query.currentIds,
+            query.timestamp,
+            plan.matcher,
         );
-        images = applyResultSkip(images, query.search, query.sorting);
-        images = applyResultTake(images, query.search, query.sorting);
+        const staleIds = query.currentIds.filter((id) => !resultIds.has(id));
+        const deletions = [...new Set([
+            ...getDeletedImageIds(query.timestamp),
+            ...staleIds,
+            ...metadataDeletions,
+        ])];
+        const timestamp = images.reduce((latest, image) => {
+            return Math.max(latest, getFreshImageTimestamp(image.id) ?? latest);
+        }, query.timestamp);
+
+        return {
+            additions: mapServerImageToClient(images),
+            deletions,
+            timestamp,
+        };
     } catch (e) {
         if (e instanceof Error) {
             console.log(`${e.message}`);
@@ -77,28 +82,6 @@ export async function computeImageUpdate(
         console.log(e);
         return { error: 'Malformed search string', status: 400 };
     }
-
-    const staleIds = query.currentIds.filter((id) => !resultIds.has(id));
-    const metadataDeletions = getMetadataMembershipDeletions(
-        query,
-        query.currentIds,
-        query.timestamp,
-        imgSearchContext,
-    );
-    const deletions = [...new Set([
-        ...getDeletedImageIds(query.timestamp),
-        ...staleIds,
-        ...metadataDeletions,
-    ])];
-    const timestamp = images.reduce((latest, image) => {
-        return Math.max(latest, getFreshImageTimestamp(image.id) ?? latest);
-    }, query.timestamp);
-
-    return {
-        additions: mapServerImageToClient(images),
-        deletions,
-        timestamp,
-    };
 }
 
 export function hasUpdateChanges(res: UpdateResponse, currentIds: Set<string>): boolean {
