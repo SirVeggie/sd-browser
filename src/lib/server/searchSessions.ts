@@ -23,7 +23,6 @@ export type SearchSession = {
 type SessionQuery = Pick<
     ImageRequest,
     | 'search'
-    | 'filters'
     | 'matching'
     | 'sorting'
     | 'explorationMode'
@@ -37,7 +36,6 @@ const sessions = new Map<string, SearchSession>();
 export function buildQueryKey(query: SessionQuery): string {
     return JSON.stringify({
         search: query.search,
-        filters: query.filters,
         matching: query.matching,
         sorting: query.sorting,
         explorationMode: query.explorationMode,
@@ -60,7 +58,6 @@ export async function runSearch(query: SessionQuery): Promise<SearchImagesResult
     const exploration = explorationFromRequest(query);
     const { images, imgSearchError } = await searchImagesAsync(
         query.search,
-        query.filters,
         query.matching,
         exploration,
         { sorting: query.sorting, skipResults: false, takeResults: false },

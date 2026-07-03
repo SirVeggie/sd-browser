@@ -15,7 +15,6 @@ export async function POST(e) {
     try {
         const { images } = await searchImagesAsync(
             query.search,
-            query.filters,
             query.matching,
             explorationFromRequest(query),
         );

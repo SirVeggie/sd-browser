@@ -239,9 +239,9 @@ function parseImgSearchPart(part: string): {
 }
 
 export async function resolveImgSearchContext(
-    search: string,
+    query: string,
 ): Promise<ImgSearchContext | undefined> {
-    const parts = splitSearchParts(search);
+    const parts = splitSearchParts(query);
     const context: ImgSearchContext = { parts: new Map() };
     let hasImgParts = false;
     let combinedMatchScores: Map<string, number> | undefined;
@@ -314,21 +314,19 @@ export type SearchOptions = {
 
 export function searchImages(
     search: string,
-    filters: string[],
     matching: SearchMode,
     exploration: ExplorationSettings,
     options: SearchOptions = {},
     imgSearchContext?: ImgSearchContext,
 ) {
-    if (matching === 'regex' && !validRegex(search))
+    if (matching === 'regex' && search && !validRegex(search))
         throw new Error('Invalid regex');
 
     const matcher = buildMatcher(search, matching, exploration, imgSearchContext);
-    const filter = buildMatcher(filters.join(' AND '), 'regex');
     const imageList = getImageList();
     const images = [...imageList.values()];
     const pool = getExplorationPool(exploration, images);
-    let list = filterPoolImages(pool, matcher, filter, options.timestamp);
+    let list = filterPoolImages(pool, matcher, options.timestamp);
 
     const imgSortScores = imgSearchContext?.matchScores;
     const sortingForPagination = imgSortScores?.size ? undefined : options.sorting;
@@ -337,7 +335,7 @@ export function searchImages(
         list = sortImagesByMatchScores(list, imgSortScores);
     } else {
         if (options.sorting === 'date')
-            list = applyLatestImageException(list, images, pool, matcher, filter, options.timestamp);
+            list = applyLatestImageException(list, images, pool, matcher, options.timestamp);
 
         if (options.sorting)
             list = sortImages(list, options.sorting);
@@ -359,14 +357,13 @@ export type SearchImagesResult = {
 
 export async function searchImagesAsync(
     search: string,
-    filters: string[],
     matching: SearchMode,
     exploration: ExplorationSettings,
     options: SearchOptions = {},
 ): Promise<SearchImagesResult> {
     const imgSearchContext = await resolveImgSearchContext(search);
     return {
-        images: searchImages(search, filters, matching, exploration, options, imgSearchContext),
+        images: searchImages(search, matching, exploration, options, imgSearchContext),
         imgSearchError: imgSearchContext?.error,
     };
 }
@@ -403,7 +400,6 @@ export type SearchStreamResult = {
 
 export async function searchImagesStreaming(
     search: string,
-    filters: string[],
     matching: SearchMode,
     exploration: ExplorationSettings,
     sorting: SortingMethod,
@@ -411,7 +407,7 @@ export async function searchImagesStreaming(
     options: SearchStreamOptions = {},
     imgSearchContext?: ImgSearchContext,
 ): Promise<SearchStreamResult> {
-    if (matching === 'regex' && !validRegex(search))
+    if (matching === 'regex' && search && !validRegex(search))
         throw new Error('Invalid regex');
 
     const yieldEvery = options.yieldEvery ?? 50;
@@ -427,7 +423,6 @@ export async function searchImagesStreaming(
     throwIfSearchAborted(options);
 
     const matcher = buildMatcher(search, matching, exploration, resolvedImgSearchContext);
-    const filter = buildMatcher(filters.join(' AND '), 'regex');
     const imageList = getImageList();
     const images = [...imageList.values()];
     await yieldToEventLoop();
@@ -509,7 +504,7 @@ export async function searchImagesStreaming(
         }
 
         const value = imageList.get(id);
-        if (!value || !matcher(value) || !filter(value)) continue;
+        if (!value || !matcher(value)) continue;
 
         if (skipped < skipThreshold) {
             skipped++;
@@ -551,7 +546,6 @@ export async function searchImagesStreaming(
             images,
             pool,
             matcher,
-            filter,
         );
         const existingIds = new Set(finalImages.map((image) => image.id));
         const added = withException.filter((image) => !existingIds.has(image.id));
@@ -587,7 +581,6 @@ function orderPoolIds(pool: Set<string>, sorting: SortingMethod): string[] {
 function filterPoolImages(
     pool: Set<string>,
     matcher: (image: ServerImage) => boolean,
-    filter: (image: ServerImage) => boolean,
     timestamp?: number,
 ): ServerImage[] {
     const imageList = getImageList();
@@ -595,7 +588,7 @@ function filterPoolImages(
 
     if (timestamp) {
         for (const value of getFreshImages(timestamp)) {
-            if (pool.has(value.id) && matcher(value) && filter(value))
+            if (pool.has(value.id) && matcher(value))
                 list.push(value);
         }
         return list;
@@ -603,7 +596,7 @@ function filterPoolImages(
 
     for (const id of pool) {
         const value = imageList.get(id);
-        if (value && matcher(value) && filter(value))
+        if (value && matcher(value))
             list.push(value);
     }
 
@@ -615,11 +608,10 @@ function applyLatestImageException(
     images: ServerImage[],
     pool: Set<string>,
     matcher: (image: ServerImage) => boolean,
-    filter: (image: ServerImage) => boolean,
     timestamp?: number,
 ): ServerImage[] {
     const newest = getNewestLibraryImage(images);
-    if (!newest || pool.has(newest.id) || !matcher(newest) || !filter(newest))
+    if (!newest || pool.has(newest.id) || !matcher(newest))
         return list;
     if (list.some(image => image.id === newest.id))
         return list;

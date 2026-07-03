@@ -57,7 +57,6 @@ async function resolveBulkImageIds(request: BulkRequest): Promise<string[]> {
 
     const images = await searchImagesAsync(
         request.search,
-        request.filters,
         request.matching,
         explorationFromRequest(request),
         { sorting: request.sorting },

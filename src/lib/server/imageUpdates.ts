@@ -20,13 +20,12 @@ function getMetadataMembershipDeletions(
     const freshIdSet = new Set(freshImages.map((image) => image.id));
     const exploration = explorationFromRequest(query);
     const matcher = buildMatcher(query.search, query.matching, exploration, imgSearchContext);
-    const filter = buildMatcher(query.filters.join(' AND '), 'regex');
 
     const deletions: string[] = [];
     for (const id of currentIds) {
         if (!freshIdSet.has(id)) continue;
         const image = getImage(id);
-        if (!image || !matcher(image) || !filter(image)) {
+        if (!image || !matcher(image)) {
             deletions.push(id);
         }
     }
@@ -51,7 +50,6 @@ export async function computeImageUpdate(
         } else {
             const currentResult = searchImages(
                 query.search,
-                query.filters,
                 query.matching,
                 exploration,
                 { sorting: query.sorting, skipResults: false, takeResults: false },
@@ -64,7 +62,6 @@ export async function computeImageUpdate(
 
         images = searchImages(
             query.search,
-            query.filters,
             query.matching,
             exploration,
             { timestamp: query.timestamp, sorting: query.sorting, skipResults: false, takeResults: false },

@@ -1,4 +1,5 @@
 import { getActiveCustomFilterStrings } from "$lib/stores/customFiltersStore";
+import { combineSearchQuery } from "$lib/tools/searchQuery";
 import { syncMemory } from "$lib/tools/syncStorage";
 import {
     defaultExplorationSettings,
@@ -13,7 +14,6 @@ import { get, writable, type Writable } from "svelte/store";
 
 export type SearchParams = {
     search: string;
-    filters: string[];
     matching: SearchMode;
     explorationMode: ExplorationMode;
     sparseFrequency: number;
@@ -43,9 +43,9 @@ export function buildSearchParams(searchText?: string): SearchParams {
     const algorithm = get(similarityAlgorithm);
     if (get(showNsfwFilter) && !get(nsfwMode) && get(nsfwFilter)) filters.push(get(nsfwFilter));
     filters.push(...getActiveCustomFilterStrings());
+    const search = combineSearchQuery(searchText ?? get(searchFilter), filters);
     return {
-        search: searchText ?? get(searchFilter),
-        filters,
+        search,
         matching: get(matchingMode),
         explorationMode: coerceExplorationMode(get(explorationMode)),
         sparseFrequency: get(sparseFrequency),

@@ -42,7 +42,6 @@ export type OpenAction = {
 
 export type ImageRequest = {
     search: string;
-    filters: string[];
     latestId: string;
     oldestId: string;
     matching: SearchMode;
@@ -55,7 +54,7 @@ export type ImageRequest = {
 };
 export function isImageRequest(object: any): object is ImageRequest {
     return testType(object, [
-        'search', 'filters', 'latestId', 'oldestId', 'sorting',
+        'search', 'latestId', 'oldestId', 'sorting',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
         (o) => isSortingMethod(o.sorting),
         (o) => typeof o.explorationMode === 'string',
@@ -78,7 +77,6 @@ export function isImageResponse(object: any): object is ImageResponse {
 
 export type UpdateRequest = {
     search: string;
-    filters: string[];
     matching: SearchMode;
     sorting: SortingMethod;
     explorationMode: ExplorationMode;
@@ -90,7 +88,7 @@ export type UpdateRequest = {
 };
 export function isUpdateRequest(object: any): object is UpdateRequest {
     return testType(object, [
-        'search', 'filters', 'matching', 'sorting', 'timestamp', 'currentIds',
+        'search', 'matching', 'sorting', 'timestamp', 'currentIds',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
         (o) => isSortingMethod(o.sorting),
         (o) => Array.isArray(o.currentIds),
@@ -113,7 +111,7 @@ export function isUpdateResponse(object: any): object is UpdateResponse {
 export type StreamRequest = Omit<UpdateRequest, 'timestamp' | 'currentIds'>;
 export function isStreamRequest(object: any): object is StreamRequest {
     return testType(object, [
-        'search', 'filters', 'matching', 'sorting',
+        'search', 'matching', 'sorting',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
         (o) => isSortingMethod(o.sorting),
         (o) => typeof o.explorationMode === 'string',
@@ -259,7 +257,6 @@ export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOp
 
 export type MatchRequest = {
     search: string;
-    filters: string[];
     matching: SearchMode;
     explorationMode: ExplorationMode;
     sparseFrequency: number;
@@ -268,7 +265,7 @@ export type MatchRequest = {
 };
 export function isMatchRequest(object: any): object is MatchRequest {
     return testType(object, [
-        'search', 'filters', 'matching',
+        'search', 'matching',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
         (o) => typeof o.explorationMode === 'string',
         (o) => typeof o.sparseFrequency === 'number',
@@ -286,7 +283,6 @@ export function isMatchResponse(object: any): object is MatchResponse {
 
 export type BulkRequest = {
     search: string;
-    filters: string[];
     matching: SearchMode;
     sorting: SortingMethod;
     explorationMode: ExplorationMode;
@@ -301,7 +297,7 @@ export type BulkRequest = {
 
 export function isBulkRequest(object: any): object is BulkRequest {
     return testType(object, [
-        'search', 'filters', 'matching', 'sorting', 'action',
+        'search', 'matching', 'sorting', 'action',
         'explorationMode', 'sparseFrequency', 'similarityAlgorithm', 'similarityThreshold',
         (o) => isSortingMethod(o.sorting),
         (o) => typeof o.explorationMode === 'string',

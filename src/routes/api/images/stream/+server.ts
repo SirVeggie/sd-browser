@@ -194,7 +194,6 @@ export async function POST(e) {
 
                     const result = await searchImagesStreaming(
                         query.search,
-                        query.filters,
                         query.matching,
                         exploration,
                         query.sorting,
