@@ -135,6 +135,53 @@ function orderPoolIdsByMatchScores(pool: Set<string>, scores: Map<string, number
     });
 }
 
+function parseImgQueryNumber(value: string): { threshold?: number; k?: number } | undefined {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+
+    if (/^-?\d+$/.test(trimmed)) {
+        const k = Number(trimmed);
+        if (!Number.isFinite(k)) {
+            return undefined;
+        }
+        return { k };
+    }
+
+    const threshold = parseSearchFloat(trimmed);
+    if (threshold === undefined) {
+        return undefined;
+    }
+    return { threshold };
+}
+
+function parseSearchTargetWithOptionalImgLimit(raw: string): {
+    text: string;
+    threshold?: number;
+    k?: number;
+} {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+        return { text: '' };
+    }
+
+    const lastSpace = trimmed.lastIndexOf(' ');
+    if (lastSpace <= 0) {
+        return { text: trimmed };
+    }
+
+    const suffix = parseImgQueryNumber(trimmed.slice(lastSpace + 1));
+    if (!suffix) {
+        return { text: trimmed };
+    }
+
+    return {
+        text: trimmed.slice(0, lastSpace).trim(),
+        ...suffix,
+    };
+}
+
 function parseSearchTargetWithOptionalThreshold(raw: string): { text: string; threshold?: number } {
     const trimmed = raw.trim();
     if (!trimmed) {
@@ -161,7 +208,12 @@ function isImgSearchPart(part: string): boolean {
     return imgRegex.test(part) || imgOnlyRegex.test(part);
 }
 
-function parseImgSearchPart(part: string): { presenceOnly: boolean; queryText: string; threshold?: number } {
+function parseImgSearchPart(part: string): {
+    presenceOnly: boolean;
+    queryText: string;
+    threshold?: number;
+    k?: number;
+} {
     if (imgOnlyRegex.test(part)) {
         return { presenceOnly: true, queryText: '' };
     }
@@ -173,12 +225,12 @@ function parseImgSearchPart(part: string): { presenceOnly: boolean; queryText: s
         raw = raw.slice(4);
     }
 
-    const { text: queryText, threshold } = parseSearchTargetWithOptionalThreshold(raw);
+    const { text: queryText, threshold, k } = parseSearchTargetWithOptionalImgLimit(raw);
     if (!queryText) {
         return { presenceOnly: true, queryText: '' };
     }
 
-    return { presenceOnly: false, queryText, threshold };
+    return { presenceOnly: false, queryText, threshold, k };
 }
 
 export async function resolveImgSearchContext(
@@ -197,7 +249,7 @@ export async function resolveImgSearchContext(
 
         hasImgParts = true;
 
-        const { presenceOnly, queryText, threshold } = parseImgSearchPart(part);
+        const { presenceOnly, queryText, threshold, k } = parseImgSearchPart(part);
         if (presenceOnly) {
             context.parts.set(index, { presence: true });
             continue;
@@ -213,7 +265,7 @@ export async function resolveImgSearchContext(
             const settings = getServerEmbeddingSettings();
             const queryEmbedding = await embedQuery(settings, queryText);
             const effectiveThreshold = threshold ?? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
-            const matchScores = EmbeddingDB.findSimilarImage(queryEmbedding, effectiveThreshold);
+            const matchScores = EmbeddingDB.findSimilarImage(queryEmbedding, effectiveThreshold, k);
             combinedMatchScores = mergeImgMatchScores(combinedMatchScores, matchScores);
             context.parts.set(index, {
                 presence: false,

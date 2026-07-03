@@ -6,9 +6,11 @@ import fs from 'fs/promises';
 import { backgroundTasks } from './background';
 import { sleep } from '$lib/tools/sleep';
 import { skipGeneration } from '$lib/tools/misc';
+import type { EmbeddingApiType } from '$lib/types/embeddings';
 
 const WEBP_FAST: sharp.WebpOptions = { effort: 0 };
-const EMBEDDING_IMAGE_MAX_TOTAL_PIXELS = 512 * 512;
+const LLAMA_EMBEDDING_MAX_TOTAL_PIXELS = 512 * 512;
+const SV_EMBED_INPUT_SIZE = 384;
 
 export function fitImageToMaxTotalPixels(
     width: number,
@@ -39,8 +41,11 @@ export async function encodeImageForLlm(imagepath: string): Promise<Buffer> {
     return sharp(imagepath).jpeg({ quality: 80 }).toBuffer();
 }
 
-/** Bicubic resize to at most 512×512 total pixels (aspect ratio preserved), then JPEG-encode. */
-export async function encodeImageForEmbedding(imagepath: string): Promise<Buffer> {
+/** Encode an image for the configured embedding API. */
+export async function encodeImageForEmbedding(
+    imagepath: string,
+    apiType: EmbeddingApiType = 'llama-cpp',
+): Promise<Buffer> {
     const image = sharp(imagepath);
 
     const metadata = await image.metadata();
@@ -50,17 +55,33 @@ export async function encodeImageForEmbedding(imagepath: string): Promise<Buffer
         throw new Error('Cannot read image dimensions');
     }
 
-    const target = fitImageToMaxTotalPixels(width, height, EMBEDDING_IMAGE_MAX_TOTAL_PIXELS);
-    if (target.width === width && target.height === height) {
-        return image.jpeg({ quality: 80 }).toBuffer();
-    }
+    switch (apiType) {
+        case 'sv-embed':
+            return image
+                .resize(SV_EMBED_INPUT_SIZE, SV_EMBED_INPUT_SIZE, {
+                    kernel: sharp.kernel.cubic,
+                    fit: 'fill',
+                })
+                .webp({ quality: 90 })
+                .toBuffer();
+        case 'llama-cpp': {
+            const target = fitImageToMaxTotalPixels(width, height, LLAMA_EMBEDDING_MAX_TOTAL_PIXELS);
+            if (target.width === width && target.height === height) {
+                return image.jpeg({ quality: 80 }).toBuffer();
+            }
 
-    return image
-        .resize(target.width, target.height, {
-            kernel: sharp.kernel.cubic,
-        })
-        .jpeg({ quality: 80 })
-        .toBuffer();
+            return image
+                .resize(target.width, target.height, {
+                    kernel: sharp.kernel.cubic,
+                })
+                .jpeg({ quality: 80 })
+                .toBuffer();
+        }
+        default: {
+            const _exhaustive: never = apiType;
+            throw new Error(`Unknown embedding API type: ${_exhaustive}`);
+        }
+    }
 }
 
 export function generateThumbnailTask(imagepath: string, outputpath: string): Promise<string> {

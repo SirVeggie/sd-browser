@@ -268,20 +268,20 @@ export class EmbeddingDB {
         EmbeddingDB.prepareStatements();
     }
 
-    static findSimilarImage(query: Float32Array, threshold: number): Map<string, number> {
+    static findSimilarImage(query: Float32Array, threshold: number, k?: number): Map<string, number> {
         EmbeddingDB.setup();
         if (!EmbeddingDB.stmtFindSimilar)
             return new Map();
 
         EmbeddingDB.assertQueryDimensions(query);
 
-        const maxDistance = 1 - threshold;
+        const maxDistance = k !== undefined ? 1 : (1 - threshold);
         const queryBuffer = embeddingToBuffer(query);
         const count = (EmbeddingDB.stmtCount!.get() as { count: number }).count;
-        const k = Math.max(1, count);
+        const limit = k !== undefined ? Math.max(1, k) : Math.max(1, count);
         const rows = EmbeddingDB.stmtFindSimilar.all(
             queryBuffer,
-            k,
+            limit,
             maxDistance,
         ) as { id: string; similarity: number }[];
         return new Map(rows.map((row) => [row.id, row.similarity]));

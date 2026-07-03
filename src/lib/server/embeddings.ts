@@ -373,7 +373,9 @@ async function embedImagePaths(
     }
 
     const api = toApiConfig(config);
-    const buffers = await Promise.all(imagePaths.map((path) => encodeImageForEmbedding(path)));
+    const buffers = await Promise.all(
+        imagePaths.map((path) => encodeImageForEmbedding(path, api.apiType)),
+    );
     const imageBase64s = buffers.map((buffer) => buffer.toString("base64"));
 
     switch (api.apiType) {
