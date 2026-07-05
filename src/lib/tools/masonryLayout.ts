@@ -167,3 +167,47 @@ export class MasonryPlacer {
         return buckets.map((items, key) => ({ key, items }));
     }
 }
+
+function firstItemSortIndex(
+    column: MasonryColumn,
+    itemIndex: Map<string, number>,
+): number {
+    const first = column.items[0];
+    if (!first) return Number.POSITIVE_INFINITY;
+    return itemIndex.get(first.id) ?? Number.POSITIVE_INFINITY;
+}
+
+/** Order columns left-to-right by paginated index of each column's first item. */
+export function sortColumnsByFirstItemIndex(
+    columns: MasonryColumn[],
+    itemIndex: Map<string, number>,
+): MasonryColumn[] {
+    return [...columns].sort((a, b) => {
+        const byIndex =
+            firstItemSortIndex(a, itemIndex) - firstItemSortIndex(b, itemIndex);
+        return byIndex !== 0 ? byIndex : a.key - b.key;
+    });
+}
+
+/** Preserve a previously chosen left-to-right column order after placer updates. */
+export function applyColumnOrder(
+    columns: MasonryColumn[],
+    order: number[],
+): MasonryColumn[] {
+    const byKey = new Map(columns.map((column) => [column.key, column]));
+    const ordered: MasonryColumn[] = [];
+    const used = new Set<number>();
+
+    for (const key of order) {
+        const column = byKey.get(key);
+        if (!column) continue;
+        ordered.push(column);
+        used.add(key);
+    }
+
+    for (const column of columns) {
+        if (!used.has(column.key)) ordered.push(column);
+    }
+
+    return ordered;
+}

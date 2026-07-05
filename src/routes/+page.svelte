@@ -49,14 +49,18 @@
         AUTO_LOAD_DEBOUNCE_MS,
         INITIAL_LOAD_THROTTLE_MS,
         isNearBottom,
+        isNearTop,
     } from "$lib/tools/scrollLoadMore";
     import {
         AUTOLOAD_SUPPRESS_AFTER_LAYOUT_MS,
+        applyColumnOrder,
         getGridMetrics,
         MasonryPlacer,
         RESIZE_DEBOUNCE_IMAGE_THRESHOLD,
         RESIZE_LAYOUT_DEBOUNCE_MS,
+        sortColumnsByFirstItemIndex,
         type MasonryColumn,
+        type MasonryMetrics,
     } from "$lib/tools/masonryLayout";
     import {
         captureScrollAnchor,
@@ -101,6 +105,7 @@
     let scrollLoadSession = 0;
     let lastAutoLoadTime = 0;
     let scrollRaf: number | undefined;
+    let masonryColumnOrder: number[] | null = null;
     const loadedImageIds = new Set<string>();
     const masonryPlacer = new MasonryPlacer();
     let gridElement: HTMLDivElement | undefined;
@@ -147,6 +152,7 @@
     $: if (!masonryEnabled) {
         masonryPlacer.reset("");
         masonryColumns = [];
+        masonryColumnOrder = null;
     }
 
     $: if (masonryEnabled && gridElement) {
@@ -154,6 +160,7 @@
         searchSessionId;
         $imageSize;
         $imageSpacing;
+        sorting;
         scheduleMasonryDataLayout();
     }
 
@@ -186,6 +193,34 @@
         });
     }
 
+    function layoutMasonryColumns(metrics: MasonryMetrics): MasonryColumn[] {
+        const columns = masonryPlacer.layout(
+            paginated,
+            searchSessionId,
+            metrics,
+        );
+
+        if (sorting !== "date") {
+            masonryColumnOrder = null;
+            return columns;
+        }
+
+        if (isNearTop()) {
+            const itemIndex = new Map(
+                paginated.map((img, index) => [img.id, index]),
+            );
+            const sorted = sortColumnsByFirstItemIndex(columns, itemIndex);
+            masonryColumnOrder = sorted.map((column) => column.key);
+            return sorted;
+        }
+
+        if (masonryColumnOrder) {
+            return applyColumnOrder(columns, masonryColumnOrder);
+        }
+
+        return columns;
+    }
+
     async function updateMasonryLayout() {
         if (!masonryEnabled || !gridElement) return;
         await tick();
@@ -210,11 +245,7 @@
 
         if (lastColumnCount === 0) {
             if (masonryReflow) {
-                masonryColumns = masonryPlacer.layout(
-                    paginated,
-                    searchSessionId,
-                    metrics,
-                );
+                masonryColumns = layoutMasonryColumns(metrics);
             }
             lastColumnCount = metrics.columnCount;
             return;
@@ -222,11 +253,7 @@
 
         if (!columnCountChanged) {
             if (masonryReflow) {
-                masonryColumns = masonryPlacer.layout(
-                    paginated,
-                    searchSessionId,
-                    metrics,
-                );
+                masonryColumns = layoutMasonryColumns(metrics);
             }
             return;
         }
@@ -235,11 +262,7 @@
         suppressAutoLoadBriefly();
 
         if (masonryReflow) {
-            masonryColumns = masonryPlacer.layout(
-                paginated,
-                searchSessionId,
-                metrics,
-            );
+            masonryColumns = layoutMasonryColumns(metrics);
             await tick();
         }
 
@@ -333,11 +356,7 @@
         suppressAutoLoadBriefly();
 
         if (masonryEnabled && columnCountChanged) {
-            masonryColumns = masonryPlacer.layout(
-                paginated,
-                searchSessionId,
-                metrics,
-            );
+            masonryColumns = layoutMasonryColumns(metrics);
             await tick();
         }
 
@@ -587,6 +606,7 @@
         streamAbort?.abort();
         streamAbort = undefined;
         searchSessionId = "";
+        masonryColumnOrder = null;
         fetchingNextPage = false;
         const sessionId = ++updateSessionId;
         connectImageStream(sessionId);

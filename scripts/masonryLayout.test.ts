@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import {
     MasonryPlacer,
+    applyColumnOrder,
     computeColumnCount,
     estimateItemHeight,
+    sortColumnsByFirstItemIndex,
+    type MasonryColumn,
 } from "../src/lib/tools/masonryLayout.ts";
 import type { ClientImage } from "../src/lib/types/images.ts";
 
@@ -59,6 +62,28 @@ assert.equal(resized.length, 2);
 assert.equal(
     resized.flatMap((column) => column.items).length,
     4,
+);
+
+const columns: MasonryColumn[] = [
+    { key: 0, items: [img("c", 100, 200)] },
+    { key: 1, items: [img("a", 100, 100)] },
+    { key: 2, items: [img("b", 100, 300)] },
+];
+const itemIndex = new Map([
+    ["a", 0],
+    ["b", 1],
+    ["c", 2],
+]);
+assert.deepEqual(
+    sortColumnsByFirstItemIndex(columns, itemIndex).map((column) =>
+        column.items[0]?.id,
+    ),
+    ["a", "b", "c"],
+);
+
+assert.deepEqual(
+    applyColumnOrder(columns, [1, 2, 0]).map((column) => column.items[0]?.id),
+    ["a", "b", "c"],
 );
 
 console.log("masonryLayout.test.ts passed");
