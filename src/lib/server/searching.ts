@@ -99,6 +99,19 @@ export function formatImgSearchFailure(cause: unknown): string {
     return 'IMG search failed';
 }
 
+export function formatSearchFailureMessage(cause: unknown): string {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    return detail ? `Malformed search string: ${detail}` : 'Malformed search string';
+}
+
+export function logSearchFailure(cause: unknown): void {
+    if (cause instanceof Error) {
+        console.error(`Search failed: ${cause.message}`, cause);
+        return;
+    }
+    console.error('Search failed:', cause);
+}
+
 function mergeImgMatchScores(
     existing: Map<string, number> | undefined,
     next: Map<string, number>,
@@ -582,7 +595,7 @@ export function collectSearchPlanImages(
     const freshIds = options.timestamp
         ? new Set(getFreshImages(options.timestamp).map((image) => image.id))
         : undefined;
-    const list: ServerImage[] = [];
+    let list: ServerImage[] = [];
 
     for (const id of plan.orderedIds) {
         if (freshIds && !freshIds.has(id))
@@ -593,14 +606,13 @@ export function collectSearchPlanImages(
     }
 
     if (plan.kind === 'stream-scan' && plan.sorting === 'date') {
-        const withException = applyLatestImageException(
+        list = applyLatestImageException(
             list,
             plan.images,
             plan.pool,
             plan.matcher,
             options.timestamp,
         );
-        list.splice(0, list.length, ...withException);
     }
 
     if (options.skipResults !== false || options.takeResults !== false) {

@@ -6,6 +6,7 @@ import {
     sliceSession,
     trackSessionViewIds,
 } from '$lib/server/searchSessions';
+import { formatSearchFailureMessage, logSearchFailure } from '$lib/server/searching';
 import { mapServerImageToClient } from '$lib/tools/misc.js';
 import { type ImageResponse, isImagePageRequest } from '$lib/types/requests';
 
@@ -36,10 +37,10 @@ export async function POST(e) {
             if (err.message === 'Invalid request: image id not found') {
                 return error(err.message, 400);
             }
-            console.log(`${err.message}`);
-            return error('Malformed search string', 200);
+            logSearchFailure(err);
+            return error(formatSearchFailureMessage(err), 200);
         }
-        console.log(err);
-        return error('Malformed search string', 400);
+        logSearchFailure(err);
+        return error(formatSearchFailureMessage(err), 400);
     }
 }

@@ -1,5 +1,11 @@
 import { getDeletedImageIds, getFreshImageTimestamp, getFreshImages, getImage } from './dataIndex';
-import { buildSearchPlan, collectSearchPlanImages, explorationFromRequest } from './searching';
+import {
+    buildSearchPlan,
+    collectSearchPlanImages,
+    explorationFromRequest,
+    formatSearchFailureMessage,
+    logSearchFailure,
+} from './searching';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';
 import type { UpdateRequest, UpdateResponse } from '$lib/types/requests';
@@ -75,12 +81,8 @@ export async function computeImageUpdate(
             timestamp,
         };
     } catch (e) {
-        if (e instanceof Error) {
-            console.log(`${e.message}`);
-            return { error: 'Malformed search string', status: 200 };
-        }
-        console.log(e);
-        return { error: 'Malformed search string', status: 400 };
+        logSearchFailure(e);
+        return { error: formatSearchFailureMessage(e), status: e instanceof Error ? 200 : 400 };
     }
 }
 

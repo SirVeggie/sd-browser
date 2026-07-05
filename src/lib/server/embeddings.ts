@@ -270,9 +270,9 @@ async function postEmbeddingRequest<T>(
 
     if (!response.ok) {
         const errText = await response.text().catch(() => "");
-        throw new Error(
-            `Embedding request failed (${response.status}): ${sanitizeEmbeddingErrorText(errText || response.statusText)}`,
-        );
+        const sanitized = sanitizeEmbeddingErrorText(errText || response.statusText);
+        console.error(`Embedding API error (${response.status}): ${sanitized}`);
+        throw new Error(`Embedding request failed (${response.status}): ${sanitized}`);
     }
 
     const data = await response.json();
@@ -455,6 +455,7 @@ export async function vectorizeImageBatch(
         return [];
     } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
+        console.error(`Vectorize batch failed (${toProcess.length} images): ${message}`);
         return toProcess.map((item) => ({ id: item.id, message }));
     }
 }

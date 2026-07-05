@@ -32,7 +32,7 @@ export async function fetchImagePage(request: ImagePageRequest, fetch?: FetchTyp
     const res = await (fetch ? doPost(url, fetch, request) : doServerPost(url, request));
 
     if ('error' in res) {
-        if (res.error === 'Malformed search string') {
+        if (typeof res.error === 'string' && res.error.startsWith('Malformed search string')) {
             console.log(res.error);
             return {
                 images: [],
@@ -58,7 +58,7 @@ export async function updateImages(search: UpdateRequest, fetch?: FetchType): Pr
     const res = await (fetch ? doPost(url, fetch, search) : doServerPost(url, search));
 
     if ('error' in res) {
-        if (res.error === 'Malformed search string') {
+        if (typeof res.error === 'string' && res.error.startsWith('Malformed search string')) {
             return {
                 additions: [],
                 deletions: [],

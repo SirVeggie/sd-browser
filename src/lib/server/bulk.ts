@@ -269,6 +269,13 @@ export async function runBulkAction(
 
             if (workTotal === 0) {
                 updateLine("");
+                if (ids.length > 0) {
+                    throw new Error(
+                        `All ${ids.length} matching image${ids.length === 1 ? "" : "s"} `
+                        + `${ids.length === 1 ? "is" : "are"} already embedded. `
+                        + `Enable "Force recompute existing embeddings" to vectorize again.`,
+                    );
+                }
                 return false;
             }
 
