@@ -58,12 +58,13 @@ export function getPrompts(prompt: string | undefined, workflow: string | undefi
             if (custom.prompt || custom.positive) {
                 const pos: string = custom.positive || parts[0] || custom.prompt;
                 const neg: string = custom.negative || parts[1];
+                const params = custom.params ? `${custom.params}\n\n${get().params}` : get().params;
                 return {
                     pos: pos.trim() || get().pos,
                     neg: neg.trim() || get().neg,
                     ogpos: (pos && og) ? get().pos : undefined,
                     ogneg: (neg && og) ? get().neg : undefined,
-                    params: custom.params || get().params,
+                    params,
                 };
             }
         } catch { /**/ }
