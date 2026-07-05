@@ -120,9 +120,8 @@
             return;
         }
 
-        const result = await option.handler();
-        if (!result) return closeContextMenu(menu.id);
-        if (result === "keep") return;
+        closeContextMenu(menu.id);
+        await option.handler();
     }
 
     function menuEnter() {
