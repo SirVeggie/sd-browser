@@ -392,7 +392,6 @@
         progressLastError = "";
         effectiveTaskMsAtProgress = 0;
         abortController = new AbortController();
-        let refresh = false;
 
         try {
             const match = await resolveSearchMatch(searchParams);
@@ -431,8 +430,6 @@
                         if (event.lastError) {
                             progressLastError = event.lastError;
                         }
-                    } else if ("complete" in event) {
-                        refresh = !!event.refresh;
                     }
                 },
                 undefined,
@@ -440,10 +437,15 @@
             );
 
             notify(`Bulk ${$bulkModalStore.action} complete (${progressTotal} images)`);
-            onComplete(refresh);
+            onComplete(true);
             close();
         } catch (e: any) {
-            if (e?.name === "AbortError") return;
+            if (e?.name === "AbortError") {
+                if (progressDone > 0) {
+                    onComplete(true);
+                }
+                return;
+            }
             console.error(e);
             if (e?.message && typeof e.message === "string") {
                 progressLastError = e.message;
@@ -731,7 +733,7 @@
             <Button disabled={running || imageCount === 0 || annotateGenerateBlocked || vectorizeBlocked} on:click={execute}>
                 {running ? "Running..." : "Run"}
             </Button>
-            <Button disabled={running} on:click={close}>Cancel</Button>
+            <Button on:click={close}>{running ? "Stop" : "Cancel"}</Button>
         </div>
 </Modal>
 

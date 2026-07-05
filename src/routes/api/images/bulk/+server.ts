@@ -28,7 +28,7 @@ export async function POST(e) {
                         failures: stats?.failures,
                         lastError: stats?.lastError,
                     });
-                });
+                }, e.request.signal);
                 send({
                     complete: true,
                     refresh,

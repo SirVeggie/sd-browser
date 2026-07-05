@@ -13,6 +13,7 @@ import { getImage } from "./dataIndex";
 
 const CHUNK_SIZE = 100;
 const BULK_FAILURE_ABORT_RATIO = 0.5;
+const BULK_FAILURE_ABORT_MIN_PROCESSED = 5;
 
 type BulkProgressStats = {
     totalTaskDurationMs: number;
@@ -26,13 +27,15 @@ type BulkFailureTracker = {
     lastError?: string;
 };
 
-function shouldAbortBulkRun(failures: number, total: number): boolean {
-    return failures > total * BULK_FAILURE_ABORT_RATIO;
+function shouldAbortBulkRun(failures: number, processed: number, total: number): boolean {
+    if (processed <= 0) return false;
+    const minProcessed = Math.min(total, BULK_FAILURE_ABORT_MIN_PROCESSED);
+    return processed >= minProcessed && failures > processed * BULK_FAILURE_ABORT_RATIO;
 }
 
-function throwBulkAborted(tracker: BulkFailureTracker): never {
+function throwBulkAborted(tracker: BulkFailureTracker, processed: number): never {
     throw new Error(
-        `Stopped after ${tracker.failures} errors (>50% failure rate): ${tracker.lastError ?? "Unknown error"}`,
+        `Stopped after ${tracker.failures}/${processed} errors (>50% failure rate): ${tracker.lastError ?? "Unknown error"}`,
     );
 }
 
@@ -74,7 +77,23 @@ function filterVectorizeWorkIds(ids: string[], force: boolean): string[] {
 export async function runBulkAction(
     request: BulkRequest,
     onProgress: (done: number, total: number, stats?: BulkProgressStats) => void,
+    signal?: AbortSignal,
 ): Promise<boolean> {
+    const changedIds = new Set<string>();
+    const markChanged = (id: string) => {
+        changedIds.add(id);
+    };
+    const isCancelled = () => signal?.aborted ?? false;
+    let broadcastMetadataChange = true;
+
+    function completeBulk(result: boolean): boolean {
+        if (!isCancelled()) {
+            broadcastMetadataChange = false;
+        }
+        return result;
+    }
+
+    try {
     const ids = await resolveBulkImageIds(request);
     const total = ids.length;
     let done = 0;
@@ -85,6 +104,7 @@ export async function runBulkAction(
 
     if (request.action.type === "delete") {
         for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+            if (isCancelled()) break;
             const chunk = ids.slice(i, i + CHUNK_SIZE);
             await deleteImages(chunk);
             done += chunk.length;
@@ -92,11 +112,12 @@ export async function runBulkAction(
             updateLine(`Bulk delete: ${done}/${total}`);
         }
         updateLine("");
-        return true;
+        return completeBulk(true);
     }
 
     if (request.action.type === "move") {
         for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+            if (isCancelled()) break;
             const chunk = ids.slice(i, i + CHUNK_SIZE);
             await moveImages(chunk, request.action.folder);
             done += chunk.length;
@@ -104,11 +125,12 @@ export async function runBulkAction(
             updateLine(`Bulk move: ${done}/${total}`);
         }
         updateLine("");
-        return false;
+        return completeBulk(false);
     }
 
     if (request.action.type === "copy") {
         for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+            if (isCancelled()) break;
             const chunk = ids.slice(i, i + CHUNK_SIZE);
             await copyImages(chunk, request.action.folder);
             done += chunk.length;
@@ -116,76 +138,94 @@ export async function runBulkAction(
             updateLine(`Bulk copy: ${done}/${total}`);
         }
         updateLine("");
-        return false;
+        return completeBulk(false);
     }
 
     if (request.action.type === "annotate") {
         const annotateOptions = request.action;
+        const tracker: BulkFailureTracker = { failures: 0, errors: [] };
         let completed = 0;
-        let failures = 0;
-        const errors: string[] = [];
-
         let totalTaskDurationMs = 0;
+
+        let aborted = false;
+        const shouldContinue = () => !aborted && !isCancelled();
+
+        function recordAnnotateFailure(id: string, message: string, label: string) {
+            tracker.lastError = message;
+            tracker.failures++;
+            tracker.errors.push(`${id}: ${message}`);
+            console.error(`Bulk ${label} failed: ${message}`);
+        }
+
+        function afterAnnotateItem(label: string) {
+            onProgress(completed, total, bulkProgressStats(tracker, totalTaskDurationMs));
+            console.log(`Bulk ${label}: completed ${completed}/${total}`);
+            updateLine(`Bulk ${label}: completed ${completed}/${total}`);
+            if (shouldAbortBulkRun(tracker.failures, completed, total)) {
+                aborted = true;
+                updateLine("");
+                throwBulkAborted(tracker, completed);
+            }
+        }
 
         const parallel = Math.max(1, request.llm?.parallelCalls || 8);
 
         if (annotateOptions.mode === "clear") {
             console.log(`Bulk clear annotation: ${parallel} parallel workers`);
             await limitedParallelMap(ids, async (id) => {
+                if (aborted) return;
                 const taskStart = Date.now();
                 try {
                     clearAnnotation(id);
+                    markChanged(id);
                 } catch (cause) {
-                    failures++;
                     const message = cause instanceof Error ? cause.message : String(cause);
-                    errors.push(`${id}: ${message}`);
-                    console.error(`Bulk clear annotation failed: ${message}`);
+                    recordAnnotateFailure(id, message, "clear annotation");
                 }
                 totalTaskDurationMs += Date.now() - taskStart;
                 completed++;
-                onProgress(completed, total, { totalTaskDurationMs, failures });
-                console.log(`Bulk clear annotation: completed ${completed}/${total}`);
-                updateLine(`Bulk clear annotation: completed ${completed}/${total}`);
-            }, parallel);
+                afterAnnotateItem("clear annotation");
+            }, parallel, shouldContinue);
 
             updateLine("");
-            if (failures) {
-                throw new Error(`Bulk clear annotation finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
+            if (isCancelled()) return false;
+            if (tracker.failures) {
+                throw new Error(
+                    `Bulk clear annotation finished with ${tracker.failures}/${total} failures:\n${tracker.errors.slice(0, 5).join("\n")}`,
+                );
             }
-            notifyMetadataChange(ids);
-            return false;
+            return completeBulk(false);
         }
 
         if (annotateOptions.mode === "modify") {
             console.log(`Bulk modify annotation: ${parallel} parallel workers`);
             await limitedParallelMap(ids, async (id) => {
+                if (aborted) return;
                 const taskStart = Date.now();
                 try {
                     const saved = modifyAnnotation(id, annotateOptions);
-                    if (!saved) {
-                        failures++;
-                        errors.push(`${id}: empty result`);
-                        console.error(`Bulk modify annotation failed: ${id}: empty result`);
+                    if (saved) {
+                        markChanged(id);
+                    } else {
+                        recordAnnotateFailure(id, "empty result", "modify annotation");
                     }
                 } catch (cause) {
-                    failures++;
                     const message = cause instanceof Error ? cause.message : String(cause);
-                    errors.push(`${id}: ${message}`);
-                    console.error(`Bulk modify annotation failed: ${message}`);
+                    recordAnnotateFailure(id, message, "modify annotation");
                 }
                 totalTaskDurationMs += Date.now() - taskStart;
                 completed++;
-                onProgress(completed, total, { totalTaskDurationMs, failures });
-                console.log(`Bulk modify annotation: completed ${completed}/${total}`);
-                updateLine(`Bulk modify annotation: completed ${completed}/${total}`);
-            }, parallel);
+                afterAnnotateItem("modify annotation");
+            }, parallel, shouldContinue);
 
             updateLine("");
-            if (failures) {
-                throw new Error(`Bulk modify annotation finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
+            if (isCancelled()) return false;
+            if (tracker.failures) {
+                throw new Error(
+                    `Bulk modify annotation finished with ${tracker.failures}/${total} failures:\n${tracker.errors.slice(0, 5).join("\n")}`,
+                );
             }
-            notifyMetadataChange(ids);
-            return false;
+            return completeBulk(false);
         }
 
         if (annotateOptions.mode === "generate") {
@@ -197,33 +237,32 @@ export async function runBulkAction(
 
             console.log(`Bulk annotate: ${generateParallel} parallel requests`);
             await limitedParallelMap(ids, async (id) => {
+                if (aborted) return;
                 const taskStart = Date.now();
                 try {
                     const saved = await annotateImage(id, request.llm!, annotateOptions);
-                    if (!saved) {
-                        failures++;
-                        errors.push(`${id}: empty result`);
-                        console.error(`Bulk annotate failed: ${id}: empty result`);
+                    if (saved) {
+                        markChanged(id);
+                    } else {
+                        recordAnnotateFailure(id, "empty result", "annotate");
                     }
                 } catch (cause) {
-                    failures++;
                     const message = cause instanceof Error ? cause.message : String(cause);
-                    errors.push(`${id}: ${message}`);
-                    console.error(`Bulk annotate failed: ${message}`);
+                    recordAnnotateFailure(id, message, "annotate");
                 }
                 totalTaskDurationMs += Date.now() - taskStart;
                 completed++;
-                onProgress(completed, total, { totalTaskDurationMs, failures });
-                console.log(`Bulk annotate: completed ${completed}/${total}`);
-                updateLine(`Bulk annotate: completed ${completed}/${total}`);
-            }, generateParallel);
+                afterAnnotateItem("annotate");
+            }, generateParallel, shouldContinue);
 
             updateLine("");
-            if (failures) {
-                throw new Error(`Bulk annotate finished with ${failures}/${total} failures:\n${errors.slice(0, 5).join("\n")}`);
+            if (isCancelled()) return false;
+            if (tracker.failures) {
+                throw new Error(
+                    `Bulk annotate finished with ${tracker.failures}/${total} failures:\n${tracker.errors.slice(0, 5).join("\n")}`,
+                );
             }
-            notifyMetadataChange(ids);
-            return false;
+            return completeBulk(false);
         }
 
         const _exhaustive: never = annotateOptions.mode;
@@ -232,15 +271,16 @@ export async function runBulkAction(
 
     if (request.action.type === "tag") {
         for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+            if (isCancelled()) break;
             const chunk = ids.slice(i, i + CHUNK_SIZE);
             bulkUpdateImageTags(chunk, request.action.mode, request.action.tags);
+            for (const id of chunk) markChanged(id);
             done += chunk.length;
             onProgress(done, total);
             updateLine(`Bulk tag ${request.action.mode}: ${done}/${total}`);
         }
         updateLine("");
-        notifyMetadataChange(ids);
-        return false;
+        return completeBulk(false);
     }
 
     if (request.action.type === "vectorize") {
@@ -251,9 +291,10 @@ export async function runBulkAction(
         if (vectorizeOptions.mode === "clear") {
             console.log(`Bulk clear embeddings: ${ids.length} images`);
             EmbeddingDB.deleteAll(ids);
+            for (const id of ids) markChanged(id);
             onProgress(total, total);
             updateLine("");
-            return false;
+            return completeBulk(false);
         }
 
         if (vectorizeOptions.mode === "embed") {
@@ -276,7 +317,7 @@ export async function runBulkAction(
                         + `Enable "Force recompute existing embeddings" to vectorize again.`,
                     );
                 }
-                return false;
+                return completeBulk(false);
             }
 
             const batchSize = Math.max(1, request.embedding.apiBatch || 1);
@@ -289,12 +330,17 @@ export async function runBulkAction(
                 + `, ${batchSize} per API request`,
             );
             for (let i = 0; i < workIds.length; i += batchSize) {
+                if (isCancelled()) break;
                 const chunk = workIds.slice(i, i + batchSize);
                 const taskStart = Date.now();
                 const batchFailures = await vectorizeImageBatch(chunk, request.embedding, {
                     force: vectorizeOptions.force,
                     mediaMarker,
                 });
+                const failedIds = new Set(batchFailures.map((failure) => failure.id));
+                for (const id of chunk) {
+                    if (!failedIds.has(id)) markChanged(id);
+                }
                 if (batchFailures.length) {
                     const message = batchFailures[0]!.message;
                     tracker.lastError = message;
@@ -309,19 +355,20 @@ export async function runBulkAction(
                 onProgress(completed, workTotal, bulkProgressStats(tracker, totalTaskDurationMs));
                 updateLine(`Bulk vectorize: completed ${completed}/${workTotal}`);
 
-                if (shouldAbortBulkRun(tracker.failures, workTotal)) {
+                if (shouldAbortBulkRun(tracker.failures, completed, workTotal)) {
                     updateLine("");
-                    throwBulkAborted(tracker);
+                    throwBulkAborted(tracker, completed);
                 }
             }
 
             updateLine("");
+            if (isCancelled()) return false;
             if (tracker.failures) {
                 throw new Error(
                     `Bulk vectorize finished with ${tracker.failures}/${workTotal} failures:\n${tracker.errors.slice(0, 5).join("\n")}`,
                 );
             }
-            return false;
+            return completeBulk(false);
         }
 
         const _exhaustive: never = vectorizeOptions.mode;
@@ -329,4 +376,9 @@ export async function runBulkAction(
     }
 
     throw new Error("Unknown bulk action");
+    } finally {
+        if (broadcastMetadataChange && changedIds.size > 0) {
+            notifyMetadataChange([...changedIds]);
+        }
+    }
 }

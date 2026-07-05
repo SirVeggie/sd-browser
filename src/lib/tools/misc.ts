@@ -57,7 +57,8 @@ export function selectRandom<T>(array: T[], amount: number): T[] {
 export async function limitedParallelMap<T, U>(
     array: T[],
     callback: (item: T) => Promise<U>,
-    limit: number
+    limit: number,
+    shouldContinue: () => boolean = () => true,
 ): Promise<U[]> {
     if (!array.length) return [];
 
@@ -65,7 +66,7 @@ export async function limitedParallelMap<T, U>(
     let nextIndex = 0;
 
     async function worker() {
-        while (true) {
+        while (shouldContinue()) {
             const index = nextIndex++;
             if (index >= array.length) return;
             results[index] = await callback(array[index]);
