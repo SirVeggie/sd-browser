@@ -8,6 +8,7 @@ const VEC_TABLE = 'image_embeddings';
 const DIMENSIONS_KEY = 'dimensions';
 /** sqlite-vec vec0 KNN hard limit; queries with k above this fail at runtime. */
 const VEC0_KNN_MAX = 4096;
+const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
 
 export class EmbeddingDimensionMismatchError extends Error {
     readonly expected: number;
@@ -95,8 +96,9 @@ export class EmbeddingDB {
     private static stmtSetImage: Statement<unknown[], unknown> | undefined;
     private static stmtDeleteImage: Statement<unknown[], unknown> | undefined;
     private static stmtFindSimilar: Statement<unknown[], unknown> | undefined;
-    private static stmtFindSimilarIn: Statement<unknown[], unknown> | undefined;
     private static stmtSelectAllIds: Statement<unknown[], unknown> | undefined;
+    private static stmtSelectAllEmbeddings: Statement<unknown[], unknown> | undefined;
+    private static stmtSelectEmbeddingsByIds: Statement<unknown[], unknown> | undefined;
     private static stmtCount: Statement<unknown[], unknown> | undefined;
 
     private static setup() {
@@ -131,8 +133,9 @@ export class EmbeddingDB {
             EmbeddingDB.stmtSetImage = undefined;
             EmbeddingDB.stmtDeleteImage = undefined;
             EmbeddingDB.stmtFindSimilar = undefined;
-            EmbeddingDB.stmtFindSimilarIn = undefined;
             EmbeddingDB.stmtSelectAllIds = undefined;
+            EmbeddingDB.stmtSelectAllEmbeddings = undefined;
+            EmbeddingDB.stmtSelectEmbeddingsByIds = undefined;
             EmbeddingDB.stmtCount = undefined;
             return;
         }
@@ -154,16 +157,15 @@ export class EmbeddingDB {
               AND distance <= ?
             ORDER BY distance
         `);
-        EmbeddingDB.stmtFindSimilarIn = EmbeddingDB.db.prepare(`
-            SELECT id, (1.0 - distance) AS similarity
-            FROM ${VEC_TABLE}
-            WHERE embedding MATCH ?
-              AND k = ?
-              AND distance <= ?
-              AND id IN (SELECT value FROM json_each(?))
-            ORDER BY distance
-        `);
         EmbeddingDB.stmtSelectAllIds = EmbeddingDB.db.prepare(`SELECT id FROM ${VEC_TABLE}`);
+        EmbeddingDB.stmtSelectAllEmbeddings = EmbeddingDB.db.prepare(
+            `SELECT id, embedding FROM ${VEC_TABLE}`,
+        );
+        EmbeddingDB.stmtSelectEmbeddingsByIds = EmbeddingDB.db.prepare(`
+            SELECT id, embedding
+            FROM ${VEC_TABLE}
+            WHERE id IN (SELECT value FROM json_each(?))
+        `);
         EmbeddingDB.stmtCount = EmbeddingDB.db.prepare(`SELECT COUNT(*) AS count FROM ${VEC_TABLE}`);
     }
 
@@ -207,8 +209,9 @@ export class EmbeddingDB {
         EmbeddingDB.stmtSetImage = undefined;
         EmbeddingDB.stmtDeleteImage = undefined;
         EmbeddingDB.stmtFindSimilar = undefined;
-        EmbeddingDB.stmtFindSimilarIn = undefined;
         EmbeddingDB.stmtSelectAllIds = undefined;
+        EmbeddingDB.stmtSelectAllEmbeddings = undefined;
+        EmbeddingDB.stmtSelectEmbeddingsByIds = undefined;
         EmbeddingDB.stmtCount = undefined;
         EmbeddingDB.db.close();
     }
@@ -294,7 +297,8 @@ export class EmbeddingDB {
 
         EmbeddingDB.assertQueryDimensions(query);
 
-        const maxDistance = k !== undefined ? 1 : (1 - threshold);
+        const minSimilarity = k !== undefined ? 0 : threshold;
+        const maxDistance = 1 - minSimilarity;
         const queryBuffer = embeddingToBuffer(query);
         const count = (EmbeddingDB.stmtCount!.get() as { count: number }).count;
         if (!count)
@@ -309,29 +313,75 @@ export class EmbeddingDB {
 
         const requested = k !== undefined ? Math.max(1, k) : Math.max(1, count);
         const limit = Math.min(requested, VEC0_KNN_MAX);
+        if (candidateIds !== undefined)
+            return EmbeddingDB.findSimilarImageCandidates(query, minSimilarity, limit, candidateIds, count);
 
-        let rows: { id: string; similarity: number }[];
-        if (candidateIds === undefined) {
-            rows = EmbeddingDB.stmtFindSimilar.all(
-                queryBuffer,
-                limit,
-                maxDistance,
-            ) as { id: string; similarity: number }[];
-        } else {
-            if (!EmbeddingDB.stmtFindSimilarIn)
-                return new Map();
-            rows = EmbeddingDB.stmtFindSimilarIn.all(
-                queryBuffer,
-                limit,
-                maxDistance,
-                idsToJsonFilter(candidateIds),
-            ) as { id: string; similarity: number }[];
-        }
+        const rows = EmbeddingDB.stmtFindSimilar.all(
+            queryBuffer,
+            limit,
+            maxDistance,
+        ) as { id: string; similarity: number }[];
 
         return new Map(rows.map((row) => [row.id, row.similarity]));
     }
+
+    private static findSimilarImageCandidates(
+        query: Float32Array,
+        minSimilarity: number,
+        limit: number,
+        candidateIds: Set<string>,
+        totalCount: number,
+    ): Map<string, number> {
+        const rows = EmbeddingDB.getCandidateEmbeddingRows(candidateIds, totalCount);
+        const scores: { id: string; similarity: number }[] = [];
+        for (const row of rows) {
+            if (!candidateIds.has(row.id))
+                continue;
+            const embedding = bufferToFloat32Array(row.embedding);
+            const similarity = cosineSimilarity(query, embedding);
+            if (similarity >= minSimilarity)
+                scores.push({ id: row.id, similarity });
+        }
+
+        scores.sort((a, b) => b.similarity - a.similarity);
+        return new Map(scores.slice(0, limit).map((row) => [row.id, row.similarity]));
+    }
+
+    private static getCandidateEmbeddingRows(
+        candidateIds: Set<string>,
+        totalCount: number,
+    ): { id: string; embedding: Buffer }[] {
+        if (candidateIds.size > totalCount / 2) {
+            if (!EmbeddingDB.stmtSelectAllEmbeddings)
+                return [];
+            return EmbeddingDB.stmtSelectAllEmbeddings.all() as { id: string; embedding: Buffer }[];
+        }
+
+        if (!EmbeddingDB.stmtSelectEmbeddingsByIds)
+            return [];
+        return EmbeddingDB.stmtSelectEmbeddingsByIds.all(
+            JSON.stringify([...candidateIds]),
+        ) as { id: string; embedding: Buffer }[];
+    }
 }
 
-function idsToJsonFilter(ids: Iterable<string>): string {
-    return JSON.stringify([...ids]);
+function bufferToFloat32Array(buffer: Buffer): Float32Array {
+    return new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / FLOAT_BYTES);
+}
+
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+    const length = Math.min(a.length, b.length);
+    for (let index = 0; index < length; index++) {
+        const valueA = a[index];
+        const valueB = b[index];
+        dot += valueA * valueB;
+        normA += valueA * valueA;
+        normB += valueB * valueB;
+    }
+    if (!normA || !normB)
+        return 0;
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
