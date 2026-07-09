@@ -1214,44 +1214,17 @@
         </div>
     {:else}
         <div class="nav selection-nav" bind:this={navEl}>
-            <button
-                type="button"
-                class="nav-menu-toggle"
-                aria-expanded={navMenuOpen}
-                aria-haspopup="menu"
-                aria-label="Selection actions menu"
-                on:click|stopPropagation={toggleNavMenu}
-            >
-                <span class="burger" aria-hidden="true">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </span>
-            </button>
-            <div class="nav-actions" class:open={navMenuOpen} role="menu">
+            <div class="nav-actions" role="menu">
                 <Button
-                    on:click={() => {
-                        closeNavMenu();
-                        deleteSelected();
-                    }}>Delete</Button
+                    on:click={deleteSelected}>Delete</Button
                 >
                 <Button
-                    on:click={(e) => {
-                        closeNavMenu();
-                        void handleSelectionButton("move")(e);
-                    }}>Move</Button
+                    on:click={(e) => void handleSelectionButton("move")(e)}>Move</Button
                 >
                 <Button
-                    on:click={(e) => {
-                        closeNavMenu();
-                        void handleSelectionButton("copy")(e);
-                    }}>Copy</Button
+                    on:click={(e) => void handleSelectionButton("copy")(e)}>Copy</Button
                 >
-                <Button
-                    on:click={() => {
-                        closeNavMenu();
-                        fillSelected();
-                    }}>Fill</Button
+                <Button on:click={fillSelected}>Fill</Button
                 >
                 <div class="flexspacer" />
                 <Button on:click={cancelSelect}>Cancel</Button>
@@ -1290,8 +1263,8 @@
                             <ImageDisplay
                                 {img}
                                 loadSession={scrollLoadSession}
-                                unselect={selecting &&
-                                    !$selection.includes(img.id)}
+                                selected={selecting &&
+                                    $selection.includes(img.id)}
                                 onClick={!selecting && ((e) => openImage(img, e))}
                                 onContext={handleImgContext(img.id)}
                                 onLoaded={() => handleImageLoaded(img.id)}
@@ -1308,7 +1281,7 @@
                     <ImageDisplay
                         {img}
                         loadSession={scrollLoadSession}
-                        unselect={selecting && !$selection.includes(img.id)}
+                        selected={selecting && $selection.includes(img.id)}
                         onClick={!selecting && ((e) => openImage(img, e))}
                         onContext={handleImgContext(img.id)}
                         onLoaded={() => handleImageLoaded(img.id)}
@@ -1536,9 +1509,27 @@
     }
 
     .nav.selection-nav {
+        .nav-actions {
+            flex: 1;
+        }
+
         @container nav (max-width: 540px) {
-            .nav-menu-toggle {
-                margin-left: auto;
+            .nav-actions {
+                display: flex;
+                flex-direction: row;
+                position: static;
+                width: auto;
+                min-width: 0;
+                max-width: none;
+                padding: 0;
+                background: transparent;
+                border-radius: 0;
+                box-shadow: none;
+                gap: 0.5em;
+            }
+
+            .flexspacer {
+                display: block;
             }
         }
     }

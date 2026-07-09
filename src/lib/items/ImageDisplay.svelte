@@ -18,7 +18,7 @@
         | false = undefined;
     export let onContext: ((e: InputEvent) => void) | undefined | false =
         undefined;
-    export let unselect = false;
+    export let selected = false;
     export let loadSession = 0;
     export let onLoaded: (() => void) | undefined = undefined;
 
@@ -61,7 +61,7 @@
     class:active
     class:spacing-compact={spacingCompact}
     class:spacing-mosaic={spacingMosaic}
-    class:unselect
+    class:selected
     class:has-dimensions={hasDimensions}
     class:loaded={hasLoaded}
     style={containerStyle}
@@ -106,6 +106,10 @@
 </div>
 
 <style lang="scss">
+    $accent-blue: rgb(63, 187, 236);
+    $accent-glow: rgba(63, 187, 236, 0.45);
+    $accent-glow-soft: rgba(63, 187, 236, 0.2);
+
     .base {
         position: relative;
         display: block;
@@ -117,7 +121,8 @@
         box-sizing: border-box;
         transition:
             transform 0.4s ease,
-            outline 0.4s ease;
+            outline 0.4s ease,
+            box-shadow 0.4s ease;
         outline: 1px solid transparent;
         user-select: none;
 
@@ -142,7 +147,22 @@
             z-index: 1;
             pointer-events: none;
             display: none;
-            transition: outline 0.4s ease;
+            box-shadow: inset 0 0 0 0 transparent;
+            transition:
+                outline 0.4s ease,
+                box-shadow 0.4s ease;
+        }
+
+        &.selected {
+            outline: 2px solid $accent-blue;
+            outline-offset: -2px;
+
+            .overlay {
+                display: block;
+                box-shadow:
+                    inset 0 0 14px 2px $accent-glow,
+                    inset 0 0 28px 6px $accent-glow-soft;
+            }
         }
 
         &.has-dimensions {
@@ -188,18 +208,26 @@
             background-color: transparent;
             outline-offset: -1px;
             
-            &.active:hover {
+            &.active:hover:not(.selected) {
                 outline: 1px solid transparent;
-                // box-shadow: inset ;
+
                 .overlay {
                     outline: 1px solid white;
                 }
             }
-            
+
             .overlay {
                 display: block;
                 outline: 1px solid transparent;
                 outline-offset: -1px;
+            }
+
+            &.selected {
+                outline: 2px solid $accent-blue;
+
+                .overlay {
+                    outline: 2px solid $accent-blue;
+                }
             }
         }
 
@@ -227,10 +255,6 @@
                 transform: scale(1.1) translateY(-0.5em);
             }
         }
-    }
-
-    .unselect {
-        filter: grayscale(0.8) opacity(0.5);
     }
 
     .loading {
