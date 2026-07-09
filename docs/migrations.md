@@ -15,6 +15,8 @@ NSFW filtering is unchanged in the UI (checkbox + editable filter string on sett
 | `folderFilter` (localStorage + global settings) | `customFilters.filters[]` — built-in **Folders** entry (`id: builtin-folders`) |
 | `folderMode` (localStorage) | `activeCustomFilterIds` — includes `builtin-folders` when folder filter was enabled |
 
+Fresh local profiles with neither legacy key do not create the built-in **Folders** entry; custom filters default to empty.
+
 ### Migration code
 
 - Local: [`src/lib/migrations/folderFilterMigration.ts`](../src/lib/migrations/folderFilterMigration.ts) — `migrateFolderFilterToCustomFilters()`, guarded by `folderFilterMigrated` in localStorage
@@ -23,9 +25,10 @@ NSFW filtering is unchanged in the UI (checkbox + editable filter string on sett
 ### How to verify
 
 1. With legacy `folderFilter` / `folderMode` in localStorage, reload the app once — custom filters should contain a **Folders** entry with the same expression; active state should match prior `folderMode`.
-2. Image page multi-select shows **Folders** when migrated; toggling it changes results as before.
-3. NSFW checkbox still works independently; network requests send NSFW expression inside `filters[]` only (no `nsfw` field).
-4. Settings → Custom Filters: add, edit, delete entries; changes persist and sync globally.
+2. With cleared site data and no legacy folder-filter keys, reload the app once — custom filters should remain empty.
+3. Image page multi-select shows **Folders** when migrated; toggling it changes results as before.
+4. NSFW checkbox still works independently; network requests send NSFW expression inside `filters[]` only (no `nsfw` field).
+5. Settings → Custom Filters: add, edit, delete entries; changes persist and sync globally.
 
 ### Removal
 

@@ -24,6 +24,13 @@ export function migrateFolderFilterToCustomFilters(): void {
         return;
     }
 
+    const hasLegacyFilter = localStorage.getItem("folderFilter") !== null;
+    const hasLegacyMode = localStorage.getItem("folderMode") !== null;
+    if (!hasLegacyFilter && !hasLegacyMode) {
+        localStorage.setItem(FOLDER_FILTER_MIGRATED_KEY, "true");
+        return;
+    }
+
     const legacyFilter = readLegacyJson<string>("folderFilter") ?? folderFilterDefault;
     const legacyMode = readLegacyJson<boolean>("folderMode") ?? true;
 

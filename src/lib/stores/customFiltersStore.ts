@@ -19,11 +19,11 @@ export function createDefaultFoldersFilter(filter = folderFilterDefault): Custom
 }
 
 const defaultCustomFilters: CustomFiltersState = {
-    filters: [createDefaultFoldersFilter()],
+    filters: [],
 };
 
 export const customFiltersStore = writable<CustomFiltersState>({ ...defaultCustomFilters });
-export const activeCustomFilterIds = writable<string[]>([BUILTIN_FOLDERS_ID]);
+export const activeCustomFilterIds = writable<string[]>([]);
 
 export function syncCustomFiltersWithLocalStorage() {
     syncMemory("customFilters", customFiltersStore, true);
