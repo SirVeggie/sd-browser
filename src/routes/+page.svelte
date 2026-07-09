@@ -1340,47 +1340,49 @@
                 placeholder="Search"
                 on:input={inputChange}
             />
-            <button
-                type="button"
-                class="nav-menu-toggle"
-                aria-expanded={navMenuOpen}
-                aria-haspopup="menu"
-                aria-label="Actions menu"
-                on:click|stopPropagation={toggleNavMenu}
-            >
-                <span class="burger" aria-hidden="true">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </span>
-            </button>
-            <div class="nav-burger-actions" class:open={navMenuOpen} role="menu">
-                <Button
-                    on:click={() => {
-                        closeNavMenu();
-                        selecting = true;
-                    }}>Select</Button
+            <div class="nav-burger-menu">
+                <button
+                    type="button"
+                    class="nav-menu-toggle"
+                    aria-expanded={navMenuOpen}
+                    aria-haspopup="menu"
+                    aria-label="Actions menu"
+                    on:click|stopPropagation={toggleNavMenu}
                 >
-                <Button
-                    on:click={() => {
-                        closeNavMenu();
-                        openQuickTagSetup();
-                    }}>Quick tag</Button
-                >
-                <div class="nav-collapsed-actions">
+                    <span class="burger" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </span>
+                </button>
+                <div class="nav-burger-actions" class:open={navMenuOpen} role="menu">
                     <Button
                         on:click={() => {
                             closeNavMenu();
-                            openLive();
-                        }}>Live</Button
+                            selecting = true;
+                        }}>Select</Button
                     >
                     <Button
                         on:click={() => {
                             closeNavMenu();
-                            openBulk();
-                        }}>Bulk</Button
+                            openQuickTagSetup();
+                        }}>Quick tag</Button
                     >
-                    <Link to="/settings" on:click={closeNavMenu}>Settings</Link>
+                    <div class="nav-collapsed-actions">
+                        <Button
+                            on:click={() => {
+                                closeNavMenu();
+                                openLive();
+                            }}>Live</Button
+                        >
+                        <Button
+                            on:click={() => {
+                                closeNavMenu();
+                                openBulk();
+                            }}>Bulk</Button
+                        >
+                        <Link to="/settings" on:click={closeNavMenu}>Settings</Link>
+                    </div>
                 </div>
             </div>
             <div class="nav-actions">
@@ -1580,11 +1582,18 @@
         }
     }
 
+    .nav-burger-menu {
+        position: relative;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        align-self: center;
+    }
+
     .nav-menu-toggle {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        align-self: center;
         flex-shrink: 0;
         appearance: none;
         margin: 0;
@@ -1631,6 +1640,7 @@
         display: flex;
         gap: 0.5em;
         flex-shrink: 0;
+        align-items: center;
     }
 
     .nav-burger-actions {
@@ -1656,8 +1666,8 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
             @include dropdown.panel-animation;
 
-            & > :global(a),
-            & > :global(button) {
+            :global(a),
+            :global(button) {
                 box-sizing: border-box;
                 display: block;
                 width: 100%;
