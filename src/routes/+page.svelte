@@ -147,9 +147,6 @@
     let suppressAutoLoadUntil = 0;
 
     $: paginated = $imageStore.slice(0, currentAmount);
-    $: visiblePaginated = quickTagActive
-        ? paginated.filter((img) => !quickTagHiddenIds.includes(img.id))
-        : paginated;
     $: prevIndex = !currentImage
         ? -1
         : paginated.findIndex((img) => img.id === currentImage?.id) - 1;
@@ -195,8 +192,7 @@
     }
 
     $: if (masonryEnabled && gridElement) {
-        visiblePaginated;
-        quickTagActive;
+        paginated;
         searchSessionId;
         $imageSize;
         $imageSpacing;
@@ -234,9 +230,8 @@
     }
 
     function layoutMasonryColumns(metrics: MasonryMetrics): MasonryColumn[] {
-        const images = quickTagActive ? visiblePaginated : paginated;
         const columns = masonryPlacer.layout(
-            images,
+            paginated,
             searchSessionId,
             metrics,
         );
@@ -1174,10 +1169,8 @@
         quickTagSetupOpen = false;
     }
 
-    function startQuickTag(event: CustomEvent<{ mode: BulkTagMode; tags: string[] }>) {
-        const { mode, tags } = event.detail;
-        quickTagMode = mode;
-        quickTagSelectedTags = tags;
+    function startQuickTag(event: CustomEvent<{ mode: BulkTagMode }>) {
+        quickTagMode = event.detail.mode;
         quickTagHistory = [];
         quickTagHiddenIds = [];
         quickTagLastClickAt = 0;
@@ -1255,7 +1248,10 @@
         const now = Date.now();
         if (now - quickTagLastClickAt < QUICK_TAG_COOLDOWN_MS) return;
 
+        quickTagLastClickAt = now;
+        quickTagHiddenIds = [...quickTagHiddenIds, img.id];
         quickTagInFlight.add(img.id);
+
         try {
             const originalTags = await fetchImageTags(img.id);
             const newTags = computeQuickTagResult(
@@ -1272,10 +1268,9 @@
                     newTags: savedTags,
                 },
             ];
-            quickTagHiddenIds = [...quickTagHiddenIds, img.id];
-            quickTagLastClickAt = Date.now();
         } catch (cause) {
             console.error(cause);
+            quickTagHiddenIds = quickTagHiddenIds.filter((id) => id !== img.id);
             notify(cause instanceof Error ? cause.message : "Tagging failed", "warn");
         } finally {
             quickTagInFlight.delete(img.id);
@@ -1441,6 +1436,7 @@
                         <div
                             id={`img_${img.id}`}
                             class:selecting
+                            class:quick-tag-hidden={quickTagHiddenIds.includes(img.id)}
                             on:click={selectImg(img.id)}
                         >
                             <VirtualImageDisplay
@@ -1459,10 +1455,15 @@
                 </div>
             {/each}
         {:else}
-            {#each visiblePaginated as img (img.id)}
+            {#each paginated as img (img.id)}
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
-                <div id={`img_${img.id}`} class:selecting on:click={selectImg(img.id)}>
+                <div
+                    id={`img_${img.id}`}
+                    class:selecting
+                    class:quick-tag-hidden={quickTagHiddenIds.includes(img.id)}
+                    on:click={selectImg(img.id)}
+                >
                     <VirtualImageDisplay
                         {img}
                         loadSession={scrollLoadSession}
@@ -1517,7 +1518,6 @@
 {#if quickTagSetupOpen}
     <QuickTagSetupModal
         bind:tagMode={quickTagMode}
-        bind:selectedTags={quickTagSelectedTags}
         on:start={startQuickTag}
         on:close={closeQuickTagSetup}
     />
@@ -1769,6 +1769,11 @@
             > div[id^="img_"],
             .masonry-column > div {
                 overflow-anchor: none;
+            }
+
+            > div[id^="img_"].quick-tag-hidden,
+            .masonry-column > div.quick-tag-hidden {
+                display: none;
             }
 
             .masonry-column {
