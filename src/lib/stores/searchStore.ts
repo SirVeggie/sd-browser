@@ -35,7 +35,7 @@ export const sparseFrequency = writable(defaultExplorationSettings.sparseFrequen
 export const similarityAlgorithm = writable<SimilarityAlgorithm>(defaultExplorationSettings.similarityAlgorithm);
 export const similarityThreshold = writable(defaultExplorationSettings.similarityThreshold);
 export const matchingMode = writable<SearchMode>('regex');
-export const initialImages = writable(50);
+export const initialImages = writable(500);
 export const slideDelay = writable(4000);
 
 export function buildSearchParams(searchText?: string): SearchParams {

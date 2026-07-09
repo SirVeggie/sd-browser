@@ -2,7 +2,7 @@
     import NavArrows from "$lib/components/NavArrows.svelte";
     import { notify } from "$lib/components/Notifier.svelte";
     import Button from "$lib/items/Button.svelte";
-    import ImageDisplay from "$lib/items/ImageDisplay.svelte";
+    import VirtualImageDisplay from "$lib/items/VirtualImageDisplay.svelte";
     import ImageFull from "$lib/items/ImageFull.svelte";
     import Link from "$lib/items/Link.svelte";
     import SearchInput from "$lib/items/SearchInput.svelte";
@@ -47,7 +47,6 @@
     import { sleep } from "$lib/tools/sleep";
     import {
         AUTO_LOAD_DEBOUNCE_MS,
-        INITIAL_LOAD_THROTTLE_MS,
         isNearBottom,
         isNearTop,
     } from "$lib/tools/scrollLoadMore";
@@ -104,12 +103,12 @@
     let searchCountComplete = false;
     const selection = createSelection();
     let anchorElement: HTMLDivElement;
-    let scrollSessionStart = Date.now();
     let scrollLoadSession = 0;
     let lastAutoLoadTime = 0;
     let scrollRaf: number | undefined;
     let masonryColumnOrder: number[] | null = null;
-    const loadedImageIds = new Set<string>();
+    let paginatedIndexById = new Map<string, number>();
+    let cachedPaginatedIds: string[] = [];
     const masonryPlacer = new MasonryPlacer();
     let gridElement: HTMLDivElement | undefined;
     let masonryColumns: MasonryColumn[] = [];
@@ -141,7 +140,23 @@
     $: newestImage = paginated[0];
     $: spacingCompact = $imageSpacing === "compact";
     $: spacingMosaic = $imageSpacing === "mosaic";
-    $: selection.setObjects(paginated.map((x) => x.id));
+    $: {
+        const ids = paginated.map((x) => x.id);
+        if (
+            ids.length !== cachedPaginatedIds.length ||
+            ids.some((id, index) => id !== cachedPaginatedIds[index])
+        ) {
+            cachedPaginatedIds = ids;
+            selection.setObjects(ids);
+        }
+    }
+
+    $: {
+        paginated;
+        const next = new Map<string, number>();
+        paginated.forEach((image, index) => next.set(image.id, index));
+        paginatedIndexById = next;
+    }
     $: slideshowInterval = Math.max($slideDelay, 100);
     $: masonryEnabled = $imageFlow === "masonry";
     $: gridStyle = buildGridStyle(
@@ -209,10 +224,7 @@
         }
 
         if (isNearTop()) {
-            const itemIndex = new Map(
-                paginated.map((img, index) => [img.id, index]),
-            );
-            const sorted = sortColumnsByFirstItemIndex(columns, itemIndex);
+            const sorted = sortColumnsByFirstItemIndex(columns, paginatedIndexById);
             masonryColumnOrder = sorted.map((column) => column.key);
             return sorted;
         }
@@ -559,9 +571,7 @@
     }
 
     function resetScrollLoadSession() {
-        scrollSessionStart = Date.now();
         lastAutoLoadTime = 0;
-        loadedImageIds.clear();
         scrollLoadSession++;
     }
 
@@ -571,10 +581,6 @@
             scrollRaf = undefined;
             maybeAutoLoadMore();
         });
-    }
-
-    function allVisibleImagesLoaded() {
-        return paginated.every((img) => loadedImageIds.has(img.id));
     }
 
     function hasMoreImagesToLoad() {
@@ -589,10 +595,6 @@
         if (!hasMoreImagesToLoad()) return false;
         if (Date.now() - lastAutoLoadTime < AUTO_LOAD_DEBOUNCE_MS) return false;
 
-        const inInitialPeriod =
-            Date.now() - scrollSessionStart < INITIAL_LOAD_THROTTLE_MS;
-        if (inInitialPeriod && !allVisibleImagesLoaded()) return false;
-
         return true;
     }
 
@@ -602,8 +604,7 @@
         loadMore();
     }
 
-    function handleImageLoaded(id: string) {
-        loadedImageIds.add(id);
+    function handleImageLoaded() {
         maybeAutoLoadMore();
     }
 
@@ -1260,14 +1261,14 @@
                             class:selecting
                             on:click={selectImg(img.id)}
                         >
-                            <ImageDisplay
+                            <VirtualImageDisplay
                                 {img}
                                 loadSession={scrollLoadSession}
                                 selected={selecting &&
                                     $selection.includes(img.id)}
                                 onClick={!selecting && ((e) => openImage(img, e))}
                                 onContext={handleImgContext(img.id)}
-                                onLoaded={() => handleImageLoaded(img.id)}
+                                onLoaded={handleImageLoaded}
                             />
                         </div>
                     {/each}
@@ -1278,13 +1279,13 @@
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <div id={`img_${img.id}`} class:selecting on:click={selectImg(img.id)}>
-                    <ImageDisplay
+                    <VirtualImageDisplay
                         {img}
                         loadSession={scrollLoadSession}
                         selected={selecting && $selection.includes(img.id)}
                         onClick={!selecting && ((e) => openImage(img, e))}
                         onContext={handleImgContext(img.id)}
-                        onLoaded={() => handleImageLoaded(img.id)}
+                        onLoaded={handleImageLoaded}
                     />
                 </div>
             {/each}

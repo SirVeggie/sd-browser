@@ -878,7 +878,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>
-            Initial amount of images loaded (default: 50)
+            Initial amount of images loaded (default: 500)
             <NumInput bind:value={$initialImages} />
         </label>
     </div>
