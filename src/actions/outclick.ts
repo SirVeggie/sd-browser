@@ -5,28 +5,31 @@ export function outclick(node: HTMLElement) {
         active = true;
     }, 0);
 
-    function handleClick(event: MouseEvent) {
-        if (!active) return;
-        if (!node.contains(event.target as Node)) {
-            node.dispatchEvent(new CustomEvent("outclick"));
-        }
+    function isOutside(event: Event) {
+        if (!active) return false;
+        return !node.contains(event.target as Node);
     }
 
-    function handleTouch(event: TouchEvent) {
-        if (!active) return;
-        if (!node.contains(event.target as Node)) {
-            node.dispatchEvent(new CustomEvent("outclick"));
-        }
+    function consumeOutside(event: Event) {
+        if (!isOutside(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        node.dispatchEvent(new CustomEvent("outclick"));
     }
 
-    document.addEventListener('click', handleClick);
-    document.addEventListener('touchstart', handleTouch);
+    const capture = true;
+
+    // Capture phase so dismiss runs before image mousedown/mouseup handlers.
+    document.addEventListener("pointerdown", consumeOutside, capture);
+    document.addEventListener("touchstart", consumeOutside, capture);
+    document.addEventListener("click", consumeOutside, capture);
 
     return {
         destroy() {
             clearTimeout(timer);
-            document.removeEventListener('click', handleClick);
-            document.removeEventListener('touchstart', handleTouch);
-        }
+            document.removeEventListener("pointerdown", consumeOutside, capture);
+            document.removeEventListener("touchstart", consumeOutside, capture);
+            document.removeEventListener("click", consumeOutside, capture);
+        },
     };
 }

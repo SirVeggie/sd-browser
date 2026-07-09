@@ -1,6 +1,7 @@
 <script lang="ts" context="module">
     import uniqueId from "lodash/uniqueId";
     import { writable } from "svelte/store";
+    import { outclick } from "../../actions/outclick";
 
     export type ContextReturn = void | "keep" | ContextMenuOption[];
     export type ContextMenuPosition = {
@@ -75,12 +76,15 @@
         }
     }
 
-    export function scheduleContextMenuHoverClose(menuId: string) {
+    export function scheduleContextMenuHoverClose(
+        menuId: string,
+        delayMs = 200,
+    ) {
         cancelContextMenuHoverClose();
         hoverCloseTimer = setTimeout(() => {
             closeContextMenuChildren(menuId);
             hoverCloseTimer = undefined;
-        }, 200);
+        }, delayMs);
     }
 
     export function closeAllContextMenus() {
@@ -93,8 +97,12 @@
     import ContextMenu from "./ContextMenu.svelte";
 </script>
 
-{#each $menuStore as menu, index (menu.id)}
-    <ContextMenu {menu} depth={index} />
-{/each}
+{#if $menuStore.length}
+    <div use:outclick on:outclick={closeAllContextMenus}>
+        {#each $menuStore as menu, index (menu.id)}
+            <ContextMenu {menu} depth={index} />
+        {/each}
+    </div>
+{/if}
 
 <svelte:window on:blur={() => closeAllContextMenus()} />

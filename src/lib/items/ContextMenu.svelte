@@ -1,8 +1,6 @@
-<script lang="ts" context="module">
-    import { outclick } from "../../actions/outclick";
-</script>
-
 <script lang="ts">
+    import { tick } from "svelte";
+    import { fitContextMenuToViewport } from "./contextMenuPosition";
     import {
         cancelContextMenuHoverClose,
         closeContextMenu,
@@ -17,9 +15,11 @@
     export let depth = 0;
 
     let element: HTMLDivElement;
-    let position = { ...menu.position };
+    let trackedMenuId: string | undefined;
+    let position = { x: menu.position.x, y: menu.position.y };
     let flipLeft = false;
     let activeSubmenuOption: string | null = null;
+    let positionFitted = false;
 
     const finePointerHover =
         typeof matchMedia !== "undefined" &&
@@ -27,32 +27,34 @@
 
     $: isSubmenu = menu.parent !== undefined;
 
-    $: if (menu) {
-        position = { ...menu.position };
+    $: if (menu.id !== trackedMenuId) {
+        trackedMenuId = menu.id;
+        position = { x: menu.position.x, y: menu.position.y };
         flipLeft = false;
         activeSubmenuOption = null;
+        positionFitted = false;
     }
 
-    $: {
-        if (element) {
-            const rect = element.getBoundingClientRect();
-            flipLeft = false;
+    $: if (element && menu.id === trackedMenuId && !positionFitted) {
+        void fitPositionOnce();
+    }
 
-            if (rect.right > window.innerWidth - 8) {
-                if (menu.position.parentLeft !== undefined) {
-                    position.x = menu.position.parentLeft - rect.width;
-                    flipLeft = true;
-                } else {
-                    position.x =
-                        menu.position.x - (rect.right - window.innerWidth + 8);
-                }
-            }
+    async function fitPositionOnce() {
+        await tick();
+        if (!element || positionFitted || menu.id !== trackedMenuId) return;
 
-            if (rect.bottom > window.innerHeight - 8) {
-                position.y =
-                    menu.position.y - (rect.bottom - window.innerHeight + 8);
-            }
-        }
+        const rect = element.getBoundingClientRect();
+        const fitted = fitContextMenuToViewport({
+            x: menu.position.x,
+            y: menu.position.y,
+            width: rect.width,
+            height: rect.height,
+            parentLeft: menu.position.parentLeft,
+        });
+
+        position = { x: fitted.x, y: fitted.y };
+        flipLeft = fitted.flipLeft;
+        positionFitted = true;
     }
 
     async function openSubmenu(
@@ -99,7 +101,7 @@
         }
 
         activeSubmenuOption = null;
-        closeContextMenuChildren(menu.id);
+        scheduleContextMenuHoverClose(menu.id, 300);
     }
 
     async function clickHandler(
@@ -145,8 +147,6 @@
     role="menu"
     aria-label={isSubmenu ? "Submenu" : "Context menu"}
     tabindex="-1"
-    use:outclick
-    on:outclick={() => closeContextMenu(menu.id)}
     on:mouseenter={menuEnter}
     on:mouseleave={menuLeave}
 >
