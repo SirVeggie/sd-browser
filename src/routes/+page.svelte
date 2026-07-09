@@ -76,6 +76,14 @@
     import { flyoutState } from "$lib/stores/flyoutStore";
     import BulkModal from "$lib/components/BulkModal.svelte";
     import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
+    import QuickTagSetupModal from "$lib/components/QuickTagSetupModal.svelte";
+    import QuickTagToolbar from "$lib/components/QuickTagToolbar.svelte";
+    import type { BulkTagMode } from "$lib/stores/bulkStore";
+    import {
+        computeQuickTagResult,
+        QUICK_TAG_COOLDOWN_MS,
+        type QuickTagHistoryEntry,
+    } from "$lib/tools/quickTag";
 
     type ActionMode = "manual" | "auto";
 
@@ -101,6 +109,14 @@
     let bulkOpen = false;
     let bulkSearchParams: SearchParams = buildSearchParams();
     let searchCountComplete = false;
+    let quickTagActive = false;
+    let quickTagSetupOpen = false;
+    let quickTagMode: BulkTagMode = "add";
+    let quickTagSelectedTags: string[] = [];
+    let quickTagHistory: QuickTagHistoryEntry[] = [];
+    let quickTagHiddenIds: string[] = [];
+    let quickTagLastClickAt = 0;
+    const quickTagInFlight = new Set<string>();
     const selection = createSelection();
     let anchorElement: HTMLDivElement;
     let scrollLoadSession = 0;
@@ -129,6 +145,9 @@
     let suppressAutoLoadUntil = 0;
 
     $: paginated = $imageStore.slice(0, currentAmount);
+    $: visiblePaginated = quickTagActive
+        ? paginated.filter((img) => !quickTagHiddenIds.includes(img.id))
+        : paginated;
     $: prevIndex = !currentImage
         ? -1
         : paginated.findIndex((img) => img.id === currentImage?.id) - 1;
@@ -174,7 +193,8 @@
     }
 
     $: if (masonryEnabled && gridElement) {
-        paginated;
+        visiblePaginated;
+        quickTagActive;
         searchSessionId;
         $imageSize;
         $imageSpacing;
@@ -212,8 +232,9 @@
     }
 
     function layoutMasonryColumns(metrics: MasonryMetrics): MasonryColumn[] {
+        const images = quickTagActive ? visiblePaginated : paginated;
         const columns = masonryPlacer.layout(
-            paginated,
+            images,
             searchSessionId,
             metrics,
         );
@@ -848,6 +869,14 @@
     }
 
     function handleEsc(e: KeyboardEvent) {
+        if (e.key === "Escape" && quickTagSetupOpen) {
+            closeQuickTagSetup();
+            return;
+        }
+        if (e.key === "Escape" && quickTagActive) {
+            void doneQuickTag();
+            return;
+        }
         if (e.key === "Escape" && selecting) {
             selection.deselectAll();
             selecting = false;
@@ -1131,6 +1160,123 @@
             reconnectSearch();
         }
     }
+
+    function openQuickTagSetup() {
+        closeNavMenu();
+        quickTagSetupOpen = true;
+    }
+
+    function closeQuickTagSetup() {
+        quickTagSetupOpen = false;
+    }
+
+    function startQuickTag(event: CustomEvent<{ mode: BulkTagMode; tags: string[] }>) {
+        const { mode, tags } = event.detail;
+        quickTagMode = mode;
+        quickTagSelectedTags = tags;
+        quickTagHistory = [];
+        quickTagHiddenIds = [];
+        quickTagLastClickAt = 0;
+        quickTagInFlight.clear();
+        quickTagActive = true;
+        quickTagSetupOpen = false;
+        closeImage();
+        cancelSelect();
+    }
+
+    function resetQuickTagState() {
+        quickTagActive = false;
+        quickTagSetupOpen = false;
+        quickTagHistory = [];
+        quickTagHiddenIds = [];
+        quickTagLastClickAt = 0;
+        quickTagInFlight.clear();
+    }
+
+    async function undoQuickTag() {
+        const entry = quickTagHistory.at(-1);
+        if (!entry) return;
+
+        quickTagHistory = quickTagHistory.slice(0, -1);
+        try {
+            await updateImageTags(entry.imageId, entry.originalTags);
+            quickTagHiddenIds = quickTagHiddenIds.filter((id) => id !== entry.imageId);
+        } catch (cause) {
+            console.error(cause);
+            quickTagHistory = [...quickTagHistory, entry];
+            notify(cause instanceof Error ? cause.message : "Undo failed", "warn");
+        }
+    }
+
+    async function revertQuickTag() {
+        if (!quickTagHistory.length) return;
+
+        const confirmed = await askConfirmation(
+            "Revert tagging",
+            `Revert ${quickTagHistory.length} tagged image${quickTagHistory.length === 1 ? "" : "s"} to their original tags?`,
+        );
+        if (!confirmed) return;
+
+        const entries = [...quickTagHistory].reverse();
+        try {
+            for (const entry of entries) {
+                await updateImageTags(entry.imageId, entry.originalTags);
+            }
+            resetQuickTagState();
+        } catch (cause) {
+            console.error(cause);
+            notify(cause instanceof Error ? cause.message : "Revert failed", "warn");
+        }
+    }
+
+    async function doneQuickTag() {
+        if (quickTagHistory.length > 0) {
+            const confirmed = await askConfirmation(
+                "Exit quick tag",
+                "Exit quick tag? You will lose the ability to undo or revert recent changes.",
+            );
+            if (!confirmed) return;
+        }
+        resetQuickTagState();
+    }
+
+    async function handleQuickTagImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
+        if (e && e instanceof MouseEvent && e.button !== 0) return;
+        if (!quickTagSelectedTags.length) {
+            notify("Select at least one tag", "warn");
+            return;
+        }
+        if (quickTagHiddenIds.includes(img.id) || quickTagInFlight.has(img.id)) return;
+
+        const now = Date.now();
+        if (now - quickTagLastClickAt < QUICK_TAG_COOLDOWN_MS) return;
+
+        quickTagInFlight.add(img.id);
+        try {
+            const originalTags = await fetchImageTags(img.id);
+            const newTags = computeQuickTagResult(
+                originalTags,
+                quickTagSelectedTags,
+                quickTagMode,
+            );
+            const savedTags = await updateImageTags(img.id, newTags);
+            quickTagHistory = [
+                ...quickTagHistory,
+                {
+                    imageId: img.id,
+                    originalTags,
+                    newTags: savedTags,
+                },
+            ];
+            quickTagHiddenIds = [...quickTagHiddenIds, img.id];
+            quickTagLastClickAt = Date.now();
+        } catch (cause) {
+            console.error(cause);
+            notify(cause instanceof Error ? cause.message : "Tagging failed", "warn");
+        } finally {
+            quickTagInFlight.delete(img.id);
+        }
+    }
 </script>
 
 <svelte:window on:keydown={handleEsc} />
@@ -1174,7 +1320,19 @@
         {/if}
     </div>
 
-    {#if !selecting}
+    {#if quickTagActive}
+        <div class="nav quick-tag-nav">
+            <QuickTagToolbar
+                tagMode={quickTagMode}
+                bind:selectedTags={quickTagSelectedTags}
+                canUndo={quickTagHistory.length > 0}
+                canRevert={quickTagHistory.length > 0}
+                on:undo={undoQuickTag}
+                on:revert={revertQuickTag}
+                on:done={doneQuickTag}
+            />
+        </div>
+    {:else if !selecting}
         <div class="nav" bind:this={navEl}>
             <SearchInput
                 bind:element={inputElement}
@@ -1196,21 +1354,39 @@
                     <span></span>
                 </span>
             </button>
-            <div class="nav-actions" class:open={navMenuOpen} role="menu">
-                <Button on:click={() => (selecting = true)}>Select</Button>
+            <div class="nav-burger-actions" class:open={navMenuOpen} role="menu">
                 <Button
                     on:click={() => {
                         closeNavMenu();
-                        openLive();
-                    }}>Live</Button
+                        selecting = true;
+                    }}>Select</Button
                 >
                 <Button
                     on:click={() => {
                         closeNavMenu();
-                        openBulk();
-                    }}>Bulk</Button
+                        openQuickTagSetup();
+                    }}>Quick tag</Button
                 >
-                <Link to="/settings" on:click={closeNavMenu}>Settings</Link>
+                <div class="nav-collapsed-actions">
+                    <Button
+                        on:click={() => {
+                            closeNavMenu();
+                            openLive();
+                        }}>Live</Button
+                    >
+                    <Button
+                        on:click={() => {
+                            closeNavMenu();
+                            openBulk();
+                        }}>Bulk</Button
+                    >
+                    <Link to="/settings" on:click={closeNavMenu}>Settings</Link>
+                </div>
+            </div>
+            <div class="nav-actions">
+                <Button on:click={openLive}>Live</Button>
+                <Button on:click={openBulk}>Bulk</Button>
+                <Link to="/settings">Settings</Link>
             </div>
         </div>
     {:else}
@@ -1266,7 +1442,9 @@
                                 loadSession={scrollLoadSession}
                                 selected={selecting &&
                                     $selection.includes(img.id)}
-                                onClick={!selecting && ((e) => openImage(img, e))}
+                                onClick={quickTagActive
+                                    ? ((e) => handleQuickTagImage(img, e))
+                                    : !selecting && ((e) => openImage(img, e))}
                                 onContext={handleImgContext(img.id)}
                                 onLoaded={handleImageLoaded}
                             />
@@ -1275,7 +1453,7 @@
                 </div>
             {/each}
         {:else}
-            {#each paginated as img (img.id)}
+            {#each visiblePaginated as img (img.id)}
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <div id={`img_${img.id}`} class:selecting on:click={selectImg(img.id)}>
@@ -1283,7 +1461,9 @@
                         {img}
                         loadSession={scrollLoadSession}
                         selected={selecting && $selection.includes(img.id)}
-                        onClick={!selecting && ((e) => openImage(img, e))}
+                        onClick={quickTagActive
+                            ? ((e) => handleQuickTagImage(img, e))
+                            : !selecting && ((e) => openImage(img, e))}
                         onContext={handleImgContext(img.id)}
                         onLoaded={handleImageLoaded}
                     />
@@ -1325,6 +1505,15 @@
         {sorting}
         on:close={() => (bulkOpen = false)}
         onComplete={handleBulkComplete}
+    />
+{/if}
+
+{#if quickTagSetupOpen}
+    <QuickTagSetupModal
+        bind:tagMode={quickTagMode}
+        bind:selectedTags={quickTagSelectedTags}
+        on:start={startQuickTag}
+        on:close={closeQuickTagSetup}
     />
 {/if}
 
@@ -1392,7 +1581,10 @@
     }
 
     .nav-menu-toggle {
-        display: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
         flex-shrink: 0;
         appearance: none;
         margin: 0;
@@ -1441,67 +1633,82 @@
         flex-shrink: 0;
     }
 
-    @container nav (max-width: 540px) {
-        .nav-menu-toggle {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            align-self: center;
-        }
+    .nav-burger-actions {
+        display: none;
+        gap: 0.5em;
+        flex-shrink: 0;
 
-        .nav-actions {
-            display: none;
+        &.open {
+            display: flex;
+            flex-direction: column;
+            position: absolute;
+            top: calc(100% - 0.5em);
+            right: 0;
+            z-index: 10;
+            box-sizing: border-box;
+            gap: 0.15em;
+            width: max-content;
+            min-width: 6.5em;
+            max-width: min(12em, 100%);
+            padding: 0.25em;
+            background: #2a2a2a;
+            border-radius: 0.35em;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            @include dropdown.panel-animation;
 
-            &.open {
-                display: flex;
-                flex-direction: column;
-                position: absolute;
-                top: calc(100% - 0.5em);
-                right: 0;
-                z-index: 10;
+            & > :global(a),
+            & > :global(button) {
                 box-sizing: border-box;
-                gap: 0.15em;
-                width: max-content;
-                min-width: 6.5em;
-                max-width: min(12em, 100%);
-                padding: 0.25em;
-                background: #2a2a2a;
-                border-radius: 0.35em;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-                @include dropdown.panel-animation;
+                display: block;
+                width: 100%;
+                min-width: 0;
+                margin: 0;
+                padding: 0.35em 0.55em;
+                border: none;
+                border-radius: 0.25em;
+                background: transparent;
+                color: #ddd;
+                font-size: 0.8rem;
+                line-height: 1.2;
+                text-align: left;
+                text-decoration: none;
+                transform: none;
+                transition: background-color 0.12s ease;
 
-                & > :global(a),
-                & > :global(button) {
-                    box-sizing: border-box;
-                    display: block;
-                    width: 100%;
-                    min-width: 0;
-                    margin: 0;
-                    padding: 0.35em 0.55em;
-                    border: none;
-                    border-radius: 0.25em;
-                    background: transparent;
-                    color: #ddd;
-                    font-size: 0.8rem;
-                    line-height: 1.2;
-                    text-align: left;
-                    text-decoration: none;
+                &:hover,
+                &:focus-visible {
+                    background: #ffffff12;
+                    border-color: transparent;
                     transform: none;
-                    transition: background-color 0.12s ease;
+                }
 
-                    &:hover,
-                    &:focus-visible {
-                        background: #ffffff12;
-                        border-color: transparent;
-                        transform: none;
-                    }
-
-                    &:active {
-                        background: #ffffff1a;
-                        transform: none;
-                    }
+                &:active {
+                    background: #ffffff1a;
+                    transform: none;
                 }
             }
+        }
+    }
+
+    .nav-collapsed-actions {
+        display: none;
+        flex-direction: column;
+        gap: 0.15em;
+    }
+
+    .nav.quick-tag-nav {
+        & > :global(.quick-tag-toolbar) {
+            width: 100%;
+        }
+    }
+
+    @container nav (max-width: 540px) {
+        .nav-actions {
+            display: none;
+        }
+
+        .nav-burger-actions.open .nav-collapsed-actions {
+            display: flex;
         }
 
         .flexspacer {
