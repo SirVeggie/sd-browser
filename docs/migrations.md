@@ -74,6 +74,42 @@ Deleting a tag in Settings removes it from the registry and strips it from all i
 
 After all clients are on v4+, no further migration steps are required for tags.
 
+## Image quality cache folders (v5, 2026-07)
+
+### What changed
+
+Generated WebP cache folders were renamed to match quality tier names. A new `minimal` quality tier was added (230px width, quality 70, effort 6). Smart subsampling is now configurable when generating cached WebP files.
+
+### Affected data
+
+| Legacy folder | New folder | Quality tier |
+|---------------|------------|--------------|
+| `{LOCAL_DATA}/compressed/` | `{LOCAL_DATA}/medium/` | `medium` (full-size WebP, quality 90) |
+| `{LOCAL_DATA}/thumbnails/` | `{LOCAL_DATA}/low/` | `low` (460px, quality 80) |
+| *(none)* | `{LOCAL_DATA}/minimal/` | `minimal` (230px, quality 70, effort 6) |
+
+App version bumped from `4` to `5`.
+
+### Migration code
+
+- Filesystem migration: [`src/lib/server/migration/v5.ts`](../src/lib/server/migration/v5.ts), wired from [`src/lib/server/migration/index.ts`](../src/lib/server/migration/index.ts)
+- Cache paths: [`src/lib/server/paths.ts`](../src/lib/server/paths.ts)
+- Generation and serving: [`src/lib/server/convert.ts`](../src/lib/server/convert.ts), [`src/lib/server/responses.ts`](../src/lib/server/responses.ts)
+- Clear cache action: [`src/lib/server/imageCache.ts`](../src/lib/server/imageCache.ts), `POST /api/settings/clear-compressed`
+
+### How to verify
+
+1. Upgrade from v4 with populated `compressed/` and `thumbnails/` folders — files appear under `medium/` and `low/` after startup.
+2. Gallery thumbnails (`quality=low`) and full view (`quality=medium` or `quality=minimal`) load without errors.
+3. Settings — `minimal` appears in quality dropdowns; smart subsampling toggle persists; clear compressed images deletes only generated WebP cache files.
+4. Delete or move an image — cache files are removed from the new tier folders.
+5. Fresh install — empty `medium/`, `low/`, and `minimal/` folders are created; lazy generation still works.
+6. Re-run startup — migration is a no-op (idempotent).
+
+### Removal
+
+After all clients are on v5+, empty legacy `compressed/` and `thumbnails/` directories can be deleted manually. The migration does not remove them automatically.
+
 ## Manual extradata recalculation
 
 This is not a version migration. It is a user-triggered rebuild of derived fields stored in `MetaCalcDB` (`extradata` table).

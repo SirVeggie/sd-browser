@@ -23,6 +23,7 @@
         slideDelay,
         sparseFrequency,
         thumbMode,
+        useSmartSubsampling,
     } from "$lib/stores/searchStore";
     import {
         activeCustomFilterIds,
@@ -56,7 +57,7 @@
     import { embeddingStore } from "$lib/stores/embeddingStore";
     import { embeddingApiTypeOptions } from "$lib/types/embeddings";
     import { authLogout, authStore } from "$lib/stores/authStore";
-    import { pullGlobalSettings, recalculateSimilarCache } from "$lib/requests/settingRequests";
+    import { pullGlobalSettings, recalculateSimilarCache, clearCompressedImages } from "$lib/requests/settingRequests";
     import { startExtradataRecalc, getOperations } from "$lib/requests/operationRequests";
     import { hasRunningOperation, operationStore } from "$lib/stores/operationStore";
     import { deleteTagFromImages } from "$lib/requests/tagRequests";
@@ -91,6 +92,7 @@
     let modalFilterName = "";
     let modalFilterText = "";
     let recalculatingSimilarCache = false;
+    let clearingCompressedImages = false;
     let tagModalOpen = false;
     let editingTag: TagDefinition | null = null;
     let modalTagName = "";
@@ -451,6 +453,28 @@
             notify('Extra data recalculation started');
         } catch (e) {
             notify(e instanceof Error ? e.message : 'Failed to start recalculation', 'error');
+        }
+    }
+
+    async function onClearCompressedImages() {
+        if (clearingCompressedImages)
+            return;
+
+        const confirmed = await askConfirmation(
+            'Clear compressed images',
+            'Delete all generated WebP cache files (medium, low, and minimal)? Original images are not affected. Cached previews will regenerate on demand.',
+        );
+        if (!confirmed)
+            return;
+
+        clearingCompressedImages = true;
+        try {
+            const result = await clearCompressedImages();
+            notify(`Cleared ${result.deleted} compressed image${result.deleted === 1 ? '' : 's'}`);
+        } catch (e) {
+            notify(e instanceof Error ? e.message : 'Failed to clear compressed images', 'warn');
+        } finally {
+            clearingCompressedImages = false;
         }
     }
 </script>
@@ -857,17 +881,17 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         </label>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
-        <label>
-            Sparse frequency (every Nth image)
-            <NumInput bind:value={$sparseFrequency} />
-        </label>
-
-        <!-- svelte-ignore a11y-label-has-associated-control -->
         <label
             title="Prompt similarity cutoff (0–1) for similar exploration. Images are included when their prompt similarity to the previous selection is below this value. Lower values keep only more distinct images; higher values allow more similar prompts."
         >
             Similarity threshold
             <NumInput bind:value={$similarityThreshold} step="any" />
+        </label>
+
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label>
+            Sparse frequency (every Nth image)
+            <NumInput bind:value={$sparseFrequency} />
         </label>
 
         <div class="similar-cache-action">
@@ -881,6 +905,12 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             Initial amount of images loaded (default: 500)
             <NumInput bind:value={$initialImages} />
         </label>
+
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label>
+            Slideshow interval (milliseconds)
+            <NumInput bind:value={$slideDelay} />
+        </label>
     </div>
 
     <div class="settings-group">
@@ -891,9 +921,11 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             <br />
             When using remotely, recommended to use medium and low for faster loading
             <br />
+            Use minimal for the smallest cached previews (230px)
+            <br />
             Setting thumbnails to low allows for smoother scrolling even locally
             <br />
-            * medium and low are slightly slower when seeing an image for the first time
+            * medium, low, and minimal are slightly slower when seeing an image for the first time
         </span>
 
         <label for="fullimage">
@@ -911,11 +943,17 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             <input type="checkbox" bind:checked={$animatedThumb} />
         </label>
 
-        <!-- svelte-ignore a11y-label-has-associated-control -->
-        <label>
-            Slideshow interval (milliseconds)
-            <NumInput bind:value={$slideDelay} />
+        <label class="checkbox">
+            Use smart subsampling
+            <span class="gray">(disabling makes compression faster)</span>
+            <input type="checkbox" bind:checked={$useSmartSubsampling} />
         </label>
+
+        <div class="inline-action">
+            <Button disabled={clearingCompressedImages} on:click={onClearCompressedImages}>
+                {clearingCompressedImages ? 'Clearing...' : 'Clear compressed images'}
+            </Button>
+        </div>
     </div>
 
     <div class="settings-group">

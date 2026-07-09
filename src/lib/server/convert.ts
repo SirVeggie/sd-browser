@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { compressedPath, thumbnailPath } from './paths';
+import { qualityTierPaths } from './paths';
 import { getImage } from './dataIndex';
 import path from 'path';
 import fs from 'fs/promises';
@@ -7,10 +7,33 @@ import { backgroundTasks } from './background';
 import { sleep } from '$lib/tools/sleep';
 import { skipGeneration } from '$lib/tools/misc';
 import type { EmbeddingApiType } from '$lib/types/embeddings';
+import type { GeneratedQualityMode } from '$lib/types/misc';
 
-const WEBP_FAST: sharp.WebpOptions = { effort: 0 };
+export type QualityTierSettings = {
+    width?: number;
+    quality: number;
+    effort: number;
+};
+
+export const QUALITY_TIER_SETTINGS: Record<GeneratedQualityMode, QualityTierSettings> = {
+    medium: { quality: 90, effort: 0 },
+    low: { width: 460, quality: 80, effort: 0 },
+    minimal: { width: 230, quality: 70, effort: 6 },
+};
+
 const LLAMA_EMBEDDING_MAX_TOTAL_PIXELS = 512 * 512;
 const SV_EMBED_INPUT_SIZE = 384;
+
+export function buildWebpOptions(
+    settings: QualityTierSettings,
+    smartSubsample: boolean,
+): sharp.WebpOptions {
+    return {
+        quality: settings.quality,
+        effort: settings.effort,
+        ...(smartSubsample ? { smartSubsample: true } : {}),
+    };
+}
 
 export function fitImageToMaxTotalPixels(
     width: number,
@@ -84,57 +107,62 @@ export async function encodeImageForEmbedding(
     }
 }
 
-export function generateThumbnailTask(imagepath: string, outputpath: string): Promise<string> {
-    return backgroundTasks.addWork(() => generateThumbnail(imagepath, outputpath), true);
+export function generateQualityTask(
+    imagepath: string,
+    outputpath: string,
+    tier: GeneratedQualityMode,
+    smartSubsample: boolean,
+): Promise<string> {
+    return backgroundTasks.addWork(
+        () => generateQualityImage(imagepath, outputpath, tier, smartSubsample),
+        true,
+    );
 }
 
-export async function generateThumbnail(imagepath: string, outputpath: string): Promise<string> {
-    await sharp(imagepath)
-        .resize({ width: 460 })
-        .webp({ quality: 80, ...WEBP_FAST })
-        .toFile(outputpath);
+export async function generateQualityImage(
+    imagepath: string,
+    outputpath: string,
+    tier: GeneratedQualityMode,
+    smartSubsample: boolean,
+): Promise<string> {
+    const settings = QUALITY_TIER_SETTINGS[tier];
+    const webpOptions = buildWebpOptions(settings, smartSubsample);
+    let pipeline = sharp(imagepath);
+    if (settings.width) {
+        pipeline = pipeline.resize({ width: settings.width });
+    }
+    await pipeline.webp(webpOptions).toFile(outputpath);
     return outputpath;
 }
 
-export function generateCompressedTask(imagepath: string, outputpath: string): Promise<string> {
-    return backgroundTasks.addWork(() => generateCompressed(imagepath, outputpath), true);
+export async function generateQualityFromId(
+    id: string,
+    tier: GeneratedQualityMode,
+    smartSubsample = true,
+    file?: string,
+) {
+    const imagepath = file ?? getImage(id)?.file;
+    if (!imagepath) return;
+    if (skipGeneration(imagepath)) return;
+    const output = path.join(qualityTierPaths[tier], `${id}.webp`);
+    const stats = await fs.stat(output).catch(() => undefined);
+    if (stats?.isFile()) return;
+    console.log(`Generating ${tier} preview for ${id}`);
+    await generateQualityImage(imagepath, output, tier, smartSubsample).catch(async () => {
+        console.log(`Failed to generate ${tier} preview, retrying...`);
+        await sleep(200);
+        await generateQualityImage(imagepath, output, tier, smartSubsample).catch(handleGenerationError(output));
+    });
 }
 
-export async function generateCompressed(imagepath: string, outputpath: string): Promise<string> {
-    await sharp(imagepath)
-        .webp({ quality: 90, ...WEBP_FAST })
-        .toFile(outputpath);
-    return outputpath;
-}
-
+/** @deprecated use generateQualityFromId with tier 'medium' */
 export async function generateCompressedFromId(id: string, file?: string) {
-    const imagepath = file ?? getImage(id)?.file;
-    if (!imagepath) return;
-    if (skipGeneration(imagepath)) return;
-    const output = path.join(compressedPath, `${id}.webp`);
-    const stats = await fs.stat(output).catch(() => undefined);
-    if (stats?.isFile()) return;
-    console.log(`Generating preview for ${id}`);
-    await generateCompressed(imagepath, output).catch(async () => {
-        console.log("Failed to generate preview, retrying...");
-        await sleep(200);
-        await generateCompressed(imagepath, output).catch(handleGenerationError(output));
-    });
+    return generateQualityFromId(id, 'medium', true, file);
 }
 
+/** @deprecated use generateQualityFromId with tier 'low' */
 export async function generateThumbnailFromId(id: string, file?: string) {
-    const imagepath = file ?? getImage(id)?.file;
-    if (!imagepath) return;
-    if (skipGeneration(imagepath)) return;
-    const output = path.join(thumbnailPath, `${id}.webp`);
-    const stats = await fs.stat(output).catch(() => undefined);
-    if (stats?.isFile()) return;
-    console.log(`Generating thumbnail for ${id}`);
-    await generateThumbnail(imagepath, output).catch(async () => {
-        console.log("Failed to generate thumbnail, retrying...");
-        await sleep(200);
-        await generateThumbnail(imagepath, output).catch(handleGenerationError(output));
-    });
+    return generateQualityFromId(id, 'low', true, file);
 }
 
 function handleGenerationError(output: string) {

@@ -3,10 +3,10 @@
     import Clickable from "./Clickable.svelte";
     import { cx } from "$lib/tools/cx";
     import { SpinLine } from "svelte-loading-spinners";
-    import { animatedThumb, thumbMode } from "$lib/stores/searchStore";
+    import { animatedThumb, thumbMode, useSmartSubsampling } from "$lib/stores/searchStore";
     import {
+        buildImageQueryParams,
         getPreviewParam,
-        getQualityParam,
     } from "$lib/requests/imageRequests";
     import { imageSpacing } from "$lib/stores/styleStore";
     import type { ClientImage } from "$lib/types/images";
@@ -40,7 +40,7 @@
         }
     }
 
-    $: src = `${img.url}?${getQualityParam($thumbMode)}&defer=true&${getPreviewParam(img.type, $animatedThumb)}`;
+    $: src = `${img.url}?${buildImageQueryParams($thumbMode, $useSmartSubsampling, `defer=true&${getPreviewParam(img.type, $animatedThumb)}`)}`;
     $: active = !!onClick;
     $: spacingCompact = $imageSpacing === "compact";
     $: spacingMosaic = $imageSpacing === "mosaic";

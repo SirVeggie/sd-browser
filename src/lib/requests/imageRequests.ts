@@ -16,7 +16,7 @@ import type {
     UpdateResponse,
 } from '$lib/types/requests';
 import { isImageInfo, type ImageInfo } from '$lib/types/images';
-import type { QualityMode } from '$lib/types/misc';
+import type { GeneratedQualityMode, QualityMode } from '$lib/types/misc';
 
 export type StreamHandlers = {
     onInit: (init: StreamInitResponse) => void;
@@ -168,7 +168,23 @@ export function getQualityParam(mode: QualityMode) {
             return 'quality=medium';
         case 'low':
             return 'quality=low';
+        case 'minimal':
+            return 'quality=minimal';
+        default: {
+            const _exhaustive: never = mode;
+            return `quality=${_exhaustive}`;
+        }
     }
+}
+
+export function getSmartSubsamplingParam(enabled: boolean) {
+    return `smartSubsampling=${enabled}`;
+}
+
+export function buildImageQueryParams(mode: QualityMode, smartSubsampling: boolean, extra?: string) {
+    const parts = [getQualityParam(mode), getSmartSubsamplingParam(smartSubsampling)];
+    if (extra) parts.push(extra);
+    return parts.join('&');
 }
 
 export function getPreviewParam(type: 'image' | 'video' | undefined, animated: boolean) {
@@ -185,13 +201,18 @@ export async function getImageInfo(imageid: string, fetch?: FetchType): Promise<
     return undefined;
 }
 
-export async function generateCompressedImages(ids: string[], fetch?: FetchType): Promise<void> {
+export async function generateCompressedImages(
+    ids: string[],
+    tier: GeneratedQualityMode = 'medium',
+    smartSubsampling = true,
+    fetch?: FetchType,
+): Promise<void> {
     if (!ids || !ids.length)
         return console.log('Invalid generation request');
     let url = `/api/generate`;
     if (!fetch)
         url = get(page).url.origin + url;
-    const res = await (fetch ? doPost(url, fetch, ids) : doServerPost(url, ids));
+    const res = await (fetch ? doPost(url, fetch, { ids, tier, smartSubsampling }) : doServerPost(url, { ids, tier, smartSubsampling }));
     if ('error' in res)
         return console.error(res.error);
     if ('message' in res)

@@ -2,8 +2,10 @@ import { page } from "$app/stores";
 import { updateGlobalSettings } from "$lib/stores/globalSettings";
 import { doGet, doPost, doServerGet, doServerPost, type FetchType } from "$lib/tools/requests";
 import {
+    isClearCompressedImagesResponse,
     isRecalculateSimilarCacheResponse,
     isSettingResponse,
+    type ClearCompressedImagesResponse,
     type RecalculateSimilarCacheRequest,
     type RecalculateSimilarCacheResponse,
     type SettingsRequest,
@@ -53,5 +55,20 @@ export async function recalculateSimilarCache(
         throw new Error(res.error);
     if (!isRecalculateSimilarCacheResponse(res))
         throw new Error('Invalid similarity cache response');
+    return res;
+}
+
+export async function clearCompressedImages(fetch?: FetchType): Promise<ClearCompressedImagesResponse> {
+    if (!get(page).url)
+        throw new Error('Page not loaded');
+    let url = '/api/settings/clear-compressed';
+    if (!fetch)
+        url = get(page).url.origin + url;
+    const res = await (fetch ? doPost(url, fetch, {}) : doServerPost(url, {}));
+
+    if ('error' in res)
+        throw new Error(res.error);
+    if (!isClearCompressedImagesResponse(res))
+        throw new Error('Invalid clear compressed images response');
     return res;
 }

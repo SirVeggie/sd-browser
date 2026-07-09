@@ -20,10 +20,14 @@ export function isFlyoutMode(object: any): object is FlyoutMode {
     return flyoutModes.includes(object);
 }
 
-export const qualityModes = ['original', 'medium', 'low'] as const;
+export const qualityModes = ['original', 'medium', 'low', 'minimal'] as const;
 export type QualityMode = typeof qualityModes[number];
+export type GeneratedQualityMode = Exclude<QualityMode, 'original'>;
 export function isQualityMode(object: any): object is QualityMode {
     return qualityModes.includes(object);
+}
+export function isGeneratedQualityMode(mode: QualityMode): mode is GeneratedQualityMode {
+    return mode !== 'original';
 }
 
 export const explorationModes = ['none', 'unique', 'similar', 'sparse'] as const;

@@ -177,6 +177,16 @@ export function isRecalculateSimilarCacheResponse(object: any): object is Recalc
     ]);
 }
 
+export type ClearCompressedImagesResponse = {
+    deleted: number;
+};
+export function isClearCompressedImagesResponse(object: any): object is ClearCompressedImagesResponse {
+    return testType(object, [
+        'deleted',
+        (o) => typeof o.deleted === 'number',
+    ]);
+}
+
 export type FoldersResponse = {
     paths: string[];
 };

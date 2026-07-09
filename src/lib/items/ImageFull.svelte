@@ -23,8 +23,8 @@
     getSvNegativePrompt,
     getSvPositivePrompt,
   } from "$lib/tools/metadataInterpreter";
-  import { compressedMode } from "$lib/stores/searchStore";
-  import { getQualityParam, imageAction } from "$lib/requests/imageRequests";
+  import { compressedMode, useSmartSubsampling } from "$lib/stores/searchStore";
+  import { buildImageQueryParams, imageAction } from "$lib/requests/imageRequests";
   import { updateImageTags } from "$lib/requests/tagRequests";
   import TagPillRow from "$lib/components/TagPillRow.svelte";
   import TagPickerPopup from "$lib/components/TagPickerPopup.svelte";
@@ -64,7 +64,7 @@
 
   $: full = $fullscreenStyle;
   $: imageUrl = image?.id
-    ? `/api/images/${image.id}?${getQualityParam(showOriginal ? "original" : $compressedMode)}`
+    ? `/api/images/${image.id}?${buildImageQueryParams(showOriginal ? "original" : $compressedMode, $useSmartSubsampling)}`
     : "";
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : buildPromptInfo(data);

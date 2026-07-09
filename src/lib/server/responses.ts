@@ -1,9 +1,10 @@
 import { readFile, unlink } from "fs/promises";
-import { generateCompressed, generateCompressedTask, generateThumbnail, generateThumbnailTask } from "./convert";
+import { generateQualityImage, generateQualityTask } from "./convert";
 import { generationDisabled, getImage } from "./dataIndex";
-import { compressedPath, thumbnailPath } from "./paths";
+import { qualityTierPaths } from "./paths";
 import path from "path";
 import { getImageType, skipGeneration } from "$lib/tools/misc";
+import type { GeneratedQualityMode } from "$lib/types/misc";
 import type { ServerError } from "$lib/types/requests";
 import { hashPath } from "./imageUtils";
 
@@ -18,7 +19,13 @@ export function success(message?: unknown, status = 200) {
     return new Response(JSON.stringify(message), { status });
 }
 
-export async function image(imageid: string | undefined, type?: string, defer?: boolean, preview?: boolean) {
+export async function image(
+    imageid: string | undefined,
+    type?: string,
+    defer?: boolean,
+    preview?: boolean,
+    smartSubsample = true,
+) {
     const img = getImage(imageid ?? '');
     if (!img) return error('Image not found', 404);
     let file = img.file;
@@ -32,10 +39,8 @@ export async function image(imageid: string | undefined, type?: string, defer?: 
 
     let buffer;
     try {
-        if (!skip && type === 'low') {
-            buffer = await getImageLow(imageid!, file, defer);
-        } else if (!skip && type === 'medium') {
-            buffer = await getImageMedium(imageid!, file, defer);
+        if (!skip && isGeneratedTier(type)) {
+            buffer = await getImageTier(imageid!, file, type, defer, smartSubsample);
         } else {
             buffer = await readFile(file);
         }
@@ -47,54 +52,38 @@ export async function image(imageid: string | undefined, type?: string, defer?: 
     return imageResponse(buffer, getImageType(img));
 }
 
-async function getImageLow(imageid: string, file: string, defer?: boolean) {
-    const thumb = path.join(thumbnailPath, `${imageid}.webp`);
-    return await readFile(thumb).then(async x => {
-        if (x.byteLength < 100) {
-            await unlink(thumb);
-            console.log(`Thumbnail is corrupted for ${imageid}`);
-            throw new Error("Thumbnail is corrupted");
-        }
-        return x;
-    }).catch(async () => {
-        if (generationDisabled)
-            return await readFile(file);
-        if (defer) {
-            await generateThumbnailTask(file, thumb);
-            console.log(`Generated thumbnail for ${imageid}`);
-        } else {
-            console.log(`Generating thumbnail for ${imageid}`);
-            await generateThumbnail(file, thumb);
-        }
-        return await readFile(thumb);
-    }).catch(async () => {
-        console.log(`Failed to fix image thumbnail for ${imageid}, sending full image`);
-        return await readFile(file);
-    });
+function isGeneratedTier(type: string | undefined): type is GeneratedQualityMode {
+    return type === 'medium' || type === 'low' || type === 'minimal';
 }
 
-async function getImageMedium(imageid: string, file: string, defer?: boolean) {
-    const compressed = path.join(compressedPath, `${imageid}.webp`);
-    return await readFile(compressed).then(async x => {
+async function getImageTier(
+    imageid: string,
+    file: string,
+    tier: GeneratedQualityMode,
+    defer?: boolean,
+    smartSubsample = true,
+) {
+    const cachePath = path.join(qualityTierPaths[tier], `${imageid}.webp`);
+    return await readFile(cachePath).then(async x => {
         if (x.byteLength < 100) {
-            await unlink(compressed);
-            console.log(`Preview is corrupted for ${imageid}`);
-            throw new Error("Preview is corrupted");
+            await unlink(cachePath);
+            console.log(`${tier} preview is corrupted for ${imageid}`);
+            throw new Error(`${tier} preview is corrupted`);
         }
         return x;
     }).catch(async () => {
         if (generationDisabled)
             return await readFile(file);
         if (defer) {
-            await generateCompressedTask(file, compressed);
-            console.log(`Generated preview for ${imageid}`);
+            await generateQualityTask(file, cachePath, tier, smartSubsample);
+            console.log(`Generated ${tier} preview for ${imageid}`);
         } else {
-            console.log(`Generating preview for ${imageid}`);
-            await generateCompressed(file, compressed);
+            console.log(`Generating ${tier} preview for ${imageid}`);
+            await generateQualityImage(file, cachePath, tier, smartSubsample);
         }
-        return await readFile(compressed);
+        return await readFile(cachePath);
     }).catch(async () => {
-        console.log(`Failed to fix image preview for ${imageid}, sending full image`);
+        console.log(`Failed to fix ${tier} preview for ${imageid}, sending full image`);
         return await readFile(file);
     });
 }

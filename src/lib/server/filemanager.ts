@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import { compressedPath, ensurePathsExist, imgFolder, thumbnailPath } from './paths';
+import { ensurePathsExist, imgFolder, qualityTierPaths } from './paths';
 import path from 'path';
 import os from 'os';
 import cp from 'child_process';
@@ -405,30 +405,25 @@ async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string,
 }
 
 async function cleanTempImages() {
-    let count = 0;
-    await fs.readdir(thumbnailPath).then(files => {
-        for (const file of files) {
-            const id = path.basename(file, '.webp');
-            if (!getImageList().has(id)) {
-                count++;
-                fs.unlink(path.join(thumbnailPath, file)).catch(() => '');
+    let totalCount = 0;
+    for (const [tier, tierPath] of Object.entries(qualityTierPaths)) {
+        let count = 0;
+        await fs.readdir(tierPath).then(files => {
+            for (const file of files) {
+                const id = path.basename(file, '.webp');
+                if (!getImageList().has(id)) {
+                    count++;
+                    fs.unlink(path.join(tierPath, file)).catch(() => '');
+                }
             }
+        });
+        if (count) {
+            console.log(`Cleaned ${count} ${tier} cache files`);
+            totalCount += count;
         }
-    });
-    if (count)
-        console.log(`Cleaned ${count} thumbnails`);
-    count = 0;
-    await fs.readdir(compressedPath).then(files => {
-        for (const file of files) {
-            const id = path.basename(file, '.webp');
-            if (!getImageList().has(id)) {
-                count++;
-                fs.unlink(path.join(compressedPath, file)).catch(() => '');
-            }
-        }
-    });
-    if (count)
-        console.log(`Cleaned ${count} preview images`);
+    }
+    if (totalCount)
+        console.log(`Cleaned ${totalCount} generated cache files total`);
 }
 //#endregion
 

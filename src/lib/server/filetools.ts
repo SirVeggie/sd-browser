@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import { compressedPath, imgFolder, thumbnailPath } from './paths';
+import { imgFolder, qualityTierPaths } from './paths';
 import path from 'path';
 
 export async function fileExists(file: string): Promise<boolean> {
@@ -88,8 +88,9 @@ export function removeFolderFromPath(file: string) {
 }
 
 export async function deleteTempImage(id: string) {
-    const thumbfile = path.join(thumbnailPath, `${id}.webp`);
-    const compfile = path.join(compressedPath, `${id}.webp`);
-    await fs.unlink(thumbfile).catch(() => '');
-    await fs.unlink(compfile).catch(() => '');
+    await Promise.all(
+        Object.values(qualityTierPaths).map((tierPath) =>
+            fs.unlink(path.join(tierPath, `${id}.webp`)).catch(() => ''),
+        ),
+    );
 }

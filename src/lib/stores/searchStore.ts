@@ -37,6 +37,7 @@ export const similarityThreshold = writable(defaultExplorationSettings.similarit
 export const matchingMode = writable<SearchMode>('regex');
 export const initialImages = writable(500);
 export const slideDelay = writable(4000);
+export const useSmartSubsampling = writable(true);
 
 export function buildSearchParams(searchText?: string): SearchParams {
     const filters: string[] = [];
@@ -76,4 +77,5 @@ export function syncSearchWithLocalStorage() {
     syncMemory('matchingMode', matchingMode);
     syncMemory('initialImages', initialImages);
     syncMemory('slideDelay', slideDelay);
+    syncMemory('useSmartSubsampling', useSmartSubsampling);
 }

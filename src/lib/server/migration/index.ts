@@ -3,8 +3,9 @@ import { migrateV1 } from './v1';
 import { migrateV2 } from './v2';
 import { migrateV3 } from './v3';
 import { migrateV4 } from './v4';
+import { migrateV5 } from './v5';
 
-export const APP_VERSION = 4;
+export const APP_VERSION = 5;
 
 function parseStoredVersion(storedVersion: string | undefined): number {
     if (!storedVersion)
@@ -41,6 +42,10 @@ export async function handleMigrationStart() {
     if (version < 4) {
         migrateV4();
         bumpVersion(4);
+    }
+    if (version < 5) {
+        await migrateV5();
+        bumpVersion(5);
     }
 }
 

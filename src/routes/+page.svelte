@@ -16,6 +16,7 @@
         subscribeImageStream,
     } from "$lib/requests/imageRequests";
     import { expandClientImages, formatSearchDateMinute } from "$lib/tools/misc";
+    import { isGeneratedQualityMode } from "$lib/types/misc";
     import {
         explorationModes,
         sortingMethods,
@@ -32,6 +33,7 @@
         compressedMode,
         slideDelay,
         initialImages,
+        useSmartSubsampling,
         buildSearchParams,
         syncSearchInput,
         type SearchParams,
@@ -495,7 +497,7 @@
             info = res;
         });
 
-        if ($compressedMode === "medium") {
+        if (isGeneratedQualityMode($compressedMode)) {
             const currentImages = $imageStore;
             const startIndex = Math.max(
                 0,
@@ -505,10 +507,12 @@
             const endIndex = Math.min(currentImages.length, startIndex + 50);
             setTimeout(() => {
                 console.log(
-                    `Generating compressed images ${startIndex} - ${endIndex}`,
+                    `Generating ${$compressedMode} images ${startIndex} - ${endIndex}`,
                 );
                 generateCompressedImages(
                     currentImages.map((x) => x.id).slice(startIndex, endIndex),
+                    $compressedMode,
+                    $useSmartSubsampling,
                 );
             }, 1000);
         }
