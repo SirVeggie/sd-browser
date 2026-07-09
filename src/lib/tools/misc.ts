@@ -33,6 +33,15 @@ export function getImageType(image: ServerImage): undefined | 'video' {
     return isVideo(image.file) ? 'video' : undefined;
 }
 
+/** Image path used for embedding/vectorization (preview PNG for videos). */
+export function getEmbeddingImagePath(image: { file: string; preview: string }): string {
+    if (!isVideo(image.file))
+        return image.file;
+    if (image.preview)
+        return image.preview;
+    return image.file.replace(/\.\w+$/i, '.png');
+}
+
 export function validRegex(str: string): boolean {
     try {
         new RegExp(str);

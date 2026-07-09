@@ -10,6 +10,7 @@ import {
     isEmbeddingConfigured,
     normalizeEmbeddingSettings,
 } from "$lib/types/embeddings";
+import { getEmbeddingImagePath } from "$lib/tools/misc";
 
 const EMBEDDING_REQUEST_TIMEOUT_MS = 120_000;
 const PROPS_REQUEST_TIMEOUT_MS = 15_000;
@@ -436,7 +437,7 @@ export async function vectorizeImageBatch(
         if (!force && EmbeddingDB.hasImageEmbedding(id)) {
             continue;
         }
-        toProcess.push({ id, path: image.file });
+        toProcess.push({ id, path: getEmbeddingImagePath(image) });
     }
 
     if (toProcess.length === 0) {
@@ -482,7 +483,7 @@ export async function vectorizeImage(
         return false;
     }
 
-    const embedding = await embedImage(config, image.file, options.mediaMarker);
+    const embedding = await embedImage(config, getEmbeddingImagePath(image), options.mediaMarker);
     EmbeddingDB.setImageEmbedding(id, embedding);
     return true;
 }

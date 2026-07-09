@@ -1,4 +1,4 @@
-import { parseSearchDate, parseSearchFloat, validRegex, XOR, yieldToEventLoop } from "$lib/tools/misc";
+import { isVideo, parseSearchDate, parseSearchFloat, validRegex, XOR, yieldToEventLoop } from "$lib/tools/misc";
 import { isExactTagTerm } from "$lib/types/tags";
 import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
@@ -34,6 +34,8 @@ const annotationRegex = new RegExp(`^${keywordPattern}(ANNOTATION|AN) `, keyword
 const tagRegex = new RegExp(`^${keywordPattern}TAG `, keywordFlags);
 const similarRegex = new RegExp(`^${keywordPattern}(SIMILAR|SM) `, keywordFlags);
 const idRegex = new RegExp(`^${keywordPattern}ID `, keywordFlags);
+const videoRegex = new RegExp(`^${keywordPattern}(VIDEO|VID) `, keywordFlags);
+const videoOnlyRegex = new RegExp(`^${keywordPattern}(VIDEO|VID)$`, keywordFlags);
 const imgRegex = new RegExp(`^${keywordPattern}IMG `, keywordFlags);
 const imgOnlyRegex = new RegExp(`^${keywordPattern}IMG$`, keywordFlags);
 /** Default similarity cutoff for IMG text queries (text query vs image embeddings). */
@@ -900,6 +902,7 @@ export function buildMatcher(
         else if (tagRegex.test(x)) type = 'tag';
         else if (similarRegex.test(x)) type = 'similar';
         else if (idRegex.test(x)) type = 'id';
+        else if (videoRegex.test(x) || videoOnlyRegex.test(x)) type = 'video';
         else if (imgRegex.test(x) || imgOnlyRegex.test(x)) type = 'img';
 
         let similarRef: string | undefined;
@@ -1000,6 +1003,11 @@ export function buildMatcher(
                 return XOR(x.not, matched);
             }
 
+            if (x.type === 'video') {
+                const matched = isVideo(image.file);
+                return XOR(x.not, matched);
+            }
+
             if (x.type === 'date') {
                 if (x.raw.toLowerCase().startsWith('to ')) {
                     const end = parseSearchDate(x.raw.substring(3), 'end');
@@ -1068,7 +1076,7 @@ function getResultTakeCount(search: string): number {
 function getSearchPartRank(part: SearchPart): number {
     if (part.type === 'id') return 0;
     if (part.type === 'date') return 1;
-    if (part.type === 'folder' || part.type === 'tag') return 2;
+    if (part.type === 'folder' || part.type === 'tag' || part.type === 'video') return 2;
     if (part.type === 'model') return 3;
     if (part.type === 'positive' || part.type === 'negative' || part.type === 'annotation') return 4;
     if (part.type === 'params') return 5;
@@ -1124,6 +1132,8 @@ function getTextByType(image: ServerImage, type: MatchType): string {
             return '';
         case 'id':
             return image.id;
+        case 'video':
+            return '';
         default: {
             const _never: never = type;
             return _never;
