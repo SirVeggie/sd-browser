@@ -15,6 +15,24 @@ const LEGACY_MOVES = [
     { from: legacyThumbnailPath, to: lowPath, label: 'thumbnails → low' },
 ] as const;
 
+async function removeLegacyFolder(from: string, to: string) {
+    const entries = await fs.readdir(from);
+    for (const file of entries) {
+        if (!file.endsWith('.webp'))
+            continue;
+
+        const destination = path.join(to, file);
+        if (await fileExists(destination))
+            await fs.unlink(path.join(from, file)).catch(() => {});
+    }
+
+    const remaining = await fs.readdir(from);
+    if (!remaining.length) {
+        await fs.rmdir(from);
+        console.log(`Removed legacy folder: ${from}`);
+    }
+}
+
 /** v4 → v5: rename generated image cache folders to match quality tiers. */
 export async function migrateV5() {
     await fs.mkdir(minimalPath, { recursive: true });
@@ -25,12 +43,8 @@ export async function migrateV5() {
             continue;
         }
 
-        const files = (await fs.readdir(from)).filter((file) => file.endsWith('.webp'));
-        if (!files.length) {
-            continue;
-        }
-
         await fs.mkdir(to, { recursive: true });
+        const files = (await fs.readdir(from)).filter((file) => file.endsWith('.webp'));
         let moved = 0;
         let skipped = 0;
         let failed = 0;
@@ -58,5 +72,8 @@ export async function migrateV5() {
         }
 
         console.log(`Migrated ${label}: moved ${moved}, skipped ${skipped}, failed ${failed}`);
+
+        if (!failed)
+            await removeLegacyFolder(from, to);
     }
 }

@@ -99,7 +99,7 @@ App version bumped from `4` to `5`.
 
 ### How to verify
 
-1. Upgrade from v4 with populated `compressed/` and `thumbnails/` folders — files appear under `medium/` and `low/` after startup.
+1. Upgrade from v4 with populated `compressed/` and `thumbnails/` folders — files appear under `medium/` and `low/` after startup; empty legacy folders are removed.
 2. Gallery thumbnails (`quality=low`) and full view (`quality=medium` or `quality=minimal`) load without errors.
 3. Settings — `minimal` appears in quality dropdowns; smart subsampling toggle persists; clear compressed images deletes only generated WebP cache files.
 4. Delete or move an image — cache files are removed from the new tier folders.
@@ -108,7 +108,7 @@ App version bumped from `4` to `5`.
 
 ### Removal
 
-After all clients are on v5+, empty legacy `compressed/` and `thumbnails/` directories can be deleted manually. The migration does not remove them automatically.
+After all clients are on v5+, legacy `compressed/` and `thumbnails/` directories are removed automatically when migration completes without failures. Folders with unmigrated files (e.g. failed moves or non-WebP leftovers) are left in place.
 
 ## Manual extradata recalculation
 
