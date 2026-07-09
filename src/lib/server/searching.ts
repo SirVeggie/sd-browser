@@ -406,6 +406,7 @@ export async function resolveImgSearchContext(
                 effectiveThreshold,
                 k,
                 candidateIds,
+                settings.useOptimizedEmbeddingQuery,
             );
             throwIfSearchAborted(options);
             const matchIds = new Set(matchScores.keys());

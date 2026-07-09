@@ -96,6 +96,7 @@ export class EmbeddingDB {
     private static stmtSetImage: Statement<unknown[], unknown> | undefined;
     private static stmtDeleteImage: Statement<unknown[], unknown> | undefined;
     private static stmtFindSimilar: Statement<unknown[], unknown> | undefined;
+    private static stmtFindSimilarIn: Statement<unknown[], unknown> | undefined;
     private static stmtSelectAllIds: Statement<unknown[], unknown> | undefined;
     private static stmtSelectAllEmbeddings: Statement<unknown[], unknown> | undefined;
     private static stmtSelectEmbeddingsByIds: Statement<unknown[], unknown> | undefined;
@@ -133,6 +134,7 @@ export class EmbeddingDB {
             EmbeddingDB.stmtSetImage = undefined;
             EmbeddingDB.stmtDeleteImage = undefined;
             EmbeddingDB.stmtFindSimilar = undefined;
+            EmbeddingDB.stmtFindSimilarIn = undefined;
             EmbeddingDB.stmtSelectAllIds = undefined;
             EmbeddingDB.stmtSelectAllEmbeddings = undefined;
             EmbeddingDB.stmtSelectEmbeddingsByIds = undefined;
@@ -155,6 +157,15 @@ export class EmbeddingDB {
             WHERE embedding MATCH ?
               AND k = ?
               AND distance <= ?
+            ORDER BY distance
+        `);
+        EmbeddingDB.stmtFindSimilarIn = EmbeddingDB.db.prepare(`
+            SELECT id, (1.0 - distance) AS similarity
+            FROM ${VEC_TABLE}
+            WHERE embedding MATCH ?
+              AND k = ?
+              AND distance <= ?
+              AND id IN (SELECT value FROM json_each(?))
             ORDER BY distance
         `);
         EmbeddingDB.stmtSelectAllIds = EmbeddingDB.db.prepare(`SELECT id FROM ${VEC_TABLE}`);
@@ -209,6 +220,7 @@ export class EmbeddingDB {
         EmbeddingDB.stmtSetImage = undefined;
         EmbeddingDB.stmtDeleteImage = undefined;
         EmbeddingDB.stmtFindSimilar = undefined;
+        EmbeddingDB.stmtFindSimilarIn = undefined;
         EmbeddingDB.stmtSelectAllIds = undefined;
         EmbeddingDB.stmtSelectAllEmbeddings = undefined;
         EmbeddingDB.stmtSelectEmbeddingsByIds = undefined;
@@ -290,6 +302,7 @@ export class EmbeddingDB {
         threshold: number,
         k?: number,
         candidateIds?: Set<string>,
+        useOptimizedQuery = true,
     ): Map<string, number> {
         EmbeddingDB.setup();
         if (!EmbeddingDB.stmtFindSimilar)
@@ -312,9 +325,29 @@ export class EmbeddingDB {
         }
 
         const requested = k !== undefined ? Math.max(1, k) : Math.max(1, count);
+        const useVecQuery = useOptimizedQuery && (k === undefined || requested <= VEC0_KNN_MAX);
+        if (!useVecQuery) {
+            return EmbeddingDB.findSimilarImageCandidates(
+                query,
+                minSimilarity,
+                k === undefined ? undefined : requested,
+                candidateIds ?? EmbeddingDB.getAllImageIds(),
+                count,
+            );
+        }
+
         const limit = Math.min(requested, VEC0_KNN_MAX);
-        if (candidateIds !== undefined)
-            return EmbeddingDB.findSimilarImageCandidates(query, minSimilarity, limit, candidateIds, count);
+        if (candidateIds !== undefined) {
+            if (!EmbeddingDB.stmtFindSimilarIn)
+                return new Map();
+            const rows = EmbeddingDB.stmtFindSimilarIn.all(
+                queryBuffer,
+                limit,
+                maxDistance,
+                JSON.stringify([...candidateIds]),
+            ) as { id: string; similarity: number }[];
+            return new Map(rows.map((row) => [row.id, row.similarity]));
+        }
 
         const rows = EmbeddingDB.stmtFindSimilar.all(
             queryBuffer,
@@ -328,7 +361,7 @@ export class EmbeddingDB {
     private static findSimilarImageCandidates(
         query: Float32Array,
         minSimilarity: number,
-        limit: number,
+        limit: number | undefined,
         candidateIds: Set<string>,
         totalCount: number,
     ): Map<string, number> {
@@ -344,7 +377,10 @@ export class EmbeddingDB {
         }
 
         scores.sort((a, b) => b.similarity - a.similarity);
-        return new Map(scores.slice(0, limit).map((row) => [row.id, row.similarity]));
+        return new Map(
+            (limit === undefined ? scores : scores.slice(0, limit))
+                .map((row) => [row.id, row.similarity]),
+        );
     }
 
     private static getCandidateEmbeddingRows(

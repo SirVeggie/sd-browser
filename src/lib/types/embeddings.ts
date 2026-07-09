@@ -13,6 +13,8 @@ export type EmbeddingSettings = {
     apiBatch: number;
     /** When set, IMG search text is sent as template with `{label}` replaced by the query. */
     searchTemplate: string;
+    /** Use sqlite-vec KNN for IMG searches when its result limit is sufficient. */
+    useOptimizedEmbeddingQuery: boolean;
 };
 
 export const embeddingStoreDefaults: EmbeddingSettings = {
@@ -22,6 +24,7 @@ export const embeddingStoreDefaults: EmbeddingSettings = {
     modelId: "",
     apiBatch: 32,
     searchTemplate: "",
+    useOptimizedEmbeddingQuery: true,
 };
 
 export function formatEmbeddingSearchQuery(label: string, template: string): string {
@@ -48,6 +51,10 @@ export function normalizeEmbeddingSettings(
         ...embeddingStoreDefaults,
         ...stored,
         apiBatch: stored.apiBatch ?? stored.parallelCalls ?? embeddingStoreDefaults.apiBatch,
+        useOptimizedEmbeddingQuery:
+            typeof stored.useOptimizedEmbeddingQuery === "boolean"
+                ? stored.useOptimizedEmbeddingQuery
+                : embeddingStoreDefaults.useOptimizedEmbeddingQuery,
     };
 }
 

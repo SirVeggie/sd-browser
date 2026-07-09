@@ -240,7 +240,7 @@ export type BulkTagOptions = {
     tags: string[];
 };
 
-export type BulkEmbeddingConfig = Omit<EmbeddingSettings, 'apiKey'> & {
+export type BulkEmbeddingConfig = Omit<EmbeddingSettings, 'apiKey' | 'useOptimizedEmbeddingQuery'> & {
     apiKey?: string;
 };
 

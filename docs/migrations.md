@@ -1,5 +1,30 @@
 # Migrations
 
+## Embedding query optimization setting (2026-07)
+
+### What changed
+
+`embeddingSettings` now includes `useOptimizedEmbeddingQuery`. It chooses the sqlite-vec KNN path for `IMG` queries; disabling it uses JavaScript cosine-similarity scoring instead. The optimized path is limited to 4096 results. An explicitly requested `k` greater than 4096 automatically uses JavaScript scoring.
+
+### Affected data
+
+Existing localStorage and global `embeddingSettings` values lack this field. They retain the previous behavior by defaulting to `true` when loaded; no persisted data is rewritten solely for this change.
+
+### Migration code
+
+- [`src/lib/types/embeddings.ts`](../src/lib/types/embeddings.ts) — `normalizeEmbeddingSettings()` adds the default at the settings boundary.
+
+### How to verify
+
+1. Load a profile with existing embedding settings that lack `useOptimizedEmbeddingQuery`; Settings → Embedding settings shows the toggle enabled.
+2. Disable the toggle and run `IMG <query>`; JavaScript similarity returns every threshold match unless the query specifies `k`.
+3. Enable the toggle; `IMG <query>` uses sqlite-vec and returns at most 4096 results.
+4. With the toggle enabled, run `IMG <query> 5000`; JavaScript similarity is used and returns up to 5000 results.
+
+### Removal
+
+Keep the defaulting behavior while stored settings from before this field existed may be loaded.
+
 ## Folder filter → custom filters (2026-06)
 
 ### What changed

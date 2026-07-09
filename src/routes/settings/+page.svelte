@@ -746,6 +746,14 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                         placeholder={'This is a photo of {label}.'}
                     />
                 </label>
+
+                <label
+                    class="checkbox"
+                    title="Uses sqlite-vec KNN queries for IMG search. Results are limited to 4096 unless a larger explicit k value selects JS similarity instead."
+                >
+                    Use optimized embedding query (results limited to max 4096):
+                    <input type="checkbox" bind:checked={$embeddingStore.useOptimizedEmbeddingQuery} />
+                </label>
             </div>
         </div>
     </div>
