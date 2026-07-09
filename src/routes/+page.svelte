@@ -51,6 +51,7 @@
         isNearBottom,
         isNearTop,
     } from "$lib/tools/scrollLoadMore";
+    import { bindDropdownOutsideClick } from "$lib/tools/dropdownOutsideClick";
     import {
         AUTOLOAD_SUPPRESS_AFTER_LAYOUT_MS,
         applyColumnOrder,
@@ -96,6 +97,8 @@
     let sorting: SortingMethod = "date";
     let fetchingNextPage = false;
     let selecting = false;
+    let navMenuOpen = false;
+    let navEl: HTMLDivElement | undefined;
     let bulkOpen = false;
     let bulkSearchParams: SearchParams = buildSearchParams();
     let searchCountComplete = false;
@@ -376,10 +379,26 @@
         lastColumnCount = getGridMetrics(gridElement).columnCount;
     }
 
+    function closeNavMenu() {
+        navMenuOpen = false;
+    }
+
+    function toggleNavMenu() {
+        navMenuOpen = !navMenuOpen;
+    }
+
+    $: selecting, closeNavMenu();
+
     onMount(() => {
         scrollToTop();
         reconnectSearch();
         fetchFolderPaths().catch(() => {});
+
+        const removeNavOutsideClick = bindDropdownOutsideClick(
+            () => navMenuOpen,
+            closeNavMenu,
+            () => navEl,
+        );
 
         window.addEventListener("keydown", keylistener);
         window.addEventListener("scroll", onScroll, { passive: true });
@@ -400,6 +419,7 @@
         });
 
         return () => {
+            removeNavOutsideClick();
             clearTimeout(inputTimer);
             if (resizeDebounceTimer !== undefined) {
                 clearTimeout(resizeDebounceTimer);
@@ -1154,26 +1174,88 @@
     </div>
 
     {#if !selecting}
-        <div class="nav">
+        <div class="nav" bind:this={navEl}>
             <SearchInput
                 bind:element={inputElement}
                 bind:value={$searchFilter}
                 placeholder="Search"
                 on:input={inputChange}
             />
-            <Button on:click={() => (selecting = true)}>Select</Button>
-            <Button on:click={openLive}>Live</Button>
-            <Button on:click={openBulk}>Bulk</Button>
-            <Link to="/settings">Settings</Link>
+            <button
+                type="button"
+                class="nav-menu-toggle"
+                aria-expanded={navMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Actions menu"
+                on:click|stopPropagation={toggleNavMenu}
+            >
+                <span class="burger" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </button>
+            <div class="nav-actions" class:open={navMenuOpen} role="menu">
+                <Button on:click={() => (selecting = true)}>Select</Button>
+                <Button
+                    on:click={() => {
+                        closeNavMenu();
+                        openLive();
+                    }}>Live</Button
+                >
+                <Button
+                    on:click={() => {
+                        closeNavMenu();
+                        openBulk();
+                    }}>Bulk</Button
+                >
+                <Link to="/settings" on:click={closeNavMenu}>Settings</Link>
+            </div>
         </div>
     {:else}
-        <div class="nav">
-            <Button on:click={deleteSelected}>Delete</Button>
-            <Button on:click={handleSelectionButton("move")}>Move</Button>
-            <Button on:click={handleSelectionButton("copy")}>Copy</Button>
-            <Button on:click={fillSelected}>Fill</Button>
-            <div class="flexspacer" />
-            <Button on:click={cancelSelect}>Cancel</Button>
+        <div class="nav selection-nav" bind:this={navEl}>
+            <button
+                type="button"
+                class="nav-menu-toggle"
+                aria-expanded={navMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Selection actions menu"
+                on:click|stopPropagation={toggleNavMenu}
+            >
+                <span class="burger" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+            </button>
+            <div class="nav-actions" class:open={navMenuOpen} role="menu">
+                <Button
+                    on:click={() => {
+                        closeNavMenu();
+                        deleteSelected();
+                    }}>Delete</Button
+                >
+                <Button
+                    on:click={(e) => {
+                        closeNavMenu();
+                        void handleSelectionButton("move")(e);
+                    }}>Move</Button
+                >
+                <Button
+                    on:click={(e) => {
+                        closeNavMenu();
+                        void handleSelectionButton("copy")(e);
+                    }}>Copy</Button
+                >
+                <Button
+                    on:click={() => {
+                        closeNavMenu();
+                        fillSelected();
+                    }}>Fill</Button
+                >
+                <div class="flexspacer" />
+                <Button on:click={cancelSelect}>Cancel</Button>
+            </div>
         </div>
     {/if}
 </div>
@@ -1287,6 +1369,8 @@
 {/if}
 
 <style lang="scss">
+    @use "$lib/items/dropdownAnimations.scss" as dropdown;
+
     .topbar {
         position: sticky;
         top: 0;
@@ -1319,12 +1403,143 @@
     }
 
     .nav {
+        container-type: inline-size;
+        container-name: nav;
+        position: relative;
         display: flex;
         gap: 0.5em;
+        align-items: center;
         padding-bottom: 0.5em;
 
         & > :global(.input) {
-            flex-grow: 1;
+            flex: 1 1 0;
+            min-width: 0;
+        }
+    }
+
+    .nav-menu-toggle {
+        display: none;
+        flex-shrink: 0;
+        appearance: none;
+        margin: 0;
+        padding: 0.45em;
+        border: none;
+        border-radius: 0.35em;
+        background: transparent;
+        color: #ddd;
+        cursor: pointer;
+        line-height: 0;
+        transition: background-color 0.12s ease;
+
+        .burger {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 0.22em;
+            width: 1.1em;
+            height: 1em;
+
+            span {
+                display: block;
+                height: 2px;
+                border-radius: 1px;
+                background: currentColor;
+            }
+        }
+
+        &:hover,
+        &:focus-visible {
+            background: #ffffff10;
+        }
+
+        &:active {
+            background: #ffffff18;
+        }
+
+        &:focus {
+            outline: none;
+        }
+    }
+
+    .nav-actions {
+        display: flex;
+        gap: 0.5em;
+        flex-shrink: 0;
+    }
+
+    @container nav (max-width: 540px) {
+        .nav-menu-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            align-self: center;
+        }
+
+        .nav-actions {
+            display: none;
+
+            &.open {
+                display: flex;
+                flex-direction: column;
+                position: absolute;
+                top: calc(100% - 0.5em);
+                right: 0;
+                z-index: 10;
+                box-sizing: border-box;
+                gap: 0.15em;
+                width: max-content;
+                min-width: 6.5em;
+                max-width: min(12em, 100%);
+                padding: 0.25em;
+                background: #2a2a2a;
+                border-radius: 0.35em;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+                @include dropdown.panel-animation;
+
+                & > :global(a),
+                & > :global(button) {
+                    box-sizing: border-box;
+                    display: block;
+                    width: 100%;
+                    min-width: 0;
+                    margin: 0;
+                    padding: 0.35em 0.55em;
+                    border: none;
+                    border-radius: 0.25em;
+                    background: transparent;
+                    color: #ddd;
+                    font-size: 0.8rem;
+                    line-height: 1.2;
+                    text-align: left;
+                    text-decoration: none;
+                    transform: none;
+                    transition: background-color 0.12s ease;
+
+                    &:hover,
+                    &:focus-visible {
+                        background: #ffffff12;
+                        border-color: transparent;
+                        transform: none;
+                    }
+
+                    &:active {
+                        background: #ffffff1a;
+                        transform: none;
+                    }
+                }
+            }
+        }
+
+        .flexspacer {
+            display: none;
+        }
+    }
+
+    .nav.selection-nav {
+        @container nav (max-width: 540px) {
+            .nav-menu-toggle {
+                margin-left: auto;
+            }
         }
     }
 
