@@ -1,14 +1,15 @@
 import type { Database as BetterSqlite3, Statement } from 'better-sqlite3';
 import path from 'path';
+import { cosineSimilarity, bufferToFloat32Array } from '$lib/tools/vectorMath';
 import { datapath } from './paths';
 import { openDatabase } from './sqlite';
 
 const META_TABLE = 'embedding_meta';
 const VEC_TABLE = 'image_embeddings';
+const UNIQUENESS_TABLE = 'uniqueness_scores';
 const DIMENSIONS_KEY = 'dimensions';
 /** sqlite-vec vec0 KNN hard limit; queries with k above this fail at runtime. */
 const VEC0_KNN_MAX = 4096;
-const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
 
 export class EmbeddingDimensionMismatchError extends Error {
     readonly expected: number;
@@ -73,6 +74,15 @@ function vecTableExists(db: BetterSqlite3): boolean {
     return Boolean(row);
 }
 
+function ensureUniquenessTable(db: BetterSqlite3): void {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ${UNIQUENESS_TABLE} (
+            id TEXT PRIMARY KEY,
+            score REAL NOT NULL
+        );
+    `);
+}
+
 function createVecTable(db: BetterSqlite3, dimensions: number): void {
     if (vecTableExists(db))
         return;
@@ -101,6 +111,12 @@ export class EmbeddingDB {
     private static stmtSelectAllEmbeddings: Statement<unknown[], unknown> | undefined;
     private static stmtSelectEmbeddingsByIds: Statement<unknown[], unknown> | undefined;
     private static stmtCount: Statement<unknown[], unknown> | undefined;
+    private static stmtGetUniquenessScore: Statement<unknown[], unknown> | undefined;
+    private static stmtGetUniquenessScoresByIds: Statement<unknown[], unknown> | undefined;
+    private static stmtSetUniquenessScore: Statement<unknown[], unknown> | undefined;
+    private static stmtDeleteUniquenessScore: Statement<unknown[], unknown> | undefined;
+    private static stmtClearUniquenessScores: Statement<unknown[], unknown> | undefined;
+    private static stmtCountUniquenessScores: Statement<unknown[], unknown> | undefined;
 
     private static setup() {
         if (EmbeddingDB.isOpen)
@@ -115,6 +131,7 @@ export class EmbeddingDB {
         EmbeddingDB.isSetup = true;
 
         ensureEmbeddingMetaTable(EmbeddingDB.db);
+        ensureUniquenessTable(EmbeddingDB.db);
         EmbeddingDB.dimensions = readStoredDimensions(EmbeddingDB.db);
 
         if (EmbeddingDB.dimensions !== null && !vecTableExists(EmbeddingDB.db)) {
@@ -129,6 +146,28 @@ export class EmbeddingDB {
     }
 
     private static prepareStatements() {
+        ensureUniquenessTable(EmbeddingDB.db);
+        EmbeddingDB.stmtGetUniquenessScore = EmbeddingDB.db.prepare(
+            `SELECT score FROM ${UNIQUENESS_TABLE} WHERE id = ?`,
+        );
+        EmbeddingDB.stmtGetUniquenessScoresByIds = EmbeddingDB.db.prepare(`
+            SELECT id, score
+            FROM ${UNIQUENESS_TABLE}
+            WHERE id IN (SELECT value FROM json_each(?))
+        `);
+        EmbeddingDB.stmtSetUniquenessScore = EmbeddingDB.db.prepare(
+            `INSERT OR REPLACE INTO ${UNIQUENESS_TABLE} (id, score) VALUES (?, ?)`,
+        );
+        EmbeddingDB.stmtDeleteUniquenessScore = EmbeddingDB.db.prepare(
+            `DELETE FROM ${UNIQUENESS_TABLE} WHERE id = ?`,
+        );
+        EmbeddingDB.stmtClearUniquenessScores = EmbeddingDB.db.prepare(
+            `DELETE FROM ${UNIQUENESS_TABLE}`,
+        );
+        EmbeddingDB.stmtCountUniquenessScores = EmbeddingDB.db.prepare(
+            `SELECT COUNT(*) AS count FROM ${UNIQUENESS_TABLE}`,
+        );
+
         if (!vecTableExists(EmbeddingDB.db)) {
             EmbeddingDB.stmtHasImage = undefined;
             EmbeddingDB.stmtSetImage = undefined;
@@ -225,6 +264,12 @@ export class EmbeddingDB {
         EmbeddingDB.stmtSelectAllEmbeddings = undefined;
         EmbeddingDB.stmtSelectEmbeddingsByIds = undefined;
         EmbeddingDB.stmtCount = undefined;
+        EmbeddingDB.stmtGetUniquenessScore = undefined;
+        EmbeddingDB.stmtGetUniquenessScoresByIds = undefined;
+        EmbeddingDB.stmtSetUniquenessScore = undefined;
+        EmbeddingDB.stmtDeleteUniquenessScore = undefined;
+        EmbeddingDB.stmtClearUniquenessScores = undefined;
+        EmbeddingDB.stmtCountUniquenessScores = undefined;
         EmbeddingDB.db.close();
     }
 
@@ -256,9 +301,10 @@ export class EmbeddingDB {
 
     static deleteImage(id: string) {
         EmbeddingDB.setup();
-        if (!EmbeddingDB.stmtDeleteImage)
-            return;
-        EmbeddingDB.stmtDeleteImage.run(id);
+        if (EmbeddingDB.stmtDeleteImage)
+            EmbeddingDB.stmtDeleteImage.run(id);
+        if (EmbeddingDB.stmtDeleteUniquenessScore)
+            EmbeddingDB.stmtDeleteUniquenessScore.run(id);
         EmbeddingDB.resetIfEmpty();
     }
 
@@ -266,10 +312,11 @@ export class EmbeddingDB {
         if (!ids.length)
             return;
         EmbeddingDB.setup();
-        if (EmbeddingDB.stmtDeleteImage) {
+        if (EmbeddingDB.stmtDeleteImage || EmbeddingDB.stmtDeleteUniquenessScore) {
             EmbeddingDB.db.transaction((imageIds: string[]) => {
                 for (const id of imageIds) {
-                    EmbeddingDB.stmtDeleteImage!.run(id);
+                    EmbeddingDB.stmtDeleteImage?.run(id);
+                    EmbeddingDB.stmtDeleteUniquenessScore?.run(id);
                 }
             }).immediate(ids);
         }
@@ -292,9 +339,57 @@ export class EmbeddingDB {
         if (vecTableExists(EmbeddingDB.db)) {
             EmbeddingDB.db.exec(`DROP TABLE IF EXISTS ${VEC_TABLE}`);
         }
+        EmbeddingDB.db.exec(`DELETE FROM ${UNIQUENESS_TABLE}`);
         EmbeddingDB.db.prepare(`DELETE FROM ${META_TABLE} WHERE key = ?`).run(DIMENSIONS_KEY);
         EmbeddingDB.dimensions = null;
         EmbeddingDB.prepareStatements();
+    }
+
+    static getEmbeddingsByIds(ids: string[]): { id: string; embedding: Float32Array }[] {
+        EmbeddingDB.setup();
+        if (!ids.length || !EmbeddingDB.stmtSelectEmbeddingsByIds)
+            return [];
+
+        const rows = EmbeddingDB.stmtSelectEmbeddingsByIds.all(
+            JSON.stringify(ids),
+        ) as { id: string; embedding: Buffer }[];
+
+        return rows.map((row) => ({
+            id: row.id,
+            embedding: bufferToFloat32Array(row.embedding),
+        }));
+    }
+
+    static getUniquenessScores(ids: string[]): Map<string, number> {
+        EmbeddingDB.setup();
+        if (!ids.length || !EmbeddingDB.stmtGetUniquenessScoresByIds)
+            return new Map();
+
+        const rows = EmbeddingDB.stmtGetUniquenessScoresByIds.all(
+            JSON.stringify(ids),
+        ) as { id: string; score: number }[];
+
+        return new Map(rows.map((row) => [row.id, row.score]));
+    }
+
+    static getUniquenessIndexCount(): number {
+        EmbeddingDB.setup();
+        if (!EmbeddingDB.stmtCountUniquenessScores)
+            return 0;
+        return (EmbeddingDB.stmtCountUniquenessScores.get() as { count: number }).count;
+    }
+
+    static replaceAllUniquenessScores(scores: Map<string, number>): void {
+        EmbeddingDB.setup();
+        if (!EmbeddingDB.stmtClearUniquenessScores || !EmbeddingDB.stmtSetUniquenessScore)
+            return;
+
+        EmbeddingDB.db.transaction((entries: [string, number][]) => {
+            EmbeddingDB.stmtClearUniquenessScores!.run();
+            for (const [id, score] of entries) {
+                EmbeddingDB.stmtSetUniquenessScore!.run(id, score);
+            }
+        }).immediate([...scores.entries()]);
     }
 
     static findSimilarImage(
@@ -400,25 +495,4 @@ export class EmbeddingDB {
             JSON.stringify([...candidateIds]),
         ) as { id: string; embedding: Buffer }[];
     }
-}
-
-function bufferToFloat32Array(buffer: Buffer): Float32Array {
-    return new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / FLOAT_BYTES);
-}
-
-function cosineSimilarity(a: Float32Array, b: Float32Array): number {
-    let dot = 0;
-    let normA = 0;
-    let normB = 0;
-    const length = Math.min(a.length, b.length);
-    for (let index = 0; index < length; index++) {
-        const valueA = a[index];
-        const valueB = b[index];
-        dot += valueA * valueB;
-        normA += valueA * valueA;
-        normB += valueB * valueB;
-    }
-    if (!normA || !normB)
-        return 0;
-    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }

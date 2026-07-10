@@ -55,9 +55,10 @@
         type SystemInstruction,
     } from "$lib/stores/llmStore";
     import { embeddingStore } from "$lib/stores/embeddingStore";
+    import { mmrStore, mmrCandidatePoolStrategies } from "$lib/stores/mmrStore";
     import { embeddingApiTypeOptions } from "$lib/types/embeddings";
     import { authLogout, authStore } from "$lib/stores/authStore";
-    import { pullGlobalSettings, recalculateSimilarCache, clearCompressedImages } from "$lib/requests/settingRequests";
+    import { pullGlobalSettings, recalculateSimilarCache, clearCompressedImages, buildUniquenessIndex } from "$lib/requests/settingRequests";
     import { startExtradataRecalc, getOperations } from "$lib/requests/operationRequests";
     import { hasRunningOperation, operationStore } from "$lib/stores/operationStore";
     import { deleteTagFromImages } from "$lib/requests/tagRequests";
@@ -92,6 +93,7 @@
     let modalFilterName = "";
     let modalFilterText = "";
     let recalculatingSimilarCache = false;
+    let buildingUniquenessIndex = false;
     let clearingCompressedImages = false;
     let tagModalOpen = false;
     let editingTag: TagDefinition | null = null;
@@ -415,6 +417,27 @@
         } catch (cause) {
             console.error(cause);
             notify(cause instanceof Error ? cause.message : "Failed to delete tag", "warn");
+        }
+    }
+
+    const mmrCandidatePoolOptions = [
+        { value: 'n-select', label: 'Even date sampling' },
+        { value: 'index', label: 'Uniqueness index' },
+        { value: 'pre-rank', label: 'Current-match uniqueness' },
+    ] satisfies { value: typeof mmrCandidatePoolStrategies[number]; label: string }[];
+
+    async function onBuildUniquenessIndex() {
+        if (buildingUniquenessIndex)
+            return;
+
+        buildingUniquenessIndex = true;
+        try {
+            const result = await buildUniquenessIndex();
+            notify(`Uniqueness index built for ${result.indexed} embedded images`);
+        } catch (e) {
+            notify(e instanceof Error ? e.message : 'Failed to build uniqueness index', 'warn');
+        } finally {
+            buildingUniquenessIndex = false;
         }
     }
 
@@ -760,6 +783,35 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                     Use optimized embedding query (results limited to max 4096):
                     <input type="checkbox" bind:checked={$embeddingStore.useOptimizedEmbeddingQuery} />
                 </label>
+
+                <p class="embedding-section-title">MMR search</p>
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <div class="select-field">
+                    <span>MMR candidate pool strategy</span>
+                    <Select
+                        id="mmr-candidate-pool"
+                        bind:value={$mmrStore.candidatePoolStrategy}
+                        options={mmrCandidatePoolOptions}
+                    />
+                </div>
+
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label
+                    title="Blend weight for MMR: higher values favor intrinsic uniqueness, lower values favor diversity from already selected images."
+                >
+                    MMR diversity weight (0–1)
+                    <NumInput bind:value={$mmrStore.diversityWeight} step="any" />
+                </label>
+
+                <div class="similar-cache-action">
+                    <Button on:click={onBuildUniquenessIndex}>
+                        {buildingUniquenessIndex ? 'Building...' : 'Build uniqueness index'}
+                    </Button>
+                </div>
+                <p class="hint">
+                    Builds the optional full-library uniqueness index used by MMR with the <code>index</code> candidate strategy. Rebuild manually after embeddings change.
+                </p>
             </div>
         </div>
     </div>
@@ -1133,6 +1185,18 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             line-height: 1.4;
         }
 
+        .embedding-section-title {
+            margin: 0.5rem 0 0;
+            font-weight: 600;
+        }
+
+        .hint {
+            margin: 0;
+            font-size: 0.85em;
+            color: #aaa;
+            line-height: 1.4;
+        }
+
         .llm-subsection {
             display: flex;
             flex-direction: column;
@@ -1308,7 +1372,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             gap: 0.5em;
         }
     }
-
 
     .select-field {
         display: flex;

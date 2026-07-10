@@ -4,7 +4,11 @@ import type { SortingMethod } from '$lib/types/misc';
 import type { StreamRequest } from '$lib/types/requests';
 import { getImage } from './dataIndex';
 import { getPositiveSimilarSourceIds, pinIdsToFront } from '$lib/tools/searchParsing';
-import type { ImgSearchContext } from './searching';
+import type { ImgSearchContext, ImgSimSearchContext, MmrSearchContext } from './searching';
+import {
+    isSimilaritySorting,
+    isUniquenessSorting,
+} from '$lib/tools/similaritySort';
 import { sortImages } from './searching';
 
 export const imageLimit = 1000;
@@ -25,6 +29,10 @@ export type SearchSession = {
     complete?: boolean;
     imgSearchContext?: ImgSearchContext;
     imgSearchError?: string;
+    imgsimSearchContext?: ImgSimSearchContext;
+    imgsimSearchError?: string;
+    mmrSearchContext?: MmrSearchContext;
+    mmrSearchError?: string;
 };
 
 type SessionQuery = Pick<
@@ -252,7 +260,23 @@ export function sortSessionIds(ids: string[], session: SearchSession): string[] 
         });
     } else {
         const matchScores = session.imgSearchContext?.matchScores;
+        const uniquenessScores = session.mmrSearchContext?.uniquenessScores;
         if (
+            uniquenessScores?.size
+            && session.sorting === 'uniqueness'
+        ) {
+            sorted = [...ids].sort((a, b) => {
+                const scoreA = uniquenessScores.get(a);
+                const scoreB = uniquenessScores.get(b);
+                if (scoreA !== undefined && scoreB !== undefined)
+                    return scoreB - scoreA || a.localeCompare(b);
+                if (scoreA !== undefined)
+                    return -1;
+                if (scoreB !== undefined)
+                    return 1;
+                return 0;
+            });
+        } else if (
             matchScores?.size
             && (session.sorting === 'similar' || session.sorting === 'similar (inverse)')
         ) {
@@ -269,12 +293,41 @@ export function sortSessionIds(ids: string[], session: SearchSession): string[] 
                     return 1;
                 return 0;
             });
+        } else if (
+            session.mmrSearchContext?.orderedIds.length
+            && !isSimilaritySorting(session.sorting)
+            && !isUniquenessSorting(session.sorting)
+            && session.sourceOrder.length
+        ) {
+            const positions = new Map(
+                session.mmrSearchContext.orderedIds.map((id, index) => [id, index]),
+            );
+            sorted = [...ids].sort((a, b) => {
+                const positionA = positions.get(a) ?? Number.POSITIVE_INFINITY;
+                const positionB = positions.get(b) ?? Number.POSITIVE_INFINITY;
+                return positionA - positionB;
+            });
+        } else if (
+            session.imgsimSearchContext?.orderedIds.length
+            && !session.mmrSearchContext?.orderedIds.length
+            && !isSimilaritySorting(session.sorting)
+            && !isUniquenessSorting(session.sorting)
+            && session.sourceOrder.length
+        ) {
+            const positions = new Map(
+                session.imgsimSearchContext.orderedIds.map((id, index) => [id, index]),
+            );
+            sorted = [...ids].sort((a, b) => {
+                const positionA = positions.get(a) ?? Number.POSITIVE_INFINITY;
+                const positionB = positions.get(b) ?? Number.POSITIVE_INFINITY;
+                return positionA - positionB;
+            });
         } else {
             sorted = sortImages(resolveImages(ids), session.sorting).map((image) => image.id);
         }
     }
 
-    if (session.sorting === 'similar' || session.sorting === 'similar (inverse)')
+    if (session.sorting === 'similar' || session.sorting === 'similar (inverse)' || session.sorting === 'uniqueness')
         return sorted;
 
     return pinIdsToFront(sorted, getPositiveSimilarSourceIds(session.query.search));
@@ -294,6 +347,30 @@ export function setSessionImgSearchContext(sessionId: string, imgSearchContext: 
         session.imgSearchContext = imgSearchContext;
         session.imgSearchError = imgSearchContext?.error;
     }
+}
+
+export function setSessionImgSimSearchContext(sessionId: string, imgsimSearchContext: ImgSimSearchContext | undefined): void {
+    const session = sessions.get(sessionId);
+    if (session) {
+        session.imgsimSearchContext = imgsimSearchContext;
+        session.imgsimSearchError = imgsimSearchContext?.error;
+    }
+}
+
+export function getSessionImgSimSearchError(session: SearchSession | undefined): string | undefined {
+    return session?.imgsimSearchContext?.error ?? session?.imgsimSearchError;
+}
+
+export function setSessionMmrSearchContext(sessionId: string, mmrSearchContext: MmrSearchContext | undefined): void {
+    const session = sessions.get(sessionId);
+    if (session) {
+        session.mmrSearchContext = mmrSearchContext;
+        session.mmrSearchError = mmrSearchContext?.error;
+    }
+}
+
+export function getSessionMmrSearchError(session: SearchSession | undefined): string | undefined {
+    return session?.mmrSearchContext?.error ?? session?.mmrSearchError;
 }
 
 export function getSessionImgSearchError(session: SearchSession | undefined): string | undefined {

@@ -3,6 +3,12 @@ import {
     getPositiveSimilarSourceIds,
     parseSimilarSearchTarget,
     pinIdsToFront,
+    parseMmrDirective,
+    parseImgSimDirective,
+    stripMmrParts,
+    stripResultShapingParts,
+    hasMmrSearchParts,
+    hasImgSimSearchParts,
 } from '../src/lib/tools/searchParsing.ts';
 
 assert.deepEqual(
@@ -69,6 +75,70 @@ assert.deepEqual(
     pinIdsToFront(['b', 'c', 'a'], ['a', 'b']),
     ['a', 'b', 'c'],
     'pins source ids to the front without duplicates',
+);
+
+assert.deepEqual(
+    parseMmrDirective('MMR 25'),
+    { resultCount: 25, candidateCount: 250 },
+    'parses MMR result count with default candidate multiplier',
+);
+
+assert.throws(
+    () => parseMmrDirective('MMR'),
+    /result count must be a positive integer/,
+    'rejects MMR without a result count',
+);
+
+assert.equal(
+    stripMmrParts('TAG favourite AND MMR 10'),
+    'TAG favourite',
+    'removes MMR clause from matcher input',
+);
+
+assert.equal(hasMmrSearchParts('MMR 10'), true, 'detects MMR search parts');
+
+assert.deepEqual(
+    parseImgSimDirective('IMGSIM 1000'),
+    { resultCount: 1000 },
+    'parses IMGSIM result count',
+);
+
+assert.throws(
+    () => parseImgSimDirective('IMGSIM'),
+    /result count must be a positive integer/,
+    'rejects IMGSIM without a result count',
+);
+
+assert.throws(
+    () => parseImgSimDirective('IMGSIM 10 20'),
+    /only one number/,
+    'rejects IMGSIM with extra numbers',
+);
+
+assert.equal(
+    stripResultShapingParts('TAG favourite AND IMGSIM 10'),
+    'TAG favourite',
+    'removes IMGSIM clause from matcher input',
+);
+
+assert.equal(
+    stripResultShapingParts('MMR 5 AND IMGSIM 10'),
+    '',
+    'removes both MMR and IMGSIM clauses from matcher input',
+);
+
+assert.equal(
+    stripMmrParts('TAG favourite AND IMGSIM 10'),
+    'TAG favourite',
+    'stripMmrParts removes IMGSIM through result-shaping strip',
+);
+
+assert.equal(hasImgSimSearchParts('IMGSIM 10'), true, 'detects IMGSIM search parts');
+
+assert.deepEqual(
+    parseImgSimDirective('TAG landscape AND IMGSIM 25'),
+    { resultCount: 25 },
+    'parses IMGSIM position-independently',
 );
 
 console.log('searching.test.ts: all tests passed');

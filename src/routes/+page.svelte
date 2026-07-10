@@ -21,12 +21,13 @@
     import {
         explorationModes,
         similaritySortingMethods,
+        uniquenessSortingMethods,
         sortingMethods,
         type InputEvent,
         type SortingMethod,
     } from "$lib/types/misc";
-    import { hasSimilaritySearchParts } from "$lib/tools/searchParsing";
-    import { transitionSimilaritySort } from "$lib/tools/similaritySort";
+    import { hasSimilaritySearchParts, hasMmrSearchParts } from "$lib/tools/searchParsing";
+    import { syncTemporarySorts, type TemporarySortState } from "$lib/tools/similaritySort";
     import { afterUpdate, onMount, tick } from "svelte";
     import { fade } from "svelte/transition";
     import {
@@ -110,10 +111,14 @@
     let updateSessionId = 0;
     let searchSessionId = "";
     let lastImgSearchNotifyKey = "";
+    let lastMmrSearchNotifyKey = "";
+    let lastImgSimSearchNotifyKey = "";
     let live = false;
     let sorting: SortingMethod = "date";
-    let savedSorting: SortingMethod | undefined;
-    let similaritySearchActive = false;
+    let temporarySortState: TemporarySortState = {
+        similarity: { active: false },
+        uniqueness: { active: false },
+    };
     let fetchingNextPage = false;
     let selecting = false;
     let navMenuOpen = false;
@@ -193,9 +198,11 @@
     }
     $: slideshowInterval = Math.max($slideDelay, 100);
     $: masonryEnabled = $imageFlow === "masonry";
-    $: sortingOptions = hasSimilaritySearchParts($searchFilter)
-        ? [...sortingMethods, ...similaritySortingMethods]
-        : sortingMethods;
+    $: sortingOptions = [
+        ...sortingMethods,
+        ...(hasSimilaritySearchParts($searchFilter) ? similaritySortingMethods : []),
+        ...(hasMmrSearchParts($searchFilter) ? uniquenessSortingMethods : []),
+    ];
     $: gridStyle = buildGridStyle(
         $imageSize,
         gridResizing,
@@ -671,7 +678,7 @@
     }
 
     function reconnectSearch() {
-        syncSimilaritySorting(buildSearchParams().search);
+        syncTemporarySorting(buildSearchParams().search);
         streamAbort?.abort();
         streamAbort = undefined;
         searchSessionId = "";
@@ -681,18 +688,13 @@
         connectImageStream(sessionId);
     }
 
-    function syncSimilaritySorting(search: string) {
-        const result = transitionSimilaritySort(
-            sorting,
-            {
-                active: similaritySearchActive,
-                savedSorting,
-            },
-            hasSimilaritySearchParts(search),
-        );
+    function syncTemporarySorting(search: string) {
+        const result = syncTemporarySorts(sorting, temporarySortState, {
+            hasSimilarity: hasSimilaritySearchParts(search),
+            hasUniqueness: hasMmrSearchParts(search),
+        });
         sorting = result.sorting;
-        similaritySearchActive = result.state.active;
-        savedSorting = result.state.savedSorting;
+        temporarySortState = result.state;
     }
 
     function isSessionUnavailable(cause: unknown): boolean {
@@ -708,6 +710,28 @@
             "Quick tag ended because its search session is no longer available. Recent tag changes remain, but undo and revert are unavailable.",
             "warn",
         );
+    }
+
+    function maybeNotifyImgSimSearchError(error: string | undefined, search: string) {
+        if (!error) {
+            lastImgSimSearchNotifyKey = "";
+            return;
+        }
+        const key = `${search}\0${error}`;
+        if (key === lastImgSimSearchNotifyKey) return;
+        lastImgSimSearchNotifyKey = key;
+        notify(error, "warn");
+    }
+
+    function maybeNotifyMmrSearchError(error: string | undefined, search: string) {
+        if (!error) {
+            lastMmrSearchNotifyKey = "";
+            return;
+        }
+        const key = `${search}\0${error}`;
+        if (key === lastMmrSearchNotifyKey) return;
+        lastMmrSearchNotifyKey = key;
+        notify(error, "warn");
     }
 
     function maybeNotifyImgSearchError(error: string | undefined, search: string) {
@@ -767,6 +791,8 @@
                     imageAmountStore.set(ready.amount);
                     searchCountComplete = true;
                     maybeNotifyImgSearchError(ready.imgSearchError, search.search);
+                    maybeNotifyImgSimSearchError(ready.imgsimSearchError, search.search);
+                    maybeNotifyMmrSearchError(ready.mmrSearchError, search.search);
                     if (!hasReceivedImages && ready.amount === 0) {
                         applySearchViewReset();
                         imageStore.set([]);

@@ -50,6 +50,82 @@ Existing localStorage and global `embeddingSettings` values lack this field. The
 
 Keep the defaulting behavior while stored settings from before this field existed may be loaded.
 
+## MMR search and uniqueness index (2026-07)
+
+### What changed
+
+- Search syntax now supports `MMR <resultCount> [candidateCount]` as a position-independent result-shaping directive. Omitted `candidateCount` defaults to `resultCount * 10`.
+- MMR returns a fixed diverse image sequence from saved embeddings inside the current filtered match set.
+- A temporary `uniqueness` sort becomes available while an MMR clause is active.
+- Global `mmrSettings` were added for candidate-pool strategy (`n-select`, `index`, `pre-rank`) and MMR diversity weight.
+- `embeddings.sqlite3` now has an optional `uniqueness_scores` table for the manual full-library uniqueness index used by the `index` candidate strategy.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| Global settings `mmrSettings` | New persisted settings with defaults from `normalizeMmrSettings()` |
+| `embeddings.sqlite3` table `uniqueness_scores` | Optional manually built scores keyed by image id |
+| Search sessions | May store `mmrSearchContext` with fixed MMR order and intrinsic uniqueness scores |
+
+No automatic uniqueness-index build runs on startup or migration. Users rebuild manually from Settings → Embedding settings → **Build uniqueness index**. Clearing or replacing the embedding database remains the required action after changing embedding models.
+
+### Migration code
+
+- [`src/lib/types/mmr.ts`](../src/lib/types/mmr.ts) — defaults and normalization for `mmrSettings`
+- [`src/lib/server/embeddingDb.ts`](../src/lib/server/embeddingDb.ts) — creates `uniqueness_scores` table only; does not populate it
+- [`src/lib/stores/mmrStore.ts`](../src/lib/stores/mmrStore.ts) — client sync and global settings push
+
+### How to verify
+
+1. Vectorize some images, then run `MMR 20` — the gallery returns at most 20 embedded matches in a stable diverse order.
+2. Run `MMR 20 50` — candidate selection is capped at 50 instead of the default 200.
+3. Combine `IMG misty forest AND MMR 10` — similarity and uniqueness temporary sorts are both available; changing sort reorders within the same MMR result set.
+4. Settings → Embedding settings — change candidate strategy and diversity weight; subsequent MMR searches use the new values.
+5. Build the uniqueness index manually, switch candidate strategy to `index`, and run MMR — candidates prefer indexed scores; images without scores fall behind scored images.
+6. Delete embeddings or images — corresponding `uniqueness_scores` rows are removed with the embedding row.
+
+### Removal
+
+Keep the `uniqueness_scores` table and `mmrSettings` defaulting while older clients or stored settings may still omit them.
+
+## IMGSIM time-neighbor pruning (2026-07)
+
+### What changed
+
+- Search syntax now supports `IMGSIM <count>` as a position-independent result-shaping keyword.
+- After ordinary filters and `IMG` / `SIMILAR img` clauses resolve, IMGSIM keeps only embedded matches, orders them by date (image id tie-break), and repeatedly removes the image whose minimum cosine distance to either direct time neighbor is smallest until `<count>` images remain.
+- Search sessions may store `imgsimSearchContext` with the fixed pruned order so live updates revalidate membership without repopulating or reordering the set.
+- The former MMR candidate strategy `time-neighbors` was removed. Use `IMGSIM` instead.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| Search sessions | May store `imgsimSearchContext` with fixed IMGSIM order |
+| Global settings `mmrSettings.candidatePoolStrategy` | Stored `time-neighbors` values normalize back to `n-select` via `normalizeMmrSettings()` |
+
+### Migration code
+
+- [`src/lib/tools/searchParsing.ts`](../src/lib/tools/searchParsing.ts) — `IMGSIM` parsing, validation, and stripping via `stripResultShapingParts()`
+- [`src/lib/server/imgSimRanking.ts`](../src/lib/server/imgSimRanking.ts) — time-neighbor pruning over embedded matches
+- [`src/lib/tools/mmrMath.ts`](../src/lib/tools/mmrMath.ts) — shared `selectByTimeNeighbors()` heap primitive
+- [`src/lib/server/searching.ts`](../src/lib/server/searching.ts) — applies IMGSIM after matching, before optional MMR
+- [`src/lib/server/imageUpdates.ts`](../src/lib/server/imageUpdates.ts) — strips IMGSIM from live-update matcher checks; fixed IMGSIM membership
+- [`src/lib/types/mmr.ts`](../src/lib/types/mmr.ts) — removed `time-neighbors` from MMR candidate strategies
+
+### How to verify
+
+1. Vectorize some images, then run `IMGSIM 1000` — the gallery returns at most 1,000 embedded matches in stable date order after time-neighbor pruning.
+2. Run `IMG misty forest AND IMGSIM 1000` and `IMGSIM 1000 AND IMG misty forest` — both return the same membership.
+3. Confirm results remain visible past the 10-second live-update check.
+4. Run `IMGSIM 1000 AND MMR 50` — IMGSIM prunes first, then MMR diversifies within the pruned set.
+5. Settings → Embedding settings — the MMR candidate strategy list no longer includes `time-neighbors`.
+
+### Removal
+
+Keep `normalizeMmrSettings()` fallback for stored `time-neighbors` values until all clients and saved settings have moved on.
+
 ## Folder filter → custom filters (2026-06)
 
 ### What changed

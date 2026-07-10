@@ -59,6 +59,8 @@ export type ImageResponse = {
     amount: number;
     timestamp: number;
     imgSearchError?: string;
+    imgsimSearchError?: string;
+    mmrSearchError?: string;
 };
 export function isImageResponse(object: any): object is ImageResponse {
     return testType(object, ['imageIds', 'amount']);
@@ -147,6 +149,8 @@ export type StreamReadyResponse = {
     type: 'ready';
     amount: number;
     imgSearchError?: string;
+    imgsimSearchError?: string;
+    mmrSearchError?: string;
 };
 
 export type StreamUpdateResponse = UpdateResponse & {
@@ -189,6 +193,16 @@ export type RecalculateSimilarCacheResponse = {
     poolSize: number;
     imageCount: number;
 };
+
+export type BuildUniquenessIndexResponse = {
+    indexed: number;
+};
+export function isBuildUniquenessIndexResponse(object: any): object is BuildUniquenessIndexResponse {
+    return testType(object, [
+        'indexed',
+        (o) => typeof o.indexed === 'number',
+    ]);
+}
 export function isRecalculateSimilarCacheResponse(object: any): object is RecalculateSimilarCacheResponse {
     return testType(object, [
         'poolSize', 'imageCount',

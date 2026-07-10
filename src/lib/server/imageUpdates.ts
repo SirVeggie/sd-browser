@@ -8,6 +8,7 @@ import {
     getResultWindow,
     logSearchFailure,
 } from './searching';
+import { stripResultShapingParts } from '$lib/tools/searchParsing';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';
 import type { UpdateRequest, UpdateResponse } from '$lib/types/requests';
@@ -21,21 +22,26 @@ function getSessionResultImages(
     exploration: ReturnType<typeof explorationFromRequest>,
 ): ServerImage[] {
     const { take } = getResultWindow(query.search);
+    const matcherSearch = stripResultShapingParts(query.search);
     const matcher = buildMatcher(
-        query.search,
+        matcherSearch,
         query.matching,
         exploration,
         session.imgSearchContext,
     );
     const maxResults = take || Number.POSITIVE_INFINITY;
+    const isFixedResultSession = session.mmrSearchContext !== undefined
+        || session.imgsimSearchContext !== undefined;
     const existingIds = new Set(session.orderedIds);
     const freshImages = getFreshImages(query.timestamp);
     const sourceOrder = session.sourceOrder;
 
-    for (const image of freshImages) {
-        if (existingIds.has(image.id) || session.sourcePositions.has(image.id)) continue;
-        session.sourcePositions.set(image.id, session.sourceOrder.length);
-        session.sourceOrder.push(image.id);
+    if (!isFixedResultSession) {
+        for (const image of freshImages) {
+            if (existingIds.has(image.id) || session.sourcePositions.has(image.id)) continue;
+            session.sourcePositions.set(image.id, session.sourceOrder.length);
+            session.sourceOrder.push(image.id);
+        }
     }
 
     let results = session.orderedIds.filter((id) => {
@@ -44,12 +50,20 @@ function getSessionResultImages(
         return image !== undefined && matcher(image);
     });
 
-    for (const image of freshImages) {
-        if (session.excludedIds.has(image.id) || !matcher(image)) continue;
-        if (!results.includes(image.id)) results.push(image.id);
+    if (!isFixedResultSession) {
+        for (const image of freshImages) {
+            if (session.excludedIds.has(image.id) || !matcher(image)) continue;
+            if (!results.includes(image.id)) results.push(image.id);
+        }
     }
 
     results = sortSessionIds(results, session);
+    if (isFixedResultSession) {
+        return results
+            .map((id) => getImage(id))
+            .filter((image): image is ServerImage => image !== undefined);
+    }
+
     if (take === 0) {
         return results
             .map((id) => getImage(id))

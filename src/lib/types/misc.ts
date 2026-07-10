@@ -4,9 +4,13 @@ import type { TagsRegistryState } from "$lib/types/tags";
 
 export const sortingMethods = ['date', 'date (asc)', 'name', 'name (desc)', 'random'] as const;
 export const similaritySortingMethods = ['similar', 'similar (inverse)'] as const;
-export type SortingMethod = typeof sortingMethods[number] | typeof similaritySortingMethods[number];
+export const uniquenessSortingMethods = ['uniqueness'] as const;
+export const temporarySortingMethods = [...similaritySortingMethods, ...uniquenessSortingMethods] as const;
+export type SortingMethod = typeof sortingMethods[number] | typeof temporarySortingMethods[number];
 export function isSortingMethod(object: any): object is SortingMethod {
-    return sortingMethods.includes(object) || similaritySortingMethods.includes(object);
+    return sortingMethods.includes(object)
+        || similaritySortingMethods.includes(object)
+        || uniquenessSortingMethods.includes(object);
 }
 
 export const searchModes = ['regex', 'words', 'contains'] as const;
@@ -69,7 +73,7 @@ export function isMatchType(object: any): object is MatchType {
     return matchTypes.includes(object);
 }
 
-export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE'] as const;
+export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'IMGSIM'] as const;
 export type SearchKeyword = typeof searchKeywords[number];
 export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);

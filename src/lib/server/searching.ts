@@ -4,10 +4,17 @@ import {
     parseSimilarSearchTarget,
     parseSearchTargetWithOptionalThreshold,
     pinIdsToFront,
+    parseMmrDirective,
+    parseImgSimDirective,
+    stripResultShapingParts,
+    isMmrSearchPart,
+    isImgSimSearchPart,
 } from "$lib/tools/searchParsing";
 import {
     isSimilaritySorting,
+    isUniquenessSorting,
     orderIdsBySimilarityScore,
+    orderIdsByUniquenessScore,
 } from "$lib/tools/similaritySort";
 import { isExactTagTerm } from "$lib/types/tags";
 import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
@@ -28,6 +35,12 @@ import { embedQuery, embedImage, getServerEmbeddingSettings, isServerEmbeddingCo
 import { formatEmbeddingSearchQuery } from "$lib/types/embeddings";
 import { computeSimilarity, getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./dataIndex";
+import { buildMmrSearchContext, type MmrSearchContext } from "./mmrRanking";
+import { buildImgSimSearchContext, type ImgSimSearchContext } from "./imgSimRanking";
+import { getServerMmrSettings } from "./mmrSettings";
+
+export type { MmrSearchContext } from "./mmrRanking";
+export type { ImgSimSearchContext } from "./imgSimRanking";
 
 const keywordPattern = `((${searchKeywords.join('|')}) )*`;
 const keywordFlags = 'i';
@@ -219,7 +232,10 @@ function isImgSearchPart(part: string): boolean {
 }
 
 function isStructuralSearchPart(part: string): boolean {
-    return skipRegex.test(part) || takeRegex.test(part);
+    return skipRegex.test(part)
+        || takeRegex.test(part)
+        || isMmrSearchPart(part)
+        || isImgSimSearchPart(part);
 }
 
 function buildNonImgSearchQuery(search: string): string {
@@ -605,6 +621,8 @@ type SearchPlanBase = {
     pool: Set<string>;
     matcher: (image: ServerImage) => boolean;
     imgSearchContext?: ImgSearchContext;
+    imgsimSearchContext?: ImgSimSearchContext;
+    mmrSearchContext?: MmrSearchContext;
 };
 
 export type SearchPlan = SearchPlanBase & (
@@ -617,7 +635,83 @@ export type SearchPlan = SearchPlanBase & (
         orderedIds: string[];
         imgSearchContext: ImgSearchContext;
     }
+    | {
+        kind: 'imgsim-ranked';
+        orderedIds: string[];
+        imgsimSearchContext: ImgSimSearchContext;
+    }
+    | {
+        kind: 'mmr-ranked';
+        orderedIds: string[];
+        mmrSearchContext: MmrSearchContext;
+    }
 );
+
+async function collectMatchingIds(
+    pool: Set<string>,
+    matcher: (image: ServerImage) => boolean,
+    imageList: Map<string, ServerImage>,
+    options: SearchAbortOptions = {},
+): Promise<string[]> {
+    const matchingIds: string[] = [];
+    let index = 0;
+    for (const id of pool) {
+        await maybeYieldAndThrowIfAborted(++index, options);
+        const image = imageList.get(id);
+        if (image && matcher(image))
+            matchingIds.push(id);
+    }
+    return matchingIds;
+}
+
+async function applyResultShaping(
+    plan: SearchPlanBase & { orderedIds: string[] },
+    options: SearchAbortOptions = {},
+): Promise<SearchPlan> {
+    const mmrDirective = parseMmrDirective(plan.search);
+    const imgsimDirective = parseImgSimDirective(plan.search);
+    if (!mmrDirective && !imgsimDirective)
+        return plan as SearchPlan;
+
+    let matchingIds = await collectMatchingIds(
+        plan.pool,
+        plan.matcher,
+        plan.imageList,
+        options,
+    );
+
+    let imgsimSearchContext: ImgSimSearchContext | undefined;
+    if (imgsimDirective) {
+        imgsimSearchContext = buildImgSimSearchContext(matchingIds, imgsimDirective);
+        matchingIds = imgsimSearchContext.orderedIds;
+    }
+
+    if (mmrDirective) {
+        const mmrSearchContext = buildMmrSearchContext(
+            matchingIds,
+            mmrDirective,
+            getServerMmrSettings(),
+        );
+        return {
+            ...plan,
+            kind: 'mmr-ranked',
+            orderedIds: mmrSearchContext.orderedIds,
+            imgsimSearchContext,
+            mmrSearchContext,
+        };
+    }
+
+    if (imgsimSearchContext) {
+        return {
+            ...plan,
+            kind: 'imgsim-ranked',
+            orderedIds: imgsimSearchContext.orderedIds,
+            imgsimSearchContext,
+        };
+    }
+
+    return plan as SearchPlan;
+}
 
 async function buildBaseCandidateIds(
     search: string,
@@ -647,11 +741,25 @@ function orderRankedSearchIds(
     scores: Map<string, number> | undefined,
     sorting: SortingMethod,
     pool: Set<string>,
+    mmrSearchContext?: MmrSearchContext,
+    imgsimSearchContext?: ImgSimSearchContext,
 ): string[] {
+    if (mmrSearchContext?.uniquenessScores.size && isUniquenessSorting(sorting)) {
+        const mmrIds = new Set(mmrSearchContext.orderedIds);
+        return orderIdsByUniquenessScore(mmrSearchContext.uniquenessScores)
+            .filter((id) => mmrIds.has(id));
+    }
+
     if (scores?.size && isSimilaritySorting(sorting))
         return orderIdsBySimilarityScore(scores, sorting);
 
-    return orderPoolIds(pool, isSimilaritySorting(sorting) ? 'date' : sorting);
+    if (mmrSearchContext?.orderedIds.length && !isSimilaritySorting(sorting) && !isUniquenessSorting(sorting))
+        return [...mmrSearchContext.orderedIds];
+
+    if (imgsimSearchContext?.orderedIds.length && !isSimilaritySorting(sorting) && !isUniquenessSorting(sorting))
+        return [...imgsimSearchContext.orderedIds];
+
+    return orderPoolIds(pool, isSimilaritySorting(sorting) || isUniquenessSorting(sorting) ? 'date' : sorting);
 }
 
 function pinSimilarSourceImages(
@@ -697,6 +805,7 @@ export async function buildSearchPlan(
         throw new Error('Invalid regex');
 
     throwIfSearchAborted(options);
+    const matcherSearch = stripResultShapingParts(search);
     const imageList = getImageList();
     const images = [...imageList.values()];
     const pool = getExplorationPool(exploration, images);
@@ -705,7 +814,7 @@ export async function buildSearchPlan(
 
     if (hasRankedSearch(search)) {
         const baseCandidateIds = await buildBaseCandidateIds(
-            search,
+            matcherSearch,
             matching,
             exploration,
             imageList,
@@ -733,9 +842,9 @@ export async function buildSearchPlan(
         };
         if (matchScores?.size)
             rankedSearchContext.matchScores = matchScores;
-        const matcher = buildMatcher(search, matching, exploration, resolvedImgSearchContext);
-        return {
-            kind: 'img-ranked',
+        const matcher = buildMatcher(matcherSearch, matching, exploration, resolvedImgSearchContext);
+        const basePlan = {
+            kind: 'img-ranked' as const,
             search,
             matching,
             exploration,
@@ -750,11 +859,12 @@ export async function buildSearchPlan(
                 similarSourceIds,
             ),
         };
+        return applyResultShaping(basePlan, options);
     }
 
     const baseCandidateIds = hasTextImgSearch(search)
         ? await buildBaseCandidateIds(
-            search,
+            matcherSearch,
             matching,
             exploration,
             imageList,
@@ -765,9 +875,9 @@ export async function buildSearchPlan(
     throwIfSearchAborted(options);
     const resolvedImgSearchContext = imgSearchContext
         ?? await resolveImgSearchContext(search, { baseCandidateIds, ...options });
-    const matcher = buildMatcher(search, matching, exploration, resolvedImgSearchContext);
-    return {
-        kind: 'stream-scan',
+    const matcher = buildMatcher(matcherSearch, matching, exploration, resolvedImgSearchContext);
+    const basePlan = {
+        kind: 'stream-scan' as const,
         search,
         matching,
         exploration,
@@ -778,10 +888,11 @@ export async function buildSearchPlan(
         matcher,
         imgSearchContext: resolvedImgSearchContext,
         orderedIds: pinIdsToFront(
-            orderPoolIds(pool, isSimilaritySorting(sorting) ? 'date' : sorting),
+            orderPoolIds(pool, isSimilaritySorting(sorting) || isUniquenessSorting(sorting) ? 'date' : sorting),
             similarSourceIds,
         ),
     };
+    return applyResultShaping(basePlan, options);
 }
 
 export function collectSearchPlanImages(
@@ -832,6 +943,10 @@ export type SearchImagesResult = {
     images: ServerImage[];
     imgSearchError?: string;
     imgSearchContext?: ImgSearchContext;
+    imgsimSearchError?: string;
+    imgsimSearchContext?: ImgSimSearchContext;
+    mmrSearchError?: string;
+    mmrSearchContext?: MmrSearchContext;
 };
 
 export async function searchImagesAsync(
@@ -845,6 +960,10 @@ export async function searchImagesAsync(
         images: collectSearchPlanImages(plan, options),
         imgSearchError: plan.imgSearchContext?.error,
         imgSearchContext: plan.imgSearchContext,
+        imgsimSearchError: plan.imgsimSearchContext?.error,
+        imgsimSearchContext: plan.imgsimSearchContext,
+        mmrSearchError: plan.mmrSearchContext?.error,
+        mmrSearchContext: plan.mmrSearchContext,
     };
 }
 
@@ -876,6 +995,8 @@ export type SearchStreamResult = {
     /** The stable search-pool order used for this session. */
     sourceOrder: string[];
     imgSearchContext?: ImgSearchContext;
+    imgsimSearchContext?: ImgSimSearchContext;
+    mmrSearchContext?: MmrSearchContext;
 };
 
 export async function searchImagesStreaming(
@@ -1027,6 +1148,8 @@ export async function searchImagesStreaming(
         amount: finalImages.length,
         sourceOrder: plan.orderedIds,
         imgSearchContext: plan.imgSearchContext,
+        imgsimSearchContext: plan.imgsimSearchContext,
+        mmrSearchContext: plan.mmrSearchContext,
     };
 }
 
@@ -1400,6 +1523,7 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
             return shuffle(images);
         case 'similar':
         case 'similar (inverse)':
+        case 'uniqueness':
             return images;
         default: {
             const _never: never = sort;

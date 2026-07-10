@@ -4,7 +4,9 @@ import { doGet, doPost, doServerGet, doServerPost, type FetchType } from "$lib/t
 import {
     isClearCompressedImagesResponse,
     isRecalculateSimilarCacheResponse,
+    isBuildUniquenessIndexResponse,
     isSettingResponse,
+    type BuildUniquenessIndexResponse,
     type ClearCompressedImagesResponse,
     type RecalculateSimilarCacheRequest,
     type RecalculateSimilarCacheResponse,
@@ -55,6 +57,21 @@ export async function recalculateSimilarCache(
         throw new Error(res.error);
     if (!isRecalculateSimilarCacheResponse(res))
         throw new Error('Invalid similarity cache response');
+    return res;
+}
+
+export async function buildUniquenessIndex(fetch?: FetchType): Promise<BuildUniquenessIndexResponse> {
+    if (!get(page).url)
+        throw new Error('Page not loaded');
+    let url = '/api/settings/uniqueness-index';
+    if (!fetch)
+        url = get(page).url.origin + url;
+    const res = await (fetch ? doPost(url, fetch, {}) : doServerPost(url, {}));
+
+    if ('error' in res)
+        throw new Error(res.error);
+    if (!isBuildUniquenessIndexResponse(res))
+        throw new Error('Invalid uniqueness index response');
     return res;
 }
 
