@@ -38,5 +38,7 @@ export function fitContextMenuToViewport(
         y = input.y - (bottom - window.innerHeight + VIEWPORT_MARGIN);
     }
 
+    y = Math.max(VIEWPORT_MARGIN, y);
+
     return { x, y, flipLeft };
 }

@@ -43,12 +43,11 @@
         await tick();
         if (!element || positionFitted || menu.id !== trackedMenuId) return;
 
-        const rect = element.getBoundingClientRect();
         const fitted = fitContextMenuToViewport({
             x: menu.position.x,
             y: menu.position.y,
-            width: rect.width,
-            height: rect.height,
+            width: element.offsetWidth,
+            height: element.offsetHeight,
             parentLeft: menu.position.parentLeft,
         });
 
