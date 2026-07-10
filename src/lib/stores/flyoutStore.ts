@@ -21,5 +21,6 @@ export function syncFlyoutWithLocalStorage() {
     syncMemory('flyout', flyoutStore);
     syncMemory('flyoutState', flyoutState);
     syncMemory('flyoutButton', flyoutButton);
+    syncMemory('flyoutButtonTop', flyoutButtonTop);
     syncMemory('flyoutHistory', flyoutHistory, true);
 }
