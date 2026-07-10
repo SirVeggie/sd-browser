@@ -749,7 +749,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
                 <label
                     class="checkbox"
-                    title="Uses sqlite-vec KNN queries for IMG search. Results are limited to 4096 unless a larger explicit k value selects JS similarity instead."
+                    title="Uses sqlite-vec KNN for IMG search without an explicit k (max 4096). Explicit k ≤ 4096 always uses vec KNN; larger k uses JS similarity."
                 >
                     Use optimized embedding query (results limited to max 4096):
                     <input type="checkbox" bind:checked={$embeddingStore.useOptimizedEmbeddingQuery} />

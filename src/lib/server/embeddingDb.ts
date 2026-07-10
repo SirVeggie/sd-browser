@@ -325,7 +325,8 @@ export class EmbeddingDB {
         }
 
         const requested = k !== undefined ? Math.max(1, k) : Math.max(1, count);
-        const useVecQuery = useOptimizedQuery && (k === undefined || requested <= VEC0_KNN_MAX);
+        const useVecQuery = (k !== undefined && requested <= VEC0_KNN_MAX)
+            || (useOptimizedQuery && k === undefined);
         if (!useVecQuery) {
             return EmbeddingDB.findSimilarImageCandidates(
                 query,

@@ -4,7 +4,7 @@
 
 ### What changed
 
-`embeddingSettings` now includes `useOptimizedEmbeddingQuery`. It chooses the sqlite-vec KNN path for `IMG` queries; disabling it uses JavaScript cosine-similarity scoring instead. The optimized path is limited to 4096 results. An explicitly requested `k` greater than 4096 automatically uses JavaScript scoring.
+`embeddingSettings` now includes `useOptimizedEmbeddingQuery`. It chooses the sqlite-vec KNN path for `IMG` queries without an explicit `k`; disabling it uses JavaScript cosine-similarity scoring for those queries instead. An explicit `k` of 4096 or less always uses sqlite-vec KNN. An explicit `k` greater than 4096 always uses JavaScript scoring.
 
 ### Affected data
 
@@ -17,9 +17,10 @@ Existing localStorage and global `embeddingSettings` values lack this field. The
 ### How to verify
 
 1. Load a profile with existing embedding settings that lack `useOptimizedEmbeddingQuery`; Settings → Embedding settings shows the toggle enabled.
-2. Disable the toggle and run `IMG <query>`; JavaScript similarity returns every threshold match unless the query specifies `k`.
-3. Enable the toggle; `IMG <query>` uses sqlite-vec and returns at most 4096 results.
-4. With the toggle enabled, run `IMG <query> 5000`; JavaScript similarity is used and returns up to 5000 results.
+2. Disable the toggle and run `IMG <query>`; JavaScript similarity returns every threshold match.
+3. With the toggle disabled, run `IMG <query> 100`; sqlite-vec KNN is used and returns up to 100 results.
+4. Enable the toggle and run `IMG <query>`; sqlite-vec KNN is used and returns at most 4096 results.
+5. Run `IMG <query> 5000`; JavaScript similarity is used and returns up to 5000 results regardless of the toggle.
 
 ### Removal
 
