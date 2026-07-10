@@ -20,10 +20,13 @@
     import { isGeneratedQualityMode } from "$lib/types/misc";
     import {
         explorationModes,
+        similaritySortingMethods,
         sortingMethods,
         type InputEvent,
         type SortingMethod,
     } from "$lib/types/misc";
+    import { hasSimilaritySearchParts } from "$lib/tools/searchParsing";
+    import { transitionSimilaritySort } from "$lib/tools/similaritySort";
     import { afterUpdate, onMount, tick } from "svelte";
     import { fade } from "svelte/transition";
     import {
@@ -109,6 +112,8 @@
     let lastImgSearchNotifyKey = "";
     let live = false;
     let sorting: SortingMethod = "date";
+    let savedSorting: SortingMethod | undefined;
+    let similaritySearchActive = false;
     let fetchingNextPage = false;
     let selecting = false;
     let navMenuOpen = false;
@@ -188,6 +193,9 @@
     }
     $: slideshowInterval = Math.max($slideDelay, 100);
     $: masonryEnabled = $imageFlow === "masonry";
+    $: sortingOptions = hasSimilaritySearchParts($searchFilter)
+        ? [...sortingMethods, ...similaritySortingMethods]
+        : sortingMethods;
     $: gridStyle = buildGridStyle(
         $imageSize,
         gridResizing,
@@ -669,6 +677,7 @@
     }
 
     function reconnectSearch() {
+        syncSimilaritySorting(buildSearchParams().search);
         streamAbort?.abort();
         streamAbort = undefined;
         searchSessionId = "";
@@ -676,6 +685,20 @@
         fetchingNextPage = false;
         const sessionId = ++updateSessionId;
         connectImageStream(sessionId);
+    }
+
+    function syncSimilaritySorting(search: string) {
+        const result = transitionSimilaritySort(
+            sorting,
+            {
+                active: similaritySearchActive,
+                savedSorting,
+            },
+            hasSimilaritySearchParts(search),
+        );
+        sorting = result.sorting;
+        similaritySearchActive = result.state.active;
+        savedSorting = result.state.savedSorting;
     }
 
     function isSessionUnavailable(cause: unknown): boolean {
@@ -1446,7 +1469,7 @@
             id="sorting"
             prefix="Sorting"
             bind:value={sorting}
-            options={sortingMethods}
+            options={sortingOptions}
             on:change={selectChange}
         />
 

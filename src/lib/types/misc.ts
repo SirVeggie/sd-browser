@@ -3,9 +3,10 @@ import type { CustomFiltersState } from "$lib/stores/customFiltersStore";
 import type { TagsRegistryState } from "$lib/types/tags";
 
 export const sortingMethods = ['date', 'date (asc)', 'name', 'name (desc)', 'random'] as const;
-export type SortingMethod = typeof sortingMethods[number];
+export const similaritySortingMethods = ['similar', 'similar (inverse)'] as const;
+export type SortingMethod = typeof sortingMethods[number] | typeof similaritySortingMethods[number];
 export function isSortingMethod(object: any): object is SortingMethod {
-    return sortingMethods.includes(object);
+    return sortingMethods.includes(object) || similaritySortingMethods.includes(object);
 }
 
 export const searchModes = ['regex', 'words', 'contains'] as const;

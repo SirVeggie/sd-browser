@@ -5,6 +5,10 @@ import {
     parseSearchTargetWithOptionalThreshold,
     pinIdsToFront,
 } from "$lib/tools/searchParsing";
+import {
+    isSimilaritySorting,
+    orderIdsBySimilarityScore,
+} from "$lib/tools/similaritySort";
 import { isExactTagTerm } from "$lib/types/tags";
 import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
@@ -258,8 +262,18 @@ function hasPositiveSimilarImgSearch(search: string): boolean {
     });
 }
 
-function hasEmbeddingRankedSearch(search: string): boolean {
-    return hasPositiveImgTextSearch(search) || hasPositiveSimilarImgSearch(search);
+function hasPositivePromptSimilarSearch(search: string): boolean {
+    return splitSearchParts(search).some((part) => {
+        if (!isSimilarSearchPart(part) || isSimilarImgSearchPart(part))
+            return false;
+        return !notRegex.test(part);
+    });
+}
+
+function hasRankedSearch(search: string): boolean {
+    return hasPositiveImgTextSearch(search)
+        || hasPositiveSimilarImgSearch(search)
+        || hasPositivePromptSimilarSearch(search);
 }
 
 export function getResultWindow(search: string): { skip: number; take: number } {
@@ -527,6 +541,48 @@ export async function resolveImgSearchContext(
     return hasEmbeddingParts ? context : undefined;
 }
 
+async function resolvePromptSimilarMatchScores(
+    search: string,
+    baseCandidateIds: Set<string>,
+    exploration: ExplorationSettings,
+    options: SearchAbortOptions,
+): Promise<Map<string, number> | undefined> {
+    let combinedScores: Map<string, number> | undefined;
+
+    for (const part of splitSearchParts(search)) {
+        if (!isSimilarSearchPart(part) || isSimilarImgSearchPart(part) || notRegex.test(part))
+            continue;
+
+        const raw = part.replace(removeRegex, '');
+        const { imageId, threshold } = parseSimilarSearchTarget(raw);
+        const reference = getImageList().get(imageId);
+        if (!reference) {
+            return new Map();
+        }
+
+        const effectiveThreshold = threshold ?? exploration.similarityThreshold;
+        const scores = new Map<string, number>();
+        let index = 0;
+        for (const id of baseCandidateIds) {
+            await maybeYieldAndThrowIfAborted(++index, options);
+            const image = getImageList().get(id);
+            if (!image)
+                continue;
+
+            const score = computeSimilarity(
+                similarityPromptText(reference),
+                similarityPromptText(image),
+                exploration.similarityAlgorithm,
+            );
+            if (score >= effectiveThreshold)
+                scores.set(id, score);
+        }
+        combinedScores = mergeImgMatchScores(combinedScores, scores);
+    }
+
+    return combinedScores;
+}
+
 function parseIdSearchTarget(raw: string): string[] {
     return raw.split(/[,\|]\s*/).map((id) => id.trim()).filter(Boolean);
 }
@@ -586,10 +642,15 @@ async function buildBaseCandidateIds(
     return candidateIds;
 }
 
-function orderIdsByMatchScores(scores: Map<string, number>): string[] {
-    return [...scores.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([id]) => id);
+function orderRankedSearchIds(
+    scores: Map<string, number> | undefined,
+    sorting: SortingMethod,
+    pool: Set<string>,
+): string[] {
+    if (scores?.size && isSimilaritySorting(sorting))
+        return orderIdsBySimilarityScore(scores, sorting);
+
+    return orderPoolIds(pool, isSimilaritySorting(sorting) ? 'date' : sorting);
 }
 
 function pinSimilarSourceImages(
@@ -641,7 +702,7 @@ export async function buildSearchPlan(
     throwIfSearchAborted(options);
     const similarSourceIds = getPositiveSimilarSourceIds(search);
 
-    if (hasEmbeddingRankedSearch(search)) {
+    if (hasRankedSearch(search)) {
         const baseCandidateIds = await buildBaseCandidateIds(
             search,
             matching,
@@ -654,6 +715,23 @@ export async function buildSearchPlan(
         const resolvedImgSearchContext = imgSearchContext
             ?? await resolveImgSearchContext(search, { baseCandidateIds, ...options });
         throwIfSearchAborted(options);
+        const promptMatchScores = await resolvePromptSimilarMatchScores(
+            search,
+            baseCandidateIds,
+            exploration,
+            options,
+        );
+        const matchScores = promptMatchScores
+            ? mergeImgMatchScores(
+                resolvedImgSearchContext?.matchScores,
+                promptMatchScores,
+            )
+            : resolvedImgSearchContext?.matchScores;
+        const rankedSearchContext: ImgSearchContext = resolvedImgSearchContext ?? {
+            parts: new Map(),
+        };
+        if (matchScores?.size)
+            rankedSearchContext.matchScores = matchScores;
         const matcher = buildMatcher(search, matching, exploration, resolvedImgSearchContext);
         return {
             kind: 'img-ranked',
@@ -665,13 +743,13 @@ export async function buildSearchPlan(
             images,
             pool,
             matcher,
-            imgSearchContext: resolvedImgSearchContext ?? { parts: new Map() },
-            orderedIds: pinIdsToFront(
-                resolvedImgSearchContext?.matchScores
-                    ? orderIdsByMatchScores(resolvedImgSearchContext.matchScores)
-                    : [],
-                similarSourceIds,
-            ),
+            imgSearchContext: rankedSearchContext,
+            orderedIds: isSimilaritySorting(sorting)
+                ? orderRankedSearchIds(matchScores, sorting, pool)
+                : pinIdsToFront(
+                    orderRankedSearchIds(matchScores, sorting, pool),
+                    similarSourceIds,
+                ),
         };
     }
 
@@ -700,7 +778,9 @@ export async function buildSearchPlan(
         pool,
         matcher,
         imgSearchContext: resolvedImgSearchContext,
-        orderedIds: pinIdsToFront(orderPoolIds(pool, sorting), similarSourceIds),
+        orderedIds: isSimilaritySorting(sorting)
+            ? orderPoolIds(pool, 'date')
+            : pinIdsToFront(orderPoolIds(pool, sorting), similarSourceIds),
     };
 }
 
@@ -734,7 +814,8 @@ export function collectSearchPlanImages(
         );
     }
 
-    list = pinSimilarSourceImages(list, plan.search, plan.imageList);
+    if (!isSimilaritySorting(plan.sorting))
+        list = pinSimilarSourceImages(list, plan.search, plan.imageList);
 
     if (options.skipResults !== false || options.takeResults !== false) {
         const skipped = options.skipResults !== false
@@ -1312,6 +1393,9 @@ export function sortImages(images: ServerImage[], sort: SortingMethod): ServerIm
             return [...images].sort(createComparer<ServerImage>(x => x.file, false));
         case 'random':
             return shuffle(images);
+        case 'similar':
+        case 'similar (inverse)':
+            return images;
         default: {
             const _never: never = sort;
             return _never;

@@ -1,5 +1,4 @@
 import { getDeletedImageIds, getFreshImageTimestamp, getFreshImages, getImage } from './dataIndex';
-import { getPositiveSimilarSourceIds, pinIdsToFront } from '$lib/tools/searchParsing';
 import {
     buildMatcher,
     buildSearchPlan,
@@ -12,7 +11,7 @@ import {
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';
 import type { UpdateRequest, UpdateResponse } from '$lib/types/requests';
-import type { SearchSession } from './searchSessions';
+import { sortSessionIds, type SearchSession } from './searchSessions';
 
 export type ImageUpdateResult = UpdateResponse | { error: string; status?: number };
 
@@ -39,7 +38,7 @@ function getSessionResultImages(
         session.sourceOrder.push(image.id);
     }
 
-    const results = session.orderedIds.filter((id) => {
+    let results = session.orderedIds.filter((id) => {
         if (session.excludedIds.has(id)) return false;
         const image = getImage(id);
         return image !== undefined && matcher(image);
@@ -50,11 +49,7 @@ function getSessionResultImages(
         if (!results.includes(image.id)) results.push(image.id);
     }
 
-    results.sort((a, b) => {
-        const positionA = session.sourcePositions.get(a) ?? Number.POSITIVE_INFINITY;
-        const positionB = session.sourcePositions.get(b) ?? Number.POSITIVE_INFINITY;
-        return positionA - positionB;
-    });
+    results = sortSessionIds(results, session);
     if (take === 0) {
         return results
             .map((id) => getImage(id))
@@ -77,9 +72,7 @@ function getSessionResultImages(
         resultIds.add(id);
     }
 
-    const pinnedIds = pinIdsToFront(results, getPositiveSimilarSourceIds(query.search));
-
-    return pinnedIds
+    return sortSessionIds(results, session)
         .map((id) => getImage(id))
         .filter((image): image is ServerImage => image !== undefined);
 }

@@ -12,6 +12,7 @@ function parseThresholdSuffix(value: string): number | undefined {
 
 const searchKeywordPrefix = '(?:AND|NOT|ALL|NEGATIVE|NEG|FOLDER|FD|PARAMS|PR|DATE|DT|MODEL|MD|ANNOTATION|AN|TAG|ID|VIDEO|VID|SKIP|TAKE)';
 const similarPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*(?:SIMILAR|SM)\\s+`, 'i');
+const imgPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*IMG(?:\\s+|$)`, 'i');
 const notPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*NOT\\s+`, 'i');
 const andSplitRegex = /\s+AND\s+/i;
 
@@ -21,6 +22,16 @@ export function extractSimilarSearchTarget(rawOrPart: string): string {
 
 export function isSimilarSearchPart(part: string): boolean {
     return similarPrefixRegex.test(part.trim());
+}
+
+export function isImgSearchPart(part: string): boolean {
+    return imgPrefixRegex.test(part.trim());
+}
+
+export function hasSimilaritySearchParts(search: string): boolean {
+    return search
+        .split(andSplitRegex)
+        .some((part) => isSimilarSearchPart(part) || isImgSearchPart(part));
 }
 
 export function isNegatedSearchPart(part: string): boolean {

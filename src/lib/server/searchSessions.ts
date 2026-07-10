@@ -240,7 +240,7 @@ export function setSessionExcluded(
     return session;
 }
 
-function sortSessionIds(ids: string[], session: SearchSession): string[] {
+export function sortSessionIds(ids: string[], session: SearchSession): string[] {
     let sorted: string[];
 
     if (session.sorting === 'random' && session.sourceOrder.length) {
@@ -251,13 +251,18 @@ function sortSessionIds(ids: string[], session: SearchSession): string[] {
             return positionA - positionB;
         });
     } else {
-        const imgSortScores = session.imgSearchContext?.matchScores;
-        if (imgSortScores?.size) {
+        const matchScores = session.imgSearchContext?.matchScores;
+        if (
+            matchScores?.size
+            && (session.sorting === 'similar' || session.sorting === 'similar (inverse)')
+        ) {
             sorted = [...ids].sort((a, b) => {
-                const scoreA = imgSortScores.get(a);
-                const scoreB = imgSortScores.get(b);
+                const scoreA = matchScores.get(a);
+                const scoreB = matchScores.get(b);
                 if (scoreA !== undefined && scoreB !== undefined)
-                    return scoreB - scoreA;
+                    return session.sorting === 'similar'
+                        ? scoreB - scoreA
+                        : scoreA - scoreB;
                 if (scoreA !== undefined)
                     return -1;
                 if (scoreB !== undefined)
@@ -268,6 +273,9 @@ function sortSessionIds(ids: string[], session: SearchSession): string[] {
             sorted = sortImages(resolveImages(ids), session.sorting).map((image) => image.id);
         }
     }
+
+    if (session.sorting === 'similar' || session.sorting === 'similar (inverse)')
+        return sorted;
 
     return pinIdsToFront(sorted, getPositiveSimilarSourceIds(session.query.search));
 }

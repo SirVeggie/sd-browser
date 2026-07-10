@@ -21,7 +21,8 @@
 		"lint": "eslint .",
 		"test:models": "node --experimental-strip-types scripts/model-parser.test.ts",
 		"test:exploration": "node --experimental-strip-types scripts/exploration.unique.test.ts",
-		"test:searching": "node --experimental-strip-types scripts/searching.test.ts"
+		"test:searching": "node --experimental-strip-types scripts/searching.test.ts",
+		"test:similarity-sort": "node --experimental-strip-types scripts/similaritySort.test.ts"
 	},
 	"dependencies": {
 		"better-sqlite3": "^11.0.0",
