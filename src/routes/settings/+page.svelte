@@ -525,30 +525,30 @@
                     />
                 </label>
 
-                <label for="flyout-mode">
-                    Styling:
+                <div class="select-field">
+                    <span>Styling:</span>
                     <Select
                         id="flyout-mode"
                         bind:value={flyoutMode}
                         options={flyoutModes}
                         on:change={onFlyoutModeChange}
                     />
-                </label>
+                </div>
 
                 <label class="checkbox">
                     Show button:
                     <input type="checkbox" bind:checked={$flyoutButton} />
                 </label>
 
-                <label for="flyout-button-position">
-                    Button position:
+                <div class="select-field">
+                    <span>Button position:</span>
                     <Select
                         id="flyout-button-position"
                         bind:value={flyoutButtonPosition}
                         options={["top", "bottom"]}
                         on:change={onFlyoutButtonPositionChange}
                     />
-                </label>
+                </div>
             </div>
         </div>
     </div>
@@ -575,32 +575,32 @@
             />
         </label>
 
-        <label
-            for="image-spacing"
+        <div
+            class="select-field"
             title="Classic: Standard grid spacing with rounded thumbnails.
 Compact: Tightens the gallery grid with smaller gaps and padding.
 Mosaic: No gaps or rounded corners; images meet edge to edge."
         >
-            Image spacing:
+            <span>Image spacing:</span>
             <Select
                 id="image-spacing"
                 bind:value={$imageSpacing}
                 options={imageSpacingOptions}
             />
-        </label>
+        </div>
 
-        <label
-            for="image-flow"
+        <div
+            class="select-field"
             title="Grid: Classic grid layout. Can leave gaps between images.
 Masonry: Tile images by placing them in the shortest column, like a photo wall."
         >
-            Image flow:
+            <span>Image flow:</span>
             <Select
                 id="image-flow"
                 bind:value={$imageFlow}
                 options={imageFlowOptions}
             />
-        </label>
+        </div>
     </div>
 
     <div class="sgroup llm-settings">
@@ -644,14 +644,14 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                     <span class="subsection-title">System instructions</span>
 
                     {#if $llmStore.systemInstructions.length}
-                        <label for="saved-instruction">
-                            Instruction:
+                        <div class="select-field">
+                            <span>Instruction:</span>
                             <Select
                                 id="saved-instruction"
                                 bind:value={selectedInstructionId}
                                 options={instructionOptions}
                             />
-                        </label>
+                        </div>
                     {/if}
 
                     <div class="instruction-buttons">
@@ -700,14 +700,14 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                 {/if}
 
                 <!-- svelte-ignore a11y-label-has-associated-control -->
-                <label for="embedding-api-type">
-                    API type:
+                <div class="select-field">
+                    <span>API type:</span>
                     <Select
                         id="embedding-api-type"
                         bind:value={$embeddingStore.apiType}
                         options={embeddingApiTypeOptions}
                     />
-                </label>
+                </div>
 
                 <!-- svelte-ignore a11y-label-has-associated-control -->
                 <label>
@@ -880,19 +880,19 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             </label>
         {/if}
 
-        <label for="matching">
-            Matching:
+        <div class="select-field">
+            <span>Matching:</span>
             <Select id="matching" bind:value={$matchingMode} options={searchModes} />
-        </label>
+        </div>
 
-        <label for="similarityAlgorithm">
-            Similarity algorithm:
+        <div class="select-field">
+            <span>Similarity algorithm:</span>
             <Select
                 id="similarityAlgorithm"
                 bind:value={$similarityAlgorithm}
                 options={similarityAlgorithms}
             />
-        </label>
+        </div>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label
@@ -942,15 +942,15 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             * medium, low, and minimal are slightly slower when seeing an image for the first time
         </span>
 
-        <label for="fullimage">
-            Full size quality:
+        <div class="select-field">
+            <span>Full size quality:</span>
             <Select id="fullimage" bind:value={$compressedMode} options={qualityModes} />
-        </label>
+        </div>
 
-        <label for="thumbnail">
-            Thumbnail quality:
+        <div class="select-field">
+            <span>Thumbnail quality:</span>
             <Select id="thumbnail" bind:value={$thumbMode} options={qualityModes} />
-        </label>
+        </div>
 
         <label class="checkbox">
             Animate thumbnail for videos:
@@ -1307,6 +1307,15 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             align-items: center;
             gap: 0.5em;
         }
+    }
+
+
+    .select-field {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25em;
+        user-select: none;
     }
 
     input[type="checkbox"] {
