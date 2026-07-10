@@ -1,5 +1,10 @@
 import { isVideo, parseSearchDate, parseSearchFloat, validRegex, XOR, yieldToEventLoop, getEmbeddingImagePath } from "$lib/tools/misc";
-import { parseSimilarSearchTarget, parseSearchTargetWithOptionalThreshold } from "$lib/tools/searchParsing";
+import {
+    getPositiveSimilarSourceIds,
+    parseSimilarSearchTarget,
+    parseSearchTargetWithOptionalThreshold,
+    pinIdsToFront,
+} from "$lib/tools/searchParsing";
 import { isExactTagTerm } from "$lib/types/tags";
 import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
@@ -587,6 +592,37 @@ function orderIdsByMatchScores(scores: Map<string, number>): string[] {
         .map(([id]) => id);
 }
 
+function pinSimilarSourceImages(
+    images: ServerImage[],
+    search: string,
+    imageList: Map<string, ServerImage>,
+): ServerImage[] {
+    const sourceIds = getPositiveSimilarSourceIds(search);
+    if (!sourceIds.length)
+        return images;
+
+    const pinned: ServerImage[] = [];
+    const seen = new Set<string>();
+    const byId = new Map(images.map((image) => [image.id, image]));
+
+    for (const id of sourceIds) {
+        const image = byId.get(id) ?? imageList.get(id);
+        if (!image || seen.has(id))
+            continue;
+        pinned.push(image);
+        seen.add(id);
+    }
+
+    for (const image of images) {
+        if (seen.has(image.id))
+            continue;
+        pinned.push(image);
+        seen.add(image.id);
+    }
+
+    return pinned;
+}
+
 export async function buildSearchPlan(
     search: string,
     matching: SearchMode,
@@ -603,6 +639,7 @@ export async function buildSearchPlan(
     const images = [...imageList.values()];
     const pool = getExplorationPool(exploration, images);
     throwIfSearchAborted(options);
+    const similarSourceIds = getPositiveSimilarSourceIds(search);
 
     if (hasEmbeddingRankedSearch(search)) {
         const baseCandidateIds = await buildBaseCandidateIds(
@@ -629,9 +666,12 @@ export async function buildSearchPlan(
             pool,
             matcher,
             imgSearchContext: resolvedImgSearchContext ?? { parts: new Map() },
-            orderedIds: resolvedImgSearchContext?.matchScores
-                ? orderIdsByMatchScores(resolvedImgSearchContext.matchScores)
-                : [],
+            orderedIds: pinIdsToFront(
+                resolvedImgSearchContext?.matchScores
+                    ? orderIdsByMatchScores(resolvedImgSearchContext.matchScores)
+                    : [],
+                similarSourceIds,
+            ),
         };
     }
 
@@ -660,7 +700,7 @@ export async function buildSearchPlan(
         pool,
         matcher,
         imgSearchContext: resolvedImgSearchContext,
-        orderedIds: orderPoolIds(pool, sorting),
+        orderedIds: pinIdsToFront(orderPoolIds(pool, sorting), similarSourceIds),
     };
 }
 
@@ -693,6 +733,8 @@ export function collectSearchPlanImages(
             options.timestamp,
         );
     }
+
+    list = pinSimilarSourceImages(list, plan.search, plan.imageList);
 
     if (options.skipResults !== false || options.takeResults !== false) {
         const skipped = options.skipResults !== false
@@ -897,6 +939,8 @@ export async function searchImagesStreaming(
         }
         finalImages = withException;
     }
+
+    finalImages = pinSimilarSourceImages(finalImages, search, plan.imageList);
 
     return {
         orderedIds: finalImages.map((image) => image.id),

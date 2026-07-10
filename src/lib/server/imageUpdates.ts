@@ -1,4 +1,5 @@
 import { getDeletedImageIds, getFreshImageTimestamp, getFreshImages, getImage } from './dataIndex';
+import { getPositiveSimilarSourceIds, pinIdsToFront } from '$lib/tools/searchParsing';
 import {
     buildMatcher,
     buildSearchPlan,
@@ -76,7 +77,9 @@ function getSessionResultImages(
         resultIds.add(id);
     }
 
-    return results
+    const pinnedIds = pinIdsToFront(results, getPositiveSimilarSourceIds(query.search));
+
+    return pinnedIds
         .map((id) => getImage(id))
         .filter((image): image is ServerImage => image !== undefined);
 }

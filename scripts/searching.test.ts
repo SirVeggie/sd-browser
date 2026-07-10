@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { parseSimilarSearchTarget } from '../src/lib/tools/searchParsing.ts';
+import {
+    getPositiveSimilarSourceIds,
+    parseSimilarSearchTarget,
+    pinIdsToFront,
+} from '../src/lib/tools/searchParsing.ts';
 
 assert.deepEqual(
     parseSimilarSearchTarget('abc123'),
@@ -47,6 +51,24 @@ assert.deepEqual(
     parseSimilarSearchTarget('img id-with-dashes'),
     { imageId: 'id-with-dashes', threshold: undefined, mode: 'embedding' },
     'parses image similar id containing dashes',
+);
+
+assert.deepEqual(
+    getPositiveSimilarSourceIds('SIMILAR abc AND landscape'),
+    ['abc'],
+    'collects positive similar source ids',
+);
+
+assert.deepEqual(
+    getPositiveSimilarSourceIds('NOT SIMILAR abc AND SIMILAR img def'),
+    ['def'],
+    'ignores negated similar clauses',
+);
+
+assert.deepEqual(
+    pinIdsToFront(['b', 'c', 'a'], ['a', 'b']),
+    ['a', 'b', 'c'],
+    'pins source ids to the front without duplicates',
 );
 
 console.log('searching.test.ts: all tests passed');

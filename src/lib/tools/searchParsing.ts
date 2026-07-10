@@ -10,10 +10,64 @@ function parseThresholdSuffix(value: string): number | undefined {
     return parsed;
 }
 
-const similarPrefixRegex = /^(?:(?:AND|NOT|ALL|NEGATIVE|NEG|FOLDER|FD|PARAMS|PR|DATE|DT|MODEL|MD|ANNOTATION|AN|TAG|ID|VIDEO|VID|SKIP|TAKE)\s+)*(?:SIMILAR|SM)\s+/i;
+const searchKeywordPrefix = '(?:AND|NOT|ALL|NEGATIVE|NEG|FOLDER|FD|PARAMS|PR|DATE|DT|MODEL|MD|ANNOTATION|AN|TAG|ID|VIDEO|VID|SKIP|TAKE)';
+const similarPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*(?:SIMILAR|SM)\\s+`, 'i');
+const notPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*NOT\\s+`, 'i');
+const andSplitRegex = /\s+AND\s+/i;
 
 export function extractSimilarSearchTarget(rawOrPart: string): string {
     return rawOrPart.trim().replace(similarPrefixRegex, '');
+}
+
+export function isSimilarSearchPart(part: string): boolean {
+    return similarPrefixRegex.test(part.trim());
+}
+
+export function isNegatedSearchPart(part: string): boolean {
+    return notPrefixRegex.test(part.trim());
+}
+
+export function getPositiveSimilarSourceIds(search: string): string[] {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+
+    for (const part of search.split(andSplitRegex)) {
+        if (!isSimilarSearchPart(part) || isNegatedSearchPart(part))
+            continue;
+
+        const { imageId } = parseSimilarSearchTarget(part);
+        if (!imageId || seen.has(imageId))
+            continue;
+
+        seen.add(imageId);
+        ids.push(imageId);
+    }
+
+    return ids;
+}
+
+export function pinIdsToFront(ids: string[], frontIds: string[]): string[] {
+    if (!frontIds.length)
+        return ids;
+
+    const seen = new Set<string>();
+    const result: string[] = [];
+
+    for (const id of frontIds) {
+        if (seen.has(id))
+            continue;
+        result.push(id);
+        seen.add(id);
+    }
+
+    for (const id of ids) {
+        if (seen.has(id))
+            continue;
+        result.push(id);
+        seen.add(id);
+    }
+
+    return result;
 }
 
 export function parseSearchTargetWithOptionalThreshold(raw: string): { text: string; threshold?: number } {

@@ -3,6 +3,7 @@ import type { ServerImage } from '$lib/types/images';
 import type { SortingMethod } from '$lib/types/misc';
 import type { StreamRequest } from '$lib/types/requests';
 import { getImage } from './dataIndex';
+import { getPositiveSimilarSourceIds, pinIdsToFront } from '$lib/tools/searchParsing';
 import type { ImgSearchContext } from './searching';
 import { sortImages } from './searching';
 
@@ -204,31 +205,35 @@ export function setSessionExcluded(
 }
 
 function sortSessionIds(ids: string[], session: SearchSession): string[] {
+    let sorted: string[];
+
     if (session.sorting === 'random' && session.sourceOrder.length) {
         const positions = new Map(session.sourceOrder.map((id, index) => [id, index]));
-        return [...ids].sort((a, b) => {
+        sorted = [...ids].sort((a, b) => {
             const positionA = positions.get(a) ?? Number.POSITIVE_INFINITY;
             const positionB = positions.get(b) ?? Number.POSITIVE_INFINITY;
             return positionA - positionB;
         });
+    } else {
+        const imgSortScores = session.imgSearchContext?.matchScores;
+        if (imgSortScores?.size) {
+            sorted = [...ids].sort((a, b) => {
+                const scoreA = imgSortScores.get(a);
+                const scoreB = imgSortScores.get(b);
+                if (scoreA !== undefined && scoreB !== undefined)
+                    return scoreB - scoreA;
+                if (scoreA !== undefined)
+                    return -1;
+                if (scoreB !== undefined)
+                    return 1;
+                return 0;
+            });
+        } else {
+            sorted = sortImages(resolveImages(ids), session.sorting).map((image) => image.id);
+        }
     }
 
-    const imgSortScores = session.imgSearchContext?.matchScores;
-    if (imgSortScores?.size) {
-        return [...ids].sort((a, b) => {
-            const scoreA = imgSortScores.get(a);
-            const scoreB = imgSortScores.get(b);
-            if (scoreA !== undefined && scoreB !== undefined)
-                return scoreB - scoreA;
-            if (scoreA !== undefined)
-                return -1;
-            if (scoreB !== undefined)
-                return 1;
-            return 0;
-        });
-    }
-
-    return sortImages(resolveImages(ids), session.sorting).map((image) => image.id);
+    return pinIdsToFront(sorted, getPositiveSimilarSourceIds(session.query.search));
 }
 
 export function trackSessionViewIds(sessionId: string, ids: string[]): void {
