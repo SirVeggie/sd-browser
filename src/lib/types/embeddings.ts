@@ -15,6 +15,8 @@ export type EmbeddingSettings = {
     searchTemplate: string;
     /** Use sqlite-vec KNN for IMG searches when its result limit is sufficient. */
     useOptimizedEmbeddingQuery: boolean;
+    /** Default similarity cutoff for SIMILAR img searches (image-to-image). */
+    imageSimilarityThreshold: number;
 };
 
 export const embeddingStoreDefaults: EmbeddingSettings = {
@@ -25,6 +27,7 @@ export const embeddingStoreDefaults: EmbeddingSettings = {
     apiBatch: 32,
     searchTemplate: "",
     useOptimizedEmbeddingQuery: true,
+    imageSimilarityThreshold: 0.8,
 };
 
 export function formatEmbeddingSearchQuery(label: string, template: string): string {
@@ -55,6 +58,10 @@ export function normalizeEmbeddingSettings(
             typeof stored.useOptimizedEmbeddingQuery === "boolean"
                 ? stored.useOptimizedEmbeddingQuery
                 : embeddingStoreDefaults.useOptimizedEmbeddingQuery,
+        imageSimilarityThreshold:
+            typeof stored.imageSimilarityThreshold === "number"
+                ? stored.imageSimilarityThreshold
+                : embeddingStoreDefaults.imageSimilarityThreshold,
     };
 }
 

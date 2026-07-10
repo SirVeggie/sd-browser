@@ -1,5 +1,29 @@
 # Migrations
 
+## Image similarity threshold setting (2026-07)
+
+### What changed
+
+`embeddingSettings` now includes `imageSimilarityThreshold` (default `0.8`). It sets the default similarity cutoff for `SIMILAR img` searches (image-to-image embedding similarity). Per-query overrides remain supported via a trailing number on the search command.
+
+### Affected data
+
+Existing localStorage and global `embeddingSettings` values lack this field. They receive the default `0.8` when loaded via `normalizeEmbeddingSettings()`; the next settings sync persists the normalized value.
+
+### Migration code
+
+- [`src/lib/types/embeddings.ts`](../src/lib/types/embeddings.ts) — `normalizeEmbeddingSettings()` adds the default at the settings boundary.
+
+### How to verify
+
+1. Load a profile with existing embedding settings that lack `imageSimilarityThreshold`; Settings → Embedding settings shows **Image similarity threshold** at `0.8`.
+2. Right-click an image with a configured embedding API; **Similar images** appears and runs `SIMILAR img <id> 0.8` (or the configured threshold).
+3. Change the threshold in settings; the context-menu command and default search behavior use the new value on the next sync.
+
+### Removal
+
+Keep the defaulting behavior while stored settings from before this field existed may be loaded.
+
 ## Embedding query optimization setting (2026-07)
 
 ### What changed

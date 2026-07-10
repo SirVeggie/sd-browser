@@ -747,6 +747,12 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                     />
                 </label>
 
+                <!-- svelte-ignore a11y-label-has-associated-control -->
+                <label>
+                    Image similarity threshold
+                    <NumInput bind:value={$embeddingStore.imageSimilarityThreshold} />
+                </label>
+
                 <label
                     class="checkbox"
                     title="Uses sqlite-vec KNN for IMG search without an explicit k (max 4096). Explicit k ≤ 4096 always uses vec KNN; larger k uses JS similarity."

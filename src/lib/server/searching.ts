@@ -242,8 +242,7 @@ function isSimilarSearchPart(part: string): boolean {
 function isSimilarImgSearchPart(part: string): boolean {
     if (!isSimilarSearchPart(part))
         return false;
-    const raw = part.replace(removeRegex, '').trim();
-    return /^img(\s|$)/i.test(raw);
+    return parseSimilarSearchTarget(part).mode === 'embedding';
 }
 
 function hasPositiveSimilarImgSearch(search: string): boolean {
@@ -367,8 +366,7 @@ export async function resolveImgSearchContext(
 
         if (isSimilarImgPart) {
             const isNegatedSimilarPart = Boolean(part.match(notRegex));
-            const raw = part.replace(removeRegex, '');
-            const { imageId, threshold } = parseSimilarSearchTarget(raw);
+            const { imageId, threshold } = parseSimilarSearchTarget(part);
             const refImage = getImageList().get(imageId);
             if (!refImage) {
                 context.parts.set(index, { presence: false, invalid: true });
@@ -994,7 +992,7 @@ export function buildMatcher(
         let similarInvalid = false;
         const embeddingPart = imgSearchContext?.parts.get(partIndex);
         if (type === 'similar') {
-            const { imageId, threshold, mode } = parseSimilarSearchTarget(raw);
+            const { imageId, threshold, mode } = parseSimilarSearchTarget(x);
             similarThreshold = threshold;
             similarMode = mode;
             const refImage = getImageList().get(imageId);
