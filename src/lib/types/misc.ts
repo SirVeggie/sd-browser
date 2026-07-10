@@ -68,7 +68,11 @@ export function isMatchType(object: any): object is MatchType {
     return matchTypes.includes(object);
 }
 
-export { searchKeywords, isSearchKeyword, type SearchKeyword } from './searchKeywords';
+export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE'] as const;
+export type SearchKeyword = typeof searchKeywords[number];
+export function isSearchKeyword(object: any): object is SearchKeyword {
+    return searchKeywords.includes(object);
+}
 
 export type GlobalSettings = {
     nsfwFilter: string;

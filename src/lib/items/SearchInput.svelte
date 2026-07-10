@@ -1,16 +1,15 @@
 <script lang="ts">
-    import { tick } from "svelte";
+    import { createEventDispatcher, tick } from "svelte";
     import { searchKeywords } from "$lib/types/misc";
     import { tagsStore } from "$lib/stores/tagsStore";
     import { tagRegistryNames } from "$lib/types/tags";
     import { getUnknownExactTagRanges, segmentOverlapsRange } from "$lib/tools/tagSearch";
     import {
-        applyExpandedIdDeletion,
-        canonicalFromDisplay,
-        collapseExpandedIds,
-        findAbbreviatedIdSegmentAtCursor,
-        formatSearchDisplay,
-        getAbbreviatedIdDisplayRanges,
+        getSearchDisplay,
+        getTouchedAbbreviatedIdRange,
+        inflateSearchDisplay,
+        mapDisplaySelectionToCanonical,
+        shouldCollapseExpandedSearch,
     } from "$lib/tools/searchDisplay";
 
     export let placeholder = "";
@@ -30,34 +29,36 @@
     ].map(keyword => keyword.toLowerCase()));
 
     const tokenRegex = /(\s+|[A-Za-z]+|[^A-Za-z\s]+)/g;
+    const dispatch = createEventDispatcher();
 
     let scrollLeft = 0;
-    let displayValue = formatSearchDisplay(value);
-    let expandedIdStarts = new Set<number>();
-    let lastEmittedValue = value;
+    let displayValue = getSearchDisplay(value).text;
+    let showExpandedIds = false;
+    let lastValue = value;
 
     $: registryNames = tagRegistryNames($tagsStore);
-    $: abbreviatedIdRanges = getAbbreviatedIdDisplayRanges(value, expandedIdStarts);
+    $: display = getSearchDisplay(value);
+    $: abbreviatedIdRanges = showExpandedIds ? [] : display.ranges;
     $: segments = getSegments(displayValue, registryNames, abbreviatedIdRanges);
     $: if (element)
         element.dataset.canonicalValue = value;
 
-    $: if (value !== lastEmittedValue) {
-        lastEmittedValue = value;
-        expandedIdStarts = new Set();
-        displayValue = formatSearchDisplay(value);
+    $: if (value !== lastValue) {
+        lastValue = value;
+        showExpandedIds = false;
+        displayValue = getSearchDisplay(value).text;
     }
 
     async function clear() {
         value = "";
-        lastEmittedValue = "";
-        expandedIdStarts = new Set();
+        lastValue = "";
+        showExpandedIds = false;
         displayValue = "";
         scrollLeft = 0;
         element?.focus();
         await Promise.resolve();
-        element?.dispatchEvent(new Event("input"));
-        element?.dispatchEvent(new Event("change"));
+        dispatch("input");
+        dispatch("change");
     }
 
     function syncScroll() {
@@ -65,75 +66,45 @@
     }
 
     function emitInput() {
-        element?.dispatchEvent(new Event("input", { bubbles: true }));
+        dispatch("input");
     }
 
     function emitChange() {
-        element?.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-
-    function commitCanonical(nextCanonical: string, nextDisplay: string, nextExpanded: Set<number>) {
-        value = nextCanonical;
-        lastEmittedValue = nextCanonical;
-        displayValue = nextDisplay;
-        expandedIdStarts = nextExpanded;
+        dispatch("change");
     }
 
     function handleInput(event: Event) {
         const input = event.currentTarget as HTMLInputElement;
-        const nextDisplay = input.value;
-        const nextCanonical = canonicalFromDisplay(nextDisplay, value);
-        const nextExpanded = collapseExpandedIds(nextCanonical, expandedIdStarts);
-        const formattedDisplay = formatSearchDisplay(nextCanonical, nextExpanded);
-
-        commitCanonical(nextCanonical, formattedDisplay, nextExpanded);
-
-        if (formattedDisplay !== nextDisplay && element) {
-            const cursor = input.selectionStart ?? formattedDisplay.length;
-            void tick().then(() => {
-                element?.setSelectionRange(cursor, cursor);
-            });
-        }
+        value = inflateSearchDisplay(input.value, value);
+        lastValue = value;
+        showExpandedIds = showExpandedIds && !shouldCollapseExpandedSearch(value);
+        displayValue = showExpandedIds ? value : getSearchDisplay(value).text;
+        emitInput();
     }
 
-    async function handleKeydown(event: KeyboardEvent) {
-        if (event.key !== "Backspace" && event.key !== "Delete")
-            return;
-
+    async function handleBeforeInput(event: InputEvent) {
         const input = element;
-        if (!input)
+        if (!input || showExpandedIds)
             return;
 
-        const cursor = input.selectionStart ?? 0;
-        const selectionEnd = input.selectionEnd ?? cursor;
-        if (cursor !== selectionEnd)
-            return;
-
-        const match = findAbbreviatedIdSegmentAtCursor(
-            value,
-            expandedIdStarts,
-            cursor,
-            event.key,
-        );
-        if (!match)
+        const selectionStart = input.selectionStart ?? 0;
+        const selectionEnd = input.selectionEnd ?? selectionStart;
+        const range = getTouchedAbbreviatedIdRange({
+            ranges: display.ranges,
+            selectionStart,
+            selectionEnd,
+            inputType: event.inputType,
+        });
+        if (!range)
             return;
 
         event.preventDefault();
+        showExpandedIds = true;
+        displayValue = value;
 
-        const result = applyExpandedIdDeletion({
-            canonical: value,
-            expandedIdStarts,
-            span: match.span,
-            segmentStart: match.segmentStart,
-            cursor,
-            key: event.key,
-        });
-
-        commitCanonical(result.canonical, result.display, result.expandedIdStarts);
-        emitInput();
-
+        const selection = mapDisplaySelectionToCanonical(range, selectionStart, selectionEnd);
         await tick();
-        input.setSelectionRange(result.cursor, result.cursor);
+        input.setSelectionRange(selection.selectionStart, selection.selectionEnd);
     }
 
     function getSegments(
@@ -182,7 +153,7 @@
             spellcheck="false"
             on:change={emitChange}
             on:input={handleInput}
-            on:keydown={handleKeydown}
+            on:beforeinput={handleBeforeInput}
             on:focus
             on:blur
             on:scroll={syncScroll}
