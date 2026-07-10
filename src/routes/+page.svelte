@@ -739,8 +739,13 @@
             {
                 onInit: (init) => {
                     if (expectedSessionId !== updateSessionId) return;
+                    const continuingSession =
+                        resumeSessionId !== undefined
+                        || (searchSessionId !== "" && init.sessionId === searchSessionId);
                     searchSessionId = init.sessionId;
-                    searchCountComplete = false;
+                    if (!continuingSession) {
+                        searchCountComplete = false;
+                    }
                 },
                 onChunk: (chunk) => {
                     if (expectedSessionId !== updateSessionId) return;
@@ -774,12 +779,6 @@
             if (abort.signal.aborted || expectedSessionId !== updateSessionId) return;
             console.error(err);
             if (resumeSessionId && isSessionUnavailable(err)) {
-                exitQuickTagAfterSessionLoss();
-                reconnectSearch();
-                return;
-            }
-            if (quickTagActive && !searchCountComplete) {
-                exitQuickTagAfterSessionLoss();
                 reconnectSearch();
                 return;
             }

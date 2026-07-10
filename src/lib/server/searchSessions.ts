@@ -322,7 +322,8 @@ export function scheduleSessionExpiry(
     cancelSessionExpiry(sessionId);
     const timer = setTimeout(() => {
         sessionExpiryTimers.delete(sessionId);
-        sessions.delete(sessionId);
+        if ((activeStreamCounts.get(sessionId) ?? 0) > 0) return;
+        deleteSession(sessionId);
     }, graceMs);
     sessionExpiryTimers.set(sessionId, timer);
 }
