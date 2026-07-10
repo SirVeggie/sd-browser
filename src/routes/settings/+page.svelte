@@ -1312,9 +1312,8 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
     .select-field {
         display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.25em;
+        align-items: center;
+        gap: 0.5em;
         user-select: none;
     }
 
