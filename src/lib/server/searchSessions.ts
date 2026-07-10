@@ -10,8 +10,14 @@ export const imageLimit = 1000;
 
 export type SearchSession = {
     queryKey: string;
+    query: SessionQuery;
     sorting: SortingMethod;
     orderedIds: string[];
+    /** Stable initial pool order; random sessions must never be reshuffled. */
+    sourceOrder: string[];
+    sourcePositions: Map<string, number>;
+    /** Images temporarily omitted from this session by quick tag. */
+    excludedIds: Set<string>;
     viewIds: Set<string>;
     timestamp: number;
     complete?: boolean;
@@ -85,8 +91,12 @@ export function createSessionStub(query: SessionQuery): {
     const timestamp = Date.now();
     sessions.set(sessionId, {
         queryKey: buildQueryKey(query),
+        query,
         sorting: query.sorting,
         orderedIds: [],
+        sourceOrder: [],
+        sourcePositions: new Map(),
+        excludedIds: new Set(),
         viewIds: new Set(),
         timestamp,
     });
@@ -108,10 +118,14 @@ export function appendSessionChunk(sessionId: string, ids: string[]): void {
     }
 }
 
-export function finalizeSession(sessionId: string, orderedIds: string[]): void {
+export function finalizeSession(sessionId: string, orderedIds: string[], sourceOrder: string[]): void {
     const session = sessions.get(sessionId);
     if (!session) return;
     session.orderedIds = orderedIds;
+    session.sourceOrder = sourceOrder;
+    session.sourcePositions = new Map(
+        sourceOrder.map((id, index) => [id, index]),
+    );
     session.complete = true;
 }
 
@@ -163,7 +177,42 @@ export function patchSession(
     }
 }
 
+export function replaceSessionResults(
+    sessionId: string,
+    orderedIds: string[],
+): void {
+    const session = sessions.get(sessionId);
+    if (!session) return;
+
+    session.orderedIds = orderedIds;
+    session.viewIds = new Set(orderedIds);
+}
+
+export function setSessionExcluded(
+    sessionId: string,
+    ids: string[],
+    excluded: boolean,
+): SearchSession | undefined {
+    const session = sessions.get(sessionId);
+    if (!session) return undefined;
+
+    for (const id of ids) {
+        if (excluded) session.excludedIds.add(id);
+        else session.excludedIds.delete(id);
+    }
+    return session;
+}
+
 function sortSessionIds(ids: string[], session: SearchSession): string[] {
+    if (session.sorting === 'random' && session.sourceOrder.length) {
+        const positions = new Map(session.sourceOrder.map((id, index) => [id, index]));
+        return [...ids].sort((a, b) => {
+            const positionA = positions.get(a) ?? Number.POSITIVE_INFINITY;
+            const positionB = positions.get(b) ?? Number.POSITIVE_INFINITY;
+            return positionA - positionB;
+        });
+    }
+
     const imgSortScores = session.imgSearchContext?.matchScores;
     if (imgSortScores?.size) {
         return [...ids].sort((a, b) => {

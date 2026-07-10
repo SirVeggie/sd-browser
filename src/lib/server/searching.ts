@@ -1,4 +1,5 @@
-import { isVideo, parseSearchDate, parseSearchFloat, validRegex, XOR, yieldToEventLoop } from "$lib/tools/misc";
+import { isVideo, parseSearchDate, parseSearchFloat, validRegex, XOR, yieldToEventLoop, getEmbeddingImagePath } from "$lib/tools/misc";
+import { parseSimilarSearchTarget, parseSearchTargetWithOptionalThreshold } from "$lib/tools/searchParsing";
 import { isExactTagTerm } from "$lib/types/tags";
 import { getModelSearchText, similarityPromptText } from "$lib/tools/metadataInterpreter";
 import type { ServerImage } from "$lib/types/images";
@@ -14,7 +15,7 @@ import {
 import shuffle from "lodash/shuffle";
 import { MetaDB } from "./db";
 import { EmbeddingDB, EmbeddingDimensionMismatchError } from "./embeddingDb";
-import { embedQuery, getServerEmbeddingSettings, isServerEmbeddingConfigured } from "./embeddings";
+import { embedQuery, embedImage, getServerEmbeddingSettings, isServerEmbeddingConfigured } from "./embeddings";
 import { formatEmbeddingSearchQuery } from "$lib/types/embeddings";
 import { computeSimilarity, getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./dataIndex";
@@ -57,6 +58,8 @@ type SearchPart = {
     tagExact?: boolean;
     similarRef?: string;
     similarThreshold?: number;
+    similarMode?: 'prompt' | 'embedding';
+    similarMatchIds?: Set<string>;
     similarInvalid?: boolean;
     imgPresence?: boolean;
     imgMatchIds?: Set<string>;
@@ -201,28 +204,6 @@ function parseSearchTargetWithOptionalImgLimit(raw: string): {
     };
 }
 
-function parseSearchTargetWithOptionalThreshold(raw: string): { text: string; threshold?: number } {
-    const trimmed = raw.trim();
-    if (!trimmed) {
-        return { text: '' };
-    }
-
-    const lastSpace = trimmed.lastIndexOf(' ');
-    if (lastSpace <= 0) {
-        return { text: trimmed };
-    }
-
-    const threshold = parseSearchFloat(trimmed.slice(lastSpace + 1));
-    if (threshold === undefined) {
-        return { text: trimmed };
-    }
-
-    return {
-        text: trimmed.slice(0, lastSpace).trim(),
-        threshold,
-    };
-}
-
 function isImgSearchPart(part: string): boolean {
     return imgRegex.test(part) || imgOnlyRegex.test(part);
 }
@@ -233,7 +214,7 @@ function isStructuralSearchPart(part: string): boolean {
 
 function buildNonImgSearchQuery(search: string): string {
     return splitSearchParts(search)
-        .filter((part) => !isImgSearchPart(part) && !isStructuralSearchPart(part))
+        .filter((part) => !isImgSearchPart(part) && !isSimilarImgSearchPart(part) && !isStructuralSearchPart(part))
         .join(' AND ');
 }
 
@@ -254,7 +235,30 @@ function hasPositiveImgTextSearch(search: string): boolean {
     });
 }
 
-function getResultWindow(search: string): { skip: number; take: number } {
+function isSimilarSearchPart(part: string): boolean {
+    return similarRegex.test(part);
+}
+
+function isSimilarImgSearchPart(part: string): boolean {
+    if (!isSimilarSearchPart(part))
+        return false;
+    const raw = part.replace(removeRegex, '').trim();
+    return /^img(\s|$)/i.test(raw);
+}
+
+function hasPositiveSimilarImgSearch(search: string): boolean {
+    return splitSearchParts(search).some((part) => {
+        if (!isSimilarImgSearchPart(part) || notRegex.test(part))
+            return false;
+        return true;
+    });
+}
+
+function hasEmbeddingRankedSearch(search: string): boolean {
+    return hasPositiveImgTextSearch(search) || hasPositiveSimilarImgSearch(search);
+}
+
+export function getResultWindow(search: string): { skip: number; take: number } {
     return {
         skip: getResultSkipCount(search),
         take: getResultTakeCount(search),
@@ -346,7 +350,7 @@ export async function resolveImgSearchContext(
 ): Promise<ImgSearchContext | undefined> {
     const parts = splitSearchParts(query);
     const context: ImgSearchContext = { parts: new Map() };
-    let hasImgParts = false;
+    let hasEmbeddingParts = false;
     let combinedMatchScores: Map<string, number> | undefined;
     let refinedCandidateIds: Set<string> | undefined;
     let error: string | undefined;
@@ -354,10 +358,89 @@ export async function resolveImgSearchContext(
     for (let index = 0; index < parts.length; index++) {
         throwIfSearchAborted(options);
         const part = parts[index];
-        if (!isImgSearchPart(part))
+        const isImgPart = isImgSearchPart(part);
+        const isSimilarImgPart = isSimilarImgSearchPart(part);
+        if (!isImgPart && !isSimilarImgPart)
             continue;
 
-        hasImgParts = true;
+        hasEmbeddingParts = true;
+
+        if (isSimilarImgPart) {
+            const isNegatedSimilarPart = Boolean(part.match(notRegex));
+            const raw = part.replace(removeRegex, '');
+            const { imageId, threshold } = parseSimilarSearchTarget(raw);
+            const refImage = getImageList().get(imageId);
+            if (!refImage) {
+                context.parts.set(index, { presence: false, invalid: true });
+                continue;
+            }
+
+            if (!isServerEmbeddingConfigured()) {
+                context.parts.set(index, { presence: false, invalid: true });
+                error ??= IMG_SEARCH_UNCONFIGURED_MESSAGE;
+                continue;
+            }
+
+            try {
+                const currentCandidateIds = refinedCandidateIds
+                    ?? options.baseCandidateIds
+                    ?? EmbeddingDB.getAllImageIds();
+                const candidateIds = await buildEmbeddingSearchCandidates(
+                    currentCandidateIds,
+                    undefined,
+                    options,
+                );
+                if (!candidateIds.size) {
+                    context.parts.set(index, {
+                        presence: false,
+                        matchIds: new Set(),
+                    });
+                    refinedCandidateIds = candidateIds;
+                    if (!isNegatedSimilarPart)
+                        combinedMatchScores = mergeImgMatchScores(combinedMatchScores, new Map());
+                    continue;
+                }
+
+                const settings = getServerEmbeddingSettings();
+                throwIfSearchAborted(options);
+                const refEmbedding = await embedImage(
+                    settings,
+                    getEmbeddingImagePath(refImage),
+                    undefined,
+                );
+                throwIfSearchAborted(options);
+                const effectiveThreshold = threshold ?? settings.imageSimilarityThreshold;
+                const matchScores = EmbeddingDB.findSimilarImage(
+                    refEmbedding,
+                    effectiveThreshold,
+                    undefined,
+                    candidateIds,
+                    settings.useOptimizedEmbeddingQuery,
+                );
+                throwIfSearchAborted(options);
+                const matchIds = new Set(matchScores.keys());
+                refinedCandidateIds = isNegatedSimilarPart
+                    ? subtractIds(candidateIds, matchIds)
+                    : matchIds;
+                if (!isNegatedSimilarPart)
+                    combinedMatchScores = mergeImgMatchScores(combinedMatchScores, matchScores);
+                else
+                    combinedMatchScores = removeImgMatchScores(combinedMatchScores, matchIds);
+                context.parts.set(index, {
+                    presence: false,
+                    matchIds,
+                });
+            } catch (cause) {
+                if (options.isAborted?.() || options.signal?.aborted)
+                    throw new SearchStreamAborted();
+                if (cause instanceof Error && cause.name === 'AbortError')
+                    throw new SearchStreamAborted();
+                console.error(formatImgSearchFailure(cause));
+                context.parts.set(index, { presence: false, invalid: true });
+                error ??= formatImgSearchFailure(cause);
+            }
+            continue;
+        }
 
         const isNegatedImgPart = Boolean(part.match(notRegex));
         const { presenceOnly, queryText, threshold, k, disableTemplate } = parseImgSearchPart(part);
@@ -438,12 +521,7 @@ export async function resolveImgSearchContext(
     if (error)
         context.error = error;
 
-    return hasImgParts ? context : undefined;
-}
-
-function parseSimilarSearchTarget(raw: string): { imageId: string; threshold?: number } {
-    const { text, threshold } = parseSearchTargetWithOptionalThreshold(raw);
-    return { imageId: text, threshold };
+    return hasEmbeddingParts ? context : undefined;
 }
 
 function parseIdSearchTarget(raw: string): string[] {
@@ -528,7 +606,7 @@ export async function buildSearchPlan(
     const pool = getExplorationPool(exploration, images);
     throwIfSearchAborted(options);
 
-    if (hasPositiveImgTextSearch(search)) {
+    if (hasEmbeddingRankedSearch(search)) {
         const baseCandidateIds = await buildBaseCandidateIds(
             search,
             matching,
@@ -675,6 +753,8 @@ export class SearchStreamAborted extends Error {
 export type SearchStreamResult = {
     orderedIds: string[];
     amount: number;
+    /** The stable search-pool order used for this session. */
+    sourceOrder: string[];
     imgSearchContext?: ImgSearchContext;
 };
 
@@ -782,7 +862,7 @@ export async function searchImagesStreaming(
     }
 
     if (options.isAborted?.()) {
-        return { orderedIds: [], amount: 0 };
+        return { orderedIds: [], amount: 0, sourceOrder: [] };
     }
 
     if (lastChunkAt === 0 && batch.length)
@@ -791,7 +871,7 @@ export async function searchImagesStreaming(
     await emitPendingChunk(true);
 
     if (options.isAborted?.()) {
-        return { orderedIds: [], amount: 0 };
+        return { orderedIds: [], amount: 0, sourceOrder: [] };
     }
 
     let finalImages = orderedIds
@@ -800,7 +880,7 @@ export async function searchImagesStreaming(
 
     if (plan.kind === 'stream-scan' && sorting === 'date') {
         if (options.isAborted?.()) {
-            return { orderedIds: [], amount: 0 };
+            return { orderedIds: [], amount: 0, sourceOrder: [] };
         }
 
         const withException = applyLatestImageException(
@@ -823,6 +903,7 @@ export async function searchImagesStreaming(
     return {
         orderedIds: finalImages.map((image) => image.id),
         amount: finalImages.length,
+        sourceOrder: plan.orderedIds,
         imgSearchContext: plan.imgSearchContext,
     };
 }
@@ -908,13 +989,25 @@ export function buildMatcher(
 
         let similarRef: string | undefined;
         let similarThreshold: number | undefined;
+        let similarMode: 'prompt' | 'embedding' | undefined;
+        let similarMatchIds: Set<string> | undefined;
         let similarInvalid = false;
+        const embeddingPart = imgSearchContext?.parts.get(partIndex);
         if (type === 'similar') {
-            const { imageId, threshold } = parseSimilarSearchTarget(raw);
+            const { imageId, threshold, mode } = parseSimilarSearchTarget(raw);
             similarThreshold = threshold;
+            similarMode = mode;
             const refImage = getImageList().get(imageId);
             if (!refImage) {
                 similarInvalid = true;
+            } else if (mode === 'embedding') {
+                if (embeddingPart?.invalid) {
+                    similarInvalid = true;
+                } else if (embeddingPart?.matchIds) {
+                    similarMatchIds = embeddingPart.matchIds;
+                } else if (!imgSearchContext) {
+                    similarInvalid = true;
+                }
             } else {
                 similarRef = similarityPromptText(refImage);
             }
@@ -936,7 +1029,7 @@ export function buildMatcher(
         let imgMatchIds: Set<string> | undefined;
         let imgInvalid = false;
 
-        const imgPart = imgSearchContext?.parts.get(partIndex);
+        const imgPart = embeddingPart;
         if (type === 'img') {
             const { presenceOnly, queryText } = parseImgSearchPart(x);
             if (imgPart?.invalid) {
@@ -960,6 +1053,8 @@ export function buildMatcher(
             tagExact,
             similarRef,
             similarThreshold,
+            similarMode,
+            similarMatchIds,
             similarInvalid,
             imgPresence,
             imgMatchIds,
@@ -982,6 +1077,11 @@ export function buildMatcher(
     return (image: ServerImage) => {
         return regexes.every(x => {
             if (x.type === 'similar') {
+                if (x.similarMode === 'embedding') {
+                    const matched = x.similarMatchIds?.has(image.id) ?? false;
+                    return XOR(x.not, matched);
+                }
+
                 const similarity = computeSimilarity(
                     x.similarRef!,
                     similarityPromptText(image),

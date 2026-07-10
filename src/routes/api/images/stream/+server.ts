@@ -10,7 +10,7 @@ import {
     finalizeSession,
     getSession,
     imageLimit,
-    patchSession,
+    replaceSessionResults,
     setSessionImgSearchContext,
 } from '$lib/server/searchSessions';
 import { mapServerImageToClient } from '$lib/tools/misc';
@@ -63,6 +63,7 @@ export async function POST(e) {
     let staleTimer: ReturnType<typeof setInterval> | undefined;
     let unsubscribe: (() => void) | undefined;
     let closed = false;
+    let updateInFlight = false;
 
     const isAborted = () => closed || e.request.signal.aborted;
 
@@ -82,36 +83,40 @@ export async function POST(e) {
             const pushIfChanged = async () => {
                 if (isAborted()) return;
                 if (!sessionId) return;
+                if (updateInFlight) return;
+                updateInFlight = true;
                 const session = getSession(sessionId);
-                if (!session) return;
+                try {
+                    if (!session) return;
 
-                const result = await computeImageUpdate(
-                    {
-                        ...query,
-                        timestamp: connectionTimestamp,
-                        currentIds: [...session.viewIds],
-                    },
-                    session,
-                );
+                    const result = await computeImageUpdate(
+                        {
+                            ...query,
+                            timestamp: connectionTimestamp,
+                            currentIds: [...session.viewIds],
+                        },
+                        session,
+                    );
 
-                if ('error' in result) return;
-                if (!hasUpdateChanges(result, session.viewIds)) {
+                    if ('error' in result) return;
+                    if (!hasUpdateChanges(result, session.viewIds)) {
+                        connectionTimestamp = result.timestamp;
+                        return;
+                    }
+
+                    if (result.orderedIds) {
+                        replaceSessionResults(sessionId, result.orderedIds);
+                    }
                     connectionTimestamp = result.timestamp;
-                    return;
+
+                    const update: UpdateResponse & { type: 'update' } = {
+                        type: 'update',
+                        ...result,
+                    };
+                    if (!safeEnqueue(controller, update)) cleanup();
+                } finally {
+                    updateInFlight = false;
                 }
-
-                patchSession(
-                    sessionId,
-                    result.additions.map((image) => image.id),
-                    result.deletions,
-                );
-                connectionTimestamp = result.timestamp;
-
-                const update: UpdateResponse & { type: 'update' } = {
-                    type: 'update',
-                    ...result,
-                };
-                if (!safeEnqueue(controller, update)) cleanup();
             };
 
             const schedulePush = () => {
@@ -205,7 +210,7 @@ export async function POST(e) {
                         return;
                     }
 
-                    finalizeSession(sessionId, result.orderedIds);
+                    finalizeSession(sessionId, result.orderedIds, result.sourceOrder);
                     setSessionImgSearchContext(sessionId!, result.imgSearchContext);
 
                     const ready: StreamReadyResponse = {

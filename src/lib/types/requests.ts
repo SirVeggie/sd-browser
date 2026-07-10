@@ -91,6 +91,8 @@ export function isUpdateRequest(object: any): object is UpdateRequest {
 export type UpdateResponse = {
     additions: Omit<ClientImage, 'url'>[];
     deletions: string[];
+    /** Canonical session order after an update, when the update came from a session. */
+    orderedIds?: string[];
     timestamp: number;
 };
 export function isUpdateResponse(object: any): object is UpdateResponse {
@@ -107,6 +109,20 @@ export function isStreamRequest(object: any): object is StreamRequest {
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
+    ]);
+}
+
+export type SessionExclusionRequest = {
+    sessionId: string;
+    ids: string[];
+    excluded: boolean;
+};
+export function isSessionExclusionRequest(object: unknown): object is SessionExclusionRequest {
+    return testType(object, [
+        'sessionId', 'ids', 'excluded',
+        (o) => typeof o.sessionId === 'string',
+        (o) => Array.isArray(o.ids) && o.ids.every((id: unknown) => typeof id === 'string'),
+        (o) => typeof o.excluded === 'boolean',
     ]);
 }
 
@@ -240,7 +256,7 @@ export type BulkTagOptions = {
     tags: string[];
 };
 
-export type BulkEmbeddingConfig = Omit<EmbeddingSettings, 'apiKey' | 'useOptimizedEmbeddingQuery'> & {
+export type BulkEmbeddingConfig = Omit<EmbeddingSettings, 'apiKey' | 'useOptimizedEmbeddingQuery' | 'imageSimilarityThreshold'> & {
     apiKey?: string;
 };
 

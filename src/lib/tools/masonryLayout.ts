@@ -71,12 +71,23 @@ export class MasonryPlacer {
     private columnCount = 0;
     private assignments = new Map<string, number>();
     private columnHeights: number[] = [];
+    private needsHeightRebuild = false;
 
     reset(listKey = "") {
         this.listKey = listKey;
         this.columnCount = 0;
         this.assignments.clear();
         this.columnHeights = [];
+        this.needsHeightRebuild = false;
+    }
+
+    getAssignment(id: string): number | undefined {
+        return this.assignments.get(id);
+    }
+
+    setAssignment(id: string, column: number): void {
+        this.assignments.set(id, column);
+        this.needsHeightRebuild = true;
     }
 
     layout(
@@ -100,6 +111,10 @@ export class MasonryPlacer {
         if (columnCount !== this.columnCount || this.assignments.size === 0) {
             this.reflow(images, metrics);
         } else {
+            if (this.needsHeightRebuild) {
+                this.rebuildColumnHeights(images, columnWidth, gap);
+                this.needsHeightRebuild = false;
+            }
             this.appendNew(images, columnWidth, gap);
         }
 
@@ -111,6 +126,7 @@ export class MasonryPlacer {
         const { columnCount, columnWidth, gap } = metrics;
         this.assignments.clear();
         this.columnHeights = Array.from({ length: columnCount }, () => 0);
+        this.needsHeightRebuild = false;
 
         for (const img of images) {
             this.place(img, columnWidth, gap);
@@ -132,6 +148,22 @@ export class MasonryPlacer {
         for (const img of images) {
             if (this.assignments.has(img.id)) continue;
             this.place(img, columnWidth, gap);
+        }
+    }
+
+    private rebuildColumnHeights(
+        images: ClientImage[],
+        columnWidth: number,
+        gap: number,
+    ) {
+        this.columnHeights = Array.from(
+            { length: this.columnCount },
+            () => 0,
+        );
+        for (const image of images) {
+            const column = this.assignments.get(image.id);
+            if (column === undefined) continue;
+            this.columnHeights[column] += estimateItemHeight(image, columnWidth, gap);
         }
     }
 

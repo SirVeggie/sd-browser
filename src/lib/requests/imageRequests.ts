@@ -7,6 +7,7 @@ import type {
     ImagePageRequest,
     ImageResponse,
     MultiActionRequest,
+    SessionExclusionRequest,
     StreamChunkResponse,
     StreamEvent,
     StreamInitResponse,
@@ -73,6 +74,21 @@ export async function updateImages(search: UpdateRequest, fetch?: FetchType): Pr
         throw new Error(res.message);
     }
 
+    return res;
+}
+
+export async function setSessionImageExclusion(
+    request: SessionExclusionRequest,
+    fetch?: FetchType,
+): Promise<UpdateResponse> {
+    let url = '/api/images/session';
+    if (!fetch)
+        url = get(page).url.origin + url;
+    const res = await (fetch ? doPost(url, fetch, request) : doServerPost(url, request));
+    if ('error' in res)
+        throw new Error(res.error);
+    if ('message' in res)
+        throw new Error(res.message);
     return res;
 }
 

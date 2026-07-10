@@ -13,6 +13,7 @@
         generateCompressedImages,
         getImageInfo,
         imageAction,
+        setSessionImageExclusion,
         subscribeImageStream,
     } from "$lib/requests/imageRequests";
     import { expandClientImages, formatSearchDateMinute } from "$lib/tools/misc";
@@ -36,6 +37,7 @@
         useSmartSubsampling,
         buildSearchParams,
         syncSearchInput,
+        similarityThreshold,
         type SearchParams,
     } from "$lib/stores/searchStore";
     import { imageFlow, imageSize, imageSpacing } from "$lib/stores/styleStore";
@@ -77,13 +79,16 @@
     import { tagsAddableToSelection } from "$lib/types/tags";
     import { flyoutState } from "$lib/stores/flyoutStore";
     import BulkModal from "$lib/components/BulkModal.svelte";
+    import { embeddingStore, isEmbeddingConfigured } from "$lib/stores/embeddingStore";
     import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
     import QuickTagSetupModal from "$lib/components/QuickTagSetupModal.svelte";
     import QuickTagToolbar from "$lib/components/QuickTagToolbar.svelte";
     import type { BulkTagMode } from "$lib/stores/bulkStore";
     import {
         computeQuickTagResult,
+        loadQuickTagSelectedTags,
         QUICK_TAG_COOLDOWN_MS,
+        saveQuickTagSelectedTags,
         type QuickTagHistoryEntry,
     } from "$lib/tools/quickTag";
 
@@ -115,6 +120,7 @@
     let quickTagSetupOpen = false;
     let quickTagMode: BulkTagMode = "add";
     let quickTagSelectedTags: string[] = [];
+    let quickTagSelectedTagsLoaded = false;
     let quickTagHistory: QuickTagHistoryEntry[] = [];
     let quickTagHiddenIds: string[] = [];
     let quickTagLastClickAt = 0;
@@ -147,19 +153,24 @@
     let suppressAutoLoadUntil = 0;
 
     $: paginated = $imageStore.slice(0, currentAmount);
+    $: galleryImages = quickTagActive
+        ? $imageStore
+            .filter((image) => !quickTagHiddenIds.includes(image.id))
+            .slice(0, currentAmount)
+        : paginated;
     $: prevIndex = !currentImage
         ? -1
-        : paginated.findIndex((img) => img.id === currentImage?.id) - 1;
+        : galleryImages.findIndex((img) => img.id === currentImage?.id) - 1;
     $: nextIndex = !currentImage
         ? -1
-        : paginated.findIndex((img) => img.id === currentImage?.id) + 1;
-    $: rightArrow = live || (nextIndex >= 0 && nextIndex < paginated.length);
-    $: leftArrow = (rightArrow || nextIndex == paginated.length) && !live;
-    $: newestImage = paginated[0];
+        : galleryImages.findIndex((img) => img.id === currentImage?.id) + 1;
+    $: rightArrow = live || (nextIndex >= 0 && nextIndex < galleryImages.length);
+    $: leftArrow = (rightArrow || nextIndex == galleryImages.length) && !live;
+    $: newestImage = galleryImages[0];
     $: spacingCompact = $imageSpacing === "compact";
     $: spacingMosaic = $imageSpacing === "mosaic";
     $: {
-        const ids = paginated.map((x) => x.id);
+        const ids = galleryImages.map((x) => x.id);
         if (
             ids.length !== cachedPaginatedIds.length ||
             ids.some((id, index) => id !== cachedPaginatedIds[index])
@@ -170,9 +181,9 @@
     }
 
     $: {
-        paginated;
+        $imageStore;
         const next = new Map<string, number>();
-        paginated.forEach((image, index) => next.set(image.id, index));
+        $imageStore.forEach((image, index) => next.set(image.id, index));
         paginatedIndexById = next;
     }
     $: slideshowInterval = Math.max($slideDelay, 100);
@@ -184,6 +195,13 @@
         resizeFrozenColumns,
         masonryEnabled,
     );
+    $: if (quickTagSelectedTagsLoaded) {
+        try {
+            saveQuickTagSelectedTags(localStorage, quickTagSelectedTags);
+        } catch {
+            // Storage may be unavailable or full.
+        }
+    }
 
     $: if (!masonryEnabled) {
         masonryPlacer.reset("");
@@ -192,7 +210,7 @@
     }
 
     $: if (masonryEnabled && gridElement) {
-        paginated;
+        galleryImages;
         searchSessionId;
         $imageSize;
         $imageSpacing;
@@ -231,7 +249,7 @@
 
     function layoutMasonryColumns(metrics: MasonryMetrics): MasonryColumn[] {
         const columns = masonryPlacer.layout(
-            paginated,
+            galleryImages,
             searchSessionId,
             metrics,
         );
@@ -420,6 +438,13 @@
     $: selecting, closeNavMenu();
 
     onMount(() => {
+        try {
+            quickTagSelectedTags = loadQuickTagSelectedTags(localStorage);
+        } catch {
+            // Storage may be unavailable.
+        } finally {
+            quickTagSelectedTagsLoaded = true;
+        }
         scrollToTop();
         reconnectSearch();
         fetchFolderPaths().catch(() => {});
@@ -522,7 +547,7 @@
 
     function openLive() {
         if (live) return;
-        if (paginated.length === 0) return;
+        if (galleryImages.length === 0) return;
         if (currentImage) closeImage();
         live = true;
     }
@@ -535,7 +560,7 @@
                 return false;
             }
         } else if (leftArrow) {
-            currentImage = paginated[prevIndex];
+            currentImage = galleryImages[prevIndex];
             scrollToImage();
             getImageInfo(currentImage!.id).then((res) => {
                 info = res;
@@ -553,10 +578,10 @@
     function goRight() {
         if (live) {
             closeImage();
-            openImage(paginated[0]);
+            openImage(galleryImages[0]);
         } else if (rightArrow) {
-            currentImage = paginated[nextIndex];
-            if (nextIndex == paginated.length - 1) {
+            currentImage = galleryImages[nextIndex];
+            if (nextIndex == galleryImages.length - 1) {
                 loadMore();
             }
             scrollToImage();
@@ -756,7 +781,7 @@
         if (expectedSessionId !== updateSessionId) return;
         if (res.timestamp === -1) return;
 
-        if (!res.additions.length) {
+        if (!res.additions.length && !res.orderedIds) {
             if (!res.deletions.length) return;
             const nothingToDelete = !res.deletions.some((x) =>
                 $imageStore.some((z) => z.id === x),
@@ -772,15 +797,44 @@
         let deletions = 0;
 
         imageStore.update((x) => {
+            const preservedIds = new Set(quickTagActive ? quickTagHiddenIds : []);
             const modified = x.filter(
-                (z) => res.deletions.indexOf(z.id) === -1,
+                (z) => !res.deletions.includes(z.id) || preservedIds.has(z.id),
             );
             deletions = x.length - modified.length;
-            return mapped.concat(modified);
+            const combined = [...modified, ...mapped];
+            if (!res.orderedIds) return combined;
+
+            const positions = new Map(
+                res.orderedIds.map((id, index) => [id, index]),
+            );
+            const hidden = combined
+                .filter((image) => preservedIds.has(image.id))
+                .sort((a, b) => {
+                    const positionA = quickTagHistory.find((entry) => entry.imageId === a.id)?.position
+                        ?? Number.POSITIVE_INFINITY;
+                    const positionB = quickTagHistory.find((entry) => entry.imageId === b.id)?.position
+                        ?? Number.POSITIVE_INFINITY;
+                    return positionA - positionB;
+                });
+            const ordered = combined
+                .filter((image) => !preservedIds.has(image.id))
+                .sort((a, b) => {
+                    const positionA = positions.get(a.id) ?? Number.POSITIVE_INFINITY;
+                    const positionB = positions.get(b.id) ?? Number.POSITIVE_INFINITY;
+                    return positionA - positionB;
+                });
+            for (const image of hidden) {
+                const position = quickTagHistory.find((entry) => entry.imageId === image.id)?.position
+                    ?? ordered.length;
+                ordered.splice(Math.min(position, ordered.length), 0, image);
+            }
+            return ordered;
         });
 
         imageAmountStore.set(
-            $imageAmountStore + additions.length - deletions,
+            res.orderedIds?.length
+                ?? $imageAmountStore + additions.length - deletions,
         );
     }
 
@@ -914,11 +968,20 @@
                     handler: () => openFolder(id),
                 },
                 {
-                    name: "Show similar",
+                    name: "Similar prompts",
                     visible: !selecting,
                     handler() {
                         explorationMode.set('none');
-                        searchFilter.set(`SIMILAR ${id}`);
+                        searchFilter.set(`SIMILAR ${id} ${$similarityThreshold}`);
+                        selectChange();
+                    },
+                },
+                {
+                    name: "Similar images",
+                    visible: !selecting && isEmbeddingConfigured($embeddingStore),
+                    handler() {
+                        explorationMode.set('none');
+                        searchFilter.set(`SIMILAR img ${id} ${$embeddingStore.imageSimilarityThreshold}`);
                         selectChange();
                     },
                 },
@@ -1150,7 +1213,7 @@
 
     function openBulk() {
         syncSearchInput(inputElement);
-        bulkSearchParams = buildSearchParams(inputElement?.value);
+        bulkSearchParams = buildSearchParams();
         bulkOpen = true;
     }
 
@@ -1194,13 +1257,21 @@
         const entry = quickTagHistory.at(-1);
         if (!entry) return;
 
-        quickTagHistory = quickTagHistory.slice(0, -1);
         try {
             await updateImageTags(entry.imageId, entry.originalTags);
+            const result = await setSessionImageExclusion({
+                sessionId: searchSessionId,
+                ids: [entry.imageId],
+                excluded: false,
+            });
+            applyUpdate(result, updateSessionId);
+            if (entry.masonryColumn !== undefined) {
+                masonryPlacer.setAssignment(entry.imageId, entry.masonryColumn);
+            }
+            quickTagHistory = quickTagHistory.slice(0, -1);
             quickTagHiddenIds = quickTagHiddenIds.filter((id) => id !== entry.imageId);
         } catch (cause) {
             console.error(cause);
-            quickTagHistory = [...quickTagHistory, entry];
             notify(cause instanceof Error ? cause.message : "Undo failed", "warn");
         }
     }
@@ -1219,6 +1290,12 @@
             for (const entry of entries) {
                 await updateImageTags(entry.imageId, entry.originalTags);
             }
+            const result = await setSessionImageExclusion({
+                sessionId: searchSessionId,
+                ids: entries.map((entry) => entry.imageId),
+                excluded: false,
+            });
+            applyUpdate(result, updateSessionId);
             resetQuickTagState();
         } catch (cause) {
             console.error(cause);
@@ -1233,6 +1310,18 @@
                 "Exit quick tag? You will lose the ability to undo or revert recent changes.",
             );
             if (!confirmed) return;
+        }
+        try {
+            const result = await setSessionImageExclusion({
+                sessionId: searchSessionId,
+                ids: quickTagHistory.map((entry) => entry.imageId),
+                excluded: false,
+            });
+            applyUpdate(result, updateSessionId);
+        } catch (cause) {
+            console.error(cause);
+            notify(cause instanceof Error ? cause.message : "Failed to restore gallery", "warn");
+            return;
         }
         resetQuickTagState();
     }
@@ -1251,9 +1340,14 @@
         quickTagLastClickAt = now;
         quickTagHiddenIds = [...quickTagHiddenIds, img.id];
         quickTagInFlight.add(img.id);
+        const position = $imageStore.findIndex((image) => image.id === img.id);
+        const masonryColumn = masonryColumns.find((column) =>
+            column.items.some((image) => image.id === img.id),
+        )?.key;
+        let originalTags: string[] | undefined;
 
         try {
-            const originalTags = await fetchImageTags(img.id);
+            originalTags = await fetchImageTags(img.id);
             const newTags = computeQuickTagResult(
                 originalTags,
                 quickTagSelectedTags,
@@ -1266,10 +1360,22 @@
                     imageId: img.id,
                     originalTags,
                     newTags: savedTags,
+                    position,
+                    masonryColumn,
                 },
             ];
+            const result = await setSessionImageExclusion({
+                sessionId: searchSessionId,
+                ids: [img.id],
+                excluded: true,
+            });
+            applyUpdate(result, updateSessionId);
         } catch (cause) {
             console.error(cause);
+            if (originalTags) {
+                await updateImageTags(img.id, originalTags).catch(console.error);
+            }
+            quickTagHistory = quickTagHistory.filter((entry) => entry.imageId !== img.id);
             quickTagHiddenIds = quickTagHiddenIds.filter((id) => id !== img.id);
             notify(cause instanceof Error ? cause.message : "Tagging failed", "warn");
         } finally {
@@ -1284,7 +1390,7 @@
 <div class="topbar">
     <div class="quickbar">
         <span class="image-count">
-            Images: {paginated.length} /
+            Images: {galleryImages.length} /
             <span class:pending={!searchCountComplete}>{$imageAmountStore}</span>
         </span>
 
@@ -1436,7 +1542,6 @@
                         <div
                             id={`img_${img.id}`}
                             class:selecting
-                            class:quick-tag-hidden={quickTagHiddenIds.includes(img.id)}
                             on:click={selectImg(img.id)}
                         >
                             <VirtualImageDisplay
@@ -1455,13 +1560,12 @@
                 </div>
             {/each}
         {:else}
-            {#each paginated as img (img.id)}
+            {#each galleryImages as img (img.id)}
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <div
                     id={`img_${img.id}`}
                     class:selecting
-                    class:quick-tag-hidden={quickTagHiddenIds.includes(img.id)}
                     on:click={selectImg(img.id)}
                 >
                     <VirtualImageDisplay
@@ -1483,7 +1587,7 @@
 <div class="loader">
     {#if fetchingNextPage}
         <div><p>loading...</p></div>
-    {:else if paginated.length === $imageAmountStore}
+    {:else if galleryImages.length === $imageAmountStore}
         <div><p>You've reached the end.</p></div>
     {:else}
         <div>
@@ -1769,11 +1873,6 @@
             > div[id^="img_"],
             .masonry-column > div {
                 overflow-anchor: none;
-            }
-
-            > div[id^="img_"].quick-tag-hidden,
-            .masonry-column > div.quick-tag-hidden {
-                display: none;
             }
 
             .masonry-column {

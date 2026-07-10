@@ -64,6 +64,29 @@ assert.equal(
     4,
 );
 
+const restored = new MasonryPlacer();
+restored.layout(
+    [img("1", 100, 200), img("2", 100, 100), img("3", 100, 300)],
+    "session-restore",
+    metrics,
+);
+const originalColumn = restored.getAssignment("2");
+restored.layout(
+    [img("1", 100, 200), img("3", 100, 300)],
+    "session-restore",
+    metrics,
+);
+restored.setAssignment("2", originalColumn!);
+const restoredColumns = restored.layout(
+    [img("1", 100, 200), img("2", 100, 100), img("3", 100, 300)],
+    "session-restore",
+    metrics,
+);
+assert.equal(
+    restoredColumns.find((column) => column.items.some((item) => item.id === "2"))?.key,
+    originalColumn,
+);
+
 const columns: MasonryColumn[] = [
     { key: 0, items: [img("c", 100, 200)] },
     { key: 1, items: [img("a", 100, 100)] },
