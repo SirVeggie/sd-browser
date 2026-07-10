@@ -1,8 +1,17 @@
 <script lang="ts">
+    import { tick } from "svelte";
     import { searchKeywords } from "$lib/types/misc";
     import { tagsStore } from "$lib/stores/tagsStore";
     import { tagRegistryNames } from "$lib/types/tags";
     import { getUnknownExactTagRanges, segmentOverlapsRange } from "$lib/tools/tagSearch";
+    import {
+        applyExpandedIdDeletion,
+        canonicalFromDisplay,
+        collapseExpandedIds,
+        findAbbreviatedIdSegmentAtCursor,
+        formatSearchDisplay,
+        getAbbreviatedIdDisplayRanges,
+    } from "$lib/tools/searchDisplay";
 
     export let placeholder = "";
     export let value = "";
@@ -12,6 +21,7 @@
         text: string;
         keyword: boolean;
         unknownTag: boolean;
+        abbreviatedId: boolean;
     };
 
     const keywordAliases = new Set([
@@ -22,11 +32,27 @@
     const tokenRegex = /(\s+|[A-Za-z]+|[^A-Za-z\s]+)/g;
 
     let scrollLeft = 0;
+    let displayValue = formatSearchDisplay(value);
+    let expandedIdStarts = new Set<number>();
+    let lastEmittedValue = value;
 
-    $: segments = getSegments(value, tagRegistryNames($tagsStore));
+    $: registryNames = tagRegistryNames($tagsStore);
+    $: abbreviatedIdRanges = getAbbreviatedIdDisplayRanges(value, expandedIdStarts);
+    $: segments = getSegments(displayValue, registryNames, abbreviatedIdRanges);
+    $: if (element)
+        element.dataset.canonicalValue = value;
+
+    $: if (value !== lastEmittedValue) {
+        lastEmittedValue = value;
+        expandedIdStarts = new Set();
+        displayValue = formatSearchDisplay(value);
+    }
 
     async function clear() {
         value = "";
+        lastEmittedValue = "";
+        expandedIdStarts = new Set();
+        displayValue = "";
         scrollLeft = 0;
         element?.focus();
         await Promise.resolve();
@@ -38,8 +64,84 @@
         scrollLeft = element?.scrollLeft ?? 0;
     }
 
-    function getSegments(text: string, registryNames: Set<string>): Segment[] {
-        const unknownRanges = getUnknownExactTagRanges(text, registryNames);
+    function emitInput() {
+        element?.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function emitChange() {
+        element?.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function commitCanonical(nextCanonical: string, nextDisplay: string, nextExpanded: Set<number>) {
+        value = nextCanonical;
+        lastEmittedValue = nextCanonical;
+        displayValue = nextDisplay;
+        expandedIdStarts = nextExpanded;
+    }
+
+    function handleInput(event: Event) {
+        const input = event.currentTarget as HTMLInputElement;
+        const nextDisplay = input.value;
+        const nextCanonical = canonicalFromDisplay(nextDisplay, value);
+        const nextExpanded = collapseExpandedIds(nextCanonical, expandedIdStarts);
+        const formattedDisplay = formatSearchDisplay(nextCanonical, nextExpanded);
+
+        commitCanonical(nextCanonical, formattedDisplay, nextExpanded);
+
+        if (formattedDisplay !== nextDisplay && element) {
+            const cursor = input.selectionStart ?? formattedDisplay.length;
+            void tick().then(() => {
+                element?.setSelectionRange(cursor, cursor);
+            });
+        }
+    }
+
+    async function handleKeydown(event: KeyboardEvent) {
+        if (event.key !== "Backspace" && event.key !== "Delete")
+            return;
+
+        const input = element;
+        if (!input)
+            return;
+
+        const cursor = input.selectionStart ?? 0;
+        const selectionEnd = input.selectionEnd ?? cursor;
+        if (cursor !== selectionEnd)
+            return;
+
+        const match = findAbbreviatedIdSegmentAtCursor(
+            value,
+            expandedIdStarts,
+            cursor,
+            event.key,
+        );
+        if (!match)
+            return;
+
+        event.preventDefault();
+
+        const result = applyExpandedIdDeletion({
+            canonical: value,
+            expandedIdStarts,
+            span: match.span,
+            segmentStart: match.segmentStart,
+            cursor,
+            key: event.key,
+        });
+
+        commitCanonical(result.canonical, result.display, result.expandedIdStarts);
+        emitInput();
+
+        await tick();
+        input.setSelectionRange(result.cursor, result.cursor);
+    }
+
+    function getSegments(
+        text: string,
+        names: Set<string>,
+        idRanges: { start: number; end: number }[],
+    ): Segment[] {
+        const unknownRanges = getUnknownExactTagRanges(text, names);
         let offset = 0;
         return Array.from(text.matchAll(tokenRegex), match => {
             const token = match[0];
@@ -50,6 +152,7 @@
                 text: token,
                 keyword: keywordAliases.has(token.toLowerCase()),
                 unknownTag: segmentOverlapsRange(segmentStart, segmentEnd, unknownRanges),
+                abbreviatedId: segmentOverlapsRange(segmentStart, segmentEnd, idRanges),
             };
         });
     }
@@ -59,11 +162,12 @@
     <form>
         <div class="highlight" aria-hidden="true">
             <div class="highlightText" style:transform={`translateX(${-scrollLeft}px)`}>
-                {#if value}
+                {#if displayValue}
                     {#each segments as segment}
                         <span
                             class:keyword={segment.keyword}
                             class:unknown-tag={segment.unknownTag}
+                            class:abbreviated-id={segment.abbreviatedId}
                         >{segment.text}</span>
                     {/each}
                 {:else}
@@ -76,12 +180,13 @@
             bind:this={element}
             {placeholder}
             spellcheck="false"
-            on:change
-            on:input
+            on:change={emitChange}
+            on:input={handleInput}
+            on:keydown={handleKeydown}
             on:focus
             on:blur
             on:scroll={syncScroll}
-            bind:value
+            bind:value={displayValue}
         />
     </form>
     <button type="button" on:click={clear}>x</button>
@@ -151,6 +256,10 @@
 
     .unknown-tag {
         color: #f0a0a0;
+    }
+
+    .abbreviated-id {
+        color: #ffd18f;
     }
 
     .placeholder {

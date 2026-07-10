@@ -57,7 +57,7 @@ export function buildSearchParams(searchText?: string): SearchParams {
 
 export function syncSearchInput(input: HTMLInputElement | undefined, store: Writable<string> = searchFilter) {
     if (!input) return;
-    const value = input.value;
+    const value = input.dataset.canonicalValue ?? input.value;
     if (value !== get(store)) {
         store.set(value);
     }
