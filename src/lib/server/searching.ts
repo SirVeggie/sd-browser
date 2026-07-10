@@ -66,6 +66,7 @@ type SearchPart = {
     type: MatchType;
     tagExact?: boolean;
     similarRef?: string;
+    similarSourceId?: string;
     similarThreshold?: number;
     similarMode?: 'prompt' | 'embedding';
     similarMatchIds?: Set<string>;
@@ -744,12 +745,10 @@ export async function buildSearchPlan(
             pool,
             matcher,
             imgSearchContext: rankedSearchContext,
-            orderedIds: isSimilaritySorting(sorting)
-                ? orderRankedSearchIds(matchScores, sorting, pool)
-                : pinIdsToFront(
-                    orderRankedSearchIds(matchScores, sorting, pool),
-                    similarSourceIds,
-                ),
+            orderedIds: pinIdsToFront(
+                orderRankedSearchIds(matchScores, sorting, pool),
+                similarSourceIds,
+            ),
         };
     }
 
@@ -778,9 +777,10 @@ export async function buildSearchPlan(
         pool,
         matcher,
         imgSearchContext: resolvedImgSearchContext,
-        orderedIds: isSimilaritySorting(sorting)
-            ? orderPoolIds(pool, 'date')
-            : pinIdsToFront(orderPoolIds(pool, sorting), similarSourceIds),
+        orderedIds: pinIdsToFront(
+            orderPoolIds(pool, isSimilaritySorting(sorting) ? 'date' : sorting),
+            similarSourceIds,
+        ),
     };
 }
 
@@ -814,8 +814,7 @@ export function collectSearchPlanImages(
         );
     }
 
-    if (!isSimilaritySorting(plan.sorting))
-        list = pinSimilarSourceImages(list, plan.search, plan.imageList);
+    list = pinSimilarSourceImages(list, plan.search, plan.imageList);
 
     if (options.skipResults !== false || options.takeResults !== false) {
         const skipped = options.skipResults !== false
@@ -1111,6 +1110,7 @@ export function buildMatcher(
         else if (imgRegex.test(x) || imgOnlyRegex.test(x)) type = 'img';
 
         let similarRef: string | undefined;
+        let similarSourceId: string | undefined;
         let similarThreshold: number | undefined;
         let similarMode: 'prompt' | 'embedding' | undefined;
         let similarMatchIds: Set<string> | undefined;
@@ -1118,6 +1118,7 @@ export function buildMatcher(
         const embeddingPart = imgSearchContext?.parts.get(partIndex);
         if (type === 'similar') {
             const { imageId, threshold, mode } = parseSimilarSearchTarget(x);
+            similarSourceId = imageId;
             similarThreshold = threshold;
             similarMode = mode;
             const refImage = getImageList().get(imageId);
@@ -1175,6 +1176,7 @@ export function buildMatcher(
             type,
             tagExact,
             similarRef,
+            similarSourceId,
             similarThreshold,
             similarMode,
             similarMatchIds,
@@ -1200,6 +1202,9 @@ export function buildMatcher(
     return (image: ServerImage) => {
         return regexes.every(x => {
             if (x.type === 'similar') {
+                if (x.similarSourceId === image.id)
+                    return !x.not;
+
                 if (x.similarMode === 'embedding') {
                     const matched = x.similarMatchIds?.has(image.id) ?? false;
                     return XOR(x.not, matched);
