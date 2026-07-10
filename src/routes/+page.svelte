@@ -186,9 +186,9 @@
     }
 
     $: {
-        $imageStore;
+        galleryImages;
         const next = new Map<string, number>();
-        $imageStore.forEach((image, index) => next.set(image.id, index));
+        galleryImages.forEach((image, index) => next.set(image.id, index));
         paginatedIndexById = next;
     }
     $: slideshowInterval = Math.max($slideDelay, 100);
@@ -222,7 +222,6 @@
         searchSessionId;
         $imageSize;
         $imageSpacing;
-        sorting;
         scheduleMasonryDataLayout();
     }
 
@@ -261,11 +260,6 @@
             searchSessionId,
             metrics,
         );
-
-        if (sorting !== "date") {
-            masonryColumnOrder = null;
-            return columns;
-        }
 
         if (isNearTop()) {
             const sorted = sortColumnsByFirstItemIndex(columns, paginatedIndexById);

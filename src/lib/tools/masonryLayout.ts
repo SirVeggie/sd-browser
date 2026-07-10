@@ -128,8 +128,12 @@ export class MasonryPlacer {
         this.columnHeights = Array.from({ length: columnCount }, () => 0);
         this.needsHeightRebuild = false;
 
+        let placementIndex = 0;
         for (const img of images) {
-            this.place(img, columnWidth, gap);
+            const forcedColumn =
+                placementIndex < columnCount ? placementIndex : undefined;
+            this.place(img, columnWidth, gap, forcedColumn);
+            placementIndex++;
         }
     }
 
@@ -145,9 +149,13 @@ export class MasonryPlacer {
             );
         }
 
+        let placementIndex = this.assignments.size;
         for (const img of images) {
             if (this.assignments.has(img.id)) continue;
-            this.place(img, columnWidth, gap);
+            const forcedColumn =
+                placementIndex < this.columnCount ? placementIndex : undefined;
+            this.place(img, columnWidth, gap, forcedColumn);
+            placementIndex++;
         }
     }
 
@@ -167,18 +175,27 @@ export class MasonryPlacer {
         }
     }
 
-    private place(img: ClientImage, columnWidth: number, gap: number) {
+    private place(
+        img: ClientImage,
+        columnWidth: number,
+        gap: number,
+        forcedColumn?: number,
+    ) {
         const height = estimateItemHeight(img, columnWidth, gap);
-        let column = 0;
+        const column = forcedColumn ?? this.shortestColumn();
 
+        this.assignments.set(img.id, column);
+        this.columnHeights[column] += height;
+    }
+
+    private shortestColumn(): number {
+        let column = 0;
         for (let i = 1; i < this.columnHeights.length; i++) {
             if (this.columnHeights[i] < this.columnHeights[column]) {
                 column = i;
             }
         }
-
-        this.assignments.set(img.id, column);
-        this.columnHeights[column] += height;
+        return column;
     }
 
     private buildColumns(
@@ -209,7 +226,7 @@ function firstItemSortIndex(
     return itemIndex.get(first.id) ?? Number.POSITIVE_INFINITY;
 }
 
-/** Order columns left-to-right by paginated index of each column's first item. */
+/** Order columns left-to-right by list index of each column's first item. */
 export function sortColumnsByFirstItemIndex(
     columns: MasonryColumn[],
     itemIndex: Map<string, number>,

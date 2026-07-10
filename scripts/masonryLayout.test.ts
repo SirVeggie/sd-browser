@@ -33,6 +33,17 @@ assert.deepEqual(
     [["1"], ["2"], ["3"]],
 );
 
+const firstRowPlacer = new MasonryPlacer();
+const unevenFirstRow = firstRowPlacer.layout(
+    [img("1", 100, 800), img("2", 100, 100), img("3", 100, 100)],
+    "first-row-uneven",
+    metrics,
+);
+assert.deepEqual(
+    unevenFirstRow.map((column) => column.items.map((item) => item.id)),
+    [["1"], ["2"], ["3"]],
+);
+
 const second = placer.layout(
     [
         img("1", 100, 200),
