@@ -99,7 +99,10 @@ export function isUpdateResponse(object: any): object is UpdateResponse {
     return testType(object, ['additions', 'deletions', 'timestamp']);
 }
 
-export type StreamRequest = Omit<UpdateRequest, 'timestamp' | 'currentIds'>;
+export type StreamRequest = Omit<UpdateRequest, 'timestamp' | 'currentIds'> & {
+    /** Completed server session to reattach after a transient stream disconnect. */
+    sessionId?: string;
+};
 export function isStreamRequest(object: any): object is StreamRequest {
     return testType(object, [
         'search', 'matching', 'sorting',
@@ -109,6 +112,7 @@ export function isStreamRequest(object: any): object is StreamRequest {
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
+        (o) => o.sessionId === undefined || typeof o.sessionId === 'string',
     ]);
 }
 

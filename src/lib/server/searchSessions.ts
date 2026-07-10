@@ -8,6 +8,7 @@ import type { ImgSearchContext } from './searching';
 import { sortImages } from './searching';
 
 export const imageLimit = 1000;
+export const sessionReconnectGraceMs = 10 * 60 * 1000;
 
 export type SearchSession = {
     queryKey: string;
@@ -38,6 +39,8 @@ type SessionQuery = Pick<
 >;
 
 const sessions = new Map<string, SearchSession>();
+const sessionExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const activeStreamCounts = new Map<string, number>();
 
 export function buildQueryKey(query: SessionQuery): string {
     return JSON.stringify({
@@ -138,6 +141,39 @@ export function validateSession(sessionId: string, query: SessionQuery): boolean
     const session = sessions.get(sessionId);
     if (!session) return false;
     return session.queryKey === buildQueryKey(query);
+}
+
+/**
+ * Reattaches a completed session to a new stream during its reconnect grace period.
+ */
+export function resumeSession(
+    sessionId: string,
+    query: SessionQuery,
+): SearchSession | undefined {
+    const session = sessions.get(sessionId);
+    if (!session || !session.complete || session.queryKey !== buildQueryKey(query)) {
+        return undefined;
+    }
+
+    cancelSessionExpiry(sessionId);
+    return session;
+}
+
+export function attachSessionStream(sessionId: string): void {
+    if (!sessions.has(sessionId)) return;
+    cancelSessionExpiry(sessionId);
+    activeStreamCounts.set(sessionId, (activeStreamCounts.get(sessionId) ?? 0) + 1);
+}
+
+export function detachSessionStream(sessionId: string): void {
+    const activeStreams = activeStreamCounts.get(sessionId) ?? 0;
+    if (activeStreams > 1) {
+        activeStreamCounts.set(sessionId, activeStreams - 1);
+        return;
+    }
+
+    activeStreamCounts.delete(sessionId);
+    scheduleSessionExpiry(sessionId);
 }
 
 export function sliceSession(
@@ -257,5 +293,35 @@ export function getSessionImgSearchError(session: SearchSession | undefined): st
 }
 
 export function deleteSession(sessionId: string): void {
+    cancelSessionExpiry(sessionId);
+    activeStreamCounts.delete(sessionId);
     sessions.delete(sessionId);
+}
+
+/**
+ * Keeps a completed session available briefly after its stream disconnects.
+ */
+export function scheduleSessionExpiry(
+    sessionId: string,
+    graceMs = sessionReconnectGraceMs,
+): void {
+    const session = sessions.get(sessionId);
+    if (!session?.complete) {
+        deleteSession(sessionId);
+        return;
+    }
+
+    cancelSessionExpiry(sessionId);
+    const timer = setTimeout(() => {
+        sessionExpiryTimers.delete(sessionId);
+        sessions.delete(sessionId);
+    }, graceMs);
+    sessionExpiryTimers.set(sessionId, timer);
+}
+
+function cancelSessionExpiry(sessionId: string): void {
+    const timer = sessionExpiryTimers.get(sessionId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    sessionExpiryTimers.delete(sessionId);
 }

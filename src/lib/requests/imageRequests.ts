@@ -159,6 +159,9 @@ export async function subscribeImageStream(
                 }
             }
         }
+        if (!signal.aborted) {
+            throw new Error('Image stream closed unexpectedly');
+        }
     } finally {
         try {
             await reader.cancel();

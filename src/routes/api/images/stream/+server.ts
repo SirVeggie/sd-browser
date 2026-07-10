@@ -5,12 +5,15 @@ import { error } from '$lib/server/responses';
 import { explorationFromRequest, SearchStreamAborted, searchImagesStreaming } from '$lib/server/searching';
 import {
     appendSessionChunk,
+    attachSessionStream,
     createSessionStub,
     deleteSession,
+    detachSessionStream,
     finalizeSession,
     getSession,
     imageLimit,
     replaceSessionResults,
+    resumeSession,
     setSessionImgSearchContext,
 } from '$lib/server/searchSessions';
 import { mapServerImageToClient } from '$lib/tools/misc';
@@ -58,6 +61,13 @@ export async function POST(e) {
         return error('Client disconnected', 499);
     }
 
+    const resumedSession = query.sessionId
+        ? resumeSession(query.sessionId, query)
+        : undefined;
+    if (query.sessionId && !resumedSession) {
+        return error('Search session expired', 410);
+    }
+
     let sessionId: string | undefined;
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     let staleTimer: ReturnType<typeof setInterval> | undefined;
@@ -73,7 +83,7 @@ export async function POST(e) {
         clearTimeout(debounceTimer);
         clearInterval(staleTimer);
         unsubscribe?.();
-        if (sessionId) deleteSession(sessionId);
+        if (sessionId) detachSessionStream(sessionId);
     };
 
     const stream = new ReadableStream({
@@ -125,6 +135,11 @@ export async function POST(e) {
                 debounceTimer = setTimeout(pushIfChanged, debounceMs);
             };
 
+            const beginLiveUpdates = () => {
+                unsubscribe = subscribeImageChanges(schedulePush);
+                staleTimer = setInterval(pushIfChanged, staleCheckMs);
+            };
+
             const finish = () => {
                 cleanup();
                 try {
@@ -143,8 +158,34 @@ export async function POST(e) {
                         return;
                     }
 
+                    if (resumedSession && query.sessionId) {
+                        sessionId = query.sessionId;
+                        attachSessionStream(sessionId);
+                        connectionTimestamp = resumedSession.timestamp;
+
+                        const init: StreamInitResponse = {
+                            type: 'init',
+                            sessionId,
+                            timestamp: resumedSession.timestamp,
+                        };
+                        const ready: StreamReadyResponse = {
+                            type: 'ready',
+                            amount: resumedSession.orderedIds.length,
+                            imgSearchError: resumedSession.imgSearchError,
+                        };
+                        if (!safeEnqueue(controller, init) || !safeEnqueue(controller, ready)) {
+                            finish();
+                            return;
+                        }
+
+                        beginLiveUpdates();
+                        void pushIfChanged();
+                        return;
+                    }
+
                     const stub = createSessionStub(query);
                     sessionId = stub.sessionId;
+                    attachSessionStream(sessionId);
                     connectionTimestamp = stub.timestamp;
 
                     const init: StreamInitResponse = {
@@ -224,14 +265,13 @@ export async function POST(e) {
                         return;
                     }
 
-                    unsubscribe = subscribeImageChanges(schedulePush);
-                    staleTimer = setInterval(pushIfChanged, staleCheckMs);
+                    beginLiveUpdates();
                 } catch (err) {
                     if (err instanceof SearchStreamAborted || isAborted()) {
                         finish();
                         return;
                     }
-                    if (sessionId) deleteSession(sessionId);
+                    if (sessionId && !resumedSession) deleteSession(sessionId);
                     sessionId = undefined;
                     if (err instanceof Error) {
                         console.log(err.message);

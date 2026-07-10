@@ -678,6 +678,21 @@
         connectImageStream(sessionId);
     }
 
+    function isSessionUnavailable(cause: unknown): boolean {
+        return cause instanceof Error
+            && /session (?:not found|expired)/i.test(cause.message);
+    }
+
+    function exitQuickTagAfterSessionLoss() {
+        searchSessionId = "";
+        if (!quickTagActive) return;
+        resetQuickTagState();
+        notify(
+            "Quick tag ended because its search session is no longer available. Recent tag changes remain, but undo and revert are unavailable.",
+            "warn",
+        );
+    }
+
     function maybeNotifyImgSearchError(error: string | undefined, search: string) {
         if (!error) {
             lastImgSearchNotifyKey = "";
@@ -689,7 +704,10 @@
         notify(error, "warn");
     }
 
-    function connectImageStream(expectedSessionId: number) {
+    function connectImageStream(
+        expectedSessionId: number,
+        resumeSessionId?: string,
+    ) {
         const abort = new AbortController();
         streamAbort = abort;
         const search = buildSearchParams();
@@ -699,6 +717,7 @@
             {
                 ...search,
                 sorting,
+                ...(resumeSessionId ? { sessionId: resumeSessionId } : {}),
             },
             {
                 onInit: (init) => {
@@ -737,9 +756,22 @@
         ).catch((err) => {
             if (abort.signal.aborted || expectedSessionId !== updateSessionId) return;
             console.error(err);
+            if (resumeSessionId && isSessionUnavailable(err)) {
+                exitQuickTagAfterSessionLoss();
+                reconnectSearch();
+                return;
+            }
+            if (quickTagActive && !searchCountComplete) {
+                exitQuickTagAfterSessionLoss();
+                reconnectSearch();
+                return;
+            }
             setTimeout(() => {
                 if (abort.signal.aborted || expectedSessionId !== updateSessionId) return;
-                connectImageStream(expectedSessionId);
+                const currentSessionId = searchCountComplete
+                    ? searchSessionId
+                    : undefined;
+                connectImageStream(expectedSessionId, currentSessionId);
             }, 2000);
         });
     }
@@ -1272,6 +1304,10 @@
             quickTagHiddenIds = quickTagHiddenIds.filter((id) => id !== entry.imageId);
         } catch (cause) {
             console.error(cause);
+            if (isSessionUnavailable(cause)) {
+                exitQuickTagAfterSessionLoss();
+                return;
+            }
             notify(cause instanceof Error ? cause.message : "Undo failed", "warn");
         }
     }
@@ -1299,6 +1335,10 @@
             resetQuickTagState();
         } catch (cause) {
             console.error(cause);
+            if (isSessionUnavailable(cause)) {
+                exitQuickTagAfterSessionLoss();
+                return;
+            }
             notify(cause instanceof Error ? cause.message : "Revert failed", "warn");
         }
     }
@@ -1320,6 +1360,10 @@
             applyUpdate(result, updateSessionId);
         } catch (cause) {
             console.error(cause);
+            if (isSessionUnavailable(cause)) {
+                exitQuickTagAfterSessionLoss();
+                return;
+            }
             notify(cause instanceof Error ? cause.message : "Failed to restore gallery", "warn");
             return;
         }
@@ -1377,6 +1421,10 @@
             }
             quickTagHistory = quickTagHistory.filter((entry) => entry.imageId !== img.id);
             quickTagHiddenIds = quickTagHiddenIds.filter((id) => id !== img.id);
+            if (isSessionUnavailable(cause)) {
+                exitQuickTagAfterSessionLoss();
+                return;
+            }
             notify(cause instanceof Error ? cause.message : "Tagging failed", "warn");
         } finally {
             quickTagInFlight.delete(img.id);
