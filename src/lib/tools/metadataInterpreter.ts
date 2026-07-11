@@ -222,7 +222,25 @@ export function getModels(prompt: string | undefined, workflow: string | undefin
     return formatModels(getModelCandidates(prompt, workflow, extra));
 }
 
+function loraContextText(candidate: ModelCandidate): string {
+    return [
+        candidate.nodeTitle,
+        candidate.className,
+        candidate.widgetLabel,
+        candidate.inputKey,
+    ].filter(Boolean).join(' ');
+}
+
+function isLoraCandidate(candidate: ModelCandidate): boolean {
+    return /lora/i.test(loraContextText(candidate));
+}
+
 function getCandidateSortRank(candidate: ModelCandidate): number {
+    if (isLoraCandidate(candidate))
+        return 4;
+    if (isExcludedFromPrimary(candidate))
+        return 5;
+
     const title = (candidate.nodeTitle ?? '').toLowerCase();
     const className = (candidate.className ?? '').toLowerCase();
     const widget = (candidate.widgetLabel ?? '').toLowerCase();
@@ -241,8 +259,8 @@ function getCandidateSortRank(candidate: ModelCandidate): number {
     if (ext === 'safetensors' || ext === 'gguf')
         return 3;
     if (ext === 'pt')
-        return 4;
-    return 5;
+        return 6;
+    return 7;
 }
 
 export function sortModelCandidates(candidates: ModelCandidate[]): ModelCandidate[] {
@@ -383,13 +401,17 @@ export function getPrimaryModel(candidates: ModelCandidate[], extra: string | un
     if (explicit)
         return explicit;
 
-    const uniqueNames = [...new Set(candidates.map(candidate => candidate.model))];
+    if (!candidates.length)
+        return UNKNOWN_MODEL;
+
+    const eligible = candidates.filter(candidate => !isLoraCandidate(candidate));
+    const uniqueNames = [...new Set(eligible.map(candidate => candidate.model))];
     if (uniqueNames.length === 1)
         return uniqueNames[0];
     if (!uniqueNames.length)
         return UNKNOWN_MODEL;
 
-    let pool = candidates.filter(candidate => !candidate.model.toLowerCase().endsWith('.pt'));
+    let pool = eligible.filter(candidate => !candidate.model.toLowerCase().endsWith('.pt'));
     pool = pool.filter(candidate => !isExcludedFromPrimary(candidate));
 
     const withMain = pool.filter(candidate => /main/i.test(candidate.nodeTitle ?? ''));

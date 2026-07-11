@@ -70,6 +70,33 @@ const multiWorkflow = JSON.stringify({
 const multiCandidates = getModelCandidates(multiPrompt, multiWorkflow, undefined);
 assert.equal(getPrimaryModel(multiCandidates, undefined), 'main.safetensors', 'primary excludes vae');
 assert.ok(formatModels(multiCandidates).includes('main.safetensors'), 'format models details');
+const multiFormattedLines = formatModels(multiCandidates).split('\n');
+assert.equal(multiFormattedLines[0], 'Main Checkpoint: main.safetensors', 'checkpoint listed before vae');
+assert.equal(multiFormattedLines[1], 'VAE: vae.safetensors', 'vae listed after checkpoint');
+
+const ckptAndLora = getModelCandidates(
+    '{"1":{"inputs":{"ckpt_name":"main.safetensors"},"class_type":"CheckpointLoaderSimple","_meta":{"title":"Main Checkpoint"}},"2":{"inputs":{"lora_name":"style.safetensors"},"class_type":"LoraLoaderModelOnly","_meta":{"title":"Load LoRA"}}}',
+    JSON.stringify({
+        nodes: [
+            { id: 1, type: 'CheckpointLoaderSimple', title: 'Main Checkpoint', order: 0 },
+            { id: 2, type: 'LoraLoaderModelOnly', title: 'Load LoRA', order: 1 },
+        ],
+    }),
+    undefined,
+);
+assert.equal(getPrimaryModel(ckptAndLora, undefined), 'main.safetensors', 'primary excludes lora');
+const ckptAndLoraLines = formatModels(ckptAndLora).split('\n');
+assert.equal(ckptAndLoraLines[0], 'Main Checkpoint: main.safetensors', 'checkpoint listed before lora');
+assert.equal(ckptAndLoraLines[1], 'Load LoRA: style.safetensors', 'lora listed after checkpoint');
+
+const loraOnly = getModelCandidates(
+    '{"2":{"inputs":{"lora_name":"style.safetensors"},"class_type":"LoraLoaderModelOnly","_meta":{"title":"Load LoRA"}}}',
+    JSON.stringify({
+        nodes: [{ id: 2, type: 'LoraLoaderModelOnly', title: 'Load LoRA', order: 0 }],
+    }),
+    undefined,
+);
+assert.equal(getPrimaryModel(loraOnly, undefined), UNKNOWN_MODEL, 'lora-only primary is unknown');
 
 const extensionOnlyPrompt = JSON.stringify({
     '7': {
@@ -307,6 +334,21 @@ assert.equal(
     getModels(hfCatalogPrompt, hfCatalogWorkflow, undefined),
     formatModels(hfCatalogCandidates),
     'getModels matches structured comfy candidates',
+);
+const hfCatalogLines = formatModels(hfCatalogCandidates).split('\n');
+assert.equal(
+    hfCatalogLines[0],
+    'Load Diffusion Model: krea2_turbo_fp8_scaled.safetensors',
+    'diffusion listed before lora and auxiliary models',
+);
+assert.equal(
+    hfCatalogLines[1],
+    'Load LoRA: krea\\Krea-2-Turbo-Projector-Scale-LoRA-Diffusers.safetensors',
+    'lora listed after diffusion',
+);
+assert.ok(
+    hfCatalogLines.slice(2).every(line => /^Load (VAE|CLIP): /.test(line)),
+    'vae and clip listed after lora',
 );
 
 assert.equal(
