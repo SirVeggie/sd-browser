@@ -29,6 +29,7 @@
   import TagPillRow from "$lib/components/TagPillRow.svelte";
   import TagPickerPopup from "$lib/components/TagPickerPopup.svelte";
   import TagModal from "$lib/components/TagModal.svelte";
+  import ImageLoadingPlaceholder from "./ImageLoadingPlaceholder.svelte";
   import { tagsStore, upsertTagDefinition } from "$lib/stores/tagsStore";
   import { DEFAULT_TAG_COLOR } from "$lib/types/tags";
   import { autofocus } from "../../actions/autofocus";
@@ -56,6 +57,50 @@
   let modalTagColor = DEFAULT_TAG_COLOR;
   let imageTags: string[] = [];
   let tagsRowEl: HTMLDivElement | undefined;
+  let mediaLoaded = false;
+  let imgElement: HTMLImageElement | undefined;
+  let videoElement: HTMLVideoElement | undefined;
+  let viewportWidth = 0;
+  let viewportHeight = 0;
+
+  function createMediaReadyHandler(expectedUrl: string) {
+    return () => {
+      if (imageUrl !== expectedUrl) return;
+      mediaLoaded = true;
+    };
+  }
+
+  function elementMatchesUrl(element: HTMLImageElement | HTMLVideoElement): boolean {
+    if (!imageUrl) return false;
+    const elSrc = element.currentSrc || element.src;
+    try {
+      return new URL(elSrc, location.origin).href === new URL(imageUrl, location.origin).href;
+    } catch {
+      return false;
+    }
+  }
+
+  function checkMediaAlreadyReady() {
+    if (!imageUrl) return;
+    if (
+      imgElement?.complete &&
+      imgElement.naturalWidth > 0 &&
+      elementMatchesUrl(imgElement)
+    ) {
+      mediaLoaded = true;
+    } else if (
+      videoElement &&
+      videoElement.readyState >= 2 &&
+      elementMatchesUrl(videoElement)
+    ) {
+      mediaLoaded = true;
+    }
+  }
+
+  $: mediaStyle =
+    image?.width && image?.height
+      ? `--media-ratio: ${image.width / image.height}; aspect-ratio: ${image.width} / ${image.height}`
+      : undefined;
 
   $: if (data) imageTags = data.tags ?? [];
   $: availableTags = $tagsStore.tags
@@ -66,6 +111,17 @@
   $: imageUrl = image?.id
     ? `/api/images/${image.id}?${buildImageQueryParams(showOriginal ? "original" : $compressedMode, $useSmartSubsampling)}`
     : "";
+  $: fullscreenPlaceholderStyle =
+    full && image?.width && image?.height && viewportWidth && viewportHeight
+      ? `width: ${Math.min(viewportWidth, (viewportHeight * image.width) / image.height)}px; height: ${Math.min(viewportHeight, (viewportWidth * image.height) / image.width)}px;`
+      : undefined;
+  $: {
+    imageUrl;
+    image?.id;
+    showOriginal;
+    mediaLoaded = false;
+  }
+  $: imageUrl, imgElement, videoElement, checkMediaAlreadyReady();
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : buildPromptInfo(data);
   $: annotationText = data?.annotation ?? "";
@@ -358,14 +414,45 @@
     <div class="layout" class:full>
       <div>
         <div class="card">
-          {#if image.type === "video"}
-            <!-- svelte-ignore a11y-media-has-caption -->
-            <video autoplay loop muted preload="metadata" src={imageUrl}>
-              <source src={imageUrl} type="video/mp4" />
-            </video>
-          {:else}
-            <img src={imageUrl} alt={image.id} />
-          {/if}
+          <div
+            class="media-container"
+            class:full
+            class:has-aspect={!!mediaStyle}
+            style={mediaStyle}
+          >
+            {#if !mediaLoaded}
+              <div class="loading-slot" style={fullscreenPlaceholderStyle}>
+                <ImageLoadingPlaceholder shimmerDelay="0ms" mosaic={full} />
+              </div>
+            {/if}
+            {#key imageUrl}
+              {#if image.type === "video"}
+                <!-- svelte-ignore a11y-media-has-caption -->
+                <video
+                  bind:this={videoElement}
+                  autoplay
+                  loop
+                  muted
+                  preload="metadata"
+                  src={imageUrl}
+                  class:hidden={!mediaLoaded}
+                  on:canplay={createMediaReadyHandler(imageUrl)}
+                  on:error={createMediaReadyHandler(imageUrl)}
+                >
+                  <source src={imageUrl} type="video/mp4" />
+                </video>
+              {:else}
+                <img
+                  bind:this={imgElement}
+                  src={imageUrl}
+                  alt={image.id}
+                  class:hidden={!mediaLoaded}
+                  on:load={createMediaReadyHandler(imageUrl)}
+                  on:error={createMediaReadyHandler(imageUrl)}
+                />
+              {/if}
+            {/key}
+          </div>
           <!-- svelte-ignore a11y-click-events-have-key-events -->
           <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
           {#if data}
@@ -442,7 +529,11 @@
   {/if}
 {/if}
 
-<svelte:window on:keydown={handleEsc} />
+<svelte:window
+  bind:innerWidth={viewportWidth}
+  bind:innerHeight={viewportHeight}
+  on:keydown={handleEsc}
+/>
 
 <style lang="scss">
   .image_overlay {
@@ -489,6 +580,43 @@
         font-size: 2em;
       }
 
+      .media-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        max-width: 100%;
+
+        .loading-slot {
+          width: 100%;
+          aspect-ratio: var(--media-ratio, 1);
+          min-height: min(40vh, 20em);
+        }
+
+        &.has-aspect .loading-slot {
+          min-height: 0;
+        }
+
+        img,
+        video {
+          max-height: calc(100dvh - var(--pad) * 2);
+          max-width: 100%;
+          display: block;
+          transition: opacity 0.3s ease;
+
+          &.hidden {
+            opacity: 0;
+            position: absolute;
+            pointer-events: none;
+          }
+        }
+
+        &.full .loading-slot {
+          min-height: 0;
+        }
+      }
+
       &.full {
         position: fixed;
         top: 0;
@@ -507,6 +635,20 @@
           background-color: transparent;
         }
 
+        .media-container {
+          width: 100%;
+          height: 100%;
+
+          img,
+          video {
+            height: 100dvh;
+            max-height: 100dvh;
+            min-height: 100dvh;
+            object-fit: contain;
+            z-index: 100;
+          }
+        }
+
         .info {
           min-width: auto;
           max-width: auto;
@@ -515,22 +657,7 @@
           background-color: #111b;
           box-shadow: 0 0 1em 1em #111b;
         }
-
-        img,
-        video {
-          height: 100dvh;
-          max-height: 100dvh;
-          min-height: 100dvh;
-          object-fit: contain;
-          z-index: 100;
-        }
       }
-    }
-
-    img,
-    video {
-      max-height: calc(100dvh - var(--pad) * 2);
-      max-width: 100%;
     }
 
     .info {

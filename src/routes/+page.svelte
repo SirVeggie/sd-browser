@@ -1637,6 +1637,7 @@
                             <VirtualImageDisplay
                                 {img}
                                 loadSession={scrollLoadSession}
+                                shimmerIndex={paginatedIndexById.get(img.id) ?? 0}
                                 selected={selecting &&
                                     $selection.includes(img.id)}
                                 onClick={quickTagActive
@@ -1650,7 +1651,7 @@
                 </div>
             {/each}
         {:else}
-            {#each galleryImages as img (img.id)}
+            {#each galleryImages as img, index (img.id)}
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <div
@@ -1661,6 +1662,7 @@
                     <VirtualImageDisplay
                         {img}
                         loadSession={scrollLoadSession}
+                        shimmerIndex={index}
                         selected={selecting && $selection.includes(img.id)}
                         onClick={quickTagActive
                             ? ((e) => handleQuickTagImage(img, e))

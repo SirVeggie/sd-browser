@@ -15,6 +15,7 @@
     export let selected = false;
     export let loadSession = 0;
     export let onLoaded: (() => void) | undefined = undefined;
+    export let shimmerIndex: number | undefined = undefined;
 
     let nearViewport = false;
 
@@ -45,6 +46,7 @@
             {selected}
             {loadSession}
             {onLoaded}
+            {shimmerIndex}
         />
     {:else}
         <div class="placeholder" aria-hidden="true"></div>

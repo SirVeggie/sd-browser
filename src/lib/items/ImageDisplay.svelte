@@ -1,8 +1,8 @@
 <script lang="ts">
     import type { InputEvent } from "$lib/types/misc";
     import Clickable from "./Clickable.svelte";
+    import ImageLoadingPlaceholder from "./ImageLoadingPlaceholder.svelte";
     import { cx } from "$lib/tools/cx";
-    import { SpinLine } from "svelte-loading-spinners";
     import { animatedThumb, thumbMode, useSmartSubsampling } from "$lib/stores/searchStore";
     import {
         buildImageQueryParams,
@@ -21,6 +21,7 @@
     export let selected = false;
     export let loadSession = 0;
     export let onLoaded: (() => void) | undefined = undefined;
+    export let shimmerIndex: number | undefined = undefined;
 
     let hasLoaded = false;
     let imgElement: HTMLImageElement | undefined;
@@ -69,7 +70,7 @@
     <Clickable up={onClick} contextMenu={onContext}>
         {#if !hasLoaded}
             <div class="loading">
-                <SpinLine color="#444" />
+                <ImageLoadingPlaceholder {shimmerIndex} mosaic={spacingMosaic} />
             </div>
         {:else}
             <div class="overlay"/>
@@ -261,7 +262,6 @@
     }
 
     .loading {
-        color: #ddd;
         transition: opacity 0.4s ease;
     }
 </style>
