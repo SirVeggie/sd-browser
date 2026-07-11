@@ -1,5 +1,6 @@
 import { searchKeywords } from '$lib/types/misc';
 import { isExactTagTerm } from '$lib/types/tags';
+import { tokenizeSearchClauses } from './searchParsing';
 
 const keywordPattern = `((${searchKeywords.join('|')}) )*`;
 const removeRegex = new RegExp(`^${keywordPattern}`, 'i');
@@ -19,26 +20,16 @@ export function getUnknownExactTagRanges(text: string, registryNames: Set<string
         return [];
 
     const ranges: { start: number; end: number }[] = [];
-    const parts = text.split(/\s+AND\s+/i);
-    let searchFrom = 0;
 
-    for (const part of parts) {
+    for (const clause of tokenizeSearchClauses(text)) {
+        const part = clause.text;
         const term = extractTagTermFromClause(part);
-        if (!term || !isExactTagTerm(term) || registryNames.has(term)) {
-            const partIndex = text.indexOf(part, searchFrom);
-            searchFrom = partIndex >= 0 ? partIndex + part.length : searchFrom + part.length;
-            continue;
-        }
-
-        const partIndex = text.indexOf(part, searchFrom);
-        if (partIndex < 0)
+        if (!term || !isExactTagTerm(term) || registryNames.has(term))
             continue;
 
-        const termStart = text.indexOf(term, partIndex);
+        const termStart = text.indexOf(term, clause.start);
         if (termStart >= 0)
             ranges.push({ start: termStart, end: termStart + term.length });
-
-        searchFrom = partIndex + part.length;
     }
 
     return ranges;

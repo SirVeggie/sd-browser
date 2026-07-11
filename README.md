@@ -104,33 +104,51 @@ Search `red` matches `scarred`
 
 ## Keywords
 
-Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT, MODEL | MD, ANNOTATION | AN, SKIP, TAKE`. Keywords are case insensitive. Keywords can be in any order (except AND). Both are valid: `NOT FOLDER img2img` and `FOLDER NOT img2img`, or `not folder img2img` and `folder not img2img`.
+Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT, MODEL | MD, ANNOTATION | AN, TAG, SIMILAR | SM, IMG, ID, VIDEO | VID, SKIP, TAKE, MMR, IMGSIM`. Keywords are case insensitive. Prefix keywords can be stacked in any order within a clause: `NOT FOLDER img2img` and `FOLDER NOT img2img` are equivalent.
 
-`AND`: Specify multiple conditions that all have to match  
+### Combining clauses
+
+Keyword-bearing filters are chained implicitly. When a recognized keyword starts a new filter, you do not need `AND` before it.
+
+Examples:
+- `landscape FOLDER txt2img` — landscape in the positive prompt and image in the `txt2img` folder
+- `red NOT girl` — red in the positive prompt, excluding images matching `girl`
+- `IMG misty forest MMR 10` — embedding similarity, then MMR result shaping
+
+Use explicit `AND` only when separating two keywordless positive-prompt searches:
+- `red AND blue` — two separate positive-prompt conditions
+- `red blue` — one positive-prompt condition (both words required in words mode)
+
+Prefix a keyword with `\` to search for that word literally in prompt text instead of starting a new clause:
+- `\MODEL sheet` — matches the phrase `MODEL sheet` in the positive prompt
+
+**Breaking change:** saved custom filters or NSFW expressions that previously relied on keyword tokens inside plain prompt text (for example `landscape MODEL foo` as one regex clause) are now split at the keyword. Escape literal keyword tokens with `\` where needed.
+
+`AND`: Explicit delimiter between keywordless positive-prompt clauses  
 Example: `red hair AND man`
 
 `NOT`: Inverts a condition  
-Example: `red hair AND NOT girl`
+Example: `red hair NOT girl` or `red hair AND NOT girl`
 
 `NEG`: Condition matches negative prompt  
-Example: `painting AND NEG landscape`
+Example: `painting NEG landscape`
 
 `PARAMS`: Condition matches parameter portion of prompt (Sampler: xxx, etc.)  
-Example: `landscape AND PARAMS sampler: euler a`
+Example: `landscape PARAMS sampler: euler a`
 
 `FOLDER`: Matches the subfolder the image is located in  
-Example: `FOLDER txt2img` or `landscape AND NOT FD img2img|grid`
+Example: `FOLDER txt2img` or `landscape NOT FD img2img|grid`
 
 `ALL`: Condition matches whole prompt (and folder name) instead of only the positive  
-Example: `red hair AND NOT ALL girl|boy` (girl or boy not mentioned in any part of the prompt)
+Example: `red hair NOT ALL girl|boy` (girl or boy not mentioned in any part of the prompt)
 
 `DATE`: Uses special date syntax to restrict search to some time frame (examples above)
 
 `SKIP`: Skips the first N results after sorting.  
-Example: `landscape AND SKIP 20`
+Example: `landscape SKIP 20`
 
 `TAKE`: Limits results to the first N matching images after sorting (and after any numeric SKIP).  
-Example: `landscape AND TAKE 20` or `landscape AND SKIP 10 AND TAKE 5`
+Example: `landscape TAKE 20` or `landscape SKIP 10 TAKE 5`
 
 ## Sorting
 - Date: Sorts images based on file modification date

@@ -1,3 +1,252 @@
+// Keep in sync with searchKeywords in src/lib/types/misc.ts
+const SEARCH_KEYWORD_ENTRIES = [
+    'AND',
+    'NOT',
+    'ALL',
+    'NEGATIVE|NEG',
+    'FOLDER|FD',
+    'PARAMS|PR',
+    'DATE|DT',
+    'MODEL|MD',
+    'ANNOTATION|AN',
+    'TAG',
+    'SIMILAR|SM',
+    'IMG',
+    'ID',
+    'VIDEO|VID',
+    'SKIP',
+    'TAKE',
+    'MMR',
+    'IMGSIM',
+] as const;
+
+export type SearchClause = {
+    text: string;
+    start: number;
+    end: number;
+};
+
+function expandClauseKeywordTokens(): string[] {
+    const tokens = new Set<string>();
+    for (const entry of SEARCH_KEYWORD_ENTRIES) {
+        for (const alias of entry.split('|')) {
+            tokens.add(alias.toUpperCase());
+        }
+    }
+    return [...tokens].sort((a, b) => b.length - a.length);
+}
+
+const CLAUSE_KEYWORD_TOKENS = expandClauseKeywordTokens();
+const PREFIX_KEYWORD_TOKENS = new Set(CLAUSE_KEYWORD_TOKENS);
+
+type KeywordMatch = {
+    canonical: string;
+    length: number;
+    escaped: boolean;
+};
+
+function skipWhitespace(search: string, index: number): number {
+    while (index < search.length && /\s/.test(search[index]))
+        index++;
+    return index;
+}
+
+function readKeywordAt(search: string, index: number): KeywordMatch | null {
+    if (index >= search.length)
+        return null;
+
+    const escaped = search[index] === '\\';
+    const probe = escaped ? index + 1 : index;
+    if (probe >= search.length)
+        return null;
+
+    const slice = search.slice(probe);
+    for (const keyword of CLAUSE_KEYWORD_TOKENS) {
+        const match = slice.match(new RegExp(`^${keyword}(?=\\s|$)`, 'i'));
+        if (match) {
+            return {
+                canonical: match[0],
+                length: escaped ? 1 + match[0].length : match[0].length,
+                escaped,
+            };
+        }
+    }
+
+    if (!escaped) {
+        const andMatch = slice.match(/^AND(?=\s|$)/i);
+        if (andMatch) {
+            return {
+                canonical: andMatch[0],
+                length: andMatch[0].length,
+                escaped: false,
+            };
+        }
+    }
+
+    return null;
+}
+
+function isExplicitAndDelimiter(search: string, index: number): boolean {
+    return /^\s+AND(?=\s|$)/i.test(search.slice(index));
+}
+
+function consumeExplicitAndDelimiter(search: string, index: number): number {
+    const match = search.slice(index).match(/^\s+AND\s+/i);
+    return index + (match?.[0].length ?? 0);
+}
+
+function isPrefixKeyword(canonical: string): boolean {
+    return canonical.toUpperCase() === 'AND' || PREFIX_KEYWORD_TOKENS.has(canonical.toUpperCase());
+}
+
+function findWordEnd(search: string, index: number): number {
+    while (index < search.length && !/\s/.test(search[index]))
+        index++;
+    return index;
+}
+
+function isDateBodyToken(word: string): boolean {
+    if (/^TO$/i.test(word))
+        return true;
+    if (/^-?\d+[ymdh]$/i.test(word))
+        return true;
+    if (/^-?\d+$/.test(word))
+        return true;
+    if (/^\d{4}(\.\d{1,2}(\.\d{1,2})?)?$/.test(word))
+        return true;
+    if (/^\d{1,2}(:\d{2}(:\d{2})?)?$/.test(word))
+        return true;
+    return false;
+}
+
+function findClauseBodyBoundary(
+    search: string,
+    bodyStart: number,
+    hasDatePrefix: boolean,
+): { end: number; nextPos: number } {
+    if (hasDatePrefix) {
+        let index = bodyStart;
+        while (index < search.length) {
+            if (isExplicitAndDelimiter(search, index))
+                return { end: index, nextPos: consumeExplicitAndDelimiter(search, index) };
+
+            index = skipWhitespace(search, index);
+            if (index >= search.length)
+                return { end: search.length, nextPos: search.length };
+
+            const keyword = readKeywordAt(search, index);
+            if (keyword && !keyword.escaped) {
+                const upper = keyword.canonical.toUpperCase();
+                if (upper === 'AND') {
+                    let end = index;
+                    while (end > bodyStart && /\s/.test(search[end - 1]))
+                        end--;
+                    return { end, nextPos: consumeExplicitAndDelimiter(search, index) };
+                }
+                if (!isDateBodyToken(keyword.canonical)) {
+                    let end = index;
+                    while (end > bodyStart && /\s/.test(search[end - 1]))
+                        end--;
+                    return { end, nextPos: index };
+                }
+            }
+
+            const wordEnd = findWordEnd(search, index);
+            const word = search.slice(index, wordEnd);
+            if (!isDateBodyToken(word)) {
+                let end = index;
+                while (end > bodyStart && /\s/.test(search[end - 1]))
+                    end--;
+                return { end, nextPos: index };
+            }
+
+            index = wordEnd;
+        }
+
+        return { end: search.length, nextPos: search.length };
+    }
+
+    for (let index = bodyStart; index < search.length; index++) {
+        if (isExplicitAndDelimiter(search, index))
+            return { end: index, nextPos: consumeExplicitAndDelimiter(search, index) };
+
+        if (!/\s/.test(search[index]))
+            continue;
+
+        const keywordStart = skipWhitespace(search, index);
+        const keyword = readKeywordAt(search, keywordStart);
+        if (!keyword || keyword.escaped)
+            continue;
+
+        const upper = keyword.canonical.toUpperCase();
+        if (upper === 'AND')
+            return { end: index, nextPos: consumeExplicitAndDelimiter(search, index) };
+
+        return { end: index, nextPos: keywordStart };
+    }
+
+    return { end: search.length, nextPos: search.length };
+}
+
+export function unescapeSearchLiterals(text: string): string {
+    let result = text;
+    for (const keyword of CLAUSE_KEYWORD_TOKENS) {
+        result = result.replace(new RegExp(`\\\\${keyword}(?=\\s|$)`, 'gi'), keyword);
+    }
+    return result.replace(/\\AND(?=\s|$)/gi, 'AND');
+}
+
+export function tokenizeSearchClauses(search: string): SearchClause[] {
+    if (!search)
+        return [];
+
+    const clauses: SearchClause[] = [];
+    let pos = 0;
+
+    while (pos < search.length) {
+        pos = skipWhitespace(search, pos);
+        if (pos >= search.length)
+            break;
+
+        const clauseStart = pos;
+        let hasDatePrefix = false;
+
+        while (pos < search.length) {
+            const keyword = readKeywordAt(search, pos);
+            if (!keyword || keyword.escaped || !isPrefixKeyword(keyword.canonical))
+                break;
+
+            const upper = keyword.canonical.toUpperCase();
+            if (upper === 'DATE' || upper === 'DT')
+                hasDatePrefix = true;
+
+            pos += keyword.length;
+            pos = skipWhitespace(search, pos);
+        }
+
+        let end = search.length;
+        let nextPos = search.length;
+
+        const boundary = findClauseBodyBoundary(search, pos, hasDatePrefix);
+        end = boundary.end;
+        nextPos = boundary.nextPos;
+
+        const text = search.slice(clauseStart, end);
+        if (text.trim())
+            clauses.push({ text, start: clauseStart, end });
+
+        pos = nextPos;
+    }
+
+    return clauses;
+}
+
+export function splitSearchParts(search: string): string[] {
+    return tokenizeSearchClauses(search)
+        .map((clause) => clause.text.trim())
+        .filter((part) => part.length > 0);
+}
+
 function parseThresholdSuffix(value: string): number | undefined {
     const trimmed = value.trim();
     if (!/^-?\d*[.,]?\d+$/.test(trimmed))
@@ -14,7 +263,6 @@ const searchKeywordPrefix = '(?:AND|NOT|ALL|NEGATIVE|NEG|FOLDER|FD|PARAMS|PR|DAT
 const similarPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*(?:SIMILAR|SM)\\s+`, 'i');
 const imgPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*IMG(?:\\s+|$)`, 'i');
 const notPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*NOT\\s+`, 'i');
-const andSplitRegex = /\s+AND\s+/i;
 const MMR_DEFAULT_CANDIDATE_MULTIPLIER = 10;
 const MMR_MAX_RESULT_COUNT = 5000;
 const MMR_MAX_CANDIDATE_COUNT = 50_000;
@@ -47,8 +295,7 @@ export function isImgSearchPart(part: string): boolean {
 }
 
 export function hasSimilaritySearchParts(search: string): boolean {
-    return search
-        .split(andSplitRegex)
+    return splitSearchParts(search)
         .some((part) => isSimilarSearchPart(part) || isImgSearchPart(part));
 }
 
@@ -165,10 +412,6 @@ export function stripMmrParts(search: string): string {
     return stripResultShapingParts(search);
 }
 
-function splitSearchParts(search: string): string[] {
-    return search.split(andSplitRegex);
-}
-
 export function isNegatedSearchPart(part: string): boolean {
     return notPrefixRegex.test(part.trim());
 }
@@ -177,7 +420,7 @@ export function getPositiveSimilarSourceIds(search: string): string[] {
     const ids: string[] = [];
     const seen = new Set<string>();
 
-    for (const part of search.split(andSplitRegex)) {
+    for (const part of splitSearchParts(search)) {
         if (!isSimilarSearchPart(part) || isNegatedSearchPart(part))
             continue;
 

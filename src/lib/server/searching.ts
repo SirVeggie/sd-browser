@@ -9,6 +9,8 @@ import {
     stripResultShapingParts,
     isMmrSearchPart,
     isImgSimSearchPart,
+    splitSearchParts,
+    unescapeSearchLiterals,
 } from "$lib/tools/searchParsing";
 import {
     isSimilaritySorting,
@@ -65,12 +67,7 @@ const imgOnlyRegex = new RegExp(`^${keywordPattern}IMG$`, keywordFlags);
 const IMAGE_EMBEDDING_SIMILARITY_THRESHOLD = 0.08;
 const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
 const takeRegex = new RegExp(`^${keywordPattern}TAKE `, keywordFlags);
-const andSplitRegex = /\s+AND\s+/i;
 const resultCountRegex = /^\d+$/;
-
-function splitSearchParts(search: string): string[] {
-    return search.split(andSplitRegex);
-}
 
 type SearchPart = {
     raw: string;
@@ -1241,7 +1238,7 @@ export function buildMatcher(
     const similaritySettings = exploration ?? defaultExplorationSettings;
     const searchParts = splitSearchParts(search);
     const regexes = searchParts.map((x, partIndex) => {
-        const raw = x.replace(removeRegex, '');
+        const raw = unescapeSearchLiterals(x.replace(removeRegex, ''));
         const take = takeRegex.test(x);
 
         if (take) {

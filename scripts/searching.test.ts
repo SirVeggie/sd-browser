@@ -9,6 +9,9 @@ import {
     stripResultShapingParts,
     hasMmrSearchParts,
     hasImgSimSearchParts,
+    splitSearchParts,
+    tokenizeSearchClauses,
+    unescapeSearchLiterals,
 } from '../src/lib/tools/searchParsing.ts';
 
 assert.deepEqual(
@@ -95,6 +98,12 @@ assert.equal(
     'removes MMR clause from matcher input',
 );
 
+assert.equal(
+    stripMmrParts('TAG favourite MMR 10'),
+    'TAG favourite',
+    'removes implicitly chained MMR clause from matcher input',
+);
+
 assert.equal(hasMmrSearchParts('MMR 10'), true, 'detects MMR search parts');
 
 assert.deepEqual(
@@ -140,5 +149,36 @@ assert.deepEqual(
     { resultCount: 25 },
     'parses IMGSIM position-independently',
 );
+
+assert.deepEqual(
+    parseImgSimDirective('TAG landscape IMGSIM 25'),
+    { resultCount: 25 },
+    'parses implicitly chained IMGSIM',
+);
+
+const splitCases: Array<{ search: string; parts: string[] }> = [
+    { search: 'red hair AND man', parts: ['red hair', 'man'] },
+    { search: 'red hair man', parts: ['red hair man'] },
+    { search: 'landscape FOLDER txt2img', parts: ['landscape', 'FOLDER txt2img'] },
+    { search: 'red NOT FOLDER drafts', parts: ['red', 'NOT FOLDER drafts'] },
+    { search: 'DT -1y TO -6m landscape', parts: ['DT -1y TO -6m', 'landscape'] },
+    { search: 'landscape IMG misty forest', parts: ['landscape', 'IMG misty forest'] },
+    { search: 'TAG favourite MMR 10', parts: ['TAG favourite', 'MMR 10'] },
+    { search: 'SIMILAR abc landscape', parts: ['SIMILAR abc landscape'] },
+    { search: 'fd landscape', parts: ['fd landscape'] },
+];
+
+for (const { search, parts } of splitCases) {
+    assert.deepEqual(splitSearchParts(search), parts, `splitSearchParts handles ${search}`);
+}
+
+assert.equal(unescapeSearchLiterals('\\MODEL sheet'), 'MODEL sheet', 'unescapes literal keyword tokens');
+assert.equal(unescapeSearchLiterals('red \\NOT girl'), 'red NOT girl', 'unescapes literal NOT tokens');
+
+const fullImageId = 'a'.repeat(64);
+const implicitSimilarSearch = `landscape SIMILAR img ${fullImageId}`;
+const similarClauses = tokenizeSearchClauses(implicitSimilarSearch);
+assert.equal(similarClauses.length, 2, 'tokenizes implicit SIMILAR clause boundaries');
+assert.match(similarClauses[1]?.text ?? '', /^SIMILAR img /i, 'keeps SIMILAR clause body after implicit split');
 
 console.log('searching.test.ts: all tests passed');

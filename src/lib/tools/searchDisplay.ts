@@ -1,8 +1,10 @@
+import { tokenizeSearchClauses } from './searchParsing';
+
 const IMAGE_ID_LENGTH = 64;
 const ABBREVIATED_ID_LENGTH = 9;
-const similarFullIdRegex = /(^|\s+AND\s+)((?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?)([0-9a-f]{64})(?=\s|$)/gi;
-const similarAbbreviatedIdRegex = /(^|\s+AND\s+)((?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?)([0-9a-f]{6}\.\.\.)(?=\s|$)/gi;
-const similarAnyIdRegex = /(^|\s+AND\s+)(?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?(\S+)/gi;
+const similarFullIdInClauseRegex = /((?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?)([0-9a-f]{64})(?=\s|$)/i;
+const similarAbbreviatedIdRegex = /((?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?)([0-9a-f]{6}\.\.\.)(?=\s|$)/gi;
+const similarAnyIdInClauseRegex = /(?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?(\S+)/i;
 
 export type AbbreviatedIdRange = {
     start: number;
@@ -23,12 +25,14 @@ export function getSearchDisplay(canonical: string): {
     let lastEnd = 0;
     const ranges: AbbreviatedIdRange[] = [];
 
-    for (const match of canonical.matchAll(similarFullIdRegex)) {
-        const leading = match[1] ?? '';
-        const header = match[2] ?? '';
-        const id = match[3] ?? '';
-        const matchStart = match.index ?? 0;
-        const idStart = matchStart + leading.length + header.length;
+    for (const clause of tokenizeSearchClauses(canonical)) {
+        const match = clause.text.match(similarFullIdInClauseRegex);
+        if (!match || match.index === undefined)
+            continue;
+
+        const header = match[1] ?? '';
+        const id = match[2] ?? '';
+        const idStart = clause.start + match.index + header.length;
 
         text += canonical.slice(lastEnd, idStart);
         const displayStart = text.length;
@@ -49,17 +53,17 @@ export function getSearchDisplay(canonical: string): {
 }
 
 export function inflateSearchDisplay(display: string, previousCanonical: string): string {
-    const ids = [...previousCanonical.matchAll(similarFullIdRegex)]
-        .map(match => match[3])
+    const ids = tokenizeSearchClauses(previousCanonical)
+        .map((clause) => clause.text.match(similarFullIdInClauseRegex)?.[2])
         .filter((id): id is string => Boolean(id));
 
     let idIndex = 0;
-    return display.replace(similarAbbreviatedIdRegex, (match, leading, header, abbreviated) => {
+    return display.replace(similarAbbreviatedIdRegex, (match, header, abbreviated) => {
         const prefix = abbreviated.slice(0, 6).toLowerCase();
         const id = ids.slice(idIndex).find((candidate) => candidate.slice(0, 6).toLowerCase() === prefix);
         if (id)
             idIndex = ids.indexOf(id, idIndex) + 1;
-        return id ? `${leading}${header}${id}` : match;
+        return id ? `${header}${id}` : match;
     });
 }
 
@@ -110,8 +114,9 @@ function mapDisplayOffsetToCanonical(range: AbbreviatedIdRange, offset: number):
 }
 
 export function shouldCollapseExpandedSearch(canonical: string): boolean {
-    for (const match of canonical.matchAll(similarAnyIdRegex)) {
-        const id = match[2];
+    for (const clause of tokenizeSearchClauses(canonical)) {
+        const match = clause.text.match(similarAnyIdInClauseRegex);
+        const id = match?.[1];
         if (id && id.length !== IMAGE_ID_LENGTH)
             return false;
     }

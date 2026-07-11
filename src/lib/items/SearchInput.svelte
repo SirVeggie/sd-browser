@@ -119,9 +119,12 @@
             const segmentStart = offset;
             const segmentEnd = offset + token.length;
             offset = segmentEnd;
+            const escapedKeyword = segmentStart > 0
+                && text[segmentStart - 1] === '\\'
+                && /^[A-Za-z]+$/.test(token);
             return {
                 text: token,
-                keyword: keywordAliases.has(token.toLowerCase()),
+                keyword: !escapedKeyword && keywordAliases.has(token.toLowerCase()),
                 unknownTag: segmentOverlapsRange(segmentStart, segmentEnd, unknownRanges),
                 abbreviatedId: segmentOverlapsRange(segmentStart, segmentEnd, idRanges),
             };
