@@ -68,6 +68,8 @@ const imgRegex = new RegExp(`^${keywordPattern}IMG `, keywordFlags);
 const imgOnlyRegex = new RegExp(`^${keywordPattern}IMG$`, keywordFlags);
 /** Default similarity cutoff for IMG text queries (text query vs image embeddings). */
 const IMAGE_EMBEDDING_SIMILARITY_THRESHOLD = 0.08;
+/** Neutral cutoff for multi-part IMG queries after normalizing positive-vs-negative scores to 0..1. */
+const WEIGHTED_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD = 0.5;
 const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
 const takeRegex = new RegExp(`^${keywordPattern}TAKE `, keywordFlags);
 const resultCountRegex = /^\d+$/;
@@ -423,10 +425,7 @@ function findWeightedImgMatches(
     const scores: { id: string; similarity: number }[] = [];
 
     for (const row of rows) {
-        let similarity = 0;
-        for (const query of queryEmbeddings) {
-            similarity += query.weight * cosineSimilarity(query.embedding, row.embedding);
-        }
+        const similarity = computeWeightedImgSimilarity(queryEmbeddings, row.embedding);
         if (similarity >= minScore)
             scores.push({ id: row.id, similarity });
     }
@@ -438,6 +437,44 @@ function findWeightedImgMatches(
     return new Map(limitedScores.map((row) => [row.id, row.similarity]));
 }
 
+function computeWeightedImgSimilarity(
+    queryEmbeddings: WeightedImgQueryEmbedding[],
+    imageEmbedding: Float32Array,
+): number {
+    const positives: number[] = [];
+    const negatives: number[] = [];
+
+    for (const query of queryEmbeddings) {
+        const similarity = clampUnitScore(cosineSimilarity(query.embedding, imageEmbedding));
+        if (query.weight > 0)
+            positives.push(similarity);
+        else
+            negatives.push(similarity);
+    }
+
+    const positiveScore = geometricMean(positives);
+    const negativeScore = negatives.length ? Math.max(...negatives) : 0;
+    return (positiveScore - negativeScore + 1) / 2;
+}
+
+function clampUnitScore(score: number): number {
+    if (score <= 0)
+        return 0;
+    if (score >= 1)
+        return 1;
+    return score;
+}
+
+function geometricMean(values: number[]): number {
+    if (!values.length)
+        return 1;
+    if (values.some((value) => value <= 0))
+        return 0;
+
+    const logSum = values.reduce((total, value) => total + Math.log(value), 0);
+    return Math.exp(logSum / values.length);
+}
+
 export async function resolveImgSearchContext(
     query: string,
     options: ImgSearchResolveOptions,
@@ -445,7 +482,7 @@ export async function resolveImgSearchContext(
     const parts = splitSearchParts(query);
     const context: ImgSearchContext = { parts: new Map() };
     let hasEmbeddingParts = false;
-    let combinedMatchScores: Map<string, number> | undefined;
+    let latestPositiveMatchScores: Map<string, number> | undefined;
     let refinedCandidateIds: Set<string> | undefined;
     let error: string | undefined;
 
@@ -490,7 +527,7 @@ export async function resolveImgSearchContext(
                     });
                     refinedCandidateIds = candidateIds;
                     if (!isNegatedSimilarPart)
-                        combinedMatchScores = mergeImgMatchScores(combinedMatchScores, new Map());
+                        latestPositiveMatchScores = new Map();
                     continue;
                 }
 
@@ -516,9 +553,9 @@ export async function resolveImgSearchContext(
                     ? subtractIds(candidateIds, matchIds)
                     : matchIds;
                 if (!isNegatedSimilarPart)
-                    combinedMatchScores = mergeImgMatchScores(combinedMatchScores, matchScores);
+                    latestPositiveMatchScores = matchScores;
                 else
-                    combinedMatchScores = removeImgMatchScores(combinedMatchScores, matchIds);
+                    latestPositiveMatchScores = removeImgMatchScores(latestPositiveMatchScores, matchIds);
                 context.parts.set(index, {
                     presence: false,
                     matchIds,
@@ -564,13 +601,19 @@ export async function resolveImgSearchContext(
                 });
                 refinedCandidateIds = candidateIds;
                 if (!isNegatedImgPart)
-                    combinedMatchScores = mergeImgMatchScores(combinedMatchScores, new Map());
+                    latestPositiveMatchScores = new Map();
                 continue;
             }
 
             const settings = getServerEmbeddingSettings();
-            const effectiveThreshold = threshold ?? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
             const weightedClauses = parseWeightedImgQueryClauses(queryText);
+            const isWeightedQuery = weightedClauses.length > 1;
+            const hasNegativeWeightedClause = weightedClauses.some((clause) => clause.weight < 0);
+            const effectiveThreshold = threshold ?? (
+                isWeightedQuery && hasNegativeWeightedClause
+                    ? WEIGHTED_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
+                    : IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
+            );
             const matchScores = weightedClauses.length > 1
                 ? findWeightedImgMatches(
                     await embedWeightedImgQueryClauses(weightedClauses, Boolean(disableTemplate), options),
@@ -598,9 +641,9 @@ export async function resolveImgSearchContext(
                 ? subtractIds(candidateIds, matchIds)
                 : matchIds;
             if (!isNegatedImgPart)
-                combinedMatchScores = mergeImgMatchScores(combinedMatchScores, matchScores);
+                latestPositiveMatchScores = matchScores;
             else
-                combinedMatchScores = removeImgMatchScores(combinedMatchScores, matchIds);
+                latestPositiveMatchScores = removeImgMatchScores(latestPositiveMatchScores, matchIds);
             context.parts.set(index, {
                 presence: false,
                 matchIds,
@@ -616,8 +659,8 @@ export async function resolveImgSearchContext(
         }
     }
 
-    if (combinedMatchScores?.size)
-        context.matchScores = combinedMatchScores;
+    if (latestPositiveMatchScores?.size)
+        context.matchScores = latestPositiveMatchScores;
 
     if (error)
         context.error = error;
