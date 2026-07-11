@@ -664,6 +664,39 @@ async function collectMatchingIds(
     return matchingIds;
 }
 
+export function orderShapedResultIds(
+    ids: string[],
+    sorting: SortingMethod,
+    options: {
+        imgSearchContext?: ImgSearchContext;
+        mmrSearchContext?: MmrSearchContext;
+        imageList: Map<string, ServerImage>;
+    },
+): string[] {
+    if (!ids.length)
+        return ids;
+
+    const idSet = new Set(ids);
+
+    if (options.mmrSearchContext?.uniquenessScores.size && isUniquenessSorting(sorting)) {
+        return orderIdsByUniquenessScore(options.mmrSearchContext.uniquenessScores)
+            .filter((id) => idSet.has(id));
+    }
+
+    const matchScores = options.imgSearchContext?.matchScores;
+    if (matchScores?.size && isSimilaritySorting(sorting)) {
+        const scored = orderIdsBySimilarityScore(matchScores, sorting)
+            .filter((id) => idSet.has(id));
+        const unscored = ids.filter((id) => !matchScores.has(id));
+        return [...scored, ...unscored];
+    }
+
+    const images = ids
+        .map((id) => options.imageList.get(id))
+        .filter((image): image is ServerImage => !!image);
+    return sortImages(images, sorting).map((image) => image.id);
+}
+
 async function applyResultShaping(
     plan: SearchPlanBase & { orderedIds: string[] },
     options: SearchAbortOptions = {},
@@ -695,7 +728,15 @@ async function applyResultShaping(
         return {
             ...plan,
             kind: 'mmr-ranked',
-            orderedIds: mmrSearchContext.orderedIds,
+            orderedIds: orderShapedResultIds(
+                mmrSearchContext.orderedIds,
+                plan.sorting,
+                {
+                    imgSearchContext: plan.imgSearchContext,
+                    mmrSearchContext,
+                    imageList: plan.imageList,
+                },
+            ),
             imgsimSearchContext,
             mmrSearchContext,
         };
@@ -705,7 +746,14 @@ async function applyResultShaping(
         return {
             ...plan,
             kind: 'imgsim-ranked',
-            orderedIds: imgsimSearchContext.orderedIds,
+            orderedIds: orderShapedResultIds(
+                imgsimSearchContext.orderedIds,
+                plan.sorting,
+                {
+                    imgSearchContext: plan.imgSearchContext,
+                    imageList: plan.imageList,
+                },
+            ),
             imgsimSearchContext,
         };
     }
@@ -741,23 +789,9 @@ function orderRankedSearchIds(
     scores: Map<string, number> | undefined,
     sorting: SortingMethod,
     pool: Set<string>,
-    mmrSearchContext?: MmrSearchContext,
-    imgsimSearchContext?: ImgSimSearchContext,
 ): string[] {
-    if (mmrSearchContext?.uniquenessScores.size && isUniquenessSorting(sorting)) {
-        const mmrIds = new Set(mmrSearchContext.orderedIds);
-        return orderIdsByUniquenessScore(mmrSearchContext.uniquenessScores)
-            .filter((id) => mmrIds.has(id));
-    }
-
     if (scores?.size && isSimilaritySorting(sorting))
         return orderIdsBySimilarityScore(scores, sorting);
-
-    if (mmrSearchContext?.orderedIds.length && !isSimilaritySorting(sorting) && !isUniquenessSorting(sorting))
-        return [...mmrSearchContext.orderedIds];
-
-    if (imgsimSearchContext?.orderedIds.length && !isSimilaritySorting(sorting) && !isUniquenessSorting(sorting))
-        return [...imgsimSearchContext.orderedIds];
 
     return orderPoolIds(pool, isSimilaritySorting(sorting) || isUniquenessSorting(sorting) ? 'date' : sorting);
 }

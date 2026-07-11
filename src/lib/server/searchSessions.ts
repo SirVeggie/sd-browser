@@ -2,14 +2,10 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ServerImage } from '$lib/types/images';
 import type { SortingMethod } from '$lib/types/misc';
 import type { StreamRequest } from '$lib/types/requests';
-import { getImage } from './dataIndex';
+import { getImage, getImageList } from './dataIndex';
 import { getPositiveSimilarSourceIds, pinIdsToFront } from '$lib/tools/searchParsing';
 import type { ImgSearchContext, ImgSimSearchContext, MmrSearchContext } from './searching';
-import {
-    isSimilaritySorting,
-    isUniquenessSorting,
-} from '$lib/tools/similaritySort';
-import { sortImages } from './searching';
+import { orderShapedResultIds, sortImages } from './searching';
 
 export const imageLimit = 1000;
 export const sessionReconnectGraceMs = 10 * 60 * 1000;
@@ -258,25 +254,15 @@ export function sortSessionIds(ids: string[], session: SearchSession): string[] 
             const positionB = positions.get(b) ?? Number.POSITIVE_INFINITY;
             return positionA - positionB;
         });
+    } else if (session.mmrSearchContext || session.imgsimSearchContext) {
+        sorted = orderShapedResultIds(ids, session.sorting, {
+            imgSearchContext: session.imgSearchContext,
+            mmrSearchContext: session.mmrSearchContext,
+            imageList: getImageList(),
+        });
     } else {
         const matchScores = session.imgSearchContext?.matchScores;
-        const uniquenessScores = session.mmrSearchContext?.uniquenessScores;
         if (
-            uniquenessScores?.size
-            && session.sorting === 'uniqueness'
-        ) {
-            sorted = [...ids].sort((a, b) => {
-                const scoreA = uniquenessScores.get(a);
-                const scoreB = uniquenessScores.get(b);
-                if (scoreA !== undefined && scoreB !== undefined)
-                    return scoreB - scoreA || a.localeCompare(b);
-                if (scoreA !== undefined)
-                    return -1;
-                if (scoreB !== undefined)
-                    return 1;
-                return 0;
-            });
-        } else if (
             matchScores?.size
             && (session.sorting === 'similar' || session.sorting === 'similar (inverse)')
         ) {
@@ -292,35 +278,6 @@ export function sortSessionIds(ids: string[], session: SearchSession): string[] 
                 if (scoreB !== undefined)
                     return 1;
                 return 0;
-            });
-        } else if (
-            session.mmrSearchContext?.orderedIds.length
-            && !isSimilaritySorting(session.sorting)
-            && !isUniquenessSorting(session.sorting)
-            && session.sourceOrder.length
-        ) {
-            const positions = new Map(
-                session.mmrSearchContext.orderedIds.map((id, index) => [id, index]),
-            );
-            sorted = [...ids].sort((a, b) => {
-                const positionA = positions.get(a) ?? Number.POSITIVE_INFINITY;
-                const positionB = positions.get(b) ?? Number.POSITIVE_INFINITY;
-                return positionA - positionB;
-            });
-        } else if (
-            session.imgsimSearchContext?.orderedIds.length
-            && !session.mmrSearchContext?.orderedIds.length
-            && !isSimilaritySorting(session.sorting)
-            && !isUniquenessSorting(session.sorting)
-            && session.sourceOrder.length
-        ) {
-            const positions = new Map(
-                session.imgsimSearchContext.orderedIds.map((id, index) => [id, index]),
-            );
-            sorted = [...ids].sort((a, b) => {
-                const positionA = positions.get(a) ?? Number.POSITIVE_INFINITY;
-                const positionB = positions.get(b) ?? Number.POSITIVE_INFINITY;
-                return positionA - positionB;
             });
         } else {
             sorted = sortImages(resolveImages(ids), session.sorting).map((image) => image.id);
