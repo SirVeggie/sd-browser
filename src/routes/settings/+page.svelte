@@ -59,7 +59,7 @@
     import { embeddingApiTypeOptions } from "$lib/types/embeddings";
     import { authLogout, authStore } from "$lib/stores/authStore";
     import { pullGlobalSettings, recalculateSimilarCache, clearCompressedImages, buildUniquenessIndex } from "$lib/requests/settingRequests";
-    import { startExtradataRecalc, getOperations } from "$lib/requests/operationRequests";
+    import { startExtradataRecalc, watchOperation } from "$lib/requests/operationRequests";
     import { hasRunningOperation, operationStore } from "$lib/stores/operationStore";
     import { deleteTagFromImages } from "$lib/requests/tagRequests";
     import {
@@ -99,8 +99,10 @@
     let editingTag: TagDefinition | null = null;
     let modalTagName = "";
     let modalTagColor = "#5b9cf5";
+    let extradataRecalcStarting = false;
+    let extradataRecalcController: AbortController | undefined;
 
-    $: extradataRecalcRunning = hasRunningOperation($operationStore, 'extradata-recalc');
+    $: extradataRecalcRunning = extradataRecalcStarting || hasRunningOperation($operationStore, 'extradata-recalc');
     $: extradataRecalcOp = $operationStore.find(op => op.type === 'extradata-recalc' && op.status === 'running');
 
     $: {
@@ -137,6 +139,7 @@
         inputTimer = undefined;
         clearInterval(refreshInterval);
         refreshInterval = undefined;
+        extradataRecalcController?.abort();
     });
 
     function setInput(value: string) {
@@ -470,12 +473,36 @@
         if (!confirmed)
             return;
 
+        extradataRecalcStarting = true;
         try {
-            await startExtradataRecalc();
-            operationStore.set(await getOperations());
+            const operation = await startExtradataRecalc();
+            if (!operation)
+                throw new Error('Failed to start recalculation');
+            void watchExtradataRecalc(operation.operationId);
             notify('Extra data recalculation started');
         } catch (e) {
+            extradataRecalcStarting = false;
             notify(e instanceof Error ? e.message : 'Failed to start recalculation', 'error');
+        }
+    }
+
+    async function watchExtradataRecalc(operationId: string) {
+        extradataRecalcController?.abort();
+        const controller = new AbortController();
+        extradataRecalcController = controller;
+
+        try {
+            await watchOperation(operationId, operations => {
+                extradataRecalcStarting = false;
+                operationStore.set(operations);
+            }, controller.signal);
+        } catch (e) {
+            if (!controller.signal.aborted)
+                notify(e instanceof Error ? e.message : 'Extra data progress stream failed', 'error');
+        } finally {
+            if (extradataRecalcController === controller)
+                extradataRecalcController = undefined;
+            extradataRecalcStarting = false;
         }
     }
 

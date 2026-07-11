@@ -744,6 +744,8 @@ export async function moveImages(ids: string | string[], folder: string) {
             await fs.rename(img.file, newPath);
             oldestMoved = Math.min(oldestMoved, img.modifiedDate);
             getImageList().delete(id);
+            removeFreshImage(id);
+            recordDeletion(id);
             deleteTextFiles(img.file);
             deleteTempImage(id);
             moved++;
@@ -766,8 +768,10 @@ export async function moveImages(ids: string | string[], folder: string) {
     if (failcount) {
         console.log(`Failed to move ${failcount} images`);
     }
-    if (moved)
+    if (moved) {
         repairExplorationCaches([...getImageList().values()], oldestMoved, `moved ${moved} images`);
+        notifyImageChange();
+    }
 }
 
 export async function copyImages(ids: string | string[], folder: string) {

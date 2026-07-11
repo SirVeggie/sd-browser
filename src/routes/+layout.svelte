@@ -8,15 +8,10 @@
     import ContextMenuManager from "$lib/items/ContextMenuManager.svelte";
     import Confirm from "$lib/components/Confirm.svelte";
     import { authStore } from "$lib/stores/authStore";
-    import { get } from "svelte/store";
     import Login from "$lib/components/Login.svelte";
     import { attemptLogin } from "$lib/requests/authRequests";
     import OperationProgress from "$lib/components/OperationProgress.svelte";
-    import { getOperations } from "$lib/requests/operationRequests";
-    import { operationStore } from "$lib/stores/operationStore";
-    import { onDestroy, onMount } from "svelte";
-
-    let operationInterval: ReturnType<typeof setInterval> | undefined;
+    import { onMount } from "svelte";
 
     let timestamp = Date.now();
     let fltimeout: any;
@@ -45,16 +40,6 @@
             });
         }
 
-        operationInterval = setInterval(async () => {
-            if (!get(authStore).valid)
-                return;
-            operationStore.set(await getOperations());
-        }, 1000);
-    });
-
-    onDestroy(() => {
-        if (operationInterval)
-            clearInterval(operationInterval);
     });
 </script>
 

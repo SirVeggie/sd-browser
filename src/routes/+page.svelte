@@ -13,7 +13,6 @@
         generateCompressedImages,
         getImageInfo,
         imageAction,
-        setSessionImageExclusion,
         subscribeImageStream,
     } from "$lib/requests/imageRequests";
     import { expandClientImages, formatSearchDateMinute } from "$lib/tools/misc";
@@ -26,7 +25,7 @@
         type InputEvent,
         type SortingMethod,
     } from "$lib/types/misc";
-    import { hasSimilaritySearchParts, hasMmrSearchParts } from "$lib/tools/searchParsing";
+    import { hasSimilaritySearchParts, hasMmrSearchParts, tokenizeSearchClauses } from "$lib/tools/searchParsing";
     import { syncTemporarySorts, type TemporarySortState } from "$lib/tools/similaritySort";
     import { afterUpdate, onMount, tick } from "svelte";
     import { fade } from "svelte/transition";
@@ -90,7 +89,7 @@
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
     import { fetchImageTags, updateImageTags } from "$lib/requests/tagRequests";
     import { tagsStore } from "$lib/stores/tagsStore";
-    import { tagsAddableToSelection } from "$lib/types/tags";
+    import { isExactTagTerm, tagsAddableToSelection } from "$lib/types/tags";
     import { flyoutState } from "$lib/stores/flyoutStore";
     import BulkModal from "$lib/components/BulkModal.svelte";
     import { embeddingStore, isEmbeddingConfigured } from "$lib/stores/embeddingStore";
@@ -143,7 +142,7 @@
     let quickTagSelectedTags: string[] = [];
     let quickTagSelectedTagsLoaded = false;
     let quickTagHistory: QuickTagHistoryEntry[] = [];
-    let quickTagHiddenIds: string[] = [];
+    let quickTagHiddenIds = new Set<string>();
     let quickTagLastClickAt = 0;
     const quickTagInFlight = new Set<string>();
     const selection = createSelection();
@@ -181,7 +180,7 @@
     $: paginated = $imageStore.slice(0, currentAmount);
     $: galleryImages = quickTagActive
         ? $imageStore
-            .filter((image) => !quickTagHiddenIds.includes(image.id))
+            .filter((image) => !quickTagHiddenIds.has(image.id))
             .slice(0, currentAmount)
         : paginated;
     $: prevIndex = !currentImage
@@ -873,8 +872,11 @@
     }
 
     function hasMoreImagesToLoad() {
+        const visibleStoreCount = quickTagActive
+            ? $imageStore.filter((image) => !quickTagHiddenIds.has(image.id)).length
+            : $imageStore.length;
         return (
-            currentAmount < $imageStore.length ||
+            currentAmount < visibleStoreCount ||
             currentAmount < $imageAmountStore
         );
     }
@@ -976,6 +978,27 @@
         notify(error, "warn");
     }
 
+    function hideQuickTagImage(id: string) {
+        quickTagHiddenIds = new Set([...quickTagHiddenIds, id]);
+    }
+
+    function showQuickTagImage(id: string) {
+        const next = new Set(quickTagHiddenIds);
+        next.delete(id);
+        quickTagHiddenIds = next;
+    }
+
+    function appendUniqueImages(existing: ClientImage[], additions: ClientImage[]): ClientImage[] {
+        const ids = new Set(existing.map((image) => image.id));
+        const unique = additions.filter((image) => {
+            if (ids.has(image.id))
+                return false;
+            ids.add(image.id);
+            return true;
+        });
+        return unique.length ? existing.concat(unique) : existing;
+    }
+
     function connectImageStream(
         expectedSessionId: number,
         resumeSessionId?: string,
@@ -1015,7 +1038,7 @@
                         return;
                     }
 
-                    imageStore.update((x) => x.concat(mapped));
+                    imageStore.update((x) => appendUniqueImages(x, mapped));
                 },
                 onReady: (ready) => {
                     if (expectedSessionId !== updateSessionId) return;
@@ -1050,11 +1073,14 @@
     }
 
     async function fetchNext() {
-        if ($imageStore.length === 0) return;
+        const visibleImages = quickTagActive
+            ? $imageStore.filter((image) => !quickTagHiddenIds.has(image.id))
+            : $imageStore;
+        if (visibleImages.length === 0) return;
         if (!searchSessionId) return;
         if (fetchingNextPage) return;
         const sessionId = searchSessionId;
-        const lastImage = $imageStore[$imageStore.length - 1];
+        const lastImage = visibleImages[visibleImages.length - 1];
 
         fetchingNextPage = true;
 
@@ -1070,10 +1096,12 @@
 
             const existingIds = new Set($imageStore.map((image) => image.id));
             const mapped = expandClientImages(
-                images.images.filter((image) => !existingIds.has(image.id)),
+                images.images.filter((image) =>
+                    !existingIds.has(image.id) && !quickTagHiddenIds.has(image.id),
+                ),
             );
             if (!mapped.length) return;
-            imageStore.update((x) => x.concat(mapped));
+            imageStore.update((x) => appendUniqueImages(x, mapped));
             imageAmountStore.set(images.amount);
         } catch (e) {
             console.error(e);
@@ -1094,20 +1122,23 @@
             if (nothingToDelete) return;
         }
 
-        const additions = res.additions.filter(
-            (x) => !$imageStore.some((z) => z.id === x.id),
+        const mapped = expandClientImages(res.additions);
+        const deletionIds = new Set(res.deletions);
+        const historyPositions = new Map(
+            quickTagHistory.map((entry) => [entry.imageId, entry.position]),
         );
-
-        const mapped = expandClientImages(additions);
+        const preservedIds = quickTagActive ? quickTagHiddenIds : new Set<string>();
+        let additions = 0;
         let deletions = 0;
 
         imageStore.update((x) => {
-            const preservedIds = new Set(quickTagActive ? quickTagHiddenIds : []);
             const modified = x.filter(
-                (z) => !res.deletions.includes(z.id) || preservedIds.has(z.id),
+                (z) => !deletionIds.has(z.id) || preservedIds.has(z.id),
             );
             deletions = x.length - modified.length;
-            const combined = [...modified, ...mapped];
+            const beforeAdditions = modified.length;
+            const combined = appendUniqueImages(modified, mapped);
+            additions = combined.length - beforeAdditions;
             if (!res.orderedIds) return combined;
 
             const positions = new Map(
@@ -1116,10 +1147,8 @@
             const hidden = combined
                 .filter((image) => preservedIds.has(image.id))
                 .sort((a, b) => {
-                    const positionA = quickTagHistory.find((entry) => entry.imageId === a.id)?.position
-                        ?? Number.POSITIVE_INFINITY;
-                    const positionB = quickTagHistory.find((entry) => entry.imageId === b.id)?.position
-                        ?? Number.POSITIVE_INFINITY;
+                    const positionA = historyPositions.get(a.id) ?? Number.POSITIVE_INFINITY;
+                    const positionB = historyPositions.get(b.id) ?? Number.POSITIVE_INFINITY;
                     return positionA - positionB;
                 });
             const ordered = combined
@@ -1130,8 +1159,7 @@
                     return positionA - positionB;
                 });
             for (const image of hidden) {
-                const position = quickTagHistory.find((entry) => entry.imageId === image.id)?.position
-                    ?? ordered.length;
+                const position = historyPositions.get(image.id) ?? ordered.length;
                 ordered.splice(Math.min(position, ordered.length), 0, image);
             }
             return ordered;
@@ -1139,7 +1167,7 @@
 
         imageAmountStore.set(
             res.orderedIds?.length
-                ?? $imageAmountStore + additions.length - deletions,
+                ?? $imageAmountStore + additions - deletions,
         );
     }
 
@@ -1359,6 +1387,28 @@
         return folder.replace(/\//g, " > ");
     }
 
+    function tagAddedInvalidatesCurrentSearch(tag: string): boolean {
+        for (const clause of tokenizeSearchClauses($searchFilter)) {
+            const text = clause.text.trim();
+            if (!/\bNOT\b/i.test(text) || !/\bTAG\b/i.test(text))
+                continue;
+
+            const raw = text.replace(/^.*?\bTAG\s+/i, '').trim();
+            if (!raw)
+                continue;
+            if (isExactTagTerm(raw) && raw === tag)
+                return true;
+
+            try {
+                if (new RegExp(raw, 'is').test(tag))
+                    return true;
+            } catch {
+                // Malformed searches are handled by the normal search flow.
+            }
+        }
+        return false;
+    }
+
     async function folderActionMenu(
         id: string,
         type: "move" | "copy",
@@ -1378,11 +1428,17 @@
 
         return folders.map((folder) => ({
             name: formatFolderDisplay(folder),
-            handler: () =>
-                imageAction(selecting ? $selection : id, {
+            handler: () => {
+                const actionIds = selecting ? [...$selection] : id ? [id] : [];
+                if (!actionIds.length)
+                    return;
+                if (type === "move")
+                    removeImagesFromUI(actionIds);
+                void imageAction(actionIds, {
                     type,
                     folder,
-                }),
+                });
+            },
         }));
     }
 
@@ -1406,12 +1462,16 @@
             return available.map((tag) => ({
                 name: tag,
                 handler: async () => {
-                    await Promise.all(ids.map(async (imageId) => {
-                        const current = await fetchImageTags(imageId);
+                    const updatedIds: string[] = [];
+                    await Promise.all(ids.map(async (imageId, index) => {
+                        const current = tagsByImage[index] ?? [];
                         if (current.includes(tag))
                             return;
                         await updateImageTags(imageId, [...current, tag]);
+                        updatedIds.push(imageId);
                     }));
+                    if (tagAddedInvalidatesCurrentSearch(tag))
+                        removeImagesFromUI(updatedIds);
                 },
             }));
         } catch (cause) {
@@ -1539,7 +1599,7 @@
     function startQuickTag(event: CustomEvent<{ mode: BulkTagMode }>) {
         quickTagMode = event.detail.mode;
         quickTagHistory = [];
-        quickTagHiddenIds = [];
+        quickTagHiddenIds = new Set();
         quickTagLastClickAt = 0;
         quickTagInFlight.clear();
         quickTagSetupOpen = false;
@@ -1557,7 +1617,7 @@
         quickTagActive = false;
         quickTagSetupOpen = false;
         quickTagHistory = [];
-        quickTagHiddenIds = [];
+        quickTagHiddenIds = new Set();
         quickTagLastClickAt = 0;
         quickTagInFlight.clear();
     }
@@ -1568,17 +1628,11 @@
 
         try {
             await updateImageTags(entry.imageId, entry.originalTags);
-            const result = await setSessionImageExclusion({
-                sessionId: searchSessionId,
-                ids: [entry.imageId],
-                excluded: false,
-            });
-            applyUpdate(result, updateSessionId);
             if (entry.masonryColumn !== undefined) {
                 masonryPlacer.setAssignment(entry.imageId, entry.masonryColumn);
             }
             quickTagHistory = quickTagHistory.slice(0, -1);
-            quickTagHiddenIds = quickTagHiddenIds.filter((id) => id !== entry.imageId);
+            showQuickTagImage(entry.imageId);
         } catch (cause) {
             console.error(cause);
             if (isSessionUnavailable(cause)) {
@@ -1603,12 +1657,6 @@
             for (const entry of entries) {
                 await updateImageTags(entry.imageId, entry.originalTags);
             }
-            const result = await setSessionImageExclusion({
-                sessionId: searchSessionId,
-                ids: entries.map((entry) => entry.imageId),
-                excluded: false,
-            });
-            applyUpdate(result, updateSessionId);
             closeOverlay("quick-tag");
         } catch (cause) {
             console.error(cause);
@@ -1628,21 +1676,9 @@
             );
             if (!confirmed) return;
         }
-        try {
-            const result = await setSessionImageExclusion({
-                sessionId: searchSessionId,
-                ids: quickTagHistory.map((entry) => entry.imageId),
-                excluded: false,
-            });
-            applyUpdate(result, updateSessionId);
-        } catch (cause) {
-            console.error(cause);
-            if (isSessionUnavailable(cause)) {
-                exitQuickTagAfterSessionLoss();
-                return;
-            }
-            notify(cause instanceof Error ? cause.message : "Failed to restore gallery", "warn");
-            return;
+        const taggedIds = new Set(quickTagHistory.map((entry) => entry.imageId));
+        if (taggedIds.size) {
+            imageStore.update((images) => images.filter((image) => !taggedIds.has(image.id)));
         }
         closeOverlay("quick-tag");
     }
@@ -1653,13 +1689,13 @@
             notify("Select at least one tag", "warn");
             return;
         }
-        if (quickTagHiddenIds.includes(img.id) || quickTagInFlight.has(img.id)) return;
+        if (quickTagHiddenIds.has(img.id) || quickTagInFlight.has(img.id)) return;
 
         const now = Date.now();
         if (now - quickTagLastClickAt < QUICK_TAG_COOLDOWN_MS) return;
 
         quickTagLastClickAt = now;
-        quickTagHiddenIds = [...quickTagHiddenIds, img.id];
+        hideQuickTagImage(img.id);
         quickTagInFlight.add(img.id);
         const position = $imageStore.findIndex((image) => image.id === img.id);
         const masonryColumn = masonryColumns.find((column) =>
@@ -1685,19 +1721,13 @@
                     masonryColumn,
                 },
             ];
-            const result = await setSessionImageExclusion({
-                sessionId: searchSessionId,
-                ids: [img.id],
-                excluded: true,
-            });
-            applyUpdate(result, updateSessionId);
         } catch (cause) {
             console.error(cause);
             if (originalTags) {
                 await updateImageTags(img.id, originalTags).catch(console.error);
             }
             quickTagHistory = quickTagHistory.filter((entry) => entry.imageId !== img.id);
-            quickTagHiddenIds = quickTagHiddenIds.filter((id) => id !== img.id);
+            showQuickTagImage(img.id);
             if (isSessionUnavailable(cause)) {
                 exitQuickTagAfterSessionLoss();
                 return;

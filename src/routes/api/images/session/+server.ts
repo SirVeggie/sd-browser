@@ -14,7 +14,12 @@ export async function POST(e) {
     const err = invalidAuth(e);
     if (err) return err;
 
-    const request = await e.request.json();
+    let request: unknown;
+    try {
+        request = await e.request.json();
+    } catch {
+        return error('Invalid JSON request body', 400);
+    }
     if (!isSessionExclusionRequest(request)) {
         return error('Invalid request body', 400);
     }

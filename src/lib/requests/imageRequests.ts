@@ -151,7 +151,12 @@ export async function subscribeImageStream(
             for (const part of parts) {
                 for (const line of part.split('\n')) {
                     if (!line.startsWith('data: ')) continue;
-                    const json = JSON.parse(line.slice(6)) as StreamEvent;
+                    let json: StreamEvent;
+                    try {
+                        json = JSON.parse(line.slice(6)) as StreamEvent;
+                    } catch {
+                        throw new Error('Image stream sent invalid JSON');
+                    }
                     if (json.type === 'init') handlers.onInit(json);
                     else if (json.type === 'chunk') handlers.onChunk(json);
                     else if (json.type === 'ready') handlers.onReady(json);

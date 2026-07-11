@@ -36,7 +36,12 @@ export async function POST(e) {
     if (!info)
         return error('Image not found', 404);
 
-    const body = await e.request.json();
+    let body: unknown;
+    try {
+        body = await e.request.json();
+    } catch {
+        return error('Invalid JSON request body', 400);
+    }
     if (!isImageTagsRequest(body))
         return error('Invalid request body', 400);
 
