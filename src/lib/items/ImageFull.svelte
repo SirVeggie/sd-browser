@@ -637,7 +637,6 @@
 
         .media-container {
           width: 100%;
-          height: 100%;
 
           img,
           video {
@@ -661,6 +660,8 @@
     }
 
     .info {
+      position: relative;
+      z-index: 101;
       font-size: 0.5em;
       margin: 0;
       width: 0;
