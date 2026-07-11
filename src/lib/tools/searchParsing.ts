@@ -26,6 +26,11 @@ export type SearchClause = {
     end: number;
 };
 
+export type ParsedWeightedImgQueryClause = {
+    text: string;
+    weight: 1 | -1;
+};
+
 function expandClauseKeywordTokens(): string[] {
     const tokens = new Set<string>();
     for (const entry of SEARCH_KEYWORD_ENTRIES) {
@@ -245,6 +250,29 @@ export function splitSearchParts(search: string): string[] {
     return tokenizeSearchClauses(search)
         .map((clause) => clause.text.trim())
         .filter((part) => part.length > 0);
+}
+
+export function parseWeightedImgQueryClauses(queryText: string): ParsedWeightedImgQueryClause[] {
+    const clauses: ParsedWeightedImgQueryClause[] = [];
+    const separatorRegex = /\s([+-])\s/g;
+    let weight: 1 | -1 = 1;
+    let start = 0;
+    let match: RegExpExecArray | null;
+
+    const addClause = (end: number) => {
+        const text = queryText.slice(start, end).trim();
+        if (text)
+            clauses.push({ text, weight });
+    };
+
+    while ((match = separatorRegex.exec(queryText)) !== null) {
+        addClause(match.index);
+        weight = match[1] === '+' ? 1 : -1;
+        start = separatorRegex.lastIndex;
+    }
+
+    addClause(queryText.length);
+    return clauses;
 }
 
 function parseThresholdSuffix(value: string): number | undefined {

@@ -11,7 +11,10 @@ import {
     isImgSimSearchPart,
     splitSearchParts,
     unescapeSearchLiterals,
+    parseWeightedImgQueryClauses,
+    type ParsedWeightedImgQueryClause,
 } from "$lib/tools/searchParsing";
+import { cosineSimilarity } from "$lib/tools/vectorMath";
 import {
     isSimilaritySorting,
     isUniquenessSorting,
@@ -302,6 +305,10 @@ type SearchAbortOptions = {
     signal?: AbortSignal;
 };
 
+type WeightedImgQueryEmbedding = ParsedWeightedImgQueryClause & {
+    embedding: Float32Array;
+};
+
 function throwIfSearchAborted(options: SearchAbortOptions): void {
     if (options.isAborted?.() || options.signal?.aborted)
         throw new SearchStreamAborted();
@@ -374,6 +381,61 @@ function parseImgSearchPart(part: string): {
     }
 
     return { presenceOnly: false, queryText, threshold, k, disableTemplate };
+}
+
+async function embedWeightedImgQueryClauses(
+    clauses: ParsedWeightedImgQueryClause[],
+    disableTemplate: boolean,
+    options: SearchAbortOptions,
+): Promise<WeightedImgQueryEmbedding[]> {
+    const settings = getServerEmbeddingSettings();
+    const embeddings: WeightedImgQueryEmbedding[] = [];
+
+    for (const clause of clauses) {
+        throwIfSearchAborted(options);
+        const embedText = formatEmbeddingSearchQuery(
+            clause.text,
+            disableTemplate ? '' : settings.searchTemplate,
+        );
+        const embedding = await embedQuery(settings, embedText, { signal: options.signal });
+        embeddings.push({ ...clause, embedding });
+    }
+
+    return embeddings;
+}
+
+function findWeightedImgMatches(
+    queryEmbeddings: WeightedImgQueryEmbedding[],
+    threshold: number,
+    k: number | undefined,
+    candidateIds: Set<string>,
+): Map<string, number> {
+    const storedDimensions = EmbeddingDB.getDimensions();
+    if (storedDimensions !== null) {
+        for (const query of queryEmbeddings) {
+            if (query.embedding.length !== storedDimensions)
+                throw new EmbeddingDimensionMismatchError(storedDimensions, query.embedding.length);
+        }
+    }
+
+    const rows = EmbeddingDB.getEmbeddingsByIds([...candidateIds]);
+    const minScore = k === undefined ? threshold : 0;
+    const scores: { id: string; similarity: number }[] = [];
+
+    for (const row of rows) {
+        let similarity = 0;
+        for (const query of queryEmbeddings) {
+            similarity += query.weight * cosineSimilarity(query.embedding, row.embedding);
+        }
+        if (similarity >= minScore)
+            scores.push({ id: row.id, similarity });
+    }
+
+    scores.sort((left, right) => right.similarity - left.similarity);
+    const limitedScores = k === undefined
+        ? scores
+        : scores.slice(0, Math.max(1, k));
+    return new Map(limitedScores.map((row) => [row.id, row.similarity]));
 }
 
 export async function resolveImgSearchContext(
@@ -507,21 +569,29 @@ export async function resolveImgSearchContext(
             }
 
             const settings = getServerEmbeddingSettings();
-            const embedText = formatEmbeddingSearchQuery(
-                queryText,
-                disableTemplate ? '' : settings.searchTemplate,
-            );
-            throwIfSearchAborted(options);
-            const queryEmbedding = await embedQuery(settings, embedText, { signal: options.signal });
-            throwIfSearchAborted(options);
             const effectiveThreshold = threshold ?? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
-            const matchScores = EmbeddingDB.findSimilarImage(
-                queryEmbedding,
-                effectiveThreshold,
-                k,
-                candidateIds,
-                settings.useOptimizedEmbeddingQuery,
-            );
+            const weightedClauses = parseWeightedImgQueryClauses(queryText);
+            const matchScores = weightedClauses.length > 1
+                ? findWeightedImgMatches(
+                    await embedWeightedImgQueryClauses(weightedClauses, Boolean(disableTemplate), options),
+                    effectiveThreshold,
+                    k,
+                    candidateIds,
+                )
+                : EmbeddingDB.findSimilarImage(
+                    await embedQuery(
+                        settings,
+                        formatEmbeddingSearchQuery(
+                            queryText,
+                            disableTemplate ? '' : settings.searchTemplate,
+                        ),
+                        { signal: options.signal },
+                    ),
+                    effectiveThreshold,
+                    k,
+                    candidateIds,
+                    settings.useOptimizedEmbeddingQuery,
+                );
             throwIfSearchAborted(options);
             const matchIds = new Set(matchScores.keys());
             refinedCandidateIds = isNegatedImgPart

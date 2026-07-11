@@ -12,6 +12,7 @@ import {
     splitSearchParts,
     tokenizeSearchClauses,
     unescapeSearchLiterals,
+    parseWeightedImgQueryClauses,
 } from '../src/lib/tools/searchParsing.ts';
 
 assert.deepEqual(
@@ -163,6 +164,7 @@ const splitCases: Array<{ search: string; parts: string[] }> = [
     { search: 'red NOT FOLDER drafts', parts: ['red', 'NOT FOLDER drafts'] },
     { search: 'DT -1y TO -6m landscape', parts: ['DT -1y TO -6m', 'landscape'] },
     { search: 'landscape IMG misty forest', parts: ['landscape', 'IMG misty forest'] },
+    { search: 'IMG cat - dog + watercolor', parts: ['IMG cat - dog + watercolor'] },
     { search: 'TAG favourite MMR 10', parts: ['TAG favourite', 'MMR 10'] },
     { search: 'SIMILAR abc landscape', parts: ['SIMILAR abc landscape'] },
     { search: 'fd landscape', parts: ['fd landscape'] },
@@ -174,6 +176,25 @@ for (const { search, parts } of splitCases) {
 
 assert.equal(unescapeSearchLiterals('\\MODEL sheet'), 'MODEL sheet', 'unescapes literal keyword tokens');
 assert.equal(unescapeSearchLiterals('red \\NOT girl'), 'red NOT girl', 'unescapes literal NOT tokens');
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses('cat - dog + watercolor'),
+    [
+        { text: 'cat', weight: 1 },
+        { text: 'dog', weight: -1 },
+        { text: 'watercolor', weight: 1 },
+    ],
+    'parses weighted IMG query clauses',
+);
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses('id-with-dashes + sci-fi'),
+    [
+        { text: 'id-with-dashes', weight: 1 },
+        { text: 'sci-fi', weight: 1 },
+    ],
+    'requires spaced separators for weighted IMG clauses',
+);
 
 const fullImageId = 'a'.repeat(64);
 const implicitSimilarSearch = `landscape SIMILAR img ${fullImageId}`;
