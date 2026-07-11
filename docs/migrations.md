@@ -1,5 +1,34 @@
 # Migrations
 
+## Smart subsampling global setting (2026-07)
+
+### What changed
+
+`useSmartSubsampling` now syncs through global settings (MiscDB `settings` key), matching other shared image preferences such as `nsfwFilter` and quality modes.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| localStorage `useSmartSubsampling` | Unchanged; still read on startup before global pull |
+| Global settings `useSmartSubsampling` | New key; absent until a client changes the toggle or loads with an existing local value and syncs |
+
+Existing per-client localStorage values continue to work. The server default when the key is missing remains `true` (store default and image API fallback).
+
+### Migration code
+
+- [`src/lib/stores/searchStore.ts`](../src/lib/stores/searchStore.ts) — `syncMemory('useSmartSubsampling', …, true)` registers the store for global pull/push
+
+### How to verify
+
+1. Client A — disable **Use smart subsampling** in Settings; confirm `useSmartSubsampling` appears in global settings (MiscDB or `/api/settings`).
+2. Client B — reload or open Settings; the toggle matches client A.
+3. Fresh client with no localStorage — receives the synced value from global settings on load.
+
+### Removal
+
+No dedicated migration helper is required; the setting is a boolean with a stable default.
+
 ## Image similarity threshold setting (2026-07)
 
 ### What changed
@@ -227,7 +256,7 @@ App version bumped from `4` to `5`.
 
 1. Upgrade from v4 with populated `compressed/` and `thumbnails/` folders — files appear under `medium/` and `low/` after startup; empty legacy folders are removed.
 2. Gallery thumbnails (`quality=low`) and full view (`quality=medium` or `quality=minimal`) load without errors.
-3. Settings — `minimal` appears in quality dropdowns; smart subsampling toggle persists; clear compressed images deletes only generated WebP cache files.
+3. Settings — `minimal` appears in quality dropdowns; smart subsampling toggle persists locally and syncs globally; clear compressed images deletes only generated WebP cache files.
 4. Delete or move an image — cache files are removed from the new tier folders.
 5. Fresh install — empty `medium/`, `low/`, and `minimal/` folders are created; lazy generation still works.
 6. Re-run startup — migration is a no-op (idempotent).

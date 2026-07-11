@@ -77,5 +77,5 @@ export function syncSearchWithLocalStorage() {
     syncMemory('matchingMode', matchingMode);
     syncMemory('initialImages', initialImages);
     syncMemory('slideDelay', slideDelay);
-    syncMemory('useSmartSubsampling', useSmartSubsampling);
+    syncMemory('useSmartSubsampling', useSmartSubsampling, true);
 }
