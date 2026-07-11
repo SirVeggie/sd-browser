@@ -113,6 +113,7 @@
     let currentAmount = initialAmount;
     let currentImage: ClientImage | undefined = undefined;
     let inputElement: HTMLInputElement;
+    let inputSearchTimer: ReturnType<typeof setTimeout> | undefined;
     let searchHistoryTimer: ReturnType<typeof setTimeout> | undefined;
     let info: ImageInfo | undefined = undefined;
     let slideTimer: ReturnType<typeof setInterval> | undefined;
@@ -506,6 +507,7 @@
 
         return () => {
             removeNavOutsideClick();
+            clearTimeout(inputSearchTimer);
             clearTimeout(searchHistoryTimer);
             if (resizeDebounceTimer !== undefined) {
                 clearTimeout(resizeDebounceTimer);
@@ -694,7 +696,6 @@
         clearTimeout(searchHistoryTimer);
         searchHistoryTimer = setTimeout(() => {
             pushSearchHistory();
-            reconnectSearch();
         }, SEARCH_HISTORY_DEBOUNCE_MS);
     }
 
@@ -898,10 +899,13 @@
 
     function inputChange() {
         scheduleSearchCommit();
+        clearTimeout(inputSearchTimer);
+        inputSearchTimer = setTimeout(reconnectSearch, 100);
     }
 
     function selectChange() {
         scheduleSearchCommit();
+        reconnectSearch();
     }
 
     function reconnectSearch() {
