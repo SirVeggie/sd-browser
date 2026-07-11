@@ -35,6 +35,9 @@
         showNsfwFilter,
         searchFilter,
         explorationMode,
+        sparseFrequency,
+        similarityAlgorithm,
+        matchingMode,
         compressedMode,
         slideDelay,
         initialImages,
@@ -75,6 +78,13 @@
         restoreScrollAnchor,
         type ScrollAnchor,
     } from "$lib/tools/scrollAnchor";
+    import {
+        isSearchHistoryState,
+        maxSearchHistoryEntries,
+        type OverlayKind,
+        type SearchHistorySnapshot,
+        type SearchHistoryState,
+    } from "$lib/tools/searchHistory";
     import type { ClientImage, ImageInfo } from "$lib/types/images";
     import type { UpdateResponse } from "$lib/types/requests";
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
@@ -103,7 +113,7 @@
     let currentAmount = initialAmount;
     let currentImage: ClientImage | undefined = undefined;
     let inputElement: HTMLInputElement;
-    let inputTimer: ReturnType<typeof setTimeout> | undefined;
+    let searchHistoryTimer: ReturnType<typeof setTimeout> | undefined;
     let info: ImageInfo | undefined = undefined;
     let slideTimer: ReturnType<typeof setInterval> | undefined;
     let slideDir: "left" | "right" = "right";
@@ -161,6 +171,11 @@
     let resizePreserveHeight = 0;
     let resizeFrozenColumns = 0;
     let suppressAutoLoadUntil = 0;
+    let searchHistoryEntries = 0;
+    let currentHistoryId = "";
+    let activeOverlay: OverlayKind | undefined;
+    const galleryCache = new Map<string, ClientImage[]>();
+    const SEARCH_HISTORY_DEBOUNCE_MS = 5_000;
 
     $: paginated = $imageStore.slice(0, currentAmount);
     $: galleryImages = quickTagActive
@@ -454,6 +469,12 @@
         } finally {
             quickTagSelectedTagsLoaded = true;
         }
+        if (!isSearchHistoryState(history.state)) {
+            history.replaceState(
+                { kind: "baseline", searchHistory: true } satisfies SearchHistoryState,
+                "",
+            );
+        }
         scrollToTop();
         reconnectSearch();
         fetchFolderPaths().catch(() => {});
@@ -466,6 +487,7 @@
 
         window.addEventListener("keydown", keylistener);
         window.addEventListener("scroll", onScroll, { passive: true });
+        window.addEventListener("popstate", handleHistoryPopState);
 
         gridResizeObserver = new ResizeObserver((entries) => {
             const entry = entries[0];
@@ -484,7 +506,7 @@
 
         return () => {
             removeNavOutsideClick();
-            clearTimeout(inputTimer);
+            clearTimeout(searchHistoryTimer);
             if (resizeDebounceTimer !== undefined) {
                 clearTimeout(resizeDebounceTimer);
             }
@@ -496,6 +518,7 @@
             closeImage();
             window.removeEventListener("keydown", keylistener);
             window.removeEventListener("scroll", onScroll);
+            window.removeEventListener("popstate", handleHistoryPopState);
             if (scrollRaf !== undefined) cancelAnimationFrame(scrollRaf);
             if (masonryRaf !== undefined) cancelAnimationFrame(masonryRaf);
             gridResizeObserver?.disconnect();
@@ -617,6 +640,216 @@
         anchorElement.scrollIntoView();
     }
 
+    function createHistoryId() {
+        return crypto.randomUUID();
+    }
+
+    function createSearchSnapshot(): SearchHistorySnapshot {
+        const params = buildSearchParams();
+        return {
+            kind: "search",
+            id: currentHistoryId || createHistoryId(),
+            searchInput: $searchFilter,
+            params,
+            sorting,
+            sessionId: searchSessionId,
+            currentAmount,
+            oldestImageId: $imageStore.at(-1)?.id ?? "",
+            anchorImageId: galleryImages[0]?.id ?? "",
+            scrollY: window.scrollY,
+        };
+    }
+
+    function replaceCurrentSearchHistory() {
+        if (!currentHistoryId || activeOverlay) return;
+        const snapshot = createSearchSnapshot();
+        currentHistoryId = snapshot.id;
+        galleryCache.set(snapshot.id, $imageStore);
+        history.replaceState(
+            { kind: "search", searchHistory: true, snapshot } satisfies SearchHistoryState,
+            "",
+        );
+    }
+
+    function pushSearchHistory() {
+        const snapshot = createSearchSnapshot();
+        currentHistoryId = snapshot.id;
+        galleryCache.set(snapshot.id, $imageStore);
+        if (searchHistoryEntries >= maxSearchHistoryEntries) {
+            history.replaceState(
+                { kind: "search", searchHistory: true, snapshot } satisfies SearchHistoryState,
+                "",
+            );
+            return;
+        }
+
+        searchHistoryEntries++;
+        history.pushState(
+            { kind: "search", searchHistory: true, snapshot } satisfies SearchHistoryState,
+            "",
+        );
+    }
+
+    function scheduleSearchCommit() {
+        clearTimeout(searchHistoryTimer);
+        searchHistoryTimer = setTimeout(() => {
+            pushSearchHistory();
+            reconnectSearch();
+        }, SEARCH_HISTORY_DEBOUNCE_MS);
+    }
+
+    function commitSearchNow() {
+        clearTimeout(searchHistoryTimer);
+        pushSearchHistory();
+        reconnectSearch();
+    }
+
+    function setOverlayOpen(overlay: OverlayKind, open: boolean) {
+        switch (overlay) {
+            case "selection":
+                selecting = open;
+                break;
+            case "bulk":
+                bulkOpen = open;
+                break;
+            case "quick-tag-setup":
+                quickTagSetupOpen = open;
+                break;
+            case "quick-tag":
+                quickTagActive = open;
+                break;
+            default: {
+                const _exhaustive: never = overlay;
+                return _exhaustive;
+            }
+        }
+    }
+
+    function openOverlay(overlay: OverlayKind) {
+        if (activeOverlay === overlay) return;
+        activeOverlay = overlay;
+        history.pushState(
+            { kind: "overlay", searchHistory: true, overlay } satisfies SearchHistoryState,
+            "",
+        );
+        setOverlayOpen(overlay, true);
+    }
+
+    function closeOverlay(overlay: OverlayKind) {
+        if (activeOverlay === overlay) {
+            history.back();
+            return;
+        }
+        setOverlayOpen(overlay, false);
+    }
+
+    function closeOverlayFromHistory() {
+        const overlay = activeOverlay;
+        activeOverlay = undefined;
+        if (!overlay) return;
+        setOverlayOpen(overlay, false);
+        if (overlay === "selection") selection.deselectAll();
+        if (overlay === "quick-tag") resetQuickTagState();
+    }
+
+    async function hydrateSearchSession(snapshot: SearchHistorySnapshot) {
+        if (!snapshot.sessionId) return false;
+
+        try {
+            let page = await fetchImagePage({
+                latestId: "",
+                oldestId: "",
+                sessionId: snapshot.sessionId,
+            });
+            let images = expandClientImages(page.images);
+
+            while (
+                images.length < snapshot.currentAmount
+                && images.length < page.amount
+                && images.length > 0
+            ) {
+                const next = await fetchImagePage({
+                    latestId: "",
+                    oldestId: images.at(-1)?.id ?? "",
+                    sessionId: snapshot.sessionId,
+                });
+                const existingIds = new Set(images.map((image) => image.id));
+                const appended = expandClientImages(
+                    next.images.filter((image) => !existingIds.has(image.id)),
+                );
+                if (!appended.length) break;
+                images = images.concat(appended);
+                page = next;
+            }
+
+            imageStore.set(images);
+            imageAmountStore.set(page.amount);
+            galleryCache.set(snapshot.id, images);
+            return true;
+        } catch (cause) {
+            if (!isSessionUnavailable(cause)) console.error(cause);
+            return false;
+        }
+    }
+
+    async function restoreSearchSnapshot(snapshot: SearchHistorySnapshot) {
+        currentHistoryId = snapshot.id;
+        searchFilter.set(snapshot.searchInput);
+        sorting = snapshot.sorting;
+        explorationMode.set(snapshot.params.explorationMode);
+        sparseFrequency.set(snapshot.params.sparseFrequency);
+        similarityAlgorithm.set(snapshot.params.similarityAlgorithm);
+        matchingMode.set(snapshot.params.matching);
+        currentAmount = snapshot.currentAmount;
+        const cached = galleryCache.get(snapshot.id);
+        if (cached) {
+            imageStore.set(cached);
+            imageAmountStore.set(Math.max(snapshot.currentAmount, cached.length));
+        } else {
+            imageStore.set([]);
+            const hydrated = await hydrateSearchSession(snapshot);
+            if (!hydrated) {
+                reconnectSearch();
+                return;
+            }
+        }
+
+        streamAbort?.abort();
+        searchSessionId = snapshot.sessionId;
+        const sessionId = ++updateSessionId;
+        connectImageStream(sessionId, snapshot.sessionId || undefined);
+        await tick();
+        requestAnimationFrame(() => window.scrollTo({ top: snapshot.scrollY, behavior: "auto" }));
+    }
+
+    function handleHistoryPopState(event: PopStateEvent) {
+        if (activeOverlay) {
+            closeOverlayFromHistory();
+            return;
+        }
+        if (!isSearchHistoryState(event.state)) return;
+
+        switch (event.state.kind) {
+            case "overlay":
+                activeOverlay = event.state.overlay;
+                setOverlayOpen(event.state.overlay, true);
+                return;
+            case "baseline":
+                currentHistoryId = "";
+                searchFilter.set("");
+                currentAmount = initialAmount;
+                reconnectSearch();
+                return;
+            case "search":
+                void restoreSearchSnapshot(event.state.snapshot);
+                return;
+            default: {
+                const _exhaustive: never = event.state;
+                return _exhaustive;
+            }
+        }
+    }
+
     function applySearchViewReset() {
         scrollToTop();
         currentAmount = initialAmount;
@@ -634,6 +867,7 @@
         scrollRaf = requestAnimationFrame(() => {
             scrollRaf = undefined;
             maybeAutoLoadMore();
+            replaceCurrentSearchHistory();
         });
     }
 
@@ -663,18 +897,11 @@
     }
 
     function inputChange() {
-        applyInput();
-    }
-
-    function applyInput() {
-        clearTimeout(inputTimer);
-        inputTimer = setTimeout(() => {
-            reconnectSearch();
-        }, 100);
+        scheduleSearchCommit();
     }
 
     function selectChange() {
-        reconnectSearch();
+        scheduleSearchCommit();
     }
 
     function reconnectSearch() {
@@ -997,16 +1224,15 @@
 
     function handleEsc(e: KeyboardEvent) {
         if (e.key === "Escape" && quickTagSetupOpen) {
-            closeQuickTagSetup();
+            closeOverlay("quick-tag-setup");
             return;
         }
         if (e.key === "Escape" && quickTagActive) {
-            void doneQuickTag();
+            closeOverlay("quick-tag");
             return;
         }
         if (e.key === "Escape" && selecting) {
-            selection.deselectAll();
-            selecting = false;
+            closeOverlay("selection");
         }
     }
 
@@ -1020,7 +1246,7 @@
                     visible: !selecting,
                     handler() {
                         selection.select(id);
-                        selecting = true;
+                        openOverlay("selection");
                     },
                 },
                 {
@@ -1033,7 +1259,7 @@
                     visible: selecting,
                     handler() {
                         selection.selectRow(id);
-                        if ($selection.length === 0) selecting = false;
+                        if ($selection.length === 0) cancelSelect();
                     },
                 },
                 {
@@ -1047,7 +1273,7 @@
                     handler() {
                         explorationMode.set('none');
                         searchFilter.set(`SIMILAR ${id} ${$similarityThreshold}`);
-                        selectChange();
+                        commitSearchNow();
                     },
                 },
                 {
@@ -1056,7 +1282,7 @@
                     handler() {
                         explorationMode.set('none');
                         searchFilter.set(`SIMILAR img ${id} ${$embeddingStore.imageSimilarityThreshold}`);
-                        selectChange();
+                        commitSearchNow();
                     },
                 },
                 {
@@ -1067,7 +1293,7 @@
                         if (!imageInfo) return;
                         sorting = 'date';
                         searchFilter.set(`DT TO ${formatSearchDateMinute(imageInfo.modifiedDate)}`);
-                        selectChange();
+                        commitSearchNow();
                     },
                 },
                 {
@@ -1229,7 +1455,7 @@
                     selection.select(id);
                 }
 
-                if ($selection.length === 0) selecting = false;
+                if ($selection.length === 0) cancelSelect();
             }
         };
     }
@@ -1277,8 +1503,8 @@
     }
 
     function cancelSelect() {
-        selecting = false;
-        selection.deselectAll();
+        closeOverlay("selection");
+        if (activeOverlay !== "selection") selection.deselectAll();
     }
 
     function openFolder(id: string) {
@@ -1288,7 +1514,7 @@
     function openBulk() {
         syncSearchInput(inputElement);
         bulkSearchParams = buildSearchParams();
-        bulkOpen = true;
+        openOverlay("bulk");
     }
 
     function handleBulkComplete(refresh?: boolean) {
@@ -1299,11 +1525,11 @@
 
     function openQuickTagSetup() {
         closeNavMenu();
-        quickTagSetupOpen = true;
+        openOverlay("quick-tag-setup");
     }
 
     function closeQuickTagSetup() {
-        quickTagSetupOpen = false;
+        closeOverlay("quick-tag-setup");
     }
 
     function startQuickTag(event: CustomEvent<{ mode: BulkTagMode }>) {
@@ -1312,8 +1538,13 @@
         quickTagHiddenIds = [];
         quickTagLastClickAt = 0;
         quickTagInFlight.clear();
-        quickTagActive = true;
         quickTagSetupOpen = false;
+        activeOverlay = "quick-tag";
+        history.replaceState(
+            { kind: "overlay", searchHistory: true, overlay: "quick-tag" } satisfies SearchHistoryState,
+            "",
+        );
+        quickTagActive = true;
         closeImage();
         cancelSelect();
     }
@@ -1374,7 +1605,7 @@
                 excluded: false,
             });
             applyUpdate(result, updateSessionId);
-            resetQuickTagState();
+            closeOverlay("quick-tag");
         } catch (cause) {
             console.error(cause);
             if (isSessionUnavailable(cause)) {
@@ -1409,7 +1640,7 @@
             notify(cause instanceof Error ? cause.message : "Failed to restore gallery", "warn");
             return;
         }
-        resetQuickTagState();
+        closeOverlay("quick-tag");
     }
 
     async function handleQuickTagImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
@@ -1554,7 +1785,7 @@
                     <Button
                         on:click={() => {
                             closeNavMenu();
-                            selecting = true;
+                            openOverlay("selection");
                         }}>Select</Button
                     >
                     <Button
@@ -1706,7 +1937,7 @@
         searchParams={bulkSearchParams}
         searchSessionId={searchSessionId}
         {sorting}
-        on:close={() => (bulkOpen = false)}
+        on:close={() => closeOverlay("bulk")}
         onComplete={handleBulkComplete}
     />
 {/if}
