@@ -60,8 +60,6 @@
   let mediaLoaded = false;
   let imgElement: HTMLImageElement | undefined;
   let videoElement: HTMLVideoElement | undefined;
-  let viewportWidth = 0;
-  let viewportHeight = 0;
 
   function createMediaReadyHandler(expectedUrl: string) {
     return () => {
@@ -111,10 +109,6 @@
   $: imageUrl = image?.id
     ? `/api/images/${image.id}?${buildImageQueryParams(showOriginal ? "original" : $compressedMode, $useSmartSubsampling)}`
     : "";
-  $: fullscreenPlaceholderStyle =
-    full && image?.width && image?.height && viewportWidth && viewportHeight
-      ? `width: ${Math.min(viewportWidth, (viewportHeight * image.width) / image.height)}px; height: ${Math.min(viewportHeight, (viewportWidth * image.height) / image.width)}px;`
-      : undefined;
   $: {
     imageUrl;
     image?.id;
@@ -421,7 +415,7 @@
             style={mediaStyle}
           >
             {#if !mediaLoaded}
-              <div class="loading-slot" style={fullscreenPlaceholderStyle}>
+              <div class="loading-slot">
                 <ImageLoadingPlaceholder shimmerDelay="0ms" mosaic={full} />
               </div>
             {/if}
@@ -529,11 +523,7 @@
   {/if}
 {/if}
 
-<svelte:window
-  bind:innerWidth={viewportWidth}
-  bind:innerHeight={viewportHeight}
-  on:keydown={handleEsc}
-/>
+<svelte:window on:keydown={handleEsc} />
 
 <style lang="scss">
   .image_overlay {
@@ -582,15 +572,21 @@
 
       .media-container {
         position: relative;
-        display: flex;
+        display: grid;
         align-items: center;
         justify-content: center;
         width: 100%;
         max-width: 100%;
 
+        &.has-aspect {
+          width: min(100%, calc((100dvh - var(--pad) * 2) * var(--media-ratio)));
+          aspect-ratio: var(--media-ratio);
+        }
+
         .loading-slot {
+          grid-area: 1 / 1;
           width: 100%;
-          aspect-ratio: var(--media-ratio, 1);
+          height: 100%;
           min-height: min(40vh, 20em);
         }
 
@@ -600,14 +596,17 @@
 
         img,
         video {
+          grid-area: 1 / 1;
+          display: block;
+          width: 100%;
+          height: 100%;
           max-height: calc(100dvh - var(--pad) * 2);
           max-width: 100%;
-          display: block;
+          object-fit: contain;
           transition: opacity 0.3s ease;
 
           &.hidden {
             opacity: 0;
-            position: absolute;
             pointer-events: none;
           }
         }
@@ -636,14 +635,13 @@
         }
 
         .media-container {
-          width: 100%;
+          &.has-aspect {
+            width: min(100%, calc(100dvh * var(--media-ratio)));
+          }
 
           img,
           video {
-            height: 100dvh;
             max-height: 100dvh;
-            min-height: 100dvh;
-            object-fit: contain;
             z-index: 100;
           }
         }
