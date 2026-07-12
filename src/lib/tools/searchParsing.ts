@@ -487,6 +487,74 @@ export function pinIdsToFront(ids: string[], frontIds: string[]): string[] {
     return result;
 }
 
+function isImgQueryK(value: string): boolean {
+    return /^-?\d+$/.test(value.trim());
+}
+
+function parseImgQueryNumber(value: string): { threshold?: number; k?: number } | undefined {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+
+    if (isImgQueryK(trimmed)) {
+        const k = Number(trimmed);
+        if (!Number.isFinite(k)) {
+            return undefined;
+        }
+        return { k };
+    }
+
+    const threshold = parseThresholdSuffix(trimmed);
+    if (threshold === undefined) {
+        return undefined;
+    }
+    return { threshold };
+}
+
+export function parseSearchTargetWithOptionalImgLimit(raw: string): {
+    text: string;
+    threshold?: number;
+    k?: number;
+} {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+        return { text: '' };
+    }
+
+    let text = trimmed;
+    let threshold: number | undefined;
+    let k: number | undefined;
+
+    for (let pass = 0; pass < 2; pass++) {
+        const lastSpace = text.lastIndexOf(' ');
+        if (lastSpace <= 0) {
+            break;
+        }
+
+        const suffix = parseImgQueryNumber(text.slice(lastSpace + 1));
+        if (!suffix) {
+            break;
+        }
+
+        if (suffix.k !== undefined) {
+            if (k !== undefined) {
+                break;
+            }
+            k = suffix.k;
+        } else if (suffix.threshold !== undefined) {
+            if (threshold !== undefined) {
+                break;
+            }
+            threshold = suffix.threshold;
+        }
+
+        text = text.slice(0, lastSpace).trim();
+    }
+
+    return { text, threshold, k };
+}
+
 export function parseSearchTargetWithOptionalThreshold(raw: string): { text: string; threshold?: number } {
     const trimmed = raw.trim();
     if (!trimmed) {

@@ -394,10 +394,11 @@ export class EmbeddingDB {
 
     static findSimilarImage(
         query: Float32Array,
-        threshold: number,
+        minSimilarity: number,
         k?: number,
         candidateIds?: Set<string>,
         useOptimizedQuery = true,
+        forceJsSimilarity = false,
     ): Map<string, number> {
         EmbeddingDB.setup();
         if (!EmbeddingDB.stmtFindSimilar)
@@ -405,7 +406,6 @@ export class EmbeddingDB {
 
         EmbeddingDB.assertQueryDimensions(query);
 
-        const minSimilarity = k !== undefined ? 0 : threshold;
         const maxDistance = 1 - minSimilarity;
         const queryBuffer = embeddingToBuffer(query);
         const count = (EmbeddingDB.stmtCount!.get() as { count: number }).count;
@@ -420,8 +420,10 @@ export class EmbeddingDB {
         }
 
         const requested = k !== undefined ? Math.max(1, k) : Math.max(1, count);
-        const useVecQuery = (k !== undefined && requested <= VEC0_KNN_MAX)
-            || (useOptimizedQuery && k === undefined);
+        const useVecQuery = !forceJsSimilarity && (
+            (k !== undefined && requested <= VEC0_KNN_MAX)
+            || (useOptimizedQuery && k === undefined)
+        );
         if (!useVecQuery) {
             return EmbeddingDB.findSimilarImageCandidates(
                 query,

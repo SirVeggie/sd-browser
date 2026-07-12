@@ -1,4 +1,4 @@
-import { isVideo, parseSearchDate, parseSearchFloat, validRegex, XOR, yieldToEventLoop, getEmbeddingImagePath } from "$lib/tools/misc";
+import { isVideo, parseSearchDate, validRegex, XOR, yieldToEventLoop, getEmbeddingImagePath } from "$lib/tools/misc";
 import {
     getPositiveSimilarSourceIds,
     parseSimilarSearchTarget,
@@ -12,6 +12,7 @@ import {
     splitSearchParts,
     unescapeSearchLiterals,
     parseWeightedImgQueryClauses,
+    parseSearchTargetWithOptionalImgLimit,
     type ParsedWeightedImgQueryClause,
 } from "$lib/tools/searchParsing";
 import { cosineSimilarity } from "$lib/tools/vectorMath";
@@ -182,51 +183,15 @@ function subtractIds(ids: Set<string>, excludedIds: Set<string>): Set<string> {
     return remaining;
 }
 
-function parseImgQueryNumber(value: string): { threshold?: number; k?: number } | undefined {
-    const trimmed = value.trim();
-    if (!trimmed) {
-        return undefined;
-    }
-
-    if (/^-?\d+$/.test(trimmed)) {
-        const k = Number(trimmed);
-        if (!Number.isFinite(k)) {
-            return undefined;
-        }
-        return { k };
-    }
-
-    const threshold = parseSearchFloat(trimmed);
-    if (threshold === undefined) {
-        return undefined;
-    }
-    return { threshold };
-}
-
-function parseSearchTargetWithOptionalImgLimit(raw: string): {
-    text: string;
-    threshold?: number;
-    k?: number;
-} {
-    const trimmed = raw.trim();
-    if (!trimmed) {
-        return { text: '' };
-    }
-
-    const lastSpace = trimmed.lastIndexOf(' ');
-    if (lastSpace <= 0) {
-        return { text: trimmed };
-    }
-
-    const suffix = parseImgQueryNumber(trimmed.slice(lastSpace + 1));
-    if (!suffix) {
-        return { text: trimmed };
-    }
-
-    return {
-        text: trimmed.slice(0, lastSpace).trim(),
-        ...suffix,
-    };
+function resolveImgSimilaritySearchLimits(
+    effectiveThreshold: number,
+    k: number | undefined,
+    explicitThreshold: boolean,
+): { minSimilarity: number; effectiveK: number | undefined; forceJs: boolean } {
+    const forceJs = k === -1;
+    const effectiveK = forceJs ? undefined : k;
+    const minSimilarity = effectiveK !== undefined && !explicitThreshold ? 0 : effectiveThreshold;
+    return { minSimilarity, effectiveK, forceJs };
 }
 
 function isImgSearchPart(part: string): boolean {
@@ -408,9 +373,10 @@ async function embedWeightedImgQueryClauses(
 
 function findWeightedImgMatches(
     queryEmbeddings: WeightedImgQueryEmbedding[],
-    threshold: number,
+    effectiveThreshold: number,
     k: number | undefined,
     candidateIds: Set<string>,
+    explicitThreshold: boolean,
 ): Map<string, number> {
     const storedDimensions = EmbeddingDB.getDimensions();
     if (storedDimensions !== null) {
@@ -420,20 +386,24 @@ function findWeightedImgMatches(
         }
     }
 
+    const { minSimilarity, effectiveK } = resolveImgSimilaritySearchLimits(
+        effectiveThreshold,
+        k,
+        explicitThreshold,
+    );
     const rows = EmbeddingDB.getEmbeddingsByIds([...candidateIds]);
-    const minScore = k === undefined ? threshold : 0;
     const scores: { id: string; similarity: number }[] = [];
 
     for (const row of rows) {
         const similarity = computeWeightedImgSimilarity(queryEmbeddings, row.embedding);
-        if (similarity >= minScore)
+        if (similarity >= minSimilarity)
             scores.push({ id: row.id, similarity });
     }
 
     scores.sort((left, right) => right.similarity - left.similarity);
-    const limitedScores = k === undefined
+    const limitedScores = effectiveK === undefined
         ? scores
-        : scores.slice(0, Math.max(1, k));
+        : scores.slice(0, Math.max(1, effectiveK));
     return new Map(limitedScores.map((row) => [row.id, row.similarity]));
 }
 
@@ -609,10 +579,16 @@ export async function resolveImgSearchContext(
             const weightedClauses = parseWeightedImgQueryClauses(queryText);
             const isWeightedQuery = weightedClauses.length > 1;
             const hasNegativeWeightedClause = weightedClauses.some((clause) => clause.weight < 0);
+            const explicitThreshold = threshold !== undefined;
             const effectiveThreshold = threshold ?? (
                 isWeightedQuery && hasNegativeWeightedClause
                     ? WEIGHTED_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
                     : IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
+            );
+            const { minSimilarity, effectiveK, forceJs } = resolveImgSimilaritySearchLimits(
+                effectiveThreshold,
+                k,
+                explicitThreshold,
             );
             const matchScores = weightedClauses.length > 1
                 ? findWeightedImgMatches(
@@ -620,6 +596,7 @@ export async function resolveImgSearchContext(
                     effectiveThreshold,
                     k,
                     candidateIds,
+                    explicitThreshold,
                 )
                 : EmbeddingDB.findSimilarImage(
                     await embedQuery(
@@ -630,10 +607,11 @@ export async function resolveImgSearchContext(
                         ),
                         { signal: options.signal },
                     ),
-                    effectiveThreshold,
-                    k,
+                    minSimilarity,
+                    effectiveK,
                     candidateIds,
                     settings.useOptimizedEmbeddingQuery,
+                    forceJs,
                 );
             throwIfSearchAborted(options);
             const matchIds = new Set(matchScores.keys());

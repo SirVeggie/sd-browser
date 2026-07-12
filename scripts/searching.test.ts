@@ -13,6 +13,7 @@ import {
     tokenizeSearchClauses,
     unescapeSearchLiterals,
     parseWeightedImgQueryClauses,
+    parseSearchTargetWithOptionalImgLimit,
 } from '../src/lib/tools/searchParsing.ts';
 
 assert.deepEqual(
@@ -194,6 +195,48 @@ assert.deepEqual(
         { text: 'sci-fi', weight: 1 },
     ],
     'requires spaced separators for weighted IMG clauses',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('cat 0.8 100'),
+    { text: 'cat', threshold: 0.8, k: 100 },
+    'parses IMG query with threshold then k',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('cat 100 0.8'),
+    { text: 'cat', threshold: 0.8, k: 100 },
+    'parses IMG query with k then threshold',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('cat 100'),
+    { text: 'cat', threshold: undefined, k: 100 },
+    'parses IMG query with k only',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('cat 0.8'),
+    { text: 'cat', threshold: 0.8, k: undefined },
+    'parses IMG query with threshold only',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('cat -1 0.8'),
+    { text: 'cat', threshold: 0.8, k: -1 },
+    'parses IMG query with force-js k and threshold',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('cat 0.8 -1'),
+    { text: 'cat', threshold: 0.8, k: -1 },
+    'parses IMG query with threshold and force-js k in either order',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('cat -1'),
+    { text: 'cat', threshold: undefined, k: -1 },
+    'parses IMG query with force-js k only',
 );
 
 const fullImageId = 'a'.repeat(64);

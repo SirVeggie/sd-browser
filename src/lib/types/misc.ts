@@ -156,8 +156,8 @@ export const searchKeywordHelp = [
     {
         keyword: 'IMG',
         summary: 'Uses image embeddings.',
-        details: 'With no text, matches images that have embeddings. With text, runs an embedding search. Prefix the text with ~ to skip the search template. A trailing decimal overrides the threshold; a trailing integer limits result count.',
-        example: 'IMG red dress 100',
+        details: 'With no text, matches images that have embeddings. With text, runs an embedding search. Prefix the text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count. Both can be used together in either order. Use -1 as k to force full JavaScript scoring while keeping a threshold.',
+        example: 'IMG red dress 0.8 100',
     },
     {
         keyword: 'ID',
