@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onDestroy } from "svelte";
     import type { InputEvent } from "$lib/types/misc";
     import Clickable from "./Clickable.svelte";
     import ImageLoadingPlaceholder from "./ImageLoadingPlaceholder.svelte";
@@ -26,18 +27,90 @@
     let hasLoaded = false;
     let imgElement: HTMLImageElement | undefined;
     let videoElement: HTMLVideoElement | undefined;
+    let loadingSrc = "";
+    let reportedLoadKey = "";
+    let placeholderVisible = true;
+    let placeholderLeaving = false;
+    let revealTimer: ReturnType<typeof setTimeout> | undefined;
 
-    function markLoaded() {
-        if (hasLoaded) return;
+    const placeholderFadeMs = 90;
+
+    function clearRevealTimer() {
+        if (!revealTimer) return;
+        clearTimeout(revealTimer);
+        revealTimer = undefined;
+    }
+
+    function prefersReducedMotion() {
+        return typeof window !== "undefined"
+            && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+
+    function resetReveal(nextSrc: string) {
+        clearRevealTimer();
+        loadingSrc = nextSrc;
+        hasLoaded = false;
+        placeholderVisible = !!nextSrc;
+        placeholderLeaving = false;
+    }
+
+    function revealLoadedMedia(expectedSrc: string) {
+        if (src !== expectedSrc) return;
+        placeholderVisible = false;
+        placeholderLeaving = false;
         hasLoaded = true;
+    }
+
+    function startReveal(expectedSrc: string) {
+        if (src !== expectedSrc || hasLoaded) return;
+        if (!placeholderVisible || prefersReducedMotion()) {
+            revealLoadedMedia(expectedSrc);
+            return;
+        }
+
+        clearRevealTimer();
+        placeholderLeaving = true;
+        revealTimer = setTimeout(() => {
+            revealTimer = undefined;
+            revealLoadedMedia(expectedSrc);
+        }, placeholderFadeMs);
+    }
+
+    function markLoaded(expectedSrc: string) {
+        if (src !== expectedSrc) return;
+        startReveal(expectedSrc);
+
+        const loadKey = `${loadSession}:${expectedSrc}`;
+        if (reportedLoadKey === loadKey) return;
+        reportedLoadKey = loadKey;
         onLoaded?.();
+    }
+
+    function createMediaReadyHandler(expectedSrc: string) {
+        return () => {
+            markLoaded(expectedSrc);
+        };
+    }
+
+    function createImageReadyHandler(expectedSrc: string) {
+        return async (event: Event) => {
+            const element = event.currentTarget;
+            if (!(element instanceof HTMLImageElement)) return;
+
+            try {
+                await element.decode();
+            } catch {
+                // A loaded image may reject decode for browser-specific reasons; still reveal it.
+            }
+            markLoaded(expectedSrc);
+        };
     }
 
     function checkAlreadyLoaded() {
         if (imgElement?.complete && imgElement.naturalWidth > 0) {
-            markLoaded();
+            markLoaded(src);
         } else if (videoElement && videoElement.readyState >= 2) {
-            markLoaded();
+            markLoaded(src);
         }
     }
 
@@ -49,12 +122,10 @@
     $: containerStyle = hasDimensions
         ? `aspect-ratio: ${img.width} / ${img.height}`
         : undefined;
-    $: {
-        src;
-        loadSession;
-        hasLoaded = false;
-    }
+    $: if (src !== loadingSrc) resetReveal(src);
     $: loadSession, src, imgElement, videoElement, checkAlreadyLoaded();
+
+    onDestroy(clearRevealTimer);
 </script>
 
 <div
@@ -68,15 +139,14 @@
     style={containerStyle}
 >
     <Clickable up={onClick} contextMenu={onContext}>
-        {#if !hasLoaded}
-            <div class="loading">
+        {#if placeholderVisible}
+            <div class="loading" class:leaving={placeholderLeaving}>
                 <ImageLoadingPlaceholder {shimmerIndex} mosaic={spacingMosaic} />
             </div>
-        {:else}
+        {:else if hasLoaded}
             <div class="overlay"/>
         {/if}
         {#if img.type === "video" && $animatedThumb}
-            <!-- svelte-ignore a11y-media-has-caption -->
             <video
                 bind:this={videoElement}
                 autoplay
@@ -86,8 +156,8 @@
                 class={cx(!hasLoaded && "hidden")}
                 width={hasDimensions ? img.width : undefined}
                 height={hasDimensions ? img.height : undefined}
-                on:canplay={markLoaded}
-                on:error={markLoaded}
+                on:canplay={createMediaReadyHandler(src)}
+                on:error={createMediaReadyHandler(src)}
             >
                 <source {src} type="video/mp4" />
             </video>
@@ -102,8 +172,8 @@
                 loading="lazy"
                 decoding="async"
                 fetchpriority="low"
-                on:load={markLoaded}
-                on:error={markLoaded}
+                on:load={createImageReadyHandler(src)}
+                on:error={createMediaReadyHandler(src)}
             />
         {/if}
     </Clickable>
@@ -137,11 +207,21 @@
             transform: scale(1.01);
             transition:
                 transform 0.4s ease,
-                opacity 0.4s ease;
+                opacity 180ms ease;
 
             &.hidden {
                 opacity: 0;
+                visibility: hidden;
                 position: absolute;
+            }
+        }
+
+        .loading {
+            opacity: 1;
+            transition: opacity 90ms ease;
+
+            &.leaving {
+                opacity: 0;
             }
         }
         
@@ -259,9 +339,5 @@
                 transform: scale(1.1) translateY(-0.5em);
             }
         }
-    }
-
-    .loading {
-        transition: opacity 0.4s ease;
     }
 </style>

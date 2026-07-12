@@ -9,6 +9,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import "../../scroll.css";
+  import { onDestroy } from "svelte";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import Button from "./Button.svelte";
@@ -36,7 +37,6 @@
   import TagPillRow from "$lib/components/TagPillRow.svelte";
   import TagPickerPopup from "$lib/components/TagPickerPopup.svelte";
   import TagModal from "$lib/components/TagModal.svelte";
-  import ImageLoadingPlaceholder from "./ImageLoadingPlaceholder.svelte";
   import { tagsStore, upsertTagDefinition } from "$lib/stores/tagsStore";
   import { DEFAULT_TAG_COLOR } from "$lib/types/tags";
   import { fullscreenStyle } from "$lib/stores/styleStore";
@@ -69,13 +69,76 @@
   let comfyStatusImageId: string | undefined;
   let comfyWorkflowOpenAvailable = false;
   let comfyWorkflowAuthRequired = false;
+  let loadingMediaUrl = "";
+  let placeholderVisible = true;
+  let placeholderLeaving = false;
+  let revealTimer: ReturnType<typeof setTimeout> | undefined;
 
   const comfyTokenStorageKey = "comfyWorkflowOpenToken";
+  const placeholderFadeMs = 90;
+
+  function clearRevealTimer() {
+    if (!revealTimer) return;
+    clearTimeout(revealTimer);
+    revealTimer = undefined;
+  }
+
+  function prefersReducedMotion() {
+    return browser && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function resetReveal(nextUrl: string) {
+    clearRevealTimer();
+    loadingMediaUrl = nextUrl;
+    mediaLoaded = false;
+    placeholderVisible = !!nextUrl;
+    placeholderLeaving = false;
+  }
+
+  function revealLoadedMedia(expectedUrl: string) {
+    if (imageUrl !== expectedUrl) return;
+    placeholderVisible = false;
+    placeholderLeaving = false;
+    mediaLoaded = true;
+  }
+
+  function startReveal(expectedUrl: string) {
+    if (imageUrl !== expectedUrl || mediaLoaded) return;
+    if (!placeholderVisible || prefersReducedMotion()) {
+      revealLoadedMedia(expectedUrl);
+      return;
+    }
+
+    clearRevealTimer();
+    placeholderLeaving = true;
+    revealTimer = setTimeout(() => {
+      revealTimer = undefined;
+      revealLoadedMedia(expectedUrl);
+    }, placeholderFadeMs);
+  }
+
+  function markMediaReady(expectedUrl: string) {
+    if (imageUrl !== expectedUrl) return;
+    startReveal(expectedUrl);
+  }
 
   function createMediaReadyHandler(expectedUrl: string) {
     return () => {
-      if (imageUrl !== expectedUrl) return;
-      mediaLoaded = true;
+      markMediaReady(expectedUrl);
+    };
+  }
+
+  function createImageReadyHandler(expectedUrl: string) {
+    return async (event: Event) => {
+      const element = event.currentTarget;
+      if (!(element instanceof HTMLImageElement)) return;
+
+      try {
+        await element.decode();
+      } catch {
+        // A loaded image may reject decode for browser-specific reasons; still reveal it.
+      }
+      markMediaReady(expectedUrl);
     };
   }
 
@@ -96,13 +159,13 @@
       imgElement.naturalWidth > 0 &&
       elementMatchesUrl(imgElement)
     ) {
-      mediaLoaded = true;
+      startReveal(imageUrl);
     } else if (
       videoElement &&
       videoElement.readyState >= 2 &&
       elementMatchesUrl(videoElement)
     ) {
-      mediaLoaded = true;
+      startReveal(imageUrl);
     }
   }
 
@@ -120,12 +183,7 @@
   $: imageUrl = image?.id
     ? `/api/images/${image.id}?${buildImageQueryParams(showOriginal ? "original" : $compressedMode, $useSmartSubsampling)}`
     : "";
-  $: {
-    imageUrl;
-    image?.id;
-    showOriginal;
-    mediaLoaded = false;
-  }
+  $: if (imageUrl !== loadingMediaUrl) resetReveal(imageUrl);
   $: imageUrl, imgElement, videoElement, checkMediaAlreadyReady();
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : buildPromptInfo(data);
@@ -497,6 +555,8 @@
     if (!selection) return;
     selection.removeAllRanges();
   }
+
+  onDestroy(clearRevealTimer);
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -516,14 +576,17 @@
             class:has-aspect={!!mediaStyle}
             style={mediaStyle}
           >
-            {#if !mediaLoaded}
-              <div class="loading-slot">
-                <ImageLoadingPlaceholder shimmerDelay="0ms" mosaic={full} />
+            {#if placeholderVisible}
+              <div class="loading-slot" class:leaving={placeholderLeaving}>
+                <div class="dot-loader" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
               </div>
             {/if}
             {#key imageUrl}
               {#if image.type === "video"}
-                <!-- svelte-ignore a11y-media-has-caption -->
                 <video
                   bind:this={videoElement}
                   autoplay
@@ -543,14 +606,13 @@
                   src={imageUrl}
                   alt={image.id}
                   class:hidden={!mediaLoaded}
-                  on:load={createMediaReadyHandler(imageUrl)}
+                  on:load={createImageReadyHandler(imageUrl)}
                   on:error={createMediaReadyHandler(imageUrl)}
                 />
               {/if}
             {/key}
           </div>
           <!-- svelte-ignore a11y-click-events-have-key-events -->
-          <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
           {#if data}
             <div class="info" on:click={prevent}>
               <div class="basic">
@@ -692,9 +754,69 @@
 
         .loading-slot {
           grid-area: 1 / 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           width: 100%;
           height: 100%;
           min-height: min(40vh, 20em);
+          opacity: 1;
+          transition: opacity 90ms ease;
+
+          &.leaving {
+            opacity: 0;
+          }
+        }
+
+        .dot-loader {
+          --loader-accent: rgb(63, 187, 236);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.45em;
+          filter: drop-shadow(0 0 0.35em rgba(63, 187, 236, 0.75));
+          pointer-events: none;
+
+          span {
+            width: 0.34em;
+            height: 0.34em;
+            border-radius: 50%;
+            background: var(--loader-accent);
+            box-shadow:
+              0 0 0.45em rgba(63, 187, 236, 0.9),
+              0 0 1em rgba(63, 187, 236, 0.35);
+            opacity: 0.65;
+            animation: loader-dot-wave 900ms ease-in-out infinite;
+          }
+
+          span:nth-child(2) {
+            animation-delay: 120ms;
+          }
+
+          span:nth-child(3) {
+            animation-delay: 240ms;
+          }
+        }
+
+        @keyframes loader-dot-wave {
+          0%,
+          80%,
+          100% {
+            opacity: 0.45;
+            transform: translateY(0);
+          }
+
+          40% {
+            opacity: 1;
+            transform: translateY(-0.45em);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .dot-loader span {
+            animation: none;
+            opacity: 0.8;
+          }
         }
 
         &.has-aspect .loading-slot {
@@ -710,10 +832,11 @@
           max-height: calc(100dvh - var(--pad) * 2);
           max-width: 100%;
           object-fit: contain;
-          transition: opacity 0.3s ease;
+          transition: opacity 180ms ease;
 
           &.hidden {
             opacity: 0;
+            visibility: hidden;
             pointer-events: none;
           }
         }
