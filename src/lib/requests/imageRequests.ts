@@ -26,6 +26,44 @@ export type StreamHandlers = {
     onUpdate: (update: UpdateResponse) => void;
 };
 
+export type ComfyWorkflowOpenStatus = {
+    available: boolean;
+    url?: string;
+    authRequired?: boolean;
+    reason?: string;
+};
+
+export class ComfyAuthRequiredError extends Error {
+    constructor(message = 'ComfyUI authentication required') {
+        super(message);
+        this.name = 'ComfyAuthRequiredError';
+    }
+}
+
+function isComfyWorkflowOpenStatus(value: unknown): value is ComfyWorkflowOpenStatus {
+    return !!value
+        && typeof value === 'object'
+        && 'available' in value
+        && typeof value.available === 'boolean';
+}
+
+function comfyHeaders(comfyToken: string | undefined): HeadersInit {
+    const headers: Record<string, string> = {
+        Authorization: 'Bearer ' + get(authStore).password,
+    };
+    const trimmed = comfyToken?.trim();
+    if (trimmed)
+        headers['X-Comfy-Authorization'] = `Bearer ${trimmed}`;
+    return headers;
+}
+
+function responseHasErrorCode(value: unknown, code: string): boolean {
+    return !!value
+        && typeof value === 'object'
+        && 'code' in value
+        && value.code === code;
+}
+
 export async function fetchImagePage(request: ImagePageRequest, fetch?: FetchType): Promise<ImageResponse> {
     let url = '/api/images';
     if (!fetch)
@@ -259,4 +297,38 @@ export async function imageAction(ids: string | string[], action: ActionRequest,
         return console.error(res.error);
     if ('message' in res)
         return console.log(res.message);
+}
+
+export async function openWorkflowInComfy(imageId: string, comfyToken?: string, fetch?: FetchType): Promise<void> {
+    let url = '/api/comfy/open-workflow';
+    if (!fetch)
+        url = get(page).url.origin + url;
+    const response = await (fetch ?? window.fetch)(url, {
+        method: 'POST',
+        headers: {
+            ...comfyHeaders(comfyToken),
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageId, comfyToken }),
+    });
+    const res = await response.json().catch(() => ({}));
+    if (response.status === 401 && responseHasErrorCode(res, 'comfy_auth_required'))
+        throw new ComfyAuthRequiredError();
+    if ('error' in res && typeof res.error === 'string')
+        throw new Error(res.error);
+    if ('message' in res)
+        return;
+}
+
+export async function getComfyWorkflowOpenStatus(comfyToken?: string, fetch?: FetchType): Promise<ComfyWorkflowOpenStatus> {
+    let url = '/api/comfy/status';
+    if (!fetch)
+        url = get(page).url.origin + url;
+    const response = await (fetch ?? window.fetch)(url, {
+        headers: comfyHeaders(comfyToken),
+    });
+    const res = await response.json().catch(() => ({}));
+    if (isComfyWorkflowOpenStatus(res))
+        return res;
+    return { available: false };
 }

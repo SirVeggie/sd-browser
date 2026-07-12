@@ -7,6 +7,7 @@
 </script>
 
 <script lang="ts">
+  import { browser } from "$app/environment";
   import "../../scroll.css";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -24,7 +25,13 @@
     getSvPositivePrompt,
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode, useSmartSubsampling } from "$lib/stores/searchStore";
-  import { buildImageQueryParams, imageAction } from "$lib/requests/imageRequests";
+  import {
+    buildImageQueryParams,
+    ComfyAuthRequiredError,
+    getComfyWorkflowOpenStatus,
+    imageAction,
+    openWorkflowInComfy,
+  } from "$lib/requests/imageRequests";
   import { updateImageTags } from "$lib/requests/tagRequests";
   import TagPillRow from "$lib/components/TagPillRow.svelte";
   import TagPickerPopup from "$lib/components/TagPickerPopup.svelte";
@@ -32,7 +39,6 @@
   import ImageLoadingPlaceholder from "./ImageLoadingPlaceholder.svelte";
   import { tagsStore, upsertTagDefinition } from "$lib/stores/tagsStore";
   import { DEFAULT_TAG_COLOR } from "$lib/types/tags";
-  import { autofocus } from "../../actions/autofocus";
   import { fullscreenStyle } from "$lib/stores/styleStore";
   import type { ClientImage, ImageInfo } from "$lib/types/images";
 
@@ -60,6 +66,11 @@
   let mediaLoaded = false;
   let imgElement: HTMLImageElement | undefined;
   let videoElement: HTMLVideoElement | undefined;
+  let comfyStatusImageId: string | undefined;
+  let comfyWorkflowOpenAvailable = false;
+  let comfyWorkflowAuthRequired = false;
+
+  const comfyTokenStorageKey = "comfyWorkflowOpenToken";
 
   function createMediaReadyHandler(expectedUrl: string) {
     return () => {
@@ -129,6 +140,17 @@
   $: workflowPrompt = !data ? "" : data.workflow;
   $: {
     showOriginal = showOriginal && !!image;
+  }
+  $: if (enabled && image?.id && data?.workflow && comfyStatusImageId !== image.id) {
+    comfyStatusImageId = image.id;
+    comfyWorkflowOpenAvailable = false;
+    comfyWorkflowAuthRequired = false;
+    void refreshComfyWorkflowOpenStatus(image.id);
+  }
+  $: if (!enabled || !image?.id || !data?.workflow) {
+    comfyStatusImageId = undefined;
+    comfyWorkflowOpenAvailable = false;
+    comfyWorkflowAuthRequired = false;
   }
 
   function extractBasic(d: ImageInfo): string {
@@ -315,6 +337,86 @@
     copyInfo(hiddenElementWorkflow, workflowPrompt, "workflow");
   }
 
+  function getStoredComfyToken() {
+    if (!browser) return "";
+    return sessionStorage.getItem(comfyTokenStorageKey) ?? "";
+  }
+
+  function setStoredComfyToken(token: string) {
+    if (!browser) return;
+    sessionStorage.setItem(comfyTokenStorageKey, token);
+  }
+
+  function askComfyToken(): string | undefined {
+    if (!browser) return undefined;
+    const token = window.prompt(
+      "Enter the ComfyUI-Login API token from the Comfy console, not the plain password.",
+      getStoredComfyToken(),
+    );
+    const trimmed = token?.trim();
+    if (!trimmed)
+      return undefined;
+    setStoredComfyToken(trimmed);
+    return trimmed;
+  }
+
+  async function refreshComfyWorkflowOpenStatus(imageId: string) {
+    try {
+      const status = await getComfyWorkflowOpenStatus(getStoredComfyToken());
+      if (image?.id === imageId && data?.workflow) {
+        comfyWorkflowOpenAvailable = status.available;
+        comfyWorkflowAuthRequired = !!status.authRequired;
+      }
+    } catch {
+      if (image?.id === imageId) {
+        comfyWorkflowOpenAvailable = false;
+        comfyWorkflowAuthRequired = false;
+      }
+    }
+  }
+
+  async function connectComfy() {
+    if (!image?.id) return;
+    const token = askComfyToken();
+    if (!token) return;
+
+    await refreshComfyWorkflowOpenStatus(image.id);
+    if (comfyWorkflowOpenAvailable) {
+      notify("Connected to ComfyUI");
+    } else {
+      notify("ComfyUI token was not accepted", "warn");
+    }
+  }
+
+  async function openInComfy() {
+    if (!image?.id) return;
+    try {
+      await openWorkflowInComfy(image.id, getStoredComfyToken());
+      notify("Opened workflow in ComfyUI");
+    } catch (cause) {
+      if (cause instanceof ComfyAuthRequiredError) {
+        const token = askComfyToken();
+        if (!token) return;
+        try {
+          await openWorkflowInComfy(image.id, token);
+          comfyWorkflowOpenAvailable = true;
+          comfyWorkflowAuthRequired = false;
+          notify("Opened workflow in ComfyUI");
+          return;
+        } catch {
+          comfyWorkflowOpenAvailable = false;
+          comfyWorkflowAuthRequired = true;
+          notify("ComfyUI token was not accepted", "warn");
+          return;
+        }
+      }
+      notify(
+        cause instanceof Error ? cause.message : "Failed to open workflow in ComfyUI",
+        "error",
+      );
+    }
+  }
+
   function deleteImage() {
     if (!image?.id) return;
     imageAction(image.id, {
@@ -452,11 +554,16 @@
           {#if data}
             <div class="info" on:click={prevent}>
               <div class="basic">
-                <button class="focusButton" use:autofocus></button>
                 <p>{basicInfo}</p>
                 <div class="buttons">
                   {#if data.workflow}
-                    <Button on:click={copyWorkflow}>Copy workflow</Button>
+                    {#if comfyWorkflowOpenAvailable}
+                      <Button on:click={openInComfy}>Open in ComfyUI</Button>
+                    {:else if comfyWorkflowAuthRequired}
+                      <Button on:click={connectComfy}>Connect ComfyUI</Button>
+                    {:else}
+                      <Button on:click={copyWorkflow}>Copy workflow</Button>
+                    {/if}
                   {:else if data.prompt}
                     <Button on:click={copyPrompt}>Copy all</Button>
                   {/if}
@@ -726,12 +833,6 @@
         }
       }
     }
-  }
-
-  .focusButton {
-    opacity: 0;
-    position: absolute;
-    pointer-events: none;
   }
 
   .fallback {
