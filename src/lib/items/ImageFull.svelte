@@ -12,7 +12,6 @@
   import { onDestroy } from "svelte";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import Button from "./Button.svelte";
   import { notify } from "$lib/components/Notifier.svelte";
   import {
     getComfyMetadataSections,
@@ -41,6 +40,11 @@
   import { DEFAULT_TAG_COLOR } from "$lib/types/tags";
   import { fullscreenStyle } from "$lib/stores/styleStore";
   import type { ClientImage, ImageInfo } from "$lib/types/images";
+  import {
+    closeAllContextMenus,
+    openContextMenu,
+    type ContextMenuOption,
+  } from "./ContextMenuManager.svelte";
 
   export let cancel: () => void;
   export let image: ClientImage | undefined;
@@ -216,12 +220,12 @@
     const primary = getPrimaryModel(candidates, d.extra);
     const hash = getModelHash(d.prompt);
     let info = "";
-    info += `Model: ${primary}`;
+    info += `Model:\u00a0${primary}`;
     if (hash) info += ` [${hash}]`;
-    if (d.width && d.height) info += `\nSize: ${d.width}x${d.height}`;
-    info += `\nCreated: ${new Date(d.createdDate).toLocaleDateString()}`;
-    info += `\nModified: ${new Date(d.modifiedDate).toLocaleDateString()}`;
-    if (d.folder) info += `\nFolder: ${d.folder}`;
+    if (d.width && d.height) info += `\nSize:\u00a0${d.width}x${d.height}`;
+    info += `\nCreated:\u00a0${new Date(d.createdDate).toLocaleDateString()}`;
+    info += `\nModified:\u00a0${new Date(d.modifiedDate).toLocaleDateString()}`;
+    if (d.folder) info += `\nFolder:\u00a0${d.folder}`;
     return info;
   }
 
@@ -336,6 +340,45 @@
   function prevent(e: Event) {
     e.stopPropagation();
     e.preventDefault();
+  }
+
+  function getTopMetadataActions(): ContextMenuOption[] {
+    const actions: ContextMenuOption[] = [];
+
+    if (data?.workflow) {
+      if (comfyWorkflowOpenAvailable) {
+        actions.push({ name: "Open in ComfyUI", handler: openInComfy });
+      } else if (comfyWorkflowAuthRequired) {
+        actions.push({ name: "Connect ComfyUI", handler: connectComfy });
+      } else {
+        actions.push({ name: "Copy workflow", handler: copyWorkflow });
+      }
+    } else if (data?.prompt) {
+      actions.push({ name: "Copy all", handler: copyPrompt });
+    }
+
+    actions.push({ name: "Delete", handler: deleteImage });
+
+    if ($compressedMode != "original" && !showOriginal) {
+      actions.push({ name: "Show original", handler: showOriginalImage });
+    }
+
+    return actions;
+  }
+
+  function openTopMetadataMenu(e: MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    closeAllContextMenus();
+    openContextMenu(
+      {
+        x: rect.left,
+        y: rect.bottom,
+      },
+      getTopMetadataActions(),
+    );
   }
 
   function copyInfo(
@@ -617,23 +660,16 @@
             <div class="info" on:click={prevent}>
               <div class="basic">
                 <p>{basicInfo}</p>
-                <div class="buttons">
-                  {#if data.workflow}
-                    {#if comfyWorkflowOpenAvailable}
-                      <Button on:click={openInComfy}>Open in ComfyUI</Button>
-                    {:else if comfyWorkflowAuthRequired}
-                      <Button on:click={connectComfy}>Connect ComfyUI</Button>
-                    {:else}
-                      <Button on:click={copyWorkflow}>Copy workflow</Button>
-                    {/if}
-                  {:else if data.prompt}
-                    <Button on:click={copyPrompt}>Copy all</Button>
-                  {/if}
-                  <Button on:click={deleteImage}>Delete</Button>
-                  {#if $compressedMode != "original" && !showOriginal}
-                    <Button on:click={showOriginalImage}>Show original</Button>
-                  {/if}
-                </div>
+                <button
+                  class="metadata-menu-button"
+                  type="button"
+                  aria-label="Image actions"
+                  on:click={openTopMetadataMenu}
+                >
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </button>
               </div>
               <div class="tags-row" bind:this={tagsRowEl} on:click={prevent}>
                 <TagPillRow
@@ -914,16 +950,71 @@
 
       p {
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
         flex-grow: 1;
+        min-width: 0;
 
         margin: 0;
       }
 
       .basic {
-        display: flex;
+        position: relative;
         padding: 0.7em var(--section-pad-x);
         border-radius: 0.5em;
         margin: 1em 0;
+
+        &::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          right: 0;
+          width: min(9em, 65%);
+          height: min(7em, 100%);
+          background: radial-gradient(
+            circle at top right,
+            rgba(0, 0, 0, 0.65),
+            rgba(0, 0, 0, 0.32) 38%,
+            transparent 72%
+          );
+          pointer-events: none;
+        }
+      }
+
+      .metadata-menu-button {
+        position: absolute;
+        top: 0.3em;
+        right: 0.35em;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.13em;
+        width: 1.9em;
+        height: 1.9em;
+        appearance: none;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        color: #ddd;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease;
+
+        &:hover,
+        &:focus-visible {
+          background-color: #ffffff14;
+          color: #fff;
+          outline: none;
+        }
+
+        span {
+          width: 0.22em;
+          height: 0.22em;
+          border-radius: 50%;
+          background-color: currentColor;
+          box-shadow: 0 0 0.25em rgba(0, 0, 0, 0.7);
+        }
       }
 
       .extra {
@@ -932,17 +1023,13 @@
         }
       }
 
-      .buttons {
-        display: flex;
-        flex-direction: column;
-        gap: 0.3em;
-      }
-
       .header {
         margin: 0;
         font-size: 0.8em;
         background-color: #112a;
         padding: 0.2em var(--section-pad-x);
+        overflow-wrap: anywhere;
+        word-break: break-word;
 
         button {
           background-color: transparent;
