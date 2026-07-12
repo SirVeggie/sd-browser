@@ -79,6 +79,124 @@ export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);
 }
 
+export type SearchKeywordHelp = {
+    keyword: SearchKeyword;
+    summary: string;
+    details: string;
+    example: string;
+};
+
+export const searchKeywordHelp = [
+    {
+        keyword: 'AND',
+        summary: 'Separates search clauses.',
+        details: 'Use AND when you want to start another clause, especially before another keyword. Each clause must match for an image to stay in the results.',
+        example: 'cat AND FOLDER favorites',
+    },
+    {
+        keyword: 'NOT',
+        summary: 'Excludes matches for the next clause.',
+        details: 'Put NOT before any other keyword or text clause to invert it.',
+        example: 'cat AND NOT TAG hidden',
+    },
+    {
+        keyword: 'ALL',
+        summary: 'Searches across all stored metadata.',
+        details: 'Matches prompt, workflow, extra metadata, and folder text instead of only the positive prompt.',
+        example: 'ALL sampler_name',
+    },
+    {
+        keyword: 'NEGATIVE|NEG',
+        summary: 'Searches the negative prompt.',
+        details: 'NEG is the short alias for NEGATIVE.',
+        example: 'NEG low quality',
+    },
+    {
+        keyword: 'FOLDER|FD',
+        summary: 'Searches the image folder path.',
+        details: 'Useful for narrowing results to a directory or path fragment. FD is the short alias.',
+        example: 'FD portraits',
+    },
+    {
+        keyword: 'PARAMS|PR',
+        summary: 'Searches generation parameters.',
+        details: 'Matches parameter text such as sampler, steps, seed, or other metadata stored with the image. PR is the short alias.',
+        example: 'PR steps: 30',
+    },
+    {
+        keyword: 'DATE|DT',
+        summary: 'Filters by modified date.',
+        details: 'Supports absolute dates, timestamps, relative offsets like -7d, and ranges with TO. DT is the short alias.',
+        example: 'DT 2026.07.01 TO 2026.07.12',
+    },
+    {
+        keyword: 'MODEL|MD',
+        summary: 'Searches detected model names.',
+        details: 'Matches the model list extracted from image metadata. MD is the short alias.',
+        example: 'MD pony',
+    },
+    {
+        keyword: 'ANNOTATION|AN',
+        summary: 'Searches local annotations.',
+        details: 'Only checks annotation text saved in this app. AN is the short alias.',
+        example: 'AN favorite lighting',
+    },
+    {
+        keyword: 'TAG',
+        summary: 'Searches image tags.',
+        details: 'Matches assigned tags. Exact tag names are checked directly when the term is written as an exact tag.',
+        example: 'TAG landscape',
+    },
+    {
+        keyword: 'SIMILAR|SM',
+        summary: 'Finds images similar to another image.',
+        details: 'Use an image id after the keyword. Add IMG after SIMILAR to compare image embeddings instead of prompt text. A trailing number can override the similarity threshold.',
+        example: 'SM abc123 0.6',
+    },
+    {
+        keyword: 'IMG',
+        summary: 'Uses image embeddings.',
+        details: 'With no text, matches images that have embeddings. With text, runs an embedding search. Prefix the text with ~ to skip the search template. A trailing decimal overrides the threshold; a trailing integer limits result count.',
+        example: 'IMG red dress 100',
+    },
+    {
+        keyword: 'ID',
+        summary: 'Matches specific image ids.',
+        details: 'Use one or more image ids to pin the search to those images.',
+        example: 'ID abc123 def456',
+    },
+    {
+        keyword: 'VIDEO|VID',
+        summary: 'Filters videos.',
+        details: 'Matches images whose file type is detected as video. VID is the short alias.',
+        example: 'VID',
+    },
+    {
+        keyword: 'SKIP',
+        summary: 'Drops results from the front.',
+        details: 'Applied after matching. Use a positive integer to skip that many results.',
+        example: 'cat AND SKIP 50',
+    },
+    {
+        keyword: 'TAKE',
+        summary: 'Limits the number of results.',
+        details: 'Applied after matching. Use a positive integer to keep only that many results.',
+        example: 'cat AND TAKE 100',
+    },
+    {
+        keyword: 'MMR',
+        summary: 'Returns diverse embedding-ranked results.',
+        details: 'Use a result count, with an optional candidate count. Requires embeddings and ranks for uniqueness/diversity within the current matches.',
+        example: 'cat AND MMR 100 1000',
+    },
+    {
+        keyword: 'IMGSIM',
+        summary: 'Fills remaining results by image similarity.',
+        details: 'Use a result count. It expands from positive IMG or SIMILAR IMG matches using image embeddings.',
+        example: 'IMG red dress AND IMGSIM 200',
+    },
+] satisfies readonly SearchKeywordHelp[];
+
 export type GlobalSettings = {
     nsfwFilter: string;
     customFilters?: CustomFiltersState;

@@ -47,6 +47,7 @@
     import NumInput from "$lib/items/NumInput.svelte";
     import SystemInstructionModal from "$lib/components/SystemInstructionModal.svelte";
     import CustomFilterModal from "$lib/components/CustomFilterModal.svelte";
+    import SearchKeywordHelpModal from "$lib/components/SearchKeywordHelpModal.svelte";
     import TagModal from "$lib/components/TagModal.svelte";
     import TagPillRow from "$lib/components/TagPillRow.svelte";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
@@ -95,6 +96,7 @@
     let recalculatingSimilarCache = false;
     let buildingUniquenessIndex = false;
     let clearingCompressedImages = false;
+    let keywordHelpOpen = false;
     let tagModalOpen = false;
     let editingTag: TagDefinition | null = null;
     let modalTagName = "";
@@ -549,11 +551,16 @@
             </div>
         </div>
 
-        <div class="gray help-block">
+        <button
+            type="button"
+            class="gray help-block keyword-help-trigger"
+            title="Open detailed search keyword help"
+            on:click={() => (keywordHelpOpen = true)}
+        >
             Search keywords:<br /><span>
                 {searchKeywords.join(", ").replaceAll("|", " | ")}
             </span>
-        </div>
+        </button>
     </div>
 
     <div class="sgroup">
@@ -875,6 +882,10 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         />
     {/if}
 
+    {#if keywordHelpOpen}
+        <SearchKeywordHelpModal on:close={() => (keywordHelpOpen = false)} />
+    {/if}
+
     <div class="tags-inline">
         <span class="subsection-title">Tags</span>
         <TagPillRow
@@ -1115,6 +1126,32 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
     .help-block {
         flex: 0 0 auto;
+    }
+
+    .keyword-help-trigger {
+        appearance: none;
+        border: none;
+        background: none;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible {
+            color: #ddd;
+        }
+
+        &:focus {
+            outline: none;
+        }
+
+        &:focus-visible {
+            outline: 1px solid rgb(63, 187, 236);
+            outline-offset: 3px;
+            border-radius: 3px;
+        }
     }
 
     .help-block + .help-block {
