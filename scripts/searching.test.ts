@@ -164,6 +164,10 @@ const splitCases: Array<{ search: string; parts: string[] }> = [
     { search: 'TAG favourite MMR 10', parts: ['TAG favourite', 'MMR 10'] },
     { search: 'SIMILAR abc landscape', parts: ['SIMILAR abc landscape'] },
     { search: 'fd landscape', parts: ['fd landscape'] },
+    { search: 'IMG AND NOT FOLDER nsfw', parts: ['IMG', 'NOT FOLDER nsfw'] },
+    { search: 'VIDEO AND FOLDER test', parts: ['VIDEO', 'FOLDER test'] },
+    { search: 'NOT IMG AND FOLDER test', parts: ['NOT IMG', 'FOLDER test'] },
+    { search: 'IMG AND FOLDER test', parts: ['IMG', 'FOLDER test'] },
 ];
 
 for (const { search, parts } of splitCases) {

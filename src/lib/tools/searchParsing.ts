@@ -132,6 +132,17 @@ function findClauseBodyBoundary(
     bodyStart: number,
     hasDatePrefix: boolean,
 ): { end: number; nextPos: number } {
+    const keywordAtBodyStart = readKeywordAt(search, bodyStart);
+    if (
+        keywordAtBodyStart
+        && !keywordAtBodyStart.escaped
+        && keywordAtBodyStart.canonical.toUpperCase() === 'AND'
+    ) {
+        let nextPos = bodyStart + keywordAtBodyStart.length;
+        nextPos = skipWhitespace(search, nextPos);
+        return { end: bodyStart, nextPos };
+    }
+
     if (hasDatePrefix) {
         let index = bodyStart;
         while (index < search.length) {
@@ -225,6 +236,9 @@ export function tokenizeSearchClauses(search: string): SearchClause[] {
                 break;
 
             const upper = keyword.canonical.toUpperCase();
+            if (pos > clauseStart && upper === 'AND')
+                break;
+
             if (upper === 'DATE' || upper === 'DT')
                 hasDatePrefix = true;
 
