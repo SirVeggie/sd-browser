@@ -156,7 +156,7 @@ export const searchKeywordHelp = [
     {
         keyword: 'IMG',
         summary: 'Uses image embeddings.',
-        details: 'With no text, matches images that have embeddings. With text, runs an embedding search. A 64-character hex image id uses that image\'s embedding instead of text. Mix image ids and text with spaced + and - (positive and negative weights). Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count. Both can be used together in either order. Use -1 as k to force full JavaScript scoring while keeping a threshold.',
+        details: 'With no text, matches images that have embeddings. With text, runs an embedding search. A 64-character hex image id uses that image\'s embedding instead of text. Mix image ids and text with spaced + and - (positive and negative weights); a leading spaced - works for negative-only queries. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count. Both can be used together in either order. Use -1 as k to force full JavaScript scoring while keeping a threshold.',
         example: 'IMG <id> + turtle - beach 0.8',
     },
     {

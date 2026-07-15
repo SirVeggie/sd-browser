@@ -197,6 +197,61 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
+    parseWeightedImgQueryClauses('- girl'),
+    [{ kind: 'text', text: 'girl', weight: -1 }],
+    'parses leading negative-only IMG text clause',
+);
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses('- girl + boy'),
+    [
+        { kind: 'text', text: 'girl', weight: -1 },
+        { kind: 'text', text: 'boy', weight: 1 },
+    ],
+    'parses leading negative with mid-query positive separator',
+);
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses('+ girl'),
+    [{ kind: 'text', text: 'girl', weight: 1 }],
+    'parses leading positive IMG text clause',
+);
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses(`- ${fullImageId}`),
+    [{ kind: 'image', imageId: fullImageId, weight: -1 }],
+    'parses leading negative image id clause',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('- girl 0.8'),
+    { text: '- girl', threshold: 0.8, k: undefined },
+    'strips threshold from leading-negative IMG query before weighted parse',
+);
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses(
+        parseSearchTargetWithOptionalImgLimit('- girl 0.8').text,
+    ),
+    [{ kind: 'text', text: 'girl', weight: -1 }],
+    'parses leading-negative IMG query after threshold strip',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit('- girl -1'),
+    { text: '- girl', threshold: undefined, k: -1 },
+    'strips force-js k from leading-negative IMG query',
+);
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses(
+        parseSearchTargetWithOptionalImgLimit('- girl -1').text,
+    ),
+    [{ kind: 'text', text: 'girl', weight: -1 }],
+    'parses leading-negative IMG query after k strip',
+);
+
+assert.deepEqual(
     parseSearchTargetWithOptionalImgLimit('cat 0.8 100'),
     { text: 'cat', threshold: 0.8, k: 100 },
     'parses IMG query with threshold then k',

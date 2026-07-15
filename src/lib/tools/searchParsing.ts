@@ -274,6 +274,13 @@ export function parseWeightedImgQueryClauses(queryText: string): ParsedWeightedI
     const separatorRegex = /\s([+-])\s/g;
     let weight: 1 | -1 = 1;
     let start = 0;
+
+    const leadingWeightMatch = queryText.match(/^([+-])\s+/);
+    if (leadingWeightMatch) {
+        weight = leadingWeightMatch[1] === '+' ? 1 : -1;
+        start = leadingWeightMatch[0].length;
+    }
+
     let match: RegExpExecArray | null;
 
     const addClause = (end: number) => {

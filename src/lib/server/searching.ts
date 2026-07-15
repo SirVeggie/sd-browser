@@ -513,9 +513,9 @@ export async function resolveImgSearchContext(
             }
 
             const settings = getServerEmbeddingSettings();
-            const isWeightedQuery = weightedClauses.length > 1;
-            const isPureImageIdQuery = weightedClauses.length === 1 && weightedClauses[0].kind === 'image';
             const hasNegativeWeightedClause = weightedClauses.some((clause) => clause.weight < 0);
+            const isWeightedQuery = weightedClauses.length > 1 || hasNegativeWeightedClause;
+            const isPureImageIdQuery = weightedClauses.length === 1 && weightedClauses[0].kind === 'image';
             const explicitThreshold = threshold !== undefined;
             const effectiveThreshold = threshold ?? (
                 isWeightedQuery && hasNegativeWeightedClause
