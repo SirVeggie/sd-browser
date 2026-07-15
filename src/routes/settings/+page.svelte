@@ -28,6 +28,7 @@
     import {
         activeCustomFilterIds,
         customFiltersStore,
+        reorderCustomFiltersByIds,
         type CustomFilter,
     } from "$lib/stores/customFiltersStore";
     import {
@@ -65,10 +66,13 @@
     import { deleteTagFromImages } from "$lib/requests/tagRequests";
     import {
         removeTagDefinition,
+        reorderTagDefinitionsByNames,
         tagsStore,
         upsertTagDefinition,
     } from "$lib/stores/tagsStore";
     import type { TagDefinition } from "$lib/types/tags";
+    import SortableList from "$lib/components/SortableList.svelte";
+    import DragHandle from "$lib/components/DragHandle.svelte";
 
     import {
         closeContextMenu,
@@ -345,6 +349,18 @@
         }));
         activeCustomFilterIds.update((ids) => ids.filter((id) => id !== filter.id));
         notify(`Deleted filter '${filter.name}'`);
+    }
+
+    function onFiltersReorder(event: CustomEvent<{ ids: string[] }>) {
+        customFiltersStore.update((state) =>
+            reorderCustomFiltersByIds(state, event.detail.ids),
+        );
+    }
+
+    function onTagsReorder(event: CustomEvent<{ ids: string[] }>) {
+        tagsStore.update((state) =>
+            reorderTagDefinitionsByNames(state, event.detail.ids),
+        );
     }
 
     async function deleteInstruction() {
@@ -893,7 +909,9 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             showAdd
             clickable
             compact
+            sortable
             on:add={openAddTag}
+            on:reorder={onTagsReorder}
             on:edit={(event) => {
                 const tag = $tagsStore.tags.find((item) => item.name === event.detail);
                 if (tag) openEditTag(tag);
@@ -915,35 +933,49 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         <div class="wrapper" class:isOpen={customFiltersOpen}>
             <div class="inner llm-inner custom-filters-inner">
                 {#if $customFiltersStore.filters.length}
-                    <ul class="filter-list">
-                        {#each $customFiltersStore.filters as filter (filter.id)}
-                            <li class="filter-card">
-                                <div class="filter-header">
-                                    <span class="filter-name">{filter.name}</span>
-                                    <div class="filter-actions">
-                                        <button
-                                            type="button"
-                                            class="filter-edit"
-                                            on:click={() => openEditFilter(filter)}
-                                        >
-                                            edit
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="filter-delete"
-                                            aria-label="Delete filter {filter.name}"
-                                            on:click={() => deleteFilter(filter)}
-                                        >
-                                            ×
-                                        </button>
+                    <div class="filter-list">
+                        <SortableList
+                            ids={$customFiltersStore.filters.map((filter) => filter.id)}
+                            axis="y"
+                            role="list"
+                            on:reorder={onFiltersReorder}
+                            let:id
+                            let:startDrag
+                        >
+                            {@const filter = $customFiltersStore.filters.find((item) => item.id === id)}
+                            {#if filter}
+                                <div class="filter-card">
+                                    <div class="filter-header">
+                                        <DragHandle
+                                            label="Drag to reorder {filter.name}"
+                                            on:pointerdown={startDrag}
+                                        />
+                                        <span class="filter-name">{filter.name}</span>
+                                        <div class="filter-actions">
+                                            <button
+                                                type="button"
+                                                class="filter-edit"
+                                                on:click={() => openEditFilter(filter)}
+                                            >
+                                                edit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="filter-delete"
+                                                aria-label="Delete filter {filter.name}"
+                                                on:click={() => deleteFilter(filter)}
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
                                     </div>
+                                    <code class="filter-expression" title={filter.filter}
+                                        >{filter.filter}</code
+                                    >
                                 </div>
-                                <code class="filter-expression" title={filter.filter}
-                                    >{filter.filter}</code
-                                >
-                            </li>
-                        {/each}
-                    </ul>
+                            {/if}
+                        </SortableList>
+                    </div>
                 {/if}
 
                 <div class="inline-action">
@@ -1290,6 +1322,11 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             display: flex;
             flex-direction: column;
             gap: 0.5em;
+
+            :global(.sortable-list) {
+                gap: 0.5em;
+                width: 100%;
+            }
         }
 
         .filter-card {
@@ -1301,22 +1338,24 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             background: #ffffff06;
             border: 1px solid #aaa2;
             min-width: 0;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .filter-header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 0.5em;
+            gap: 0.35em;
             min-width: 0;
-            padding-left: 0.2em;
         }
 
         .filter-name {
+            flex: 1;
             min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            line-height: 1.4;
         }
 
         .filter-actions {
@@ -1331,12 +1370,18 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             appearance: none;
             border: none;
             background: none;
+            margin: 0;
             padding: 0;
             font: inherit;
             line-height: 1;
             cursor: pointer;
             color: #888;
             transition: color 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 1.5em;
+            box-sizing: border-box;
 
             &:focus {
                 outline: none;
@@ -1350,7 +1395,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
         .filter-edit {
             font-size: 0.85em;
-            padding: 0.15em 0.35em;
+            padding: 0 0.35em;
 
             &:hover {
                 color: rgb(63, 187, 236);
@@ -1358,8 +1403,9 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         }
 
         .filter-delete {
-            font-size: 1.15em;
-            padding: 0.1em 0.25em;
+            font-size: 1.1em;
+            width: 1.5em;
+            padding: 0;
 
             &:hover {
                 color: #e55;

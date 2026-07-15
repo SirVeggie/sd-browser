@@ -70,10 +70,9 @@ export function sortTagNames(names: string[]): string[] {
 
 export function tagsAddableToSelection(registry: TagsRegistryState, tagsByImage: string[][]): string[] {
     if (!tagsByImage.length) return [];
-    const available = registry.tags
+    return registry.tags
         .map((tag) => tag.name)
         .filter((name) => tagsByImage.some((imageTags) => !imageTags.includes(name)));
-    return sortTagNames(available);
 }
 
 export function tagsNotOnImage(registry: TagsRegistryState, imageTags: string[]): string[] {
