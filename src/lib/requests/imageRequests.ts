@@ -135,6 +135,9 @@ export async function subscribeImageStream(
     handlers: StreamHandlers,
     signal: AbortSignal,
 ): Promise<void> {
+    const staleCheckIntervalMs = 5_000;
+    const staleTimeoutMs = 45_000;
+
     let url = '/api/images/stream';
     url = get(page).url.origin + url;
 
@@ -166,10 +169,26 @@ export async function subscribeImageStream(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let lastActivityAt = Date.now();
+    let stale = false;
+    let staleTimer: ReturnType<typeof setInterval> | undefined;
+
+    const touchActivity = () => {
+        lastActivityAt = Date.now();
+    };
+
+    staleTimer = setInterval(() => {
+        if (signal.aborted) return;
+        if (Date.now() - lastActivityAt > staleTimeoutMs) {
+            stale = true;
+            void reader.cancel();
+        }
+    }, staleCheckIntervalMs);
 
     try {
         while (true) {
             if (signal.aborted) return;
+            if (stale) throw new Error('Image stream stale');
 
             let readResult: ReadableStreamReadResult<Uint8Array>;
             try {
@@ -182,6 +201,7 @@ export async function subscribeImageStream(
             const { done, value } = readResult;
             if (done) break;
 
+            touchActivity();
             buffer += decoder.decode(value, { stream: true });
             const parts = buffer.split('\n\n');
             buffer = parts.pop() ?? '';
@@ -206,6 +226,7 @@ export async function subscribeImageStream(
             throw new Error('Image stream closed unexpectedly');
         }
     } finally {
+        clearInterval(staleTimer);
         try {
             await reader.cancel();
         } catch {

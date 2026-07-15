@@ -118,6 +118,9 @@
     let slideTimer: ReturnType<typeof setInterval> | undefined;
     let slideDir: "left" | "right" = "right";
     let streamAbort: AbortController | undefined;
+    let streamRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
+    let pageWasHidden = false;
+    const STREAM_RECOVERY_DEBOUNCE_MS = 300;
     let updateSessionId = 0;
     let searchSessionId = "";
     let lastImgSearchNotifyKey = "";
@@ -488,6 +491,9 @@
         window.addEventListener("keydown", keylistener);
         window.addEventListener("scroll", onScroll, { passive: true });
         window.addEventListener("popstate", handleHistoryPopState);
+        document.addEventListener("visibilitychange", handleVisibilityRecovery);
+        window.addEventListener("pageshow", handlePageShowRecovery);
+        window.addEventListener("online", handleOnlineRecovery);
 
         gridResizeObserver = new ResizeObserver((entries) => {
             const entry = entries[0];
@@ -507,6 +513,7 @@
         return () => {
             removeNavOutsideClick();
             clearTimeout(inputSearchTimer);
+            clearTimeout(streamRecoveryTimer);
             clearTimeout(searchHistoryTimer);
             if (resizeDebounceTimer !== undefined) {
                 clearTimeout(resizeDebounceTimer);
@@ -520,6 +527,9 @@
             window.removeEventListener("keydown", keylistener);
             window.removeEventListener("scroll", onScroll);
             window.removeEventListener("popstate", handleHistoryPopState);
+            document.removeEventListener("visibilitychange", handleVisibilityRecovery);
+            window.removeEventListener("pageshow", handlePageShowRecovery);
+            window.removeEventListener("online", handleOnlineRecovery);
             if (scrollRaf !== undefined) cancelAnimationFrame(scrollRaf);
             if (masonryRaf !== undefined) cancelAnimationFrame(masonryRaf);
             gridResizeObserver?.disconnect();
@@ -921,6 +931,49 @@
         connectImageStream(sessionId);
     }
 
+    function hasActiveSearchStream(): boolean {
+        return searchSessionId !== "" || !searchCountComplete || streamAbort !== undefined;
+    }
+
+    function reconnectImageStream() {
+        if (searchCountComplete && searchSessionId) {
+            streamAbort?.abort();
+            streamAbort = undefined;
+            connectImageStream(updateSessionId, searchSessionId);
+            return;
+        }
+        reconnectSearch();
+    }
+
+    function scheduleStreamRecovery() {
+        if (!hasActiveSearchStream()) return;
+        clearTimeout(streamRecoveryTimer);
+        streamRecoveryTimer = setTimeout(() => {
+            streamRecoveryTimer = undefined;
+            if (!hasActiveSearchStream()) return;
+            reconnectImageStream();
+        }, STREAM_RECOVERY_DEBOUNCE_MS);
+    }
+
+    function handleVisibilityRecovery() {
+        if (document.visibilityState === "hidden") {
+            pageWasHidden = true;
+            return;
+        }
+        if (!pageWasHidden) return;
+        pageWasHidden = false;
+        scheduleStreamRecovery();
+    }
+
+    function handlePageShowRecovery(event: PageTransitionEvent) {
+        if (!event.persisted) return;
+        scheduleStreamRecovery();
+    }
+
+    function handleOnlineRecovery() {
+        scheduleStreamRecovery();
+    }
+
     function syncTemporarySorting(search: string) {
         const result = syncTemporarySorts(sorting, temporarySortState, {
             hasSimilarity: hasSimilaritySearchParts(search),
@@ -1064,10 +1117,7 @@
             }
             setTimeout(() => {
                 if (abort.signal.aborted || expectedSessionId !== updateSessionId) return;
-                const currentSessionId = searchCountComplete
-                    ? searchSessionId
-                    : undefined;
-                connectImageStream(expectedSessionId, currentSessionId);
+                reconnectImageStream();
             }, 2000);
         });
     }

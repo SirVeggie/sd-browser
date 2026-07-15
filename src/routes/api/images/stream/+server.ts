@@ -32,6 +32,7 @@ import type { ServerImage } from '$lib/types/images';
 const encoder = new TextEncoder();
 const staleCheckMs = 10_000;
 const debounceMs = 100;
+const heartbeatIntervalMs = 15_000;
 const streamYieldEvery = 50;
 const streamChunkIntervalMs = 100;
 const streamFirstChunkMaxImages = 200;
@@ -41,9 +42,22 @@ function formatEvent(data: unknown): Uint8Array {
     return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+function formatHeartbeat(): Uint8Array {
+    return encoder.encode(': heartbeat\n\n');
+}
+
 function safeEnqueue(controller: ReadableStreamDefaultController, data: unknown): boolean {
     try {
         controller.enqueue(formatEvent(data));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function safeEnqueueHeartbeat(controller: ReadableStreamDefaultController): boolean {
+    try {
+        controller.enqueue(formatHeartbeat());
         return true;
     } catch {
         return false;
@@ -73,6 +87,7 @@ export async function POST(e) {
     let sessionId: string | undefined;
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     let staleTimer: ReturnType<typeof setInterval> | undefined;
+    let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
     let unsubscribe: (() => void) | undefined;
     let closed = false;
     let updateInFlight = false;
@@ -84,6 +99,7 @@ export async function POST(e) {
         closed = true;
         clearTimeout(debounceTimer);
         clearInterval(staleTimer);
+        clearInterval(heartbeatTimer);
         unsubscribe?.();
         if (sessionId) detachSessionStream(sessionId);
     };
@@ -152,6 +168,11 @@ export async function POST(e) {
             };
 
             e.request.signal.addEventListener('abort', finish);
+
+            heartbeatTimer = setInterval(() => {
+                if (closed) return;
+                if (!safeEnqueueHeartbeat(controller)) cleanup();
+            }, heartbeatIntervalMs);
 
             void (async () => {
                 try {
