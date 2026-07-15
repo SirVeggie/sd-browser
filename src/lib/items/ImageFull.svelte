@@ -74,17 +74,35 @@
   let comfyWorkflowOpenAvailable = false;
   let comfyWorkflowAuthRequired = false;
   let loadingMediaUrl = "";
+  let displayMediaUrl = "";
   let placeholderVisible = true;
   let placeholderLeaving = false;
   let revealTimer: ReturnType<typeof setTimeout> | undefined;
+  let mediaRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  let mediaRetryCount = 0;
 
   const comfyTokenStorageKey = "comfyWorkflowOpenToken";
   const placeholderFadeMs = 90;
+  const maxMediaRetries = 6;
+  const mediaRetryDelayMs = 400;
 
   function clearRevealTimer() {
     if (!revealTimer) return;
     clearTimeout(revealTimer);
     revealTimer = undefined;
+  }
+
+  function clearMediaRetryTimer() {
+    if (!mediaRetryTimer) return;
+    clearTimeout(mediaRetryTimer);
+    mediaRetryTimer = undefined;
+  }
+
+  function buildDisplayMediaUrl(baseUrl: string, retryCount: number): string {
+    if (!baseUrl) return "";
+    if (retryCount === 0) return baseUrl;
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    return `${baseUrl}${separator}retry=${retryCount}`;
   }
 
   function prefersReducedMotion() {
@@ -93,10 +111,29 @@
 
   function resetReveal(nextUrl: string) {
     clearRevealTimer();
+    clearMediaRetryTimer();
+    mediaRetryCount = 0;
     loadingMediaUrl = nextUrl;
+    displayMediaUrl = buildDisplayMediaUrl(nextUrl, 0);
     mediaLoaded = false;
     placeholderVisible = !!nextUrl;
     placeholderLeaving = false;
+  }
+
+  function scheduleMediaRetry(expectedBaseUrl: string) {
+    if (imageUrl !== expectedBaseUrl) return;
+    if (mediaRetryCount >= maxMediaRetries) return;
+
+    clearMediaRetryTimer();
+    mediaRetryCount += 1;
+    placeholderVisible = true;
+    placeholderLeaving = false;
+    mediaLoaded = false;
+    mediaRetryTimer = setTimeout(() => {
+      mediaRetryTimer = undefined;
+      if (imageUrl !== expectedBaseUrl) return;
+      displayMediaUrl = buildDisplayMediaUrl(expectedBaseUrl, mediaRetryCount);
+    }, mediaRetryDelayMs);
   }
 
   function revealLoadedMedia(expectedUrl: string) {
@@ -132,6 +169,12 @@
     };
   }
 
+  function createMediaErrorHandler(expectedUrl: string) {
+    return () => {
+      scheduleMediaRetry(expectedUrl);
+    };
+  }
+
   function createImageReadyHandler(expectedUrl: string) {
     return async (event: Event) => {
       const element = event.currentTarget;
@@ -147,10 +190,10 @@
   }
 
   function elementMatchesUrl(element: HTMLImageElement | HTMLVideoElement): boolean {
-    if (!imageUrl) return false;
+    if (!displayMediaUrl) return false;
     const elSrc = element.currentSrc || element.src;
     try {
-      return new URL(elSrc, location.origin).href === new URL(imageUrl, location.origin).href;
+      return new URL(elSrc, location.origin).href === new URL(displayMediaUrl, location.origin).href;
     } catch {
       return false;
     }
@@ -599,7 +642,10 @@
     selection.removeAllRanges();
   }
 
-  onDestroy(clearRevealTimer);
+  onDestroy(() => {
+    clearRevealTimer();
+    clearMediaRetryTimer();
+  });
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -628,7 +674,7 @@
                 </div>
               </div>
             {/if}
-            {#key imageUrl}
+            {#key displayMediaUrl}
               {#if image.type === "video"}
                 <video
                   bind:this={videoElement}
@@ -636,21 +682,21 @@
                   loop
                   muted
                   preload="metadata"
-                  src={imageUrl}
+                  src={displayMediaUrl}
                   class:hidden={!mediaLoaded}
                   on:canplay={createMediaReadyHandler(imageUrl)}
-                  on:error={createMediaReadyHandler(imageUrl)}
+                  on:error={createMediaErrorHandler(imageUrl)}
                 >
-                  <source src={imageUrl} type="video/mp4" />
+                  <source src={displayMediaUrl} type="video/mp4" />
                 </video>
               {:else}
                 <img
                   bind:this={imgElement}
-                  src={imageUrl}
+                  src={displayMediaUrl}
                   alt={image.id}
                   class:hidden={!mediaLoaded}
                   on:load={createImageReadyHandler(imageUrl)}
-                  on:error={createMediaReadyHandler(imageUrl)}
+                  on:error={createMediaErrorHandler(imageUrl)}
                 />
               {/if}
             {/key}
