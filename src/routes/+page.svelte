@@ -28,6 +28,7 @@
     import { hasSimilaritySearchParts, hasMmrSearchParts, tokenizeSearchClauses } from "$lib/tools/searchParsing";
     import { syncTemporarySorts, type TemporarySortState } from "$lib/tools/similaritySort";
     import { afterUpdate, onMount, tick } from "svelte";
+    import { get } from "svelte/store";
     import { fade } from "svelte/transition";
     import {
         nsfwMode,
@@ -645,6 +646,33 @@
         if (el) {
             el.scrollIntoView({ behavior: "auto", block: "center" });
         }
+    }
+
+    function visibleGalleryIndex(imageId: string): number {
+        const images = get(imageStore);
+        const hiddenIds = quickTagActive ? quickTagHiddenIds : new Set<string>();
+        let index = 0;
+        for (const image of images) {
+            if (!hiddenIds.has(image.id)) {
+                if (image.id === imageId) return index;
+                index++;
+            }
+        }
+        return -1;
+    }
+
+    async function scrollGalleryImageIntoView(imageId: string) {
+        const visibleIndex = visibleGalleryIndex(imageId);
+        if (visibleIndex >= 0 && currentAmount <= visibleIndex) {
+            currentAmount = visibleIndex + 1;
+        }
+        await tick();
+        requestAnimationFrame(() => {
+            document.getElementById(`img_${imageId}`)?.scrollIntoView({
+                behavior: "auto",
+                block: "center",
+            });
+        });
     }
 
     function scrollToTop() {
@@ -1678,11 +1706,9 @@
 
         try {
             await updateImageTags(entry.imageId, entry.originalTags);
-            if (entry.masonryColumn !== undefined) {
-                masonryPlacer.setAssignment(entry.imageId, entry.masonryColumn);
-            }
             quickTagHistory = quickTagHistory.slice(0, -1);
             showQuickTagImage(entry.imageId);
+            await scrollGalleryImageIntoView(entry.imageId);
         } catch (cause) {
             console.error(cause);
             if (isSessionUnavailable(cause)) {
@@ -1748,9 +1774,6 @@
         hideQuickTagImage(img.id);
         quickTagInFlight.add(img.id);
         const position = $imageStore.findIndex((image) => image.id === img.id);
-        const masonryColumn = masonryColumns.find((column) =>
-            column.items.some((image) => image.id === img.id),
-        )?.key;
         let originalTags: string[] | undefined;
 
         try {
@@ -1768,7 +1791,6 @@
                     originalTags,
                     newTags: savedTags,
                     position,
-                    masonryColumn,
                 },
             ];
         } catch (cause) {

@@ -6,8 +6,6 @@ export type QuickTagHistoryEntry = {
     newTags: string[];
     /** Canonical gallery position before this image was hidden. */
     position: number;
-    /** Masonry column before hiding, when masonry was enabled. */
-    masonryColumn?: number;
 };
 
 export const QUICK_TAG_COOLDOWN_MS = 150;

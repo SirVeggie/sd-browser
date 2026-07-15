@@ -66,28 +66,34 @@ export const RESIZE_LAYOUT_DEBOUNCE_MS = 150;
 export const RESIZE_DEBOUNCE_IMAGE_THRESHOLD = 1500;
 export const AUTOLOAD_SUPPRESS_AFTER_LAYOUT_MS = 400;
 
+/** First index where previous and next id sequences diverge. */
+export function computeDirtyIndex(prevIds: string[], nextIds: string[]): number {
+    const minLen = Math.min(prevIds.length, nextIds.length);
+    for (let i = 0; i < minLen; i++) {
+        if (prevIds[i] !== nextIds[i]) {
+            return i;
+        }
+    }
+    return minLen;
+}
+
 export class MasonryPlacer {
     private listKey = "";
     private columnCount = 0;
+    private prevIds: string[] = [];
     private assignments = new Map<string, number>();
     private columnHeights: number[] = [];
-    private needsHeightRebuild = false;
 
     reset(listKey = "") {
         this.listKey = listKey;
         this.columnCount = 0;
+        this.prevIds = [];
         this.assignments.clear();
         this.columnHeights = [];
-        this.needsHeightRebuild = false;
     }
 
     getAssignment(id: string): number | undefined {
         return this.assignments.get(id);
-    }
-
-    setAssignment(id: string, column: number): void {
-        this.assignments.set(id, column);
-        this.needsHeightRebuild = true;
     }
 
     layout(
@@ -100,7 +106,8 @@ export class MasonryPlacer {
         }
 
         const { columnCount, columnWidth, gap } = metrics;
-        const imageIds = new Set(images.map((img) => img.id));
+        const nextIds = images.map((img) => img.id);
+        const imageIds = new Set(nextIds);
 
         for (const id of [...this.assignments.keys()]) {
             if (!imageIds.has(id)) {
@@ -108,17 +115,20 @@ export class MasonryPlacer {
             }
         }
 
-        if (columnCount !== this.columnCount || this.assignments.size === 0) {
+        const dirtyIndex = computeDirtyIndex(this.prevIds, nextIds);
+        const needsFullReflow =
+            columnCount !== this.columnCount ||
+            this.assignments.size === 0 ||
+            dirtyIndex === 0;
+
+        if (needsFullReflow) {
             this.reflow(images, metrics);
-        } else {
-            if (this.needsHeightRebuild) {
-                this.rebuildColumnHeights(images, columnWidth, gap);
-                this.needsHeightRebuild = false;
-            }
-            this.appendNew(images, columnWidth, gap);
+        } else if (dirtyIndex < images.length) {
+            this.reflowFrom(images, dirtyIndex, metrics);
         }
 
         this.columnCount = columnCount;
+        this.prevIds = nextIds;
         return this.buildColumns(images, columnCount);
     }
 
@@ -126,7 +136,6 @@ export class MasonryPlacer {
         const { columnCount, columnWidth, gap } = metrics;
         this.assignments.clear();
         this.columnHeights = Array.from({ length: columnCount }, () => 0);
-        this.needsHeightRebuild = false;
 
         let placementIndex = 0;
         for (const img of images) {
@@ -137,23 +146,24 @@ export class MasonryPlacer {
         }
     }
 
-    private appendNew(
+    private reflowFrom(
         images: ClientImage[],
-        columnWidth: number,
-        gap: number,
+        dirtyIndex: number,
+        metrics: MasonryMetrics,
     ) {
-        if (this.columnHeights.length === 0) {
-            this.columnHeights = Array.from(
-                { length: this.columnCount },
-                () => 0,
-            );
+        const { columnCount, columnWidth, gap } = metrics;
+
+        for (let i = dirtyIndex; i < images.length; i++) {
+            this.assignments.delete(images[i].id);
         }
 
-        let placementIndex = this.assignments.size;
-        for (const img of images) {
-            if (this.assignments.has(img.id)) continue;
+        this.rebuildColumnHeights(images, columnWidth, gap);
+
+        let placementIndex = dirtyIndex;
+        for (let i = dirtyIndex; i < images.length; i++) {
+            const img = images[i];
             const forcedColumn =
-                placementIndex < this.columnCount ? placementIndex : undefined;
+                placementIndex < columnCount ? placementIndex : undefined;
             this.place(img, columnWidth, gap, forcedColumn);
             placementIndex++;
         }
