@@ -15,53 +15,29 @@ import {
     parseWeightedImgQueryClauses,
     parseSearchTargetWithOptionalImgLimit,
 } from '../src/lib/tools/searchParsing.ts';
+import {
+    abbreviateImageId,
+    getSearchDisplay,
+    inflateSearchDisplay,
+    shouldCollapseExpandedSearch,
+} from '../src/lib/tools/searchDisplay.ts';
 
 assert.deepEqual(
     parseSimilarSearchTarget('abc123'),
-    { imageId: 'abc123', threshold: undefined, mode: 'prompt' },
+    { imageId: 'abc123', threshold: undefined },
     'parses prompt similar id',
 );
 
 assert.deepEqual(
     parseSimilarSearchTarget('abc123 0.6'),
-    { imageId: 'abc123', threshold: 0.6, mode: 'prompt' },
+    { imageId: 'abc123', threshold: 0.6 },
     'parses prompt similar id with threshold',
 );
 
 assert.deepEqual(
-    parseSimilarSearchTarget('img abc123'),
-    { imageId: 'abc123', threshold: undefined, mode: 'embedding' },
-    'parses image similar id',
-);
-
-assert.deepEqual(
-    parseSimilarSearchTarget('img abc123 0.8'),
-    { imageId: 'abc123', threshold: 0.8, mode: 'embedding' },
-    'parses image similar id with threshold',
-);
-
-assert.deepEqual(
-    parseSimilarSearchTarget('SIMILAR img abc123 0.8'),
-    { imageId: 'abc123', threshold: 0.8, mode: 'embedding' },
-    'parses full image similar command with threshold',
-);
-
-assert.deepEqual(
-    parseSimilarSearchTarget('NOT SIMILAR img abc123'),
-    { imageId: 'abc123', threshold: undefined, mode: 'embedding' },
-    'preserves image mode when stripping a negated similar prefix',
-);
-
-assert.deepEqual(
-    parseSimilarSearchTarget('IMG xyz 0.12'),
-    { imageId: 'xyz', threshold: 0.12, mode: 'embedding' },
-    'parses image similar case-insensitively',
-);
-
-assert.deepEqual(
-    parseSimilarSearchTarget('img id-with-dashes'),
-    { imageId: 'id-with-dashes', threshold: undefined, mode: 'embedding' },
-    'parses image similar id containing dashes',
+    parseSimilarSearchTarget('SIMILAR abc123 0.8'),
+    { imageId: 'abc123', threshold: 0.8 },
+    'parses full prompt similar command with threshold',
 );
 
 assert.deepEqual(
@@ -70,10 +46,29 @@ assert.deepEqual(
     'collects positive similar source ids',
 );
 
+const fullImageId = 'a'.repeat(64);
+const secondImageId = 'b'.repeat(64);
+
 assert.deepEqual(
-    getPositiveSimilarSourceIds('NOT SIMILAR abc AND SIMILAR img def'),
-    ['def'],
-    'ignores negated similar clauses',
+    getPositiveSimilarSourceIds(`NOT SIMILAR abc AND IMG ${fullImageId}`),
+    [fullImageId],
+    'collects positive IMG hex source ids and ignores negated similar clauses',
+);
+
+assert.deepEqual(
+    getPositiveSimilarSourceIds(`IMG ${fullImageId} + ${secondImageId} - beach`),
+    [fullImageId, secondImageId],
+    'collects multiple positive IMG hex source ids from weighted clauses',
+);
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses(`${fullImageId} + turtle - ${secondImageId}`),
+    [
+        { kind: 'image', imageId: fullImageId, weight: 1 },
+        { kind: 'text', text: 'turtle', weight: 1 },
+        { kind: 'image', imageId: secondImageId, weight: -1 },
+    ],
+    'parses weighted IMG clauses with image ids and text',
 );
 
 assert.deepEqual(
@@ -181,9 +176,9 @@ assert.equal(unescapeSearchLiterals('red \\NOT girl'), 'red NOT girl', 'unescape
 assert.deepEqual(
     parseWeightedImgQueryClauses('cat - dog + watercolor'),
     [
-        { text: 'cat', weight: 1 },
-        { text: 'dog', weight: -1 },
-        { text: 'watercolor', weight: 1 },
+        { kind: 'text', text: 'cat', weight: 1 },
+        { kind: 'text', text: 'dog', weight: -1 },
+        { kind: 'text', text: 'watercolor', weight: 1 },
     ],
     'parses weighted IMG query clauses',
 );
@@ -191,8 +186,8 @@ assert.deepEqual(
 assert.deepEqual(
     parseWeightedImgQueryClauses('id-with-dashes + sci-fi'),
     [
-        { text: 'id-with-dashes', weight: 1 },
-        { text: 'sci-fi', weight: 1 },
+        { kind: 'text', text: 'id-with-dashes', weight: 1 },
+        { kind: 'text', text: 'sci-fi', weight: 1 },
     ],
     'requires spaced separators for weighted IMG clauses',
 );
@@ -239,10 +234,36 @@ assert.deepEqual(
     'parses IMG query with force-js k only',
 );
 
-const fullImageId = 'a'.repeat(64);
-const implicitSimilarSearch = `landscape SIMILAR img ${fullImageId}`;
-const similarClauses = tokenizeSearchClauses(implicitSimilarSearch);
-assert.equal(similarClauses.length, 2, 'tokenizes implicit SIMILAR clause boundaries');
-assert.match(similarClauses[1]?.text ?? '', /^SIMILAR img /i, 'keeps SIMILAR clause body after implicit split');
+const implicitImgSearch = `landscape IMG ${fullImageId}`;
+const imgClauses = tokenizeSearchClauses(implicitImgSearch);
+assert.equal(imgClauses.length, 2, 'tokenizes implicit IMG clause boundaries');
+assert.match(imgClauses[1]?.text ?? '', /^IMG /i, 'keeps IMG clause body after implicit split');
+
+const similarDisplay = getSearchDisplay(`SIMILAR ${fullImageId} 0.8`);
+assert.equal(
+    similarDisplay.text,
+    `SIMILAR ${abbreviateImageId(fullImageId)} 0.8`,
+    'abbreviates SIMILAR prompt-mode hex ids',
+);
+
+const weightedImgDisplay = getSearchDisplay(`IMG ${fullImageId} + ${secondImageId} - beach`);
+assert.equal(
+    weightedImgDisplay.text,
+    `IMG ${abbreviateImageId(fullImageId)} + ${abbreviateImageId(secondImageId)} - beach`,
+    'abbreviates all hex ids inside IMG clauses',
+);
+
+assert.equal(
+    inflateSearchDisplay(weightedImgDisplay.text, `IMG ${fullImageId} + ${secondImageId} - beach`),
+    `IMG ${fullImageId} + ${secondImageId} - beach`,
+    'inflates abbreviated IMG hex ids on edit',
+);
+
+assert.equal(shouldCollapseExpandedSearch(`IMG ${fullImageId}`), true, 'collapses intact IMG hex ids');
+assert.equal(
+    shouldCollapseExpandedSearch(`IMG ${fullImageId.slice(0, 60)}`),
+    false,
+    'keeps expanded display while an IMG hex id is partially edited',
+);
 
 console.log('searching.test.ts: all tests passed');

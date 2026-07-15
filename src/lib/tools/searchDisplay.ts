@@ -2,9 +2,18 @@ import { tokenizeSearchClauses } from './searchParsing';
 
 const IMAGE_ID_LENGTH = 64;
 const ABBREVIATED_ID_LENGTH = 9;
-const similarFullIdInClauseRegex = /((?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?)([0-9a-f]{64})(?=\s|$)/i;
-const similarAbbreviatedIdRegex = /((?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?)([0-9a-f]{6}\.\.\.)(?=\s|$)/gi;
-const similarAnyIdInClauseRegex = /(?:NOT\s+)?(?:SIMILAR|SM)\s+(?:img\s+)?(\S+)/i;
+const FULL_HEX_ID_PATTERN = '[0-9a-f]{64}';
+
+const similarClauseRegex = /^(?:NOT\s+)?(?:SIMILAR|SM)\s+/i;
+const imgClauseRegex = /^(?:NOT\s+)?IMG\s+/i;
+const similarFullIdInClauseRegex = new RegExp(
+    `((?:NOT\\s+)?(?:SIMILAR|SM)\\s+)(${FULL_HEX_ID_PATTERN})(?=\\s|$)`,
+    'i',
+);
+const similarAnyIdInClauseRegex = /(?:NOT\s+)?(?:SIMILAR|SM)\s+(\S+)/i;
+const fullHexIdTokenRegex = new RegExp(`(?<![0-9a-f])(${FULL_HEX_ID_PATTERN})(?![0-9a-f])`, 'gi');
+const abbreviatedIdRegex = /[0-9a-f]{6}\.\.\./gi;
+const partialHexIdRegex = /^[0-9a-f]{7,63}$/i;
 
 export type AbbreviatedIdRange = {
     start: number;
@@ -13,8 +22,53 @@ export type AbbreviatedIdRange = {
     canonicalEnd: number;
 };
 
+type ClauseIdMatch = {
+    start: number;
+    id: string;
+};
+
 export function abbreviateImageId(id: string): string {
     return `${id.slice(0, 6)}...`;
+}
+
+function findAbbreviatableIdsInClause(clauseText: string): ClauseIdMatch[] {
+    if (similarClauseRegex.test(clauseText)) {
+        const match = clauseText.match(similarFullIdInClauseRegex);
+        if (!match || match.index === undefined)
+            return [];
+
+        const header = match[1] ?? '';
+        const id = match[2] ?? '';
+        return [{ start: match.index + header.length, id }];
+    }
+
+    if (!imgClauseRegex.test(clauseText))
+        return [];
+
+    const headerMatch = clauseText.match(imgClauseRegex);
+    const bodyStart = headerMatch?.[0].length ?? 0;
+    const body = clauseText.slice(bodyStart);
+    const ids: ClauseIdMatch[] = [];
+
+    fullHexIdTokenRegex.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = fullHexIdTokenRegex.exec(body)) !== null) {
+        const id = match[1] ?? '';
+        if (!id)
+            continue;
+        ids.push({ start: bodyStart + match.index, id });
+    }
+
+    return ids;
+}
+
+function collectCanonicalIds(canonical: string): string[] {
+    const ids: string[] = [];
+    for (const clause of tokenizeSearchClauses(canonical)) {
+        for (const { id } of findAbbreviatableIdsInClause(clause.text))
+            ids.push(id);
+    }
+    return ids;
 }
 
 export function getSearchDisplay(canonical: string): {
@@ -26,24 +80,20 @@ export function getSearchDisplay(canonical: string): {
     const ranges: AbbreviatedIdRange[] = [];
 
     for (const clause of tokenizeSearchClauses(canonical)) {
-        const match = clause.text.match(similarFullIdInClauseRegex);
-        if (!match || match.index === undefined)
-            continue;
+        for (const { start, id } of findAbbreviatableIdsInClause(clause.text)) {
+            const idStart = clause.start + start;
 
-        const header = match[1] ?? '';
-        const id = match[2] ?? '';
-        const idStart = clause.start + match.index + header.length;
-
-        text += canonical.slice(lastEnd, idStart);
-        const displayStart = text.length;
-        text += abbreviateImageId(id);
-        ranges.push({
-            start: displayStart,
-            end: displayStart + ABBREVIATED_ID_LENGTH,
-            canonicalStart: idStart,
-            canonicalEnd: idStart + IMAGE_ID_LENGTH,
-        });
-        lastEnd = idStart + IMAGE_ID_LENGTH;
+            text += canonical.slice(lastEnd, idStart);
+            const displayStart = text.length;
+            text += abbreviateImageId(id);
+            ranges.push({
+                start: displayStart,
+                end: displayStart + ABBREVIATED_ID_LENGTH,
+                canonicalStart: idStart,
+                canonicalEnd: idStart + IMAGE_ID_LENGTH,
+            });
+            lastEnd = idStart + IMAGE_ID_LENGTH;
+        }
     }
 
     return {
@@ -53,17 +103,17 @@ export function getSearchDisplay(canonical: string): {
 }
 
 export function inflateSearchDisplay(display: string, previousCanonical: string): string {
-    const ids = tokenizeSearchClauses(previousCanonical)
-        .map((clause) => clause.text.match(similarFullIdInClauseRegex)?.[2])
-        .filter((id): id is string => Boolean(id));
-
+    const ids = collectCanonicalIds(previousCanonical);
     let idIndex = 0;
-    return display.replace(similarAbbreviatedIdRegex, (match, header, abbreviated) => {
-        const prefix = abbreviated.slice(0, 6).toLowerCase();
+
+    return display.replace(abbreviatedIdRegex, (match) => {
+        const prefix = match.slice(0, 6).toLowerCase();
         const id = ids.slice(idIndex).find((candidate) => candidate.slice(0, 6).toLowerCase() === prefix);
-        if (id)
-            idIndex = ids.indexOf(id, idIndex) + 1;
-        return id ? `${header}${id}` : match;
+        if (!id)
+            return match;
+
+        idIndex = ids.indexOf(id, idIndex) + 1;
+        return id;
     });
 }
 
@@ -115,10 +165,24 @@ function mapDisplayOffsetToCanonical(range: AbbreviatedIdRange, offset: number):
 
 export function shouldCollapseExpandedSearch(canonical: string): boolean {
     for (const clause of tokenizeSearchClauses(canonical)) {
-        const match = clause.text.match(similarAnyIdInClauseRegex);
-        const id = match?.[1];
-        if (id && id.length !== IMAGE_ID_LENGTH)
-            return false;
+        if (similarClauseRegex.test(clause.text)) {
+            const match = clause.text.match(similarAnyIdInClauseRegex);
+            const id = match?.[1];
+            if (id && id.length !== IMAGE_ID_LENGTH)
+                return false;
+            continue;
+        }
+
+        if (!imgClauseRegex.test(clause.text))
+            continue;
+
+        const headerMatch = clause.text.match(imgClauseRegex);
+        const body = clause.text.slice(headerMatch?.[0].length ?? 0);
+        for (const token of body.split(/\s+/)) {
+            if (partialHexIdRegex.test(token))
+                return false;
+        }
     }
+
     return true;
 }

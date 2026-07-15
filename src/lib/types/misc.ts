@@ -150,14 +150,14 @@ export const searchKeywordHelp = [
     {
         keyword: 'SIMILAR|SM',
         summary: 'Finds images similar to another image.',
-        details: 'Use an image id after the keyword. Add IMG after SIMILAR to compare image embeddings instead of prompt text. A trailing number can override the similarity threshold.',
+        details: 'Use an image id after the keyword to compare prompt text. A trailing number can override the similarity threshold.',
         example: 'SM abc123 0.6',
     },
     {
         keyword: 'IMG',
         summary: 'Uses image embeddings.',
-        details: 'With no text, matches images that have embeddings. With text, runs an embedding search. Prefix the text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count. Both can be used together in either order. Use -1 as k to force full JavaScript scoring while keeping a threshold.',
-        example: 'IMG red dress 0.8 100',
+        details: 'With no text, matches images that have embeddings. With text, runs an embedding search. A 64-character hex image id uses that image\'s embedding instead of text. Mix image ids and text with spaced + and - (positive and negative weights). Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count. Both can be used together in either order. Use -1 as k to force full JavaScript scoring while keeping a threshold.',
+        example: 'IMG <id> + turtle - beach 0.8',
     },
     {
         keyword: 'ID',
@@ -192,7 +192,7 @@ export const searchKeywordHelp = [
     {
         keyword: 'IMGSIM',
         summary: 'Fills remaining results by image similarity.',
-        details: 'Use a result count. It expands from positive IMG or SIMILAR IMG matches using image embeddings.',
+        details: 'Use a result count. It expands from positive IMG matches using image embeddings.',
         example: 'IMG red dress AND IMGSIM 200',
     },
 ] satisfies readonly SearchKeywordHelp[];

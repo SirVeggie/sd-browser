@@ -15,7 +15,7 @@ export type EmbeddingSettings = {
     searchTemplate: string;
     /** Use sqlite-vec KNN for IMG searches when its result limit is sufficient. */
     useOptimizedEmbeddingQuery: boolean;
-    /** Default similarity cutoff for SIMILAR img searches (image-to-image). */
+    /** Default similarity cutoff for IMG searches with a 64-char image id (image-to-image). */
     imageSimilarityThreshold: number;
 };
 

@@ -26,10 +26,13 @@ export type SearchClause = {
     end: number;
 };
 
-export type ParsedWeightedImgQueryClause = {
-    text: string;
-    weight: 1 | -1;
-};
+export type ParsedWeightedImgQueryClause =
+    | { kind: 'text'; text: string; weight: 1 | -1 }
+    | { kind: 'image'; imageId: string; weight: 1 | -1 };
+
+export function isImageEmbeddingId(token: string): boolean {
+    return /^[0-9a-f]{64}$/i.test(token);
+}
 
 function expandClauseKeywordTokens(): string[] {
     const tokens = new Set<string>();
@@ -261,8 +264,15 @@ export function parseWeightedImgQueryClauses(queryText: string): ParsedWeightedI
 
     const addClause = (end: number) => {
         const text = queryText.slice(start, end).trim();
-        if (text)
-            clauses.push({ text, weight });
+        if (!text)
+            return;
+
+        if (isImageEmbeddingId(text)) {
+            clauses.push({ kind: 'image', imageId: text, weight });
+            return;
+        }
+
+        clauses.push({ kind: 'text', text, weight });
     };
 
     while ((match = separatorRegex.exec(queryText)) !== null) {
@@ -312,6 +322,10 @@ export const IMGSIM_MAX_RESULT_COUNT = 50_000;
 
 export function extractSimilarSearchTarget(rawOrPart: string): string {
     return rawOrPart.trim().replace(similarPrefixRegex, '');
+}
+
+export function extractImgSearchTarget(rawOrPart: string): string {
+    return rawOrPart.trim().replace(imgPrefixRegex, '');
 }
 
 export function isSimilarSearchPart(part: string): boolean {
@@ -444,20 +458,43 @@ export function isNegatedSearchPart(part: string): boolean {
     return notPrefixRegex.test(part.trim());
 }
 
+function collectPositiveImgSourceIds(part: string): string[] {
+    if (!isImgSearchPart(part) || isNegatedSearchPart(part))
+        return [];
+
+    let raw = extractImgSearchTarget(part).replace(/^~\s*/, '');
+    const { text: queryText } = parseSearchTargetWithOptionalImgLimit(raw);
+    if (!queryText)
+        return [];
+
+    const ids: string[] = [];
+    for (const clause of parseWeightedImgQueryClauses(queryText)) {
+        if (clause.kind === 'image' && clause.weight > 0)
+            ids.push(clause.imageId);
+    }
+    return ids;
+}
+
 export function getPositiveSimilarSourceIds(search: string): string[] {
     const ids: string[] = [];
     const seen = new Set<string>();
 
-    for (const part of splitSearchParts(search)) {
-        if (!isSimilarSearchPart(part) || isNegatedSearchPart(part))
-            continue;
-
-        const { imageId } = parseSimilarSearchTarget(part);
+    const addId = (imageId: string) => {
         if (!imageId || seen.has(imageId))
-            continue;
-
+            return;
         seen.add(imageId);
         ids.push(imageId);
+    };
+
+    for (const part of splitSearchParts(search)) {
+        if (isSimilarSearchPart(part) && !isNegatedSearchPart(part)) {
+            const { imageId } = parseSimilarSearchTarget(part);
+            addId(imageId);
+            continue;
+        }
+
+        for (const imageId of collectPositiveImgSourceIds(part))
+            addId(imageId);
     }
 
     return ids;
@@ -580,15 +617,8 @@ export function parseSearchTargetWithOptionalThreshold(raw: string): { text: str
 export function parseSimilarSearchTarget(raw: string): {
     imageId: string;
     threshold?: number;
-    mode: 'prompt' | 'embedding';
 } {
     const trimmed = extractSimilarSearchTarget(raw).trim();
-    if (/^img(\s|$)/i.test(trimmed)) {
-        const withoutImg = trimmed.replace(/^img\s+/i, '').trim();
-        const { text, threshold } = parseSearchTargetWithOptionalThreshold(withoutImg);
-        return { imageId: text, threshold, mode: 'embedding' };
-    }
-
     const { text, threshold } = parseSearchTargetWithOptionalThreshold(trimmed);
-    return { imageId: text, threshold, mode: 'prompt' };
+    return { imageId: text, threshold };
 }

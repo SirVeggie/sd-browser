@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multi-image similarity search — mode catalog</title>
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --ink: #1c1916;
+      --muted: #5c554c;
+      --line: #d9d0c4;
+      --card: #fffdf9;
+      --accent: #2a5f4f;
+      --accent-soft: #e4efe9;
+      --warn: #8a4b2a;
+      --warn-soft: #f5ebe4;
+      --fast: #2f5d8a;
+      --fast-soft: #e6eef6;
+      --slow: #6b4f8a;
+      --slow-soft: #eee8f4;
+      --ship: #3d5a1f;
+      --ship-soft: #eaf0df;
+      --shadow: 0 1px 0 rgba(28, 25, 22, 0.04), 0 12px 32px rgba(28, 25, 22, 0.06);
+      --radius: 14px;
+      --font: "Segoe UI", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --mono: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #ebe4d8 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #dfe8e3 0%, transparent 50%),
+        var(--bg);
+      font-family: var(--font);
+      line-height: 1.55;
+      font-size: 17px;
+    }
+
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+
+    header.hero {
+      padding: 0.5rem 0 1.75rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 1.75rem;
+    }
+
+    .eyebrow {
+      font-family: system-ui, sans-serif;
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 650;
+      margin: 0 0 0.6rem;
+    }
+
+    h1 {
+      font-size: clamp(1.9rem, 4vw, 2.6rem);
+      line-height: 1.15;
+      margin: 0 0 0.75rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .lede {
+      max-width: 42rem;
+      color: var(--muted);
+      margin: 0;
+      font-size: 1.05rem;
+    }
+
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 1.5rem 0 0;
+    }
+
+    nav.toc a {
+      font-family: system-ui, sans-serif;
+      font-size: 0.82rem;
+      text-decoration: none;
+      color: var(--ink);
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+    }
+
+    nav.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+    section { margin: 2.25rem 0; }
+    h2 {
+      font-size: 1.35rem;
+      margin: 0 0 0.85rem;
+      letter-spacing: -0.015em;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 0 0 0.4rem;
+      letter-spacing: -0.01em;
+    }
+
+    .baseline {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      box-shadow: var(--shadow);
+    }
+
+    .baseline p { margin: 0.55rem 0; color: var(--muted); }
+    .baseline p:first-child { margin-top: 0; }
+    .baseline strong { color: var(--ink); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.86em;
+      background: #efe9df;
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin: 1rem 0 0;
+      font-family: system-ui, sans-serif;
+      font-size: 0.8rem;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+    }
+    .pill.fast { background: var(--fast-soft); color: var(--fast); }
+    .pill.slow { background: var(--slow-soft); color: var(--slow); }
+    .pill.ship { background: var(--ship-soft); color: var(--ship); }
+    .pill.warn { background: var(--warn-soft); color: var(--warn); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 0.9rem;
+    }
+
+    article.mode {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1rem 1.05rem 1.05rem;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      min-height: 100%;
+    }
+
+    article.mode.ship-hint {
+      border-color: #b7c89a;
+      background: linear-gradient(180deg, #fcfdf8 0%, var(--card) 40%);
+    }
+
+    .mode-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .letter {
+      font-family: system-ui, sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .tags { display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: flex-end; }
+
+    .intent {
+      margin: 0;
+      color: var(--ink);
+      font-size: 0.98rem;
+    }
+
+    .meta {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .meta span.label {
+      display: inline-block;
+      min-width: 4.2rem;
+      color: #7a7268;
+      font-weight: 600;
+    }
+
+    .fails {
+      margin: 0;
+      padding: 0.55rem 0.65rem;
+      background: var(--warn-soft);
+      border-radius: 8px;
+      font-size: 0.88rem;
+      color: var(--warn);
+    }
+
+    .compare {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: system-ui, sans-serif;
+      font-size: 0.88rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.7rem 0.85rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      background: #f0ebe3;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #faf7f2; }
+
+    .decision {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+    }
+    .decision .box {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+    }
+    .decision .box h3 { font-size: 0.95rem; margin-bottom: 0.35rem; }
+    .decision .box p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+    .decision .q {
+      font-family: system-ui, sans-serif;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      margin: 0 0 0.35rem;
+      font-weight: 700;
+    }
+
+    .shortlist {
+      display: grid;
+      gap: 0.55rem;
+    }
+    .shortlist .item {
+      display: grid;
+      grid-template-columns: 2.2rem 1fr;
+      gap: 0.75rem;
+      align-items: start;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.8rem 0.95rem;
+    }
+    .shortlist .n {
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: grid;
+      place-items: center;
+      font-family: system-ui, sans-serif;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+    .shortlist strong { display: block; margin-bottom: 0.15rem; }
+    .shortlist span { color: var(--muted); font-size: 0.92rem; }
+
+    .tips {
+      display: grid;
+      gap: 0.5rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .tips li {
+      background: var(--card);
+      border-left: 3px solid var(--accent);
+      padding: 0.65rem 0.9rem;
+      border-radius: 0 10px 10px 0;
+      color: var(--muted);
+    }
+    .tips li strong { color: var(--ink); }
+
+    footer.note {
+      margin-top: 2.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 640px) {
+      body { font-size: 16px; }
+      .wrap { padding-top: 1.5rem; }
+    }
+
+    @media print {
+      body { background: white; }
+      article.mode, .baseline, .compare, .decision .box, .shortlist .item {
+        box-shadow: none;
+      }
+      nav.toc { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <p class="eyebrow">sd-browser · design catalog</p>
+      <h1>Multi-image similarity search</h1>
+      <p class="lede">
+        Ways to turn a selection of images into a search — beyond averaging embeddings —
+        and what each mode tends to return.
+      </p>
+      <nav class="toc" aria-label="Sections">
+        <a href="#baseline">Baseline</a>
+        <a href="#consensus">Consensus</a>
+        <a href="#coverage">Coverage</a>
+        <a href="#contrast">Contrast</a>
+        <a href="#novelty">Set / novelty</a>
+        <a href="#compare">Compare</a>
+        <a href="#when">When to use what</a>
+        <a href="#shortlist">Shortlist</a>
+      </nav>
+    </header>
+
+    <section id="baseline">
+      <h2>Baseline</h2>
+      <div class="baseline">
+        <p>
+          Today: one reference via <code>IMG &lt;64-char-id&gt;</code> → cosine KNN.
+          Multiple <code>SIMILAR</code> clauses merge by <strong>min-score intersection</strong>.
+          Weighted text <code>IMG</code> already does <strong>geometric mean of positives − max of negatives</strong>.
+          Selection exists; no multi-reference similar action yet.
+        </p>
+        <p>
+          <strong>Centroid / average</strong> (the obvious first mode): mean of reference vectors,
+          L2-renormalize, then KNN. Soft consensus — shared subject/palette/composition.
+          Weak refs get washed out; conflicting styles collapse into a muddy middle.
+        </p>
+        <div class="legend">
+          <span class="pill fast">Fast KNN — single query vector</span>
+          <span class="pill slow">Score-space — scan / merge neighborhoods</span>
+          <span class="pill ship">Good shortlist candidate</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="consensus">
+      <h2>1. Consensus — shared traits</h2>
+      <div class="grid">
+        <article class="mode ship-hint">
+          <div class="mode-top">
+            <span class="letter">A</span>
+            <div class="tags">
+              <span class="pill ship">shortlist</span>
+              <span class="pill fast">fast KNN</span>
+            </div>
+          </div>
+          <h3>Centroid (average)</h3>
+          <p class="intent">Images near the common center of the selection.</p>
+          <p class="meta"><span class="label">Query</span> mean of vectors, renormalize</p>
+          <p class="meta"><span class="label">Feels like</span> soft consensus / blend</p>
+          <p class="fails">Fails when refs disagree hard (portrait + landscape) — bland midpoints that match neither.</p>
+        </article>
+
+        <article class="mode ship-hint">
+          <div class="mode-top">
+            <span class="letter">B</span>
+            <div class="tags">
+              <span class="pill ship">shortlist</span>
+              <span class="pill slow">score-space</span>
+            </div>
+          </div>
+          <h3>Soft intersection</h3>
+          <p class="intent">Must resemble <em>every</em> reference at least somewhat.</p>
+          <p class="meta"><span class="label">Score</span> min(sim<sub>i</sub>) or geometric mean — same idea as weighted IMG positives</p>
+          <p class="meta"><span class="label">Feels like</span> “could sit next to all of these,” not “looks like the average”</p>
+          <p class="fails">Stricter than centroid; empties out faster when the set is mixed.</p>
+        </article>
+
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">C</span>
+            <div class="tags"><span class="pill slow">score-space</span></div>
+          </div>
+          <h3>Hard intersection</h3>
+          <p class="intent">Pass a threshold against each ref; rank by min or mean.</p>
+          <p class="meta"><span class="label">Feels like</span> tight theme clusters, or nothing</p>
+          <p class="meta"><span class="label">Note</span> closest to today’s multi-SIMILAR merge</p>
+        </article>
+
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">D</span>
+            <div class="tags"><span class="pill fast">fast KNN</span></div>
+          </div>
+          <h3>Median / geometric median</h3>
+          <p class="intent">Like centroid, but one odd pick doesn’t drag the query as hard.</p>
+          <p class="meta"><span class="label">Best when</span> set is mostly cohesive with 1–2 outliers</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="coverage">
+      <h2>2. Coverage — “any of these”</h2>
+      <div class="grid">
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">E</span>
+            <div class="tags"><span class="pill slow">score-space</span></div>
+          </div>
+          <h3>Soft union (max)</h3>
+          <p class="intent">Neighbors of <em>any</em> reference — N similar searches merged by best score.</p>
+          <p class="meta"><span class="label">Feels like</span> broad, multi-modal gallery</p>
+          <p class="fails">Strongest ref often dominates the ranking unless you diversify.</p>
+        </article>
+
+        <article class="mode ship-hint">
+          <div class="mode-top">
+            <span class="letter">F</span>
+            <div class="tags">
+              <span class="pill ship">shortlist</span>
+              <span class="pill slow">score-space</span>
+            </div>
+          </div>
+          <h3>Union + MMR</h3>
+          <p class="intent">Same pool as union, then MMR so results don’t collapse onto one ref.</p>
+          <p class="meta"><span class="label">Feels like</span> moodboard expansion — coverage across modes</p>
+          <p class="meta"><span class="label">Reuse</span> existing MMR patterns</p>
+        </article>
+
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">G</span>
+            <div class="tags"><span class="pill slow">score-space</span></div>
+          </div>
+          <h3>k-medoids / exemplar cover</h3>
+          <p class="intent">One pile of neighbors per exemplar, interleaved.</p>
+          <p class="meta"><span class="label">Feels like</span> clearer multi-theme than raw max-score when refs are far apart</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="contrast">
+      <h2>3. Contrast, difference, direction</h2>
+      <div class="grid">
+        <article class="mode ship-hint">
+          <div class="mode-top">
+            <span class="letter">H</span>
+            <div class="tags">
+              <span class="pill ship">shortlist</span>
+              <span class="pill warn">needs +/−</span>
+            </div>
+          </div>
+          <h3>Positive − negative</h3>
+          <p class="intent">“Like these, but not like those.”</p>
+          <p class="meta"><span class="label">Score / query</span> reuse weighted IMG formula, or normalize(mean(pos) − λ·mean(neg))</p>
+          <p class="meta"><span class="label">UX</span> include/exclude groups, or last-clicked as negative</p>
+          <p class="fails">Classic win: keep subject, drop style — or the reverse.</p>
+        </article>
+
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">I</span>
+            <div class="tags"><span class="pill fast">fast KNN</span></div>
+          </div>
+          <h3>Difference / residual</h3>
+          <p class="intent">Images along the <em>axis of change</em> between refs, not “similar to A”.</p>
+          <p class="meta"><span class="label">Query</span> normalize(A − B)</p>
+          <p class="fails">Noisy as a pure KNN query; often better as a re-ranker on a broader pool.</p>
+        </article>
+
+        <article class="mode ship-hint">
+          <div class="mode-top">
+            <span class="letter">J</span>
+            <div class="tags">
+              <span class="pill ship">shortlist</span>
+              <span class="pill fast">fast KNN</span>
+            </div>
+          </div>
+          <h3>Extrapolation</h3>
+          <p class="intent">More of whatever distinguishes A from B.</p>
+          <p class="meta"><span class="label">Query</span> normalize(A + α(A − B))</p>
+          <p class="meta"><span class="label">Feels like</span> generative / exaggerated retrieval</p>
+          <p class="fails">Surprising at high α; unstable when A ≈ B.</p>
+        </article>
+
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">K</span>
+            <div class="tags"><span class="pill fast">fast KNN</span></div>
+          </div>
+          <h3>Shared subspace</h3>
+          <p class="intent">Drop dimensions that disagree across the selection; query on what stays stable.</p>
+          <p class="meta"><span class="label">Cost</span> tiny PCA/SVD on N≤20 refs — cheap, a bit more engineering</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="novelty">
+      <h2>4. Set structure and novelty</h2>
+      <div class="grid">
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">L</span>
+            <div class="tags"><span class="pill slow">score-space</span></div>
+          </div>
+          <h3>Analogy (A:B :: C:?)</h3>
+          <p class="intent">Same relationship in embedding space — relational transfer.</p>
+          <p class="meta"><span class="label">Feels like</span> the most novel mode; needs the embedding to actually encode that axis</p>
+        </article>
+
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">M</span>
+            <div class="tags"><span class="pill slow">score-space</span></div>
+          </div>
+          <h3>Set affinity</h3>
+          <p class="intent">Does this candidate <em>belong with</em> the group, not just near the centroid?</p>
+          <p class="meta"><span class="label">Feels like</span> curation / “complete this collection”</p>
+          <p class="meta"><span class="label">Quirk</span> can favor bridges between two clusters</p>
+        </article>
+
+        <article class="mode ship-hint">
+          <div class="mode-top">
+            <span class="letter">N / O</span>
+            <div class="tags">
+              <span class="pill ship">shortlist</span>
+              <span class="pill slow">score-space</span>
+            </div>
+          </div>
+          <h3>Fringe / anti-centroid</h3>
+          <p class="intent">Related to the selection, but atypical — edge cases, hybrids, weird cousins.</p>
+          <p class="meta"><span class="label">Score</span> high max-sim to nearest ref, low to centroid; or uniqueness within the union neighborhood</p>
+          <p class="meta"><span class="label">Pairs with</span> MMR after a loose union</p>
+        </article>
+
+        <article class="mode">
+          <div class="mode-top">
+            <span class="letter">P</span>
+            <div class="tags"><span class="pill slow">score-space</span></div>
+          </div>
+          <h3>Cluster-conditioned</h3>
+          <p class="intent">If the selection has multiple themes, search per cluster and show split/interleaved results.</p>
+          <p class="meta"><span class="label">UX</span> “your selection has 2 themes” — honest multi-theme instead of one muddy average</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="compare">
+      <h2>Quick compare</h2>
+      <div class="compare">
+        <table>
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>Intent</th>
+              <th>Fast KNN?</th>
+              <th>Result flavor</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Centroid</td>
+              <td>Shared blend</td>
+              <td>Yes</td>
+              <td>Soft consensus</td>
+            </tr>
+            <tr>
+              <td>Soft intersection</td>
+              <td>Like all of them</td>
+              <td>No</td>
+              <td>Strict theme</td>
+            </tr>
+            <tr>
+              <td>Soft union + MMR</td>
+              <td>Like any, diversified</td>
+              <td>Partial</td>
+              <td>Moodboard</td>
+            </tr>
+            <tr>
+              <td>Pos − neg</td>
+              <td>Like these, not those</td>
+              <td>Yes / No</td>
+              <td>Controlled subtract</td>
+            </tr>
+            <tr>
+              <td>Extrapolation</td>
+              <td>More A vs B</td>
+              <td>Yes</td>
+              <td>Exaggerated trait</td>
+            </tr>
+            <tr>
+              <td>Set affinity</td>
+              <td>Belongs with these</td>
+              <td>No</td>
+              <td>Collection fit</td>
+            </tr>
+            <tr>
+              <td>Fringe / anti-centroid</td>
+              <td>Related but atypical</td>
+              <td>No</td>
+              <td>Novel discovery</td>
+            </tr>
+            <tr>
+              <td>Analogy</td>
+              <td>Same relationship</td>
+              <td>Partial</td>
+              <td>Relational</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="when">
+      <h2>When selection shape changes the answer</h2>
+      <div class="decision">
+        <div class="box">
+          <p class="q">Refs cohesive?</p>
+          <h3>Yes → consensus</h3>
+          <p>Centroid or soft intersection. Modes barely differ when the two refs are already similar.</p>
+        </div>
+        <div class="box">
+          <p class="q">Refs far apart?</p>
+          <h3>One theme vs many</h3>
+          <p>Want one theme → intersection (may empty). Want many → union + MMR or medoids. Centroid muddies.</p>
+        </div>
+        <div class="box">
+          <p class="q">Have excludes?</p>
+          <h3>Pos − neg</h3>
+          <p>Keep subject / drop style (or reverse). You already have this score shape for text IMG.</p>
+        </div>
+        <div class="box">
+          <p class="q">Want novelty?</p>
+          <h3>Fringe or extrapolate</h3>
+          <p>Fringe for weird cousins. Extrapolation when you have a clear A-vs-B direction to push.</p>
+        </div>
+      </div>
+
+      <ul class="tips" style="margin-top: 1rem;">
+        <li><strong>Many near-duplicates:</strong> median or soft intersection beats plain mean.</li>
+        <li><strong>Style refs mixed with content refs:</strong> pos/neg or shared subspace beats averaging.</li>
+        <li><strong>Implementation note:</strong> prefer stored embeddings for selected ids — re-embedding N refs via API each search will hurt.</li>
+      </ul>
+    </section>
+
+    <section id="shortlist">
+      <h2>Recommended shortlist</h2>
+      <p class="lede" style="margin-bottom: 1rem;">Six modes that feel distinct in a UI without overlapping too much.</p>
+      <div class="shortlist">
+        <div class="item">
+          <div class="n">1</div>
+          <div>
+            <strong>Average (centroid)</strong>
+            <span>Default. Familiar soft consensus.</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="n">2</div>
+          <div>
+            <strong>Match all (soft intersection)</strong>
+            <span>Stricter theme — must fit every pick.</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="n">3</div>
+          <div>
+            <strong>Match any (union + light MMR)</strong>
+            <span>Multi-theme moodboard expansion.</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="n">4</div>
+          <div>
+            <strong>Like these / not those</strong>
+            <span>Reuse weighted pos/neg for controlled subtract.</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="n">5</div>
+          <div>
+            <strong>More like A than B (extrapolation)</strong>
+            <span>Novelty / exaggeration for 2+ images.</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="n">6</div>
+          <div>
+            <strong>Fringe of selection</strong>
+            <span>Discovery — related but atypical.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="note">
+      Design catalog only — not an implementation plan.
+      Fast path = single vector into existing sqlite-vec KNN;
+      rich path = score-space scan like weighted <code>IMG</code>.
+    </footer>
+  </div>
+</body>
+</html>

@@ -29,11 +29,39 @@ Existing per-client localStorage values continue to work. The server default whe
 
 No dedicated migration helper is required; the setting is a boolean with a stable default.
 
+## SIMILAR img removed (2026-07)
+
+### What changed
+
+Image-to-image embedding similarity no longer uses `SIMILAR img <id>`. Use `IMG <id>` instead (64-character hex image id). `SIMILAR` / `SM` is prompt-only similarity. There is no runtime fallback for the old syntax.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| Search syntax | `SIMILAR img …` is not parsed as image embedding similarity |
+| Context menu **Similar images** | Sets `IMG <id> <threshold>` |
+| Search display abbreviation | Applies to `IMG` clause hex ids as well as `SIMILAR` ids |
+
+### Migration code
+
+None. Users must update saved searches and habits manually.
+
+### How to verify
+
+1. Right-click an image with embeddings configured — **Similar images** runs `IMG <id> 0.8` (or the configured threshold).
+2. `IMG <64-char-id>` returns image-to-image matches; `SIMILAR <id>` compares prompt text only.
+3. Weighted `IMG <id> + turtle - beach` abbreviates hex ids in the search box display.
+
+### Removal
+
+No migration helper; the old `SIMILAR img` form is unsupported.
+
 ## Image similarity threshold setting (2026-07)
 
 ### What changed
 
-`embeddingSettings` now includes `imageSimilarityThreshold` (default `0.8`). It sets the default similarity cutoff for `SIMILAR img` searches (image-to-image embedding similarity). Per-query overrides remain supported via a trailing number on the search command.
+`embeddingSettings` now includes `imageSimilarityThreshold` (default `0.8`). It sets the default similarity cutoff for `IMG` searches with a 64-character image id (image-to-image embedding similarity). Per-query overrides remain supported via a trailing number on the search command.
 
 ### Affected data
 
@@ -46,7 +74,7 @@ Existing localStorage and global `embeddingSettings` values lack this field. The
 ### How to verify
 
 1. Load a profile with existing embedding settings that lack `imageSimilarityThreshold`; Settings → Embedding settings shows **Image similarity threshold** at `0.8`.
-2. Right-click an image with a configured embedding API; **Similar images** appears and runs `SIMILAR img <id> 0.8` (or the configured threshold).
+2. Right-click an image with a configured embedding API; **Similar images** appears and runs `IMG <id> 0.8` (or the configured threshold).
 3. Change the threshold in settings; the context-menu command and default search behavior use the new value on the next sync.
 
 ### Removal
@@ -123,7 +151,7 @@ Keep the `uniqueness_scores` table and `mmrSettings` defaulting while older clie
 ### What changed
 
 - Search syntax now supports `IMGSIM <count>` as a position-independent result-shaping keyword.
-- After ordinary filters and `IMG` / `SIMILAR img` clauses resolve, IMGSIM keeps only embedded matches, orders them by date (image id tie-break), and repeatedly removes the image whose minimum cosine distance to either direct time neighbor is smallest until `<count>` images remain.
+- After ordinary filters and `IMG` clauses resolve, IMGSIM keeps only embedded matches, orders them by date (image id tie-break), and repeatedly removes the image whose minimum cosine distance to either direct time neighbor is smallest until `<count>` images remain.
 - Search sessions may store `imgsimSearchContext` with the fixed pruned order so live updates revalidate membership without repopulating or reordering the set.
 - The former MMR candidate strategy `time-neighbors` was removed. Use `IMGSIM` instead.
 

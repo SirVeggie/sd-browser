@@ -400,6 +400,11 @@
       actions.push({ name: "Copy all", handler: copyPrompt });
     }
 
+    actions.push({
+      name: "Copy ID",
+      handler: copyId,
+    });
+
     actions.push({ name: "Delete", handler: deleteImage });
 
     if ($compressedMode != "original" && !showOriginal) {
@@ -446,6 +451,20 @@
       })
       .catch(() => {
         notify(`Failed to copy ${name} to clipboard`);
+      });
+  }
+
+  function copyId() {
+    if (!image?.id) return;
+    if (!navigator?.clipboard?.writeText) return notify("Clipboard unavailable");
+
+    navigator.clipboard
+      .writeText(image.id)
+      .then(() => {
+        notify("Copied id to clipboard");
+      })
+      .catch(() => {
+        notify("Failed to copy id to clipboard");
       });
   }
 

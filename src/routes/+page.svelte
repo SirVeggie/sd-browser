@@ -1391,7 +1391,7 @@
                     visible: !selecting && isEmbeddingConfigured($embeddingStore),
                     handler() {
                         explorationMode.set('none');
-                        searchFilter.set(`SIMILAR img ${id} ${$embeddingStore.imageSimilarityThreshold}`);
+                        searchFilter.set(`IMG ${id} ${$embeddingStore.imageSimilarityThreshold}`);
                         commitSearchNow();
                     },
                 },
