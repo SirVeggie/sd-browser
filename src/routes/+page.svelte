@@ -798,7 +798,7 @@
         if (!currentHistoryId || activeOverlay) return;
         const snapshot = createSearchSnapshot();
         currentHistoryId = snapshot.id;
-        galleryCache.set(snapshot.id, $imageStore);
+        galleryCache.set(snapshot.id, get(imageStore));
         history.replaceState(
             { kind: "search", searchHistory: true, snapshot } satisfies SearchHistoryState,
             "",
@@ -806,9 +806,13 @@
     }
 
     function pushSearchHistory() {
-        const snapshot = createSearchSnapshot();
+        // Always allocate a new id so the previous entry's galleryCache is not overwritten.
+        const snapshot: SearchHistorySnapshot = {
+            ...createSearchSnapshot(),
+            id: createHistoryId(),
+        };
         currentHistoryId = snapshot.id;
-        galleryCache.set(snapshot.id, $imageStore);
+        galleryCache.set(snapshot.id, get(imageStore));
         if (searchHistoryEntries >= maxSearchHistoryEntries) {
             history.replaceState(
                 { kind: "search", searchHistory: true, snapshot } satisfies SearchHistoryState,
@@ -932,6 +936,10 @@
     async function restoreSearchSnapshot(snapshot: SearchHistorySnapshot) {
         currentHistoryId = snapshot.id;
         pendingHistoryAnchorId = "";
+        // Invalidate in-flight stream callbacks, then abort the outgoing search.
+        const sessionId = ++updateSessionId;
+        streamAbort?.abort();
+        streamAbort = undefined;
         searchFilter.set(snapshot.searchInput);
         sorting = snapshot.sorting;
         explorationMode.set(snapshot.params.explorationMode);
@@ -939,6 +947,12 @@
         similarityAlgorithm.set(snapshot.params.similarityAlgorithm);
         matchingMode.set(snapshot.params.matching);
         currentAmount = Math.max(snapshot.currentAmount, initialAmount);
+
+        // Drop the outgoing gallery immediately so the previous search cannot linger.
+        galleryLayout = { tiles: [], byId: new Map(), totalHeight: 0 };
+        visibleTiles = [];
+        viewportImageIndex = 0;
+
         const cached = galleryCache.get(snapshot.id);
         if (cached) {
             imageStore.set(cached);
@@ -955,9 +969,7 @@
             }
         }
 
-        streamAbort?.abort();
         searchSessionId = snapshot.sessionId;
-        const sessionId = ++updateSessionId;
         connectImageStream(sessionId, snapshot.sessionId || undefined);
 
         await tick();
@@ -1237,12 +1249,23 @@
 
                     if (!hasReceivedImages) {
                         hasReceivedImages = true;
-                        applySearchViewReset();
-                        imageStore.set(mapped);
+                        if (resumeSessionId) {
+                            // History restore already filled the store; merge instead of replacing.
+                            imageStore.update((x) => appendUniqueImages(x, mapped));
+                        } else {
+                            applySearchViewReset();
+                            imageStore.set(mapped);
+                        }
+                        if (currentHistoryId) {
+                            galleryCache.set(currentHistoryId, get(imageStore));
+                        }
                         return;
                     }
 
                     imageStore.update((x) => appendUniqueImages(x, mapped));
+                    if (currentHistoryId) {
+                        galleryCache.set(currentHistoryId, get(imageStore));
+                    }
                 },
                 onReady: (ready) => {
                     if (expectedSessionId !== updateSessionId) return;
