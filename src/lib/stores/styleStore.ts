@@ -8,7 +8,7 @@ export const imageSpacing = writable<ImageSpacing>("classic");
 export const imageFlow = writable<ImageFlow>("grid");
 export const imageSize = writable("");
 export const fullscreenStyle = writable(false);
-export const imageFadeMs = writable(180);
+export const imageFadeMs = writable(100);
 
 export function syncStyleWithLocalStorage() {
     syncMemory("imageSpacing", imageSpacing);
