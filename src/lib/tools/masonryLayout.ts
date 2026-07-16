@@ -23,15 +23,22 @@ export function computeColumnWidth(
     return (containerWidth - gap * (columnCount - 1)) / columnCount;
 }
 
+export function estimateContentHeight(
+    img: ClientImage,
+    columnWidth: number,
+): number {
+    if (img.width && img.height && img.width > 0) {
+        return columnWidth * (img.height / img.width);
+    }
+    return FALLBACK_ITEM_HEIGHT;
+}
+
 export function estimateItemHeight(
     img: ClientImage,
     columnWidth: number,
     itemGap: number,
 ): number {
-    if (img.width && img.height && img.width > 0) {
-        return columnWidth * (img.height / img.width) + itemGap;
-    }
-    return FALLBACK_ITEM_HEIGHT + itemGap;
+    return estimateContentHeight(img, columnWidth) + itemGap;
 }
 
 export type MasonryColumn = {
@@ -47,10 +54,22 @@ export type MasonryMetrics = {
 
 export function getGridMetrics(container: HTMLElement): MasonryMetrics {
     const probe = container.querySelector(".masonry-probe") as HTMLElement | null;
-    const styles = getComputedStyle(container);
-    const gap = parseFloat(styles.gap) || parseFloat(styles.columnGap) || 0;
+    const content = container.querySelector(".grid-content") as HTMLElement | null;
+    const contentStyles = getComputedStyle(content ?? container);
+    const containerStyles = getComputedStyle(container);
+    // Prefer computed gap (px) from the content box; fall back to --gallery-gap.
+    const gapFromComputed =
+        parseFloat(contentStyles.gap) || parseFloat(contentStyles.columnGap) || 0;
+    const gapFromVar = parseFloat(
+        containerStyles.getPropertyValue("--gallery-gap"),
+    );
+    const gap =
+        gapFromComputed ||
+        (Number.isFinite(gapFromVar) ? gapFromVar : 0) ||
+        0;
     const padding =
-        parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+        parseFloat(containerStyles.paddingLeft) +
+        parseFloat(containerStyles.paddingRight);
     const innerWidth = container.clientWidth - padding;
     const minColumnWidth = probe?.offsetWidth ?? innerWidth;
     const columnCount = computeColumnCount(innerWidth, minColumnWidth, gap);

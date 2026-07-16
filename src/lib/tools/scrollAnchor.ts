@@ -3,6 +3,38 @@ export type ScrollAnchor = {
     viewportTop: number;
 };
 
+export type ScrollAnchorLayout = {
+    id: string;
+    top: number;
+    height: number;
+};
+
+/** Pick the tile whose vertical center is closest to the viewport center. */
+export function captureScrollAnchorFromLayouts(
+    layouts: ScrollAnchorLayout[],
+    gridTopInViewport: number,
+): ScrollAnchor | null {
+    if (layouts.length === 0) return null;
+
+    const viewportCenter = window.innerHeight / 2;
+    let best: ScrollAnchor | null = null;
+    let bestDistance = Infinity;
+
+    for (const layout of layouts) {
+        const itemCenter = gridTopInViewport + layout.top + layout.height / 2;
+        const distance = Math.abs(itemCenter - viewportCenter);
+        if (distance >= bestDistance) continue;
+
+        bestDistance = distance;
+        best = {
+            id: `img_${layout.id}`,
+            viewportTop: gridTopInViewport + layout.top,
+        };
+    }
+
+    return best;
+}
+
 export function captureScrollAnchor(root: HTMLElement): ScrollAnchor | null {
     const items = root.querySelectorAll<HTMLElement>('[id^="img_"]');
     if (items.length === 0) return null;
@@ -36,4 +68,56 @@ export function restoreScrollAnchor(anchor: ScrollAnchor): boolean {
 
     window.scrollBy(0, delta);
     return true;
+}
+
+/** Restore scroll using layout coordinates when the tile may be unmounted. */
+export function restoreScrollAnchorFromLayout(
+    anchor: ScrollAnchor,
+    layout: ScrollAnchorLayout | undefined,
+    grid: HTMLElement,
+): boolean {
+    if (!layout) return restoreScrollAnchor(anchor);
+
+    const gridTop = grid.getBoundingClientRect().top;
+    const currentTop = gridTop + layout.top;
+    const delta = currentTop - anchor.viewportTop;
+    if (Math.abs(delta) < 0.5) return true;
+
+    window.scrollBy(0, delta);
+    return true;
+}
+
+export function scrollLayoutIntoView(
+    layout: ScrollAnchorLayout,
+    grid: HTMLElement,
+    block: ScrollLogicalPosition = "center",
+): void {
+    const gridDocTop = window.scrollY + grid.getBoundingClientRect().top;
+    const absoluteTop = gridDocTop + layout.top;
+
+    let target: number;
+    if (block === "start") {
+        target = absoluteTop;
+    } else if (block === "end") {
+        target = absoluteTop + layout.height - window.innerHeight;
+    } else if (block === "nearest") {
+        const viewTop = window.scrollY;
+        const viewBottom = viewTop + window.innerHeight;
+        const itemBottom = absoluteTop + layout.height;
+        if (absoluteTop >= viewTop && itemBottom <= viewBottom) {
+            return;
+        }
+        target =
+            absoluteTop < viewTop
+                ? absoluteTop
+                : itemBottom - window.innerHeight;
+    } else if (block === "center") {
+        target = absoluteTop - window.innerHeight / 2 + layout.height / 2;
+    } else {
+        const _exhaustive: never = block;
+        void _exhaustive;
+        target = absoluteTop - window.innerHeight / 2 + layout.height / 2;
+    }
+
+    window.scrollTo({ top: Math.max(0, target), behavior: "auto" });
 }

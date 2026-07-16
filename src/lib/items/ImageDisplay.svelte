@@ -9,7 +9,8 @@
         buildImageQueryParams,
         getPreviewParam,
     } from "$lib/requests/imageRequests";
-    import { imageSpacing } from "$lib/stores/styleStore";
+    import { fadeInImages, imageSpacing } from "$lib/stores/styleStore";
+    import { get } from "svelte/store";
     import type { ClientImage } from "$lib/types/images";
 
     export let img: ClientImage;
@@ -63,7 +64,7 @@
 
     function startReveal(expectedSrc: string) {
         if (src !== expectedSrc || hasLoaded) return;
-        if (!placeholderVisible || prefersReducedMotion()) {
+        if (!placeholderVisible || prefersReducedMotion() || !get(fadeInImages)) {
             revealLoadedMedia(expectedSrc);
             return;
         }
@@ -136,6 +137,7 @@
     class:selected
     class:has-dimensions={hasDimensions}
     class:loaded={hasLoaded}
+    class:no-fade={!$fadeInImages}
     style={containerStyle}
 >
     <Clickable up={onClick} contextMenu={onContext}>
@@ -186,7 +188,7 @@
     .base {
         position: relative;
         display: block;
-        background-color: #333;
+        background-color: #242424;
         color: #ddd;
         border-radius: 0.5em;
         box-shadow: 0px 3px 5px #0005;
@@ -282,6 +284,17 @@
                 height: auto;
                 position: static;
                 opacity: 1;
+            }
+        }
+
+        &.no-fade {
+            .loading {
+                transition: none;
+            }
+
+            img,
+            video {
+                transition: transform 0.4s ease;
             }
         }
 

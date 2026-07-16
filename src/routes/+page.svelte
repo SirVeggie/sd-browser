@@ -2,7 +2,7 @@
     import NavArrows from "$lib/components/NavArrows.svelte";
     import { notify } from "$lib/components/Notifier.svelte";
     import Button from "$lib/items/Button.svelte";
-    import VirtualImageDisplay from "$lib/items/VirtualImageDisplay.svelte";
+    import ImageDisplay from "$lib/items/ImageDisplay.svelte";
     import ImageFull from "$lib/items/ImageFull.svelte";
     import Link from "$lib/items/Link.svelte";
     import SearchInput from "$lib/items/SearchInput.svelte";
@@ -63,19 +63,24 @@
     } from "$lib/tools/scrollLoadMore";
     import { bindDropdownOutsideClick } from "$lib/tools/dropdownOutsideClick";
     import {
+        getVisibleTilesForGrid,
+        layoutGridTiles,
+        layoutMasonryTiles,
+        type GalleryLayout,
+        type GalleryTile,
+    } from "$lib/tools/galleryLayout";
+    import {
         AUTOLOAD_SUPPRESS_AFTER_LAYOUT_MS,
-        applyColumnOrder,
         getGridMetrics,
         MasonryPlacer,
         RESIZE_DEBOUNCE_IMAGE_THRESHOLD,
         RESIZE_LAYOUT_DEBOUNCE_MS,
-        sortColumnsByFirstItemIndex,
-        type MasonryColumn,
         type MasonryMetrics,
     } from "$lib/tools/masonryLayout";
     import {
-        captureScrollAnchor,
-        restoreScrollAnchor,
+        captureScrollAnchorFromLayouts,
+        restoreScrollAnchorFromLayout,
+        scrollLayoutIntoView,
         type ScrollAnchor,
     } from "$lib/tools/scrollAnchor";
     import {
@@ -156,11 +161,17 @@
     let scrollRaf: number | undefined;
     let masonryColumnOrder: number[] | null = null;
     let paginatedIndexById = new Map<string, number>();
+    let galleryImageById = new Map<string, ClientImage>();
     let cachedPaginatedIds: string[] = [];
     const masonryPlacer = new MasonryPlacer();
     let gridElement: HTMLDivElement | undefined;
-    let masonryColumns: MasonryColumn[] = [];
-    let masonryRaf: number | undefined;
+    let galleryLayout: GalleryLayout = {
+        tiles: [],
+        byId: new Map(),
+        totalHeight: 0,
+    };
+    let visibleTiles: GalleryTile[] = [];
+    let galleryLayoutRaf: number | undefined;
     let gridResizeObserver: ResizeObserver | undefined;
     let observedGrid: HTMLDivElement | undefined;
     let observedGridWidth = 0;
@@ -173,7 +184,6 @@
     let gridRevealTimer: ReturnType<typeof setTimeout> | undefined;
     const GRID_REVEAL_MS = 180;
     let resizePreserveHeight = 0;
-    let resizeFrozenColumns = 0;
     let suppressAutoLoadUntil = 0;
     let searchHistoryEntries = 0;
     let currentHistoryId = "";
@@ -211,9 +221,14 @@
 
     $: {
         galleryImages;
-        const next = new Map<string, number>();
-        galleryImages.forEach((image, index) => next.set(image.id, index));
-        paginatedIndexById = next;
+        const nextIndex = new Map<string, number>();
+        const nextImages = new Map<string, ClientImage>();
+        galleryImages.forEach((image, index) => {
+            nextIndex.set(image.id, index);
+            nextImages.set(image.id, image);
+        });
+        paginatedIndexById = nextIndex;
+        galleryImageById = nextImages;
     }
     $: slideshowInterval = Math.max($slideDelay, 100);
     $: masonryEnabled = $imageFlow === "masonry";
@@ -226,8 +241,7 @@
         $imageSize,
         gridResizing,
         resizePreserveHeight,
-        resizeFrozenColumns,
-        masonryEnabled,
+        galleryLayout.totalHeight,
     );
     $: if (quickTagSelectedTagsLoaded) {
         try {
@@ -239,29 +253,23 @@
 
     $: if (!masonryEnabled) {
         masonryPlacer.reset("");
-        masonryColumns = [];
         masonryColumnOrder = null;
     }
 
-    $: if (masonryEnabled && gridElement) {
+    $: if (gridElement) {
         galleryImages;
         searchSessionId;
         $imageSize;
         $imageSpacing;
-        scheduleMasonryDataLayout();
+        masonryEnabled;
+        scheduleGalleryLayout();
     }
 
-    $: if (gridElement && !masonryEnabled) {
-        $imageSize;
-        $imageSpacing;
-        void applyGridSettingsLayout();
-    }
-
-    function scheduleMasonryDataLayout() {
-        if (masonryRaf !== undefined) cancelAnimationFrame(masonryRaf);
-        masonryRaf = requestAnimationFrame(() => {
-            masonryRaf = undefined;
-            void updateMasonryLayout();
+    function scheduleGalleryLayout() {
+        if (galleryLayoutRaf !== undefined) cancelAnimationFrame(galleryLayoutRaf);
+        galleryLayoutRaf = requestAnimationFrame(() => {
+            galleryLayoutRaf = undefined;
+            void updateGalleryLayout();
         });
     }
 
@@ -271,51 +279,71 @@
         lastAutoLoadTime = Date.now();
     }
 
+    function captureGalleryScrollAnchor(): ScrollAnchor | null {
+        if (!gridElement) return null;
+        return captureScrollAnchorFromLayouts(
+            galleryLayout.tiles,
+            gridElement.getBoundingClientRect().top,
+        );
+    }
+
     async function restoreScrollAfterLayout(anchor: ScrollAnchor | null) {
-        if (!anchor) return;
-        restoreScrollAnchor(anchor);
+        if (!anchor || !gridElement) return;
+        const id = anchor.id.startsWith("img_")
+            ? anchor.id.slice(4)
+            : anchor.id;
+        restoreScrollAnchorFromLayout(
+            anchor,
+            galleryLayout.byId.get(id),
+            gridElement,
+        );
         await tick();
         requestAnimationFrame(() => {
-            restoreScrollAnchor(anchor);
+            if (!gridElement) return;
+            restoreScrollAnchorFromLayout(
+                anchor,
+                galleryLayout.byId.get(id),
+                gridElement,
+            );
         });
     }
 
-    function layoutMasonryColumns(metrics: MasonryMetrics): MasonryColumn[] {
-        const columns = masonryPlacer.layout(
-            galleryImages,
-            searchSessionId,
-            metrics,
-        );
-
-        if (isNearTop()) {
-            const sorted = sortColumnsByFirstItemIndex(columns, paginatedIndexById);
-            masonryColumnOrder = sorted.map((column) => column.key);
-            return sorted;
+    function computeGalleryLayout(metrics: MasonryMetrics): GalleryLayout {
+        if (masonryEnabled) {
+            const result = layoutMasonryTiles(
+                masonryPlacer,
+                galleryImages,
+                searchSessionId,
+                metrics,
+                {
+                    columnOrder: masonryColumnOrder,
+                    itemIndex: paginatedIndexById,
+                    nearTop: isNearTop(),
+                },
+            );
+            masonryColumnOrder =
+                result.columnOrder.length > 0 ? result.columnOrder : null;
+            return result.layout;
         }
 
-        if (masonryColumnOrder) {
-            return applyColumnOrder(columns, masonryColumnOrder);
+        return layoutGridTiles(galleryImages, metrics);
+    }
+
+    function refreshVisibleTiles() {
+        if (!gridElement) {
+            visibleTiles = [];
+            return;
         }
-
-        return columns;
+        visibleTiles = getVisibleTilesForGrid(gridElement, galleryLayout.tiles);
     }
 
-    async function updateMasonryLayout() {
-        if (!masonryEnabled || !gridElement) return;
+    async function updateGalleryLayout() {
+        if (!gridElement) return;
         await tick();
-        await applyColumnCountChange(getGridMetrics(gridElement), true);
+        await applyColumnCountChange(getGridMetrics(gridElement));
     }
 
-    async function applyGridSettingsLayout() {
-        if (!gridElement || masonryEnabled) return;
-        await tick();
-        await applyColumnCountChange(getGridMetrics(gridElement), false);
-    }
-
-    async function applyColumnCountChange(
-        metrics: ReturnType<typeof getGridMetrics>,
-        masonryReflow: boolean,
-    ) {
+    async function applyColumnCountChange(metrics: MasonryMetrics) {
         if (!gridElement) return;
 
         const columnCountChanged =
@@ -323,27 +351,24 @@
             metrics.columnCount !== lastColumnCount;
 
         if (lastColumnCount === 0) {
-            if (masonryReflow) {
-                masonryColumns = layoutMasonryColumns(metrics);
-            }
+            galleryLayout = computeGalleryLayout(metrics);
+            refreshVisibleTiles();
             lastColumnCount = metrics.columnCount;
             return;
         }
 
         if (!columnCountChanged) {
-            if (masonryReflow) {
-                masonryColumns = layoutMasonryColumns(metrics);
-            }
+            galleryLayout = computeGalleryLayout(metrics);
+            refreshVisibleTiles();
             return;
         }
 
-        const anchor = captureScrollAnchor(gridElement);
+        const anchor = captureGalleryScrollAnchor();
         suppressAutoLoadBriefly();
 
-        if (masonryReflow) {
-            masonryColumns = layoutMasonryColumns(metrics);
-            await tick();
-        }
+        galleryLayout = computeGalleryLayout(metrics);
+        refreshVisibleTiles();
+        await tick();
 
         await restoreScrollAfterLayout(anchor);
         lastColumnCount = metrics.columnCount;
@@ -353,15 +378,14 @@
         imageSize: string,
         resizing: boolean,
         preserveHeight: number,
-        frozenColumns: number,
-        masonry: boolean,
+        galleryHeight: number,
     ) {
-        const parts = [`--size-offset:${parseSizeOffset(imageSize)}`];
+        const parts = [
+            `--size-offset:${parseSizeOffset(imageSize)}`,
+            `--gallery-height:${galleryHeight}px`,
+        ];
         if (resizing && preserveHeight > 0) {
             parts.push(`min-height:${preserveHeight}px`);
-        }
-        if (resizing && !masonry && frozenColumns > 0) {
-            parts.push(`--resize-columns:${frozenColumns}`);
         }
         return parts.join(";");
     }
@@ -398,10 +422,8 @@
         if (!gridElement || gridResizing) return;
 
         clearGridReveal();
-        resizeAnchor = captureScrollAnchor(gridElement);
+        resizeAnchor = captureGalleryScrollAnchor();
         resizePreserveHeight = gridElement.offsetHeight;
-        resizeFrozenColumns =
-            lastColumnCount || getGridMetrics(gridElement).columnCount;
         gridResizing = true;
     }
 
@@ -434,14 +456,17 @@
 
         suppressAutoLoadBriefly();
 
-        if (masonryEnabled && columnCountChanged) {
-            masonryColumns = layoutMasonryColumns(metrics);
+        if (columnCountChanged) {
+            galleryLayout = computeGalleryLayout(metrics);
+            refreshVisibleTiles();
             await tick();
+        } else {
+            galleryLayout = computeGalleryLayout(metrics);
+            refreshVisibleTiles();
         }
 
         gridResizing = false;
         resizePreserveHeight = 0;
-        resizeFrozenColumns = 0;
         resizeAnchor = null;
 
         await tick();
@@ -532,7 +557,7 @@
             window.removeEventListener("pageshow", handlePageShowRecovery);
             window.removeEventListener("online", handleOnlineRecovery);
             if (scrollRaf !== undefined) cancelAnimationFrame(scrollRaf);
-            if (masonryRaf !== undefined) cancelAnimationFrame(masonryRaf);
+            if (galleryLayoutRaf !== undefined) cancelAnimationFrame(galleryLayoutRaf);
             gridResizeObserver?.disconnect();
         };
     });
@@ -641,11 +666,11 @@
     }
 
     function scrollToImage() {
-        if (!currentImage) return;
-        const el = document.getElementById(`img_${currentImage.id}`);
-        if (el) {
-            el.scrollIntoView({ behavior: "auto", block: "center" });
-        }
+        if (!currentImage || !gridElement) return;
+        const layout = galleryLayout.byId.get(currentImage.id);
+        if (!layout) return;
+        scrollLayoutIntoView(layout, gridElement, "center");
+        refreshVisibleTiles();
     }
 
     function visibleGalleryIndex(imageId: string): number {
@@ -667,12 +692,12 @@
             currentAmount = visibleIndex + 1;
         }
         await tick();
-        requestAnimationFrame(() => {
-            document.getElementById(`img_${imageId}`)?.scrollIntoView({
-                behavior: "auto",
-                block: "center",
-            });
-        });
+        if (!gridElement) return;
+        galleryLayout = computeGalleryLayout(getGridMetrics(gridElement));
+        const layout = galleryLayout.byId.get(imageId);
+        if (!layout) return;
+        scrollLayoutIntoView(layout, gridElement, "center");
+        refreshVisibleTiles();
     }
 
     function scrollToTop() {
@@ -904,6 +929,7 @@
         if (scrollRaf !== undefined) return;
         scrollRaf = requestAnimationFrame(() => {
             scrollRaf = undefined;
+            refreshVisibleTiles();
             maybeAutoLoadMore();
             replaceCurrentSearchHistory();
         });
@@ -1968,47 +1994,24 @@
         <p>Adjusting layout…</p>
     </div>
     <div class="grid-content">
-        {#if masonryEnabled}
-            {#each masonryColumns as column (column.key)}
-                <div class="masonry-column">
-                    {#each column.items as img (img.id)}
-                        <!-- svelte-ignore a11y-no-static-element-interactions -->
-                        <!-- svelte-ignore a11y-click-events-have-key-events -->
-                        <div
-                            id={`img_${img.id}`}
-                            class:selecting
-                            on:click={selectImg(img.id)}
-                        >
-                            <VirtualImageDisplay
-                                {img}
-                                loadSession={scrollLoadSession}
-                                shimmerIndex={paginatedIndexById.get(img.id) ?? 0}
-                                selected={selecting &&
-                                    $selection.includes(img.id)}
-                                onClick={quickTagActive
-                                    ? ((e) => handleQuickTagImage(img, e))
-                                    : !selecting && ((e) => openImage(img, e))}
-                                onContext={handleImgContext(img.id)}
-                                onLoaded={handleImageLoaded}
-                            />
-                        </div>
-                    {/each}
-                </div>
-            {/each}
-        {:else}
-            {#each galleryImages as img, index (img.id)}
+        {#each visibleTiles as tile (tile.id)}
+            {@const img = galleryImageById.get(tile.id)}
+            {#if img}
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <div
                     id={`img_${img.id}`}
+                    class="gallery-tile"
                     class:selecting
+                    style={`top:${tile.top}px;left:${tile.left}px;width:${tile.width}px;height:${tile.height}px`}
                     on:click={selectImg(img.id)}
                 >
-                    <VirtualImageDisplay
+                    <ImageDisplay
                         {img}
                         loadSession={scrollLoadSession}
-                        shimmerIndex={index}
-                        selected={selecting && $selection.includes(img.id)}
+                        shimmerIndex={paginatedIndexById.get(img.id) ?? 0}
+                        selected={selecting &&
+                            $selection.includes(img.id)}
                         onClick={quickTagActive
                             ? ((e) => handleQuickTagImage(img, e))
                             : !selecting && ((e) => openImage(img, e))}
@@ -2016,8 +2019,8 @@
                         onLoaded={handleImageLoaded}
                     />
                 </div>
-            {/each}
-        {/if}
+            {/if}
+        {/each}
     </div>
 </div>
 
@@ -2298,30 +2301,31 @@
     }
 
     .grid {
+        --gallery-gap: 0.8em;
         padding: calc(var(--main-padding) / 2) var(--main-padding);
         min-height: 100vh;
         overflow-anchor: none;
         position: relative;
 
         .grid-content {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: var(--gallery-gap);
+            height: var(--gallery-height, 0px);
             opacity: 1;
             visibility: visible;
+        }
 
-            > div[id^="img_"],
-            .masonry-column > div {
-                overflow-anchor: none;
+        .gallery-tile {
+            position: absolute;
+            box-sizing: border-box;
+            overflow-anchor: none;
+
+            :global(.base) {
+                width: 100%;
+                height: 100%;
             }
-
-            .masonry-column {
-                overflow-anchor: none;
-            }
-
-            display: grid;
-            grid-template-columns: repeat(
-                auto-fill,
-                minmax(calc(200px + var(--size-offset)), 1fr)
-            );
-            gap: 0.8em;
         }
 
         &.resizing .grid-content {
@@ -2342,27 +2346,6 @@
             opacity: 1;
             transition: opacity 180ms ease;
             pointer-events: auto;
-        }
-
-        &.resizing:not(.masonry) .grid-content {
-            grid-template-columns: repeat(
-                var(--resize-columns, 1),
-                minmax(calc(200px + var(--size-offset)), 1fr)
-            );
-
-            @media (width > 1200px) {
-                grid-template-columns: repeat(
-                    var(--resize-columns, 1),
-                    minmax(calc(250px + var(--size-offset)), 1fr)
-                );
-            }
-
-            @media (width < 501px) {
-                grid-template-columns: repeat(
-                    var(--resize-columns, 1),
-                    minmax(calc(130px + var(--size-offset)), 1fr)
-                );
-            }
         }
 
         .resize-overlay {
@@ -2398,114 +2381,38 @@
             height: 0;
         }
 
-        &.masonry .grid-content {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.8em;
-
-            .masonry-column {
-                display: flex;
-                flex-direction: column;
-                flex: 1;
-                min-width: 0;
-                gap: 0.8em;
-            }
-        }
-
         &.spacing-compact {
+            --gallery-gap: 2px;
             padding: 5px;
-
-            .grid-content {
-                gap: 2px;
-            }
-
-            &.masonry .grid-content .masonry-column {
-                gap: 2px;
-            }
         }
 
         &.spacing-mosaic {
+            --gallery-gap: 0px;
             padding: 0;
-
-            .grid-content {
-                gap: 0;
-            }
-
-            &.masonry .grid-content {
-                gap: 0;
-
-                .masonry-column {
-                    gap: 0;
-                }
-            }
         }
 
         @media (width > 1200px) {
-            .grid-content {
-                grid-template-columns: repeat(
-                    auto-fill,
-                    minmax(calc(250px + var(--size-offset)), 1fr)
-                );
-            }
-
             .masonry-probe {
                 width: calc(250px + var(--size-offset));
             }
         }
 
         @media (width < 501px) {
+            --gallery-gap: 0.2em;
             padding: 5px;
-
-            .grid-content {
-                grid-template-columns: repeat(
-                    auto-fill,
-                    minmax(calc(130px + var(--size-offset)), 1fr)
-                );
-                gap: 0.2em;
-            }
 
             .masonry-probe {
                 width: calc(130px + var(--size-offset));
             }
 
-            &.masonry .grid-content {
-                gap: 0.2em;
-
-                .masonry-column {
-                    gap: 0.2em;
-                }
-            }
-
             &.spacing-compact {
+                --gallery-gap: 2px;
                 padding: 5px;
-
-                .grid-content {
-                    gap: 2px;
-                }
-
-                &.masonry .grid-content {
-                    gap: 2px;
-
-                    .masonry-column {
-                        gap: 2px;
-                    }
-                }
             }
 
             &.spacing-mosaic {
+                --gallery-gap: 0px;
                 padding: 0;
-
-                .grid-content {
-                    gap: 0;
-                }
-
-                &.masonry .grid-content {
-                    gap: 0;
-
-                    .masonry-column {
-                        gap: 0;
-                    }
-                }
             }
         }
     }
