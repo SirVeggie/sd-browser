@@ -14,7 +14,6 @@
     import {
         animatedThumb,
         compressedMode,
-        initialImages,
         matchingMode,
         nsfwFilter,
         showNsfwFilter,
@@ -1044,12 +1043,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                 {recalculatingSimilarCache ? 'Recalculating...' : 'Recalculate similarity cache'}
             </Button>
         </div>
-
-        <!-- svelte-ignore a11y-label-has-associated-control -->
-        <label>
-            Initial amount of images loaded (default: 500)
-            <NumInput bind:value={$initialImages} />
-        </label>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label>

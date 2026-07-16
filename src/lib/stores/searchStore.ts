@@ -35,7 +35,6 @@ export const sparseFrequency = writable(defaultExplorationSettings.sparseFrequen
 export const similarityAlgorithm = writable<SimilarityAlgorithm>(defaultExplorationSettings.similarityAlgorithm);
 export const similarityThreshold = writable(defaultExplorationSettings.similarityThreshold);
 export const matchingMode = writable<SearchMode>('regex');
-export const initialImages = writable(500);
 export const slideDelay = writable(4000);
 export const useSmartSubsampling = writable(true);
 
@@ -75,7 +74,6 @@ export function syncSearchWithLocalStorage() {
     syncMemory('similarityAlgorithm', similarityAlgorithm, true);
     syncMemory('similarityThreshold', similarityThreshold, true);
     syncMemory('matchingMode', matchingMode);
-    syncMemory('initialImages', initialImages);
     syncMemory('slideDelay', slideDelay);
     syncMemory('useSmartSubsampling', useSmartSubsampling, true);
 }

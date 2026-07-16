@@ -1,5 +1,33 @@
 # Migrations
 
+## initialImages setting removed (2026-07)
+
+### What changed
+
+The **Initial amount of images loaded** setting (`initialImages`) was removed. Gallery DOM cost is bounded by true windowing; client pagination uses a fixed internal page size (`GALLERY_PAGE_SIZE = 500` in `+page.svelte`).
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| localStorage `initialImages` | Orphaned; ignored |
+| Global settings `initialImages` | Orphaned; ignored |
+
+No runtime migration — leftover values are simply unused. Safe to delete manually from MiscDB / localStorage.
+
+### Migration code
+
+None. `syncMemory('initialImages', …)` was removed from [`src/lib/stores/searchStore.ts`](../src/lib/stores/searchStore.ts).
+
+### How to verify
+
+1. Settings page no longer shows **Initial amount of images loaded**.
+2. New searches still load an initial chunk and auto-load more near the bottom.
+
+### Removal
+
+Orphaned keys can be deleted anytime; they have no readers.
+
 ## Smart subsampling global setting (2026-07)
 
 ### What changed

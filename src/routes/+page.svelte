@@ -40,7 +40,6 @@
         matchingMode,
         compressedMode,
         slideDelay,
-        initialImages,
         useSmartSubsampling,
         buildSearchParams,
         syncSearchInput,
@@ -79,6 +78,7 @@
     } from "$lib/tools/masonryLayout";
     import {
         captureScrollAnchorFromLayouts,
+        findNearestViewportLayout,
         restoreScrollAnchorFromLayout,
         scrollLayoutIntoView,
         type ScrollAnchor,
@@ -113,8 +113,10 @@
 
     type ActionMode = "manual" | "auto";
 
-    const initialAmount = Math.max($initialImages, 1);
-    const increment = Math.max(initialAmount, 25);
+    /** Fixed client pagination chunk; DOM cost is bounded by windowing. */
+    const GALLERY_PAGE_SIZE = 500;
+    const initialAmount = GALLERY_PAGE_SIZE;
+    const increment = GALLERY_PAGE_SIZE;
     let currentAmount = initialAmount;
     let currentImage: ClientImage | undefined = undefined;
     let inputElement: HTMLInputElement;
@@ -171,6 +173,8 @@
         totalHeight: 0,
     };
     let visibleTiles: GalleryTile[] = [];
+    let viewportImageIndex = 0;
+    let pendingHistoryAnchorId = "";
     let galleryLayoutRaf: number | undefined;
     let gridResizeObserver: ResizeObserver | undefined;
     let observedGrid: HTMLDivElement | undefined;
@@ -332,9 +336,75 @@
     function refreshVisibleTiles() {
         if (!gridElement) {
             visibleTiles = [];
+            viewportImageIndex = 0;
             return;
         }
         visibleTiles = getVisibleTilesForGrid(gridElement, galleryLayout.tiles);
+        updateViewportImageIndex();
+        tryRestorePendingHistoryAnchor();
+    }
+
+    function updateViewportImageIndex() {
+        if (!gridElement || galleryLayout.tiles.length === 0) {
+            viewportImageIndex = 0;
+            return;
+        }
+        const nearest = findNearestViewportLayout(
+            galleryLayout.tiles,
+            gridElement.getBoundingClientRect().top,
+        );
+        if (!nearest) {
+            viewportImageIndex = 0;
+            return;
+        }
+        const index = paginatedIndexById.get(nearest.id);
+        viewportImageIndex = index === undefined ? 0 : index + 1;
+    }
+
+    function getViewportAnchorImageId(): string {
+        if (!gridElement || galleryLayout.tiles.length === 0) return "";
+        const nearest = findNearestViewportLayout(
+            galleryLayout.tiles,
+            gridElement.getBoundingClientRect().top,
+        );
+        return nearest?.id ?? "";
+    }
+
+    function ensureCurrentAmountCoversImage(imageId: string) {
+        if (!imageId) return;
+        const index = paginatedIndexById.get(imageId);
+        if (index !== undefined && currentAmount <= index) {
+            currentAmount = index + 1;
+        } else {
+            const storeIndex = visibleGalleryIndex(imageId);
+            if (storeIndex >= 0 && currentAmount <= storeIndex) {
+                currentAmount = storeIndex + 1;
+            }
+        }
+    }
+
+    function scrollToAnchorImage(imageId: string, fallbackScrollY?: number) {
+        if (!gridElement) return;
+        const layout = galleryLayout.byId.get(imageId);
+        if (layout) {
+            scrollLayoutIntoView(layout, gridElement, "center");
+            refreshVisibleTiles();
+            return;
+        }
+        if (fallbackScrollY !== undefined) {
+            window.scrollTo({ top: fallbackScrollY, behavior: "auto" });
+            refreshVisibleTiles();
+        }
+    }
+
+    function tryRestorePendingHistoryAnchor() {
+        if (!pendingHistoryAnchorId || !gridElement) return;
+        ensureCurrentAmountCoversImage(pendingHistoryAnchorId);
+        const layout = galleryLayout.byId.get(pendingHistoryAnchorId);
+        if (!layout) return;
+        pendingHistoryAnchorId = "";
+        scrollLayoutIntoView(layout, gridElement, "center");
+        updateViewportImageIndex();
     }
 
     async function updateGalleryLayout() {
@@ -719,7 +789,7 @@
             sessionId: searchSessionId,
             currentAmount,
             oldestImageId: $imageStore.at(-1)?.id ?? "",
-            anchorImageId: galleryImages[0]?.id ?? "",
+            anchorImageId: getViewportAnchorImageId(),
             scrollY: window.scrollY,
         };
     }
@@ -826,10 +896,14 @@
             });
             let images = expandClientImages(page.images);
 
+            const hasAnchor = () =>
+                !snapshot.anchorImageId
+                || images.some((image) => image.id === snapshot.anchorImageId);
+
             while (
-                images.length < snapshot.currentAmount
-                && images.length < page.amount
+                images.length < page.amount
                 && images.length > 0
+                && (images.length < snapshot.currentAmount || !hasAnchor())
             ) {
                 const next = await fetchImagePage({
                     latestId: "",
@@ -857,13 +931,14 @@
 
     async function restoreSearchSnapshot(snapshot: SearchHistorySnapshot) {
         currentHistoryId = snapshot.id;
+        pendingHistoryAnchorId = "";
         searchFilter.set(snapshot.searchInput);
         sorting = snapshot.sorting;
         explorationMode.set(snapshot.params.explorationMode);
         sparseFrequency.set(snapshot.params.sparseFrequency);
         similarityAlgorithm.set(snapshot.params.similarityAlgorithm);
         matchingMode.set(snapshot.params.matching);
-        currentAmount = snapshot.currentAmount;
+        currentAmount = Math.max(snapshot.currentAmount, initialAmount);
         const cached = galleryCache.get(snapshot.id);
         if (cached) {
             imageStore.set(cached);
@@ -872,6 +947,9 @@
             imageStore.set([]);
             const hydrated = await hydrateSearchSession(snapshot);
             if (!hydrated) {
+                if (snapshot.anchorImageId) {
+                    pendingHistoryAnchorId = snapshot.anchorImageId;
+                }
                 reconnectSearch();
                 return;
             }
@@ -881,8 +959,25 @@
         searchSessionId = snapshot.sessionId;
         const sessionId = ++updateSessionId;
         connectImageStream(sessionId, snapshot.sessionId || undefined);
+
         await tick();
-        requestAnimationFrame(() => window.scrollTo({ top: snapshot.scrollY, behavior: "auto" }));
+        // Rebuild index maps from restored store before expanding currentAmount.
+        const restoredImages = get(imageStore);
+        const nextIndex = new Map<string, number>();
+        restoredImages.forEach((image, index) => nextIndex.set(image.id, index));
+        paginatedIndexById = nextIndex;
+
+        ensureCurrentAmountCoversImage(snapshot.anchorImageId);
+        await tick();
+
+        if (gridElement) {
+            galleryLayout = computeGalleryLayout(getGridMetrics(gridElement));
+            scrollToAnchorImage(snapshot.anchorImageId, snapshot.scrollY);
+        } else {
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: snapshot.scrollY, behavior: "auto" });
+            });
+        }
     }
 
     function handleHistoryPopState(event: PopStateEvent) {
@@ -899,6 +994,7 @@
                 return;
             case "baseline":
                 currentHistoryId = "";
+                pendingHistoryAnchorId = "";
                 searchFilter.set("");
                 currentAmount = initialAmount;
                 reconnectSearch();
@@ -916,6 +1012,7 @@
     function applySearchViewReset() {
         scrollToTop();
         currentAmount = initialAmount;
+        pendingHistoryAnchorId = "";
         resetScrollLoadSession();
         lastColumnCount = 0;
     }
@@ -1851,7 +1948,7 @@
 <div class="topbar">
     <div class="quickbar">
         <span class="image-count">
-            Images: {galleryImages.length} /
+            Images: {viewportImageIndex} /
             <span class:pending={!searchCountComplete}>{$imageAmountStore}</span>
         </span>
 

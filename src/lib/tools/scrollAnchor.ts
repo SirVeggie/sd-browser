@@ -10,14 +10,14 @@ export type ScrollAnchorLayout = {
 };
 
 /** Pick the tile whose vertical center is closest to the viewport center. */
-export function captureScrollAnchorFromLayouts(
+export function findNearestViewportLayout(
     layouts: ScrollAnchorLayout[],
     gridTopInViewport: number,
-): ScrollAnchor | null {
+): ScrollAnchorLayout | null {
     if (layouts.length === 0) return null;
 
     const viewportCenter = window.innerHeight / 2;
-    let best: ScrollAnchor | null = null;
+    let best: ScrollAnchorLayout | null = null;
     let bestDistance = Infinity;
 
     for (const layout of layouts) {
@@ -26,13 +26,23 @@ export function captureScrollAnchorFromLayouts(
         if (distance >= bestDistance) continue;
 
         bestDistance = distance;
-        best = {
-            id: `img_${layout.id}`,
-            viewportTop: gridTopInViewport + layout.top,
-        };
+        best = layout;
     }
 
     return best;
+}
+
+export function captureScrollAnchorFromLayouts(
+    layouts: ScrollAnchorLayout[],
+    gridTopInViewport: number,
+): ScrollAnchor | null {
+    const nearest = findNearestViewportLayout(layouts, gridTopInViewport);
+    if (!nearest) return null;
+
+    return {
+        id: `img_${nearest.id}`,
+        viewportTop: gridTopInViewport + nearest.top,
+    };
 }
 
 export function captureScrollAnchor(root: HTMLElement): ScrollAnchor | null {
