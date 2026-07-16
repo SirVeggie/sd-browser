@@ -14,6 +14,7 @@ import {
     unescapeSearchLiterals,
     parseWeightedImgQueryClauses,
     parseSearchTargetWithOptionalImgLimit,
+    parseImgQueryBody,
 } from '../src/lib/tools/searchParsing.ts';
 import {
     abbreviateImageId,
@@ -21,6 +22,14 @@ import {
     inflateSearchDisplay,
     shouldCollapseExpandedSearch,
 } from '../src/lib/tools/searchDisplay.ts';
+import {
+    averageEmbeddings,
+    extrapolateEmbedding,
+    normalizeEmbedding,
+    scoreImgAllMode,
+    scoreImgAnyMode,
+    scoreImgFringeMode,
+} from '../src/lib/tools/vectorMath.ts';
 
 assert.deepEqual(
     parseSimilarSearchTarget('abc123'),
@@ -323,6 +332,95 @@ assert.equal(
     shouldCollapseExpandedSearch(`IMG ${fullImageId.slice(0, 60)}`),
     false,
     'keeps expanded display while an IMG hex id is partially edited',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(`avg ${fullImageId} ${secondImageId}`),
+    { kind: 'mode', mode: 'avg', imageIds: [fullImageId, secondImageId] },
+    'parses IMG avg mode with space-separated hex ids',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(`ALL ${fullImageId} ${secondImageId}`),
+    { kind: 'mode', mode: 'all', imageIds: [fullImageId, secondImageId] },
+    'parses IMG all mode case-insensitively',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(`more ${fullImageId} ${secondImageId}`),
+    { kind: 'mode', mode: 'more', imageIds: [fullImageId, secondImageId] },
+    'parses IMG more mode',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(`fringe ${fullImageId}`),
+    { kind: 'mode', mode: 'fringe', imageIds: [fullImageId] },
+    'parses IMG fringe mode with one id',
+);
+
+assert.equal(
+    parseImgQueryBody('fringe of trees').kind,
+    'weighted',
+    'does not treat mode keyword as mode without hex ids',
+);
+
+assert.deepEqual(
+    getPositiveSimilarSourceIds(`IMG avg ${fullImageId} ${secondImageId} 0.8`),
+    [fullImageId, secondImageId],
+    'collects source ids from IMG mode queries',
+);
+
+const imgAllModeSearch = `IMG all ${fullImageId} ${secondImageId} 0.8`;
+const imgAllClauses = tokenizeSearchClauses(imgAllModeSearch);
+assert.equal(imgAllClauses.length, 1, 'keeps IMG all mode in a single clause despite ALL keyword');
+assert.match(imgAllClauses[0]?.text ?? '', /^IMG all /i, 'preserves IMG all mode body');
+
+const modeDisplay = getSearchDisplay(`IMG avg ${fullImageId} ${secondImageId} 0.8`);
+assert.equal(
+    modeDisplay.text,
+    `IMG avg ${abbreviateImageId(fullImageId)} ${abbreviateImageId(secondImageId)} 0.8`,
+    'abbreviates hex ids in IMG mode queries',
+);
+
+function unitVec(...values: number[]): Float32Array {
+    return normalizeEmbedding(Float32Array.from(values));
+}
+
+const axisX = unitVec(1, 0, 0);
+const axisY = unitVec(0, 1, 0);
+const midXY = averageEmbeddings([axisX, axisY]);
+assert.ok(midXY.length === 3, 'averageEmbeddings keeps dimensions');
+assert.ok(
+    Math.abs(Math.hypot(midXY[0], midXY[1], midXY[2]) - 1) < 1e-5,
+    'averageEmbeddings renormalizes',
+);
+
+const beyondX = extrapolateEmbedding(axisX, axisY, 1);
+assert.ok(beyondX[0] > axisX[0] || beyondX[1] < 0, 'extrapolateEmbedding pushes past A away from B');
+
+assert.equal(
+    scoreImgAllMode([axisX, axisY], axisX),
+    0,
+    'all-mode is zero when a candidate misses one reference entirely',
+);
+assert.ok(
+    scoreImgAllMode([axisX, axisY], midXY) > 0.5,
+    'all-mode scores a shared midpoint above half when both refs match',
+);
+assert.equal(
+    scoreImgAnyMode([axisX, axisY], axisX),
+    1,
+    'any-mode returns 1 for an exact reference match',
+);
+assert.ok(
+    scoreImgAnyMode([axisX, axisY], midXY) < 1,
+    'any-mode scores the midpoint below an exact ref match',
+);
+const fringeAtAxis = scoreImgFringeMode([axisX, axisY], midXY, axisX);
+const fringeAtMid = scoreImgFringeMode([axisX, axisY], midXY, midXY);
+assert.ok(
+    fringeAtAxis > fringeAtMid,
+    `fringe-mode ranks an off-centroid neighbor above the centroid (${fringeAtAxis} > ${fringeAtMid})`,
 );
 
 console.log('searching.test.ts: all tests passed');

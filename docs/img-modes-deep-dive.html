@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IMG modes deep dive — difference, subspace, analogy, affinity</title>
+  <style>
+    :root {
+      --bg: #f4f0ea;
+      --ink: #1a1714;
+      --muted: #5a534a;
+      --line: #d5ccc0;
+      --card: #fffcf7;
+      --accent: #2a5f4f;
+      --accent-soft: #e3efe9;
+      --warn: #7a4424;
+      --warn-soft: #f4e9e1;
+      --blue: #2c567c;
+      --blue-soft: #e5eef5;
+      --purple: #5a4578;
+      --purple-soft: #eee8f3;
+      --shadow: 0 1px 0 rgba(26, 23, 20, 0.04), 0 14px 36px rgba(26, 23, 20, 0.07);
+      --font: "Segoe UI", "Iowan Old Style", Palatino, Georgia, serif;
+      --mono: "Cascadia Code", Consolas, monospace;
+      --sans: system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(1000px 500px at 0% 0%, #e8e0d4 0%, transparent 50%),
+        radial-gradient(800px 400px at 100% 5%, #dce6e1 0%, transparent 45%),
+        var(--bg);
+      font-family: var(--font);
+      font-size: 17.5px;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 820px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    .eyebrow {
+      font-family: var(--sans);
+      font-size: 0.75rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 700;
+      margin: 0 0 0.5rem;
+    }
+    h1 {
+      font-size: clamp(1.85rem, 4vw, 2.45rem);
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.7rem;
+    }
+    .lede { color: var(--muted); margin: 0 0 1.25rem; max-width: 38rem; }
+    nav {
+      display: flex; flex-wrap: wrap; gap: 0.45rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 0.5rem;
+    }
+    nav a {
+      font-family: var(--sans);
+      font-size: 0.8rem;
+      text-decoration: none;
+      color: var(--ink);
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 0.3rem 0.65rem;
+      border-radius: 999px;
+    }
+    nav a:hover { color: var(--accent); border-color: var(--accent); }
+    section.mode {
+      margin: 2.25rem 0;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 1.35rem 1.4rem 1.45rem;
+      box-shadow: var(--shadow);
+    }
+    section.mode h2 {
+      margin: 0 0 0.35rem;
+      font-size: 1.35rem;
+      letter-spacing: -0.015em;
+    }
+    .tagrow { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0 0 0.9rem; }
+    .pill {
+      font-family: var(--sans);
+      font-size: 0.72rem;
+      padding: 0.18rem 0.5rem;
+      border-radius: 999px;
+      font-weight: 650;
+    }
+    .fast { background: var(--blue-soft); color: var(--blue); }
+    .slow { background: var(--purple-soft); color: var(--purple); }
+    .defer { background: #efe9df; color: var(--muted); }
+    .hook {
+      font-size: 1.05rem;
+      color: var(--ink);
+      margin: 0 0 1rem;
+      padding-left: 0.85rem;
+      border-left: 3px solid var(--accent);
+    }
+    h3 {
+      font-family: var(--sans);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin: 1.15rem 0 0.4rem;
+      font-weight: 700;
+    }
+    p { margin: 0.45rem 0; color: var(--muted); }
+    p strong { color: var(--ink); font-weight: 650; }
+    pre, .eq {
+      font-family: var(--mono);
+      font-size: 0.84rem;
+      background: #f0ebe3;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      overflow-x: auto;
+      line-height: 1.45;
+      color: var(--ink);
+      margin: 0.5rem 0;
+    }
+    ul { margin: 0.4rem 0; padding-left: 1.2rem; color: var(--muted); }
+    li { margin: 0.25rem 0; }
+    li strong { color: var(--ink); }
+    .vs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin: 0.7rem 0;
+    }
+    @media (max-width: 640px) { .vs { grid-template-columns: 1fr; } }
+    .vs div {
+      background: #f7f3ec;
+      border-radius: 10px;
+      padding: 0.7rem 0.8rem;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+    .vs div b {
+      display: block;
+      font-family: var(--sans);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      margin-bottom: 0.25rem;
+    }
+    .warn {
+      background: var(--warn-soft);
+      color: var(--warn);
+      border-radius: 10px;
+      padding: 0.7rem 0.85rem;
+      font-size: 0.92rem;
+      margin: 0.7rem 0 0;
+    }
+    .syntax {
+      font-family: var(--mono);
+      font-size: 0.86rem;
+      color: var(--accent);
+      background: var(--accent-soft);
+      display: inline-block;
+      padding: 0.25rem 0.55rem;
+      border-radius: 6px;
+      margin: 0.3rem 0 0;
+    }
+    footer {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="eyebrow">Beyond the v1 shortlist</p>
+    <h1>Four modes that dig deeper</h1>
+    <p class="lede">
+      Difference, shared subspace, analogy, and set affinity — what they actually optimize for,
+      how they differ from <code>avg</code> / <code>more</code> / <code>all</code>, and when they’d be worth building.
+    </p>
+    <nav>
+      <a href="#diff">Difference</a>
+      <a href="#subspace">Shared subspace</a>
+      <a href="#analogy">Analogy</a>
+      <a href="#affinity">Set affinity</a>
+    </nav>
+
+    <section class="mode" id="diff">
+      <h2>Difference / residual</h2>
+      <div class="tagrow">
+        <span class="pill fast">single query vector</span>
+        <span class="pill defer">deferred</span>
+      </div>
+      <p class="hook">Search along the <em>axis of change</em> between two images — not “near A,” not “blend of A and B.”</p>
+
+      <h3>Intuition</h3>
+      <p>
+        Pick a watercolor portrait (A) and a photo portrait (B). Averaging pulls toward “generic portrait.”
+        Extrapolation (<code>more</code>) says “even more watercolor than A, away from B.”
+        <strong>Difference</strong> throws away absolute position and keeps only the direction
+        <em>photo → watercolor</em> (or A−B). You’re asking: “who else in the library sits on that same transformation axis?”
+      </p>
+
+      <h3>Math</h3>
+      <div class="eq">q = normalize(A − B)
+score(c) = cosine(c, q)</div>
+      <p>
+        Optionally recenter: score candidates that are also somewhat near A, or re-rank a pool from
+        <code>any A B</code> by alignment with A−B. Pure difference KNN with no anchor is the noisiest form.
+      </p>
+
+      <h3>What shows up</h3>
+      <ul>
+        <li>Style transfers that share the same “delta” (photo→paint, day→night, clothed→outfit-X)</li>
+        <li>Images that aren’t near A or B in absolute terms, but move in a similar direction from some baseline</li>
+        <li>Often abstract / surprising — can feel magical or like garbage depending on the embedding</li>
+      </ul>
+
+      <div class="vs">
+        <div>
+          <b>vs more (extrapolation)</b>
+          <code>more</code> stays near A and pushes past it. Difference can leave A’s neighborhood entirely and chase the direction alone.
+        </div>
+        <div>
+          <b>vs pos − neg</b>
+          Weighted subtract still rewards being <em>like</em> positives. Difference doesn’t require looking like A — only aligning with A−B.
+        </div>
+      </div>
+
+      <h3>Fits IMG as</h3>
+      <span class="syntax">IMG diff &lt;idA&gt; &lt;idB&gt;</span>
+      <p style="margin-top:0.6rem">Exactly two ids. Order matters (A−B ≠ B−A).</p>
+
+      <div class="warn">
+        Cosine to a difference vector is brittle when A≈B (tiny noisy direction) or when the embedding
+        doesn’t linearly encode the trait you care about. Best as a re-ranker on a broader pool, or with a soft anchor to A.
+      </div>
+    </section>
+
+    <section class="mode" id="subspace">
+      <h2>Shared subspace</h2>
+      <div class="tagrow">
+        <span class="pill fast">single query vector</span>
+        <span class="pill defer">deferred · needs PCA</span>
+      </div>
+      <p class="hook">Ignore what the selected images <em>disagree</em> on; search using only what they stably share.</p>
+
+      <h3>Intuition</h3>
+      <p>
+        You select five images of the same character in different outfits, lighting, and crops.
+        Centroid still averages the outfits in. Soft <code>all</code> demands every outfit trait a bit.
+        <strong>Shared subspace</strong> finds axes of <em>variation within the set</em> and throws them out —
+        what’s left is closer to “character identity” (or shared medium, shared composition — whatever is stable).
+      </p>
+
+      <h3>Math (sketch)</h3>
+      <div class="eq">X = stack of N ref embeddings (N small, e.g. 3–20)
+find principal components of X (or of X − mean)
+project refs (or the mean) into the complementary subspace —
+  drop top-k high-variance directions within the set
+q = normalize(projected mean)
+then ordinary KNN</div>
+      <p>
+        Alternate cheap version: for each dimension, down-weight coords with high variance across refs,
+        then average. Same idea, no full SVD.
+      </p>
+
+      <h3>What shows up</h3>
+      <ul>
+        <li>More of the same subject / motif despite style churn in the selection</li>
+        <li>Fewer “outfit average” or “lighting average” false friends than plain <code>avg</code></li>
+        <li>If the set only shares something weak (all “colorful”), you get weak/generic results</li>
+      </ul>
+
+      <div class="vs">
+        <div>
+          <b>vs avg</b>
+          Avg keeps disagreeing traits at half strength. Subspace tries to zero them out.
+        </div>
+        <div>
+          <b>vs all</b>
+          <code>all</code> requires candidates to match each ref’s private traits too. Subspace forgives private traits.
+        </div>
+      </div>
+
+      <h3>Fits IMG as</h3>
+      <span class="syntax">IMG shared &lt;id&gt; &lt;id&gt;…</span>
+      <p style="margin-top:0.6rem">Needs ≥3 ids to estimate variance meaningfully; with 2 it’s almost the same as projecting out A−B (cousin of difference).</p>
+
+      <div class="warn">
+        Assumes “disagreement within the set = nuisance.” Wrong when you <em>wanted</em> the varying trait
+        (five different art styles and you care about style range). Also: PCA on N≪dims is underdetermined —
+        you only remove a few directions, which is usually enough for this use case.
+      </div>
+    </section>
+
+    <section class="mode" id="analogy">
+      <h2>Analogy <span style="font-weight:500;color:var(--muted)">(A:B :: C:?)</span></h2>
+      <div class="tagrow">
+        <span class="pill slow">score-space or pair search</span>
+        <span class="pill defer">deferred · richest / hardest</span>
+      </div>
+      <p class="hook">Transfer a relationship. “A is to B as C is to what?” in embedding space.</p>
+
+      <h3>Intuition</h3>
+      <p>
+        Classic word2vec energy: king − man + woman ≈ queen.
+        Visually: sketch-of-cat − photo-of-cat + photo-of-dog ≈ sketch-of-dog —
+        <em>if</em> your embedding encodes style and subject somewhat linearly and separately.
+        You’re not searching “similar to C”; you’re applying the A→B transform at C.
+      </p>
+
+      <h3>Math</h3>
+      <div class="eq">// three-ref form (most natural UX)
+q = normalize(C + (B − A))
+score(d) = cosine(d, q)
+
+// four-image / pair form (harder UX)
+find d maximizing cosine(d − C, B − A)
+  or cosine(normalize(d−C), normalize(B−A))</div>
+      <p>
+        Three-id form is basically <strong>anchored difference</strong>: difference direction B−A, applied at C.
+        That’s why it sits next to <code>diff</code> / <code>more</code> in the design space — same linear algebra family, different intent.
+      </p>
+
+      <h3>What shows up</h3>
+      <ul>
+        <li>Same subject, transferred style/medium/pose — when it works</li>
+        <li>Plausible near-misses that reveal what the model actually factors</li>
+        <li>Nonsense when the relationship isn’t linear in the embedding (often)</li>
+      </ul>
+
+      <div class="vs">
+        <div>
+          <b>vs more</b>
+          <code>more A B</code> = push from B through A. Analogy needs a third point C as the place to apply A→B.
+        </div>
+        <div>
+          <b>vs diff</b>
+          Diff searches the direction alone. Analogy searches “C plus that direction.”
+        </div>
+      </div>
+
+      <h3>Fits IMG as</h3>
+      <span class="syntax">IMG analogy &lt;A&gt; &lt;B&gt; &lt;C&gt;</span>
+      <p style="margin-top:0.6rem">
+        Read as “A is to B as C is to ?”. Order is sacred. Pair-picking UX is awkward in multi-select
+        unless you define order as selection order or first/last.
+      </p>
+
+      <div class="warn">
+        Highest coolness / lowest reliability of the four. Worth a prototype once <code>more</code> and <code>diff</code>
+        exist — same vector ops, third id. Don’t bet the default UX on it.
+      </div>
+    </section>
+
+    <section class="mode" id="affinity">
+      <h2>Set affinity</h2>
+      <div class="tagrow">
+        <span class="pill slow">score-space</span>
+        <span class="pill defer">deferred</span>
+      </div>
+      <p class="hook">Not “near the average” — “would this image <em>belong in the set</em>?”</p>
+
+      <h3>Intuition</h3>
+      <p>
+        Think curation. Your selection is a little collection. Some candidates sit on the centroid but
+        would look weird in the group (wrong vibe). Others sit off-centroid but act as a <strong>bridge</strong>
+        between two clusters in the selection and make the set feel more complete.
+        Affinity scores how well the candidate fits the <em>structure</em> of the set.
+      </p>
+
+      <h3>Math (a few variants)</h3>
+      <div class="eq">// cohesion gain
+score(c) = mean_pairwise_sim({refs ∪ c}) − mean_pairwise_sim({refs})
+
+// silhouette-ish
+score(c) = mean_i sim(c, ref_i) − penalty for being closer to "outsiders"
+  (outsiders = hard; often skip)
+
+// soft membership
+score(c) = geom_mean_i sim(c, ref_i)     // collapses toward `all`
+         or harmonic mean / min           // stricter membership</div>
+      <p>
+        The interesting version is <strong>cohesion gain</strong> (or leave-one-out variants):
+        reward candidates that increase internal connectivity, including bridges between two modes
+        in a multi-theme selection. Plain geom mean is basically <code>all</code> again — affinity only
+        earns a new name if the score uses set structure, not just distance to each ref independently.
+      </p>
+
+      <h3>What shows up</h3>
+      <ul>
+        <li>Collection completers: images that “fit the moodboard”</li>
+        <li>Bridges when the selection is bi-modal (can look odd next to centroid results)</li>
+        <li>Fewer lonely outliers than <code>any</code>; less muddy than <code>avg</code> on mixed sets</li>
+      </ul>
+
+      <div class="vs">
+        <div>
+          <b>vs all</b>
+          <code>all</code> = independently similar to each ref. Affinity can prefer a bridge that isn’t max-similar to every ref.
+        </div>
+        <div>
+          <b>vs fringe</b>
+          Fringe wants atypical members of the neighborhood. Affinity wants typical-enough members of the <em>set</em> — almost opposites.
+        </div>
+      </div>
+
+      <h3>Fits IMG as</h3>
+      <span class="syntax">IMG affinity &lt;id&gt; &lt;id&gt;…</span>
+      <p style="margin-top:0.6rem">Natural multi-select mode for “expand this collection.” Heavier than KNN; fine for N refs small and a capped candidate pool (e.g. union of neighbors first, then affinity re-rank).</p>
+
+      <div class="warn">
+        Cohesion-gain needs care: adding something similar to everything raises pairwise means trivially.
+        Practical recipe: take union-neighborhood candidates, then rank by cohesion gain or by
+        “mean sim to refs × (1 − max sim to already-selected results)” if used iteratively.
+      </div>
+    </section>
+
+    <footer>
+      These four stay out of v1 (<code>avg</code> / <code>all</code> / <code>any</code> / <code>more</code> / <code>fringe</code>).
+      Closest cousins already shipping: <strong>more</strong> ≈ anchored push;
+      <strong>all</strong> ≈ crude affinity; <strong>fringe</strong> ≈ opposite of affinity.
+      Difference and analogy are one linear-algebra family; subspace is “smarter avg”; affinity is “smarter all.”
+    </footer>
+  </div>
+</body>
+</html>

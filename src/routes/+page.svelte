@@ -1388,10 +1388,16 @@
                 },
                 {
                     name: "Similar images",
-                    visible: !selecting && isEmbeddingConfigured($embeddingStore),
+                    visible: (!selecting || $selection.length > 0) && isEmbeddingConfigured($embeddingStore),
                     handler() {
                         explorationMode.set('none');
-                        searchFilter.set(`IMG ${id} ${$embeddingStore.imageSimilarityThreshold}`);
+                        const threshold = $embeddingStore.imageSimilarityThreshold;
+                        const ids = selecting ? [...$selection] : [id];
+                        if (ids.length > 1) {
+                            searchFilter.set(`IMG avg ${ids.join(' ')} ${threshold}`);
+                        } else {
+                            searchFilter.set(`IMG ${ids[0]} ${threshold}`);
+                        }
                         commitSearchNow();
                     },
                 },

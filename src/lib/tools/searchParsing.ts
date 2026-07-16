@@ -30,8 +30,57 @@ export type ParsedWeightedImgQueryClause =
     | { kind: 'text'; text: string; weight: 1 | -1 }
     | { kind: 'image'; imageId: string; weight: 1 | -1 };
 
+export const IMG_SEARCH_MODES = ['avg', 'all', 'any', 'more', 'fringe'] as const;
+export type ImgSearchMode = (typeof IMG_SEARCH_MODES)[number];
+
+export type ParsedImgModeQuery = {
+    kind: 'mode';
+    mode: ImgSearchMode;
+    imageIds: string[];
+};
+
+export type ParsedImgQueryBody =
+    | ParsedImgModeQuery
+    | { kind: 'weighted'; clauses: ParsedWeightedImgQueryClause[] };
+
+const IMG_SEARCH_MODE_SET = new Set<string>(IMG_SEARCH_MODES);
+
 export function isImageEmbeddingId(token: string): boolean {
     return /^[0-9a-f]{64}$/i.test(token);
+}
+
+export function isImgSearchMode(token: string): token is ImgSearchMode {
+    return IMG_SEARCH_MODE_SET.has(token.toLowerCase());
+}
+
+/**
+ * Mode form: `avg|all|any|more|fringe` followed by one or more 64-char hex ids.
+ * Otherwise fall back to weighted +/- parsing (text and/or image ids).
+ */
+export function parseImgQueryBody(queryText: string): ParsedImgQueryBody {
+    const trimmed = queryText.trim();
+    if (!trimmed)
+        return { kind: 'weighted', clauses: [] };
+
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    if (tokens.length >= 2) {
+        const modeToken = tokens[0]?.toLowerCase() ?? '';
+        if (isImgSearchMode(modeToken)) {
+            const imageIds = tokens.slice(1);
+            if (imageIds.length > 0 && imageIds.every((token) => isImageEmbeddingId(token))) {
+                return {
+                    kind: 'mode',
+                    mode: modeToken,
+                    imageIds,
+                };
+            }
+        }
+    }
+
+    return {
+        kind: 'weighted',
+        clauses: parseWeightedImgQueryClauses(trimmed),
+    };
 }
 
 function expandClauseKeywordTokens(): string[] {
@@ -131,6 +180,7 @@ function findClauseBodyBoundary(
     search: string,
     bodyStart: number,
     hasDatePrefix: boolean,
+    hasImgPrefix = false,
 ): { end: number; nextPos: number } {
     const keywordAtBodyStart = readKeywordAt(search, bodyStart);
     if (
@@ -201,6 +251,12 @@ function findClauseBodyBoundary(
         if (upper === 'AND')
             return { end: index, nextPos: consumeExplicitAndDelimiter(search, index) };
 
+        // Allow `IMG all <hex>…` mode: ALL is also a top-level search keyword.
+        if (hasImgPrefix && upper === 'ALL') {
+            index = keywordStart + keyword.length - 1;
+            continue;
+        }
+
         return { end: index, nextPos: keywordStart };
     }
 
@@ -229,6 +285,7 @@ export function tokenizeSearchClauses(search: string): SearchClause[] {
 
         const clauseStart = pos;
         let hasDatePrefix = false;
+        let hasImgPrefix = false;
 
         while (pos < search.length) {
             const keyword = readKeywordAt(search, pos);
@@ -241,6 +298,8 @@ export function tokenizeSearchClauses(search: string): SearchClause[] {
 
             if (upper === 'DATE' || upper === 'DT')
                 hasDatePrefix = true;
+            if (upper === 'IMG')
+                hasImgPrefix = true;
 
             pos += keyword.length;
             pos = skipWhitespace(search, pos);
@@ -249,7 +308,7 @@ export function tokenizeSearchClauses(search: string): SearchClause[] {
         let end = search.length;
         let nextPos = search.length;
 
-        const boundary = findClauseBodyBoundary(search, pos, hasDatePrefix);
+        const boundary = findClauseBodyBoundary(search, pos, hasDatePrefix, hasImgPrefix);
         end = boundary.end;
         nextPos = boundary.nextPos;
 
@@ -488,8 +547,12 @@ function collectPositiveImgSourceIds(part: string): string[] {
     if (!queryText)
         return [];
 
+    const parsed = parseImgQueryBody(queryText);
+    if (parsed.kind === 'mode')
+        return [...parsed.imageIds];
+
     const ids: string[] = [];
-    for (const clause of parseWeightedImgQueryClauses(queryText)) {
+    for (const clause of parsed.clauses) {
         if (clause.kind === 'image' && clause.weight > 0)
             ids.push(clause.imageId);
     }

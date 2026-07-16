@@ -40,7 +40,7 @@ Image-to-image embedding similarity no longer uses `SIMILAR img <id>`. Use `IMG 
 | Location | Change |
 |----------|--------|
 | Search syntax | `SIMILAR img …` is not parsed as image embedding similarity |
-| Context menu **Similar images** | Sets `IMG <id> <threshold>` |
+| Context menu **Similar images** | Sets `IMG <id> <threshold>` (single) or `IMG avg <ids…> <threshold>` (multi-select) |
 | Search display abbreviation | Applies to `IMG` clause hex ids as well as `SIMILAR` ids |
 
 ### Migration code
@@ -50,12 +50,53 @@ None. Users must update saved searches and habits manually.
 ### How to verify
 
 1. Right-click an image with embeddings configured — **Similar images** runs `IMG <id> 0.8` (or the configured threshold).
-2. `IMG <64-char-id>` returns image-to-image matches; `SIMILAR <id>` compares prompt text only.
-3. Weighted `IMG <id> + turtle - beach` abbreviates hex ids in the search box display.
+2. With multiple images selected — **Similar images** runs `IMG avg <id1> <id2> … <threshold>`.
+3. `IMG <64-char-id>` returns image-to-image matches; `SIMILAR <id>` compares prompt text only.
+4. Weighted `IMG <id> + turtle - beach` abbreviates hex ids in the search box display.
+5. Mode queries work: `IMG all <id1> <id2>`, `IMG any …`, `IMG more <A> <B>`, `IMG fringe …`.
 
 ### Removal
 
 No migration helper; the old `SIMILAR img` form is unsupported.
+
+## IMG multi-image modes (2026-07)
+
+### What changed
+
+`IMG` accepts named multi-image modes with space-separated hex ids (no `+` required):
+
+- `avg` — centroid / average embedding (fast KNN)
+- `all` — soft intersection (geometric mean of similarities)
+- `any` — soft union (max similarity)
+- `more <A> <B>` — extrapolate past A away from B
+- `fringe` — related but atypical vs the selection centroid
+
+Weighted `+/-` image+text queries are unchanged. Mode names are recognized only when followed by hex ids, so `IMG fringe of trees` remains a text query.
+
+Tokenizer note: inside an `IMG` clause, the `ALL` keyword does not start a new clause (so `IMG all <id>…` parses as one clause). Explicit `AND` still splits.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| Search syntax | Additive mode forms |
+| Multi-select **Similar images** | Emits `IMG avg …` |
+| Keyword help | Documents modes |
+
+### Migration code
+
+None (additive).
+
+### How to verify
+
+1. `IMG avg <id1> <id2> 0.8` returns blended neighbors.
+2. `IMG all <id1> <id2>` stays one search clause (not split by `ALL`).
+3. `IMG more <idA> <idB>` requires exactly two ids.
+4. Multi-select → Similar images emits `IMG avg` with all selected ids.
+
+### Removal
+
+Modes can be removed later by dropping the mode parse branch; no data migration.
 
 ## Image similarity threshold setting (2026-07)
 
