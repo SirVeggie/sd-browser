@@ -38,7 +38,8 @@
   import TagModal from "$lib/components/TagModal.svelte";
   import { tagsStore, upsertTagDefinition } from "$lib/stores/tagsStore";
   import { DEFAULT_TAG_COLOR } from "$lib/types/tags";
-  import { fullscreenStyle } from "$lib/stores/styleStore";
+  import { fullscreenStyle, imageFadeMs } from "$lib/stores/styleStore";
+  import { get } from "svelte/store";
   import type { ClientImage, ImageInfo } from "$lib/types/images";
   import {
     closeAllContextMenus,
@@ -82,9 +83,12 @@
   let mediaRetryCount = 0;
 
   const comfyTokenStorageKey = "comfyWorkflowOpenToken";
-  const placeholderFadeMs = 90;
   const maxMediaRetries = 6;
   const mediaRetryDelayMs = 400;
+
+  function placeholderLeaveMs(fadeMs: number) {
+    return Math.max(0, Math.floor(fadeMs / 2));
+  }
 
   function clearRevealTimer() {
     if (!revealTimer) return;
@@ -145,17 +149,18 @@
 
   function startReveal(expectedUrl: string) {
     if (imageUrl !== expectedUrl || mediaLoaded) return;
-    if (!placeholderVisible || prefersReducedMotion()) {
+    if (!placeholderVisible || prefersReducedMotion() || get(imageFadeMs) <= 0) {
       revealLoadedMedia(expectedUrl);
       return;
     }
 
+    const leaveMs = placeholderLeaveMs(get(imageFadeMs));
     clearRevealTimer();
     placeholderLeaving = true;
     revealTimer = setTimeout(() => {
       revealTimer = undefined;
       revealLoadedMedia(expectedUrl);
-    }, placeholderFadeMs);
+    }, leaveMs);
   }
 
   function markMediaReady(expectedUrl: string) {
@@ -216,10 +221,13 @@
     }
   }
 
-  $: mediaStyle =
+  $: mediaStyle = [
     image?.width && image?.height
       ? `--media-ratio: ${image.width / image.height}; aspect-ratio: ${image.width} / ${image.height}`
-      : undefined;
+      : "",
+    `--image-fade-ms: ${$imageFadeMs}ms`,
+    `--placeholder-fade-ms: ${placeholderLeaveMs($imageFadeMs)}ms`,
+  ].filter(Boolean).join("; ");
 
   $: if (data) imageTags = data.tags ?? [];
   $: availableTags = $tagsStore.tags
@@ -681,7 +689,8 @@
           <div
             class="media-container"
             class:full
-            class:has-aspect={!!mediaStyle}
+            class:has-aspect={!!(image?.width && image?.height)}
+            class:no-fade={$imageFadeMs <= 0}
             style={mediaStyle}
           >
             {#if placeholderVisible}
@@ -862,7 +871,7 @@
           height: 100%;
           min-height: min(40vh, 20em);
           opacity: 1;
-          transition: opacity 90ms ease;
+          transition: opacity var(--placeholder-fade-ms, 90ms) ease;
 
           &.leaving {
             opacity: 0;
@@ -924,6 +933,17 @@
           min-height: 0;
         }
 
+        &.no-fade {
+          .loading-slot {
+            transition: none;
+          }
+
+          img,
+          video {
+            transition: none;
+          }
+        }
+
         img,
         video {
           grid-area: 1 / 1;
@@ -933,7 +953,7 @@
           max-height: calc(100dvh - var(--pad) * 2);
           max-width: 100%;
           object-fit: contain;
-          transition: opacity 180ms ease;
+          transition: opacity var(--image-fade-ms, 180ms) ease;
 
           &.hidden {
             opacity: 0;

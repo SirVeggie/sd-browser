@@ -9,7 +9,7 @@
         buildImageQueryParams,
         getPreviewParam,
     } from "$lib/requests/imageRequests";
-    import { fadeInImages, imageSpacing } from "$lib/stores/styleStore";
+    import { imageFadeMs, imageSpacing } from "$lib/stores/styleStore";
     import { get } from "svelte/store";
     import type { ClientImage } from "$lib/types/images";
 
@@ -34,7 +34,9 @@
     let placeholderLeaving = false;
     let revealTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const placeholderFadeMs = 90;
+    function placeholderLeaveMs(fadeMs: number) {
+        return Math.max(0, Math.floor(fadeMs / 2));
+    }
 
     function clearRevealTimer() {
         if (!revealTimer) return;
@@ -64,17 +66,18 @@
 
     function startReveal(expectedSrc: string) {
         if (src !== expectedSrc || hasLoaded) return;
-        if (!placeholderVisible || prefersReducedMotion() || !get(fadeInImages)) {
+        if (!placeholderVisible || prefersReducedMotion() || get(imageFadeMs) <= 0) {
             revealLoadedMedia(expectedSrc);
             return;
         }
 
+        const leaveMs = placeholderLeaveMs(get(imageFadeMs));
         clearRevealTimer();
         placeholderLeaving = true;
         revealTimer = setTimeout(() => {
             revealTimer = undefined;
             revealLoadedMedia(expectedSrc);
-        }, placeholderFadeMs);
+        }, leaveMs);
     }
 
     function markLoaded(expectedSrc: string) {
@@ -120,9 +123,11 @@
     $: spacingCompact = $imageSpacing === "compact";
     $: spacingMosaic = $imageSpacing === "mosaic";
     $: hasDimensions = !!(img.width && img.height);
-    $: containerStyle = hasDimensions
-        ? `aspect-ratio: ${img.width} / ${img.height}`
-        : undefined;
+    $: fadeVars = `--image-fade-ms: ${$imageFadeMs}ms; --placeholder-fade-ms: ${placeholderLeaveMs($imageFadeMs)}ms`;
+    $: containerStyle = [
+        hasDimensions ? `aspect-ratio: ${img.width} / ${img.height}` : "",
+        fadeVars,
+    ].filter(Boolean).join("; ");
     $: if (src !== loadingSrc) resetReveal(src);
     $: loadSession, src, imgElement, videoElement, checkAlreadyLoaded();
 
@@ -137,7 +142,7 @@
     class:selected
     class:has-dimensions={hasDimensions}
     class:loaded={hasLoaded}
-    class:no-fade={!$fadeInImages}
+    class:no-fade={$imageFadeMs <= 0}
     style={containerStyle}
 >
     <Clickable up={onClick} contextMenu={onContext}>
@@ -208,7 +213,7 @@
             transform: scale(1.01);
             transition:
                 transform 0.4s ease,
-                opacity 180ms ease;
+                opacity var(--image-fade-ms, 180ms) ease;
 
             &.hidden {
                 opacity: 0;
@@ -219,7 +224,7 @@
 
         .loading {
             opacity: 1;
-            transition: opacity 90ms ease;
+            transition: opacity var(--placeholder-fade-ms, 90ms) ease;
 
             &.leaving {
                 opacity: 0;

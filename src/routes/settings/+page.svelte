@@ -40,6 +40,7 @@
     } from "$lib/types/misc";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import {
+        imageFadeMs,
         fullscreenStyle,
         imageFlow,
         imageSize,
@@ -635,6 +636,14 @@
         >
             Maximize fullscreen image size:
             <input type="checkbox" bind:checked={$fullscreenStyle} />
+        </label>
+
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label
+            title="0 disables fade (instant swap); higher values smooth the reveal (nicer on slow networks)."
+        >
+            Image fade-in (ms):
+            <NumInput bind:value={$imageFadeMs} />
         </label>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
