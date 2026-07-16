@@ -169,7 +169,6 @@
                 alt={img.id}
                 width={hasDimensions ? img.width : undefined}
                 height={hasDimensions ? img.height : undefined}
-                loading="lazy"
                 decoding="async"
                 fetchpriority="low"
                 on:load={createImageReadyHandler(src)}
