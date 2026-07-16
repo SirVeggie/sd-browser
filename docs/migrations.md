@@ -70,10 +70,14 @@ No migration helper; the old `SIMILAR img` form is unsupported.
 - `any` — soft union (max similarity)
 - `more <A> <B>` — extrapolate past A away from B
 - `fringe` — related but atypical vs the selection centroid
+- `diff <A> <B>` — search along normalize(A − B)
+- `shared` — centroid with high within-set variance dims downweighted
+- `analogy <A> <B> <C>` — A:B :: C:? via normalize(C + (B − A))
+- `affinity` — cohesion gain of joining the reference set
 
 Weighted `+/-` image+text queries are unchanged. Mode names are recognized only when followed by hex ids, so `IMG fringe of trees` remains a text query.
 
-Tokenizer note: inside an `IMG` clause, the `ALL` keyword does not start a new clause (so `IMG all <id>…` parses as one clause). Explicit `AND` still splits.
+Tokenizer note: inside an `IMG` clause, the `ALL` keyword does not start a new clause (so `IMG all <id>…` parses as one clause). Explicit `AND` still splits. Matcher classifies `IMG` before `ALL` so `IMG all …` is embedding search, not metadata `ALL`.
 
 ### Affected data
 
@@ -90,9 +94,10 @@ None (additive).
 ### How to verify
 
 1. `IMG avg <id1> <id2> 0.8` returns blended neighbors.
-2. `IMG all <id1> <id2>` stays one search clause (not split by `ALL`).
-3. `IMG more <idA> <idB>` requires exactly two ids.
-4. Multi-select → Similar images emits `IMG avg` with all selected ids.
+2. `IMG all <id1> <id2>` stays one search clause and returns embedding matches (not empty metadata `ALL` hits).
+3. `IMG more <idA> <idB>` and `IMG diff <idA> <idB>` require exactly two ids; `IMG analogy <A> <B> <C>` requires three.
+4. `IMG shared <ids…>` and `IMG affinity <ids…>` require at least two ids.
+5. Multi-select → Similar images emits `IMG avg` with all selected ids.
 
 ### Removal
 

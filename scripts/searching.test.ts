@@ -25,11 +25,16 @@ import {
 } from '../src/lib/tools/searchDisplay.ts';
 import {
     averageEmbeddings,
+    analogyEmbedding,
+    buildImgAffinityRefStats,
+    differenceEmbedding,
     extrapolateEmbedding,
     normalizeEmbedding,
+    scoreImgAffinityMode,
     scoreImgAllMode,
     scoreImgAnyMode,
     scoreImgFringeMode,
+    sharedSubspaceEmbedding,
 } from '../src/lib/tools/vectorMath.ts';
 
 assert.deepEqual(
@@ -381,6 +386,32 @@ assert.deepEqual(
     'parses IMG fringe mode with one id',
 );
 
+const thirdImageId = 'c'.repeat(64);
+
+assert.deepEqual(
+    parseImgQueryBody(`diff ${fullImageId} ${secondImageId}`),
+    { kind: 'mode', mode: 'diff', imageIds: [fullImageId, secondImageId] },
+    'parses IMG diff mode',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(`shared ${fullImageId} ${secondImageId}`),
+    { kind: 'mode', mode: 'shared', imageIds: [fullImageId, secondImageId] },
+    'parses IMG shared mode',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(`analogy ${fullImageId} ${secondImageId} ${thirdImageId}`),
+    { kind: 'mode', mode: 'analogy', imageIds: [fullImageId, secondImageId, thirdImageId] },
+    'parses IMG analogy mode with three ids',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(`affinity ${fullImageId} ${secondImageId}`),
+    { kind: 'mode', mode: 'affinity', imageIds: [fullImageId, secondImageId] },
+    'parses IMG affinity mode',
+);
+
 assert.equal(
     parseImgQueryBody('fringe of trees').kind,
     'weighted',
@@ -455,6 +486,33 @@ const fringeAtMid = scoreImgFringeMode([axisX, axisY], midXY, midXY);
 assert.ok(
     fringeAtAxis > fringeAtMid,
     `fringe-mode ranks an off-centroid neighbor above the centroid (${fringeAtAxis} > ${fringeAtMid})`,
+);
+
+const diffXY = differenceEmbedding(axisX, axisY);
+assert.ok(diffXY[0] > 0 && diffXY[1] < 0, 'differenceEmbedding points from B toward A');
+
+const axisZ = unitVec(0, 0, 1);
+const analogyQ = analogyEmbedding(axisX, axisY, axisZ);
+assert.ok(analogyQ.length === 3, 'analogyEmbedding keeps dimensions');
+assert.ok(
+    Math.abs(Math.hypot(analogyQ[0], analogyQ[1], analogyQ[2]) - 1) < 1e-5,
+    'analogyEmbedding renormalizes',
+);
+
+const nearX = unitVec(0.95, 0.05, 0);
+const nearX2 = unitVec(0.9, 0.1, 0);
+const sharedQ = sharedSubspaceEmbedding([nearX, nearX2, axisX]);
+assert.ok(
+    sharedQ[0] > Math.abs(sharedQ[1]),
+    'sharedSubspaceEmbedding keeps the stable axis stronger than varying dims',
+);
+
+const affinityStats = buildImgAffinityRefStats([axisX, axisY]);
+const affinityMid = scoreImgAffinityMode([axisX, axisY], affinityStats, midXY);
+const affinityFar = scoreImgAffinityMode([axisX, axisY], affinityStats, axisZ);
+assert.ok(
+    affinityMid > affinityFar,
+    `affinity prefers a bridge between refs over an orthogonal point (${affinityMid} > ${affinityFar})`,
 );
 
 console.log('searching.test.ts: all tests passed');

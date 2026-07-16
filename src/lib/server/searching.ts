@@ -19,12 +19,17 @@ import {
 } from "$lib/tools/searchParsing";
 import {
     averageEmbeddings,
+    analogyEmbedding,
+    buildImgAffinityRefStats,
     clampUnitScore,
     cosineSimilarity,
+    differenceEmbedding,
     extrapolateEmbedding,
     geometricMeanPositive,
+    scoreImgAffinityMode,
     scoreImgAnyMode,
     scoreImgFringeMode,
+    sharedSubspaceEmbedding,
 } from "$lib/tools/vectorMath";
 import {
     isSimilaritySorting,
@@ -85,6 +90,30 @@ const WEIGHTED_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD = 0.5;
 const FRINGE_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD = 0.05;
 /** Extrapolation strength for `IMG more A B` (step past A away from B). */
 const IMG_MORE_EXTRAPOLATION_ALPHA = 1;
+
+function defaultImgModeThreshold(mode: ImgSearchMode, imageSimilarityThreshold: number): number {
+    switch (mode) {
+        case 'fringe':
+            return FRINGE_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
+        case 'all':
+        case 'affinity':
+            // Same default as positive-only weighted `IMG a + b`.
+            return IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
+        case 'diff':
+        case 'analogy':
+            // Direction vectors often score lower than absolute similarity.
+            return IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
+        case 'avg':
+        case 'any':
+        case 'more':
+        case 'shared':
+            return imageSimilarityThreshold;
+        default: {
+            const _exhaustive: never = mode;
+            return _exhaustive;
+        }
+    }
+}
 const skipRegex = new RegExp(`^${keywordPattern}SKIP `, keywordFlags);
 const takeRegex = new RegExp(`^${keywordPattern}TAKE `, keywordFlags);
 const resultCountRegex = /^\d+$/;
@@ -502,9 +531,20 @@ function findScoredImgMatches(
 function assertImgModeArity(mode: ImgSearchMode, imageIds: string[]): void {
     switch (mode) {
         case 'more':
+        case 'diff':
             if (imageIds.length !== 2) {
-                throw new Error('IMG more requires exactly two image ids: IMG more <idA> <idB>');
+                throw new Error(`IMG ${mode} requires exactly two image ids: IMG ${mode} <idA> <idB>`);
             }
+            return;
+        case 'analogy':
+            if (imageIds.length !== 3) {
+                throw new Error('IMG analogy requires exactly three image ids: IMG analogy <A> <B> <C>');
+            }
+            return;
+        case 'shared':
+        case 'affinity':
+            if (imageIds.length < 2)
+                throw new Error(`IMG ${mode} requires at least two image ids`);
             return;
         case 'avg':
         case 'all':
@@ -574,6 +614,43 @@ async function findImgModeMatches(
                 knnForceJs,
             );
         }
+        case 'diff': {
+            const query = differenceEmbedding(refEmbeddings[0], refEmbeddings[1]);
+            return EmbeddingDB.findSimilarImage(
+                query,
+                minSimilarity,
+                effectiveK,
+                candidateIds,
+                useOptimizedEmbeddingQuery,
+                knnForceJs,
+            );
+        }
+        case 'shared': {
+            const query = sharedSubspaceEmbedding(refEmbeddings);
+            return EmbeddingDB.findSimilarImage(
+                query,
+                minSimilarity,
+                effectiveK,
+                candidateIds,
+                useOptimizedEmbeddingQuery,
+                knnForceJs,
+            );
+        }
+        case 'analogy': {
+            const query = analogyEmbedding(
+                refEmbeddings[0],
+                refEmbeddings[1],
+                refEmbeddings[2],
+            );
+            return EmbeddingDB.findSimilarImage(
+                query,
+                minSimilarity,
+                effectiveK,
+                candidateIds,
+                useOptimizedEmbeddingQuery,
+                knnForceJs,
+            );
+        }
         case 'all':
             // Same score as weighted `IMG a + b` (geom mean of positives, shifted to 0..1).
             return findWeightedImgMatches(
@@ -601,6 +678,16 @@ async function findImgModeMatches(
                 explicitThreshold,
                 (candidate) => scoreImgFringeMode(refEmbeddings, centroid, candidate),
                 { excludeIds },
+            );
+        }
+        case 'affinity': {
+            const stats = buildImgAffinityRefStats(refEmbeddings);
+            return findScoredImgMatches(
+                candidateIds,
+                effectiveThreshold,
+                k,
+                explicitThreshold,
+                (candidate) => scoreImgAffinityMode(refEmbeddings, stats, candidate),
             );
         }
         default: {
@@ -698,13 +785,9 @@ export async function resolveImgSearchContext(
             let matchScores: Map<string, number>;
 
             if (parsedQuery.kind === 'mode') {
-                const effectiveThreshold = threshold ?? (
-                    parsedQuery.mode === 'fringe'
-                        ? FRINGE_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
-                        : parsedQuery.mode === 'all'
-                            // Same default as positive-only weighted `IMG a + b`.
-                            ? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
-                            : settings.imageSimilarityThreshold
+                const effectiveThreshold = threshold ?? defaultImgModeThreshold(
+                    parsedQuery.mode,
+                    settings.imageSimilarityThreshold,
                 );
                 const { forceJs } = resolveImgSimilaritySearchLimits(
                     effectiveThreshold,

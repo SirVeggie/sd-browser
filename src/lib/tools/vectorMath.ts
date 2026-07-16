@@ -127,3 +127,110 @@ export function scoreImgFringeMode(
     const centrality = clampUnitScore(cosineSimilarity(centroid, candidate));
     return relatedness * (1 - centrality);
 }
+
+/** Difference / residual direction: normalize(A − B). */
+export function differenceEmbedding(
+    embeddingA: Float32Array,
+    embeddingB: Float32Array,
+): Float32Array {
+    const length = Math.min(embeddingA.length, embeddingB.length);
+    const result = new Float32Array(length);
+    for (let index = 0; index < length; index++)
+        result[index] = embeddingA[index] - embeddingB[index];
+    return normalizeEmbedding(result);
+}
+
+/** Analogy A:B :: C:? → normalize(C + (B − A)). */
+export function analogyEmbedding(
+    embeddingA: Float32Array,
+    embeddingB: Float32Array,
+    embeddingC: Float32Array,
+): Float32Array {
+    const length = Math.min(embeddingA.length, embeddingB.length, embeddingC.length);
+    const result = new Float32Array(length);
+    for (let index = 0; index < length; index++)
+        result[index] = embeddingC[index] + (embeddingB[index] - embeddingA[index]);
+    return normalizeEmbedding(result);
+}
+
+/**
+ * Shared-subspace query: mean embedding with high within-set variance dims downweighted.
+ * Cheaper than PCA; enough for small reference sets.
+ */
+export function sharedSubspaceEmbedding(embeddings: Float32Array[]): Float32Array {
+    if (!embeddings.length)
+        return new Float32Array();
+    if (embeddings.length === 1)
+        return normalizeEmbedding(new Float32Array(embeddings[0]));
+
+    const dimensions = embeddings[0].length;
+    const mean = new Float32Array(dimensions);
+    for (const embedding of embeddings) {
+        const length = Math.min(dimensions, embedding.length);
+        for (let index = 0; index < length; index++)
+            mean[index] += embedding[index];
+    }
+    const invN = 1 / embeddings.length;
+    for (let index = 0; index < dimensions; index++)
+        mean[index] *= invN;
+
+    const variance = new Float32Array(dimensions);
+    for (const embedding of embeddings) {
+        const length = Math.min(dimensions, embedding.length);
+        for (let index = 0; index < length; index++) {
+            const delta = embedding[index] - mean[index];
+            variance[index] += delta * delta;
+        }
+    }
+    for (let index = 0; index < dimensions; index++)
+        variance[index] *= invN;
+
+    const query = new Float32Array(dimensions);
+    for (let index = 0; index < dimensions; index++)
+        query[index] = mean[index] / (1 + variance[index]);
+
+    return normalizeEmbedding(query);
+}
+
+export type ImgAffinityRefStats = {
+    refPairSum: number;
+    refPairCount: number;
+};
+
+/** Precompute pairwise cohesion among refs for affinity scoring. */
+export function buildImgAffinityRefStats(refEmbeddings: Float32Array[]): ImgAffinityRefStats {
+    let refPairSum = 0;
+    let refPairCount = 0;
+    for (let i = 0; i < refEmbeddings.length; i++) {
+        for (let j = i + 1; j < refEmbeddings.length; j++) {
+            refPairSum += clampUnitScore(cosineSimilarity(refEmbeddings[i], refEmbeddings[j]));
+            refPairCount++;
+        }
+    }
+    return { refPairSum, refPairCount };
+}
+
+/**
+ * Set affinity via cohesion gain when adding the candidate.
+ * Mapped to ~0..1 with (gain + 1) / 2 so thresholds behave like weighted IMG.
+ */
+export function scoreImgAffinityMode(
+    refEmbeddings: Float32Array[],
+    stats: ImgAffinityRefStats,
+    candidate: Float32Array,
+): number {
+    if (!refEmbeddings.length)
+        return 0;
+    if (refEmbeddings.length === 1)
+        return clampUnitScore(cosineSimilarity(refEmbeddings[0], candidate));
+
+    let toCandidate = 0;
+    for (const ref of refEmbeddings)
+        toCandidate += clampUnitScore(cosineSimilarity(ref, candidate));
+
+    const baseMean = stats.refPairCount > 0 ? stats.refPairSum / stats.refPairCount : 0;
+    const newCount = stats.refPairCount + refEmbeddings.length;
+    const newMean = (stats.refPairSum + toCandidate) / newCount;
+    const gain = newMean - baseMean;
+    return clampUnitScore((gain + 1) / 2);
+}

@@ -30,7 +30,17 @@ export type ParsedWeightedImgQueryClause =
     | { kind: 'text'; text: string; weight: 1 | -1 }
     | { kind: 'image'; imageId: string; weight: 1 | -1 };
 
-export const IMG_SEARCH_MODES = ['avg', 'all', 'any', 'more', 'fringe'] as const;
+export const IMG_SEARCH_MODES = [
+    'avg',
+    'all',
+    'any',
+    'more',
+    'fringe',
+    'diff',
+    'shared',
+    'analogy',
+    'affinity',
+] as const;
 export type ImgSearchMode = (typeof IMG_SEARCH_MODES)[number];
 
 export type ParsedImgModeQuery = {
@@ -54,7 +64,7 @@ export function isImgSearchMode(token: string): token is ImgSearchMode {
 }
 
 /**
- * Mode form: `avg|all|any|more|fringe` followed by one or more 64-char hex ids.
+ * Mode form: known mode keyword followed by one or more 64-char hex ids.
  * Otherwise fall back to weighted +/- parsing (text and/or image ids).
  */
 export function parseImgQueryBody(queryText: string): ParsedImgQueryBody {
