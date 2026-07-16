@@ -12,6 +12,7 @@ import {
     unescapeSearchLiterals,
     parseSearchTargetWithOptionalImgLimit,
     parseImgQueryBody,
+    extractImgSearchTarget,
     type ParsedWeightedImgQueryClause,
     type ImgSearchMode,
     type ParsedImgModeQuery,
@@ -22,7 +23,6 @@ import {
     cosineSimilarity,
     extrapolateEmbedding,
     geometricMeanPositive,
-    scoreImgAllMode,
     scoreImgAnyMode,
     scoreImgFringeMode,
 } from "$lib/tools/vectorMath";
@@ -332,7 +332,9 @@ function parseImgSearchPart(part: string): {
         return { presenceOnly: true, queryText: '' };
     }
 
-    let raw = part.replace(removeRegex, '');
+    // Prefer extractImgSearchTarget over stripping all keyword prefixes: `ALL` is both an
+    // IMG mode name and a search keyword, and removeRegex would eat `IMG all …` down to ids.
+    let raw = extractImgSearchTarget(part);
     let disableTemplate = false;
 
     if (/^~\s*/.test(raw)) {
@@ -573,12 +575,13 @@ async function findImgModeMatches(
             );
         }
         case 'all':
-            return findScoredImgMatches(
-                candidateIds,
+            // Same score as weighted `IMG a + b` (geom mean of positives, shifted to 0..1).
+            return findWeightedImgMatches(
+                refEmbeddings.map((embedding) => ({ weight: 1 as const, embedding })),
                 effectiveThreshold,
                 k,
+                candidateIds,
                 explicitThreshold,
-                (candidate) => scoreImgAllMode(refEmbeddings, candidate),
             );
         case 'any':
             return findScoredImgMatches(
@@ -698,7 +701,10 @@ export async function resolveImgSearchContext(
                 const effectiveThreshold = threshold ?? (
                     parsedQuery.mode === 'fringe'
                         ? FRINGE_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
-                        : settings.imageSimilarityThreshold
+                        : parsedQuery.mode === 'all'
+                            // Same default as positive-only weighted `IMG a + b`.
+                            ? IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
+                            : settings.imageSimilarityThreshold
                 );
                 const { forceJs } = resolveImgSimilaritySearchLimits(
                     effectiveThreshold,
@@ -1052,7 +1058,6 @@ function orderRankedSearchIds(
 function pinSimilarSourceImages(
     images: ServerImage[],
     search: string,
-    imageList: Map<string, ServerImage>,
 ): ServerImage[] {
     const sourceIds = getPositiveSimilarSourceIds(search);
     if (!sourceIds.length)
@@ -1063,7 +1068,7 @@ function pinSimilarSourceImages(
     const byId = new Map(images.map((image) => [image.id, image]));
 
     for (const id of sourceIds) {
-        const image = byId.get(id) ?? imageList.get(id);
+        const image = byId.get(id);
         if (!image || seen.has(id))
             continue;
         pinned.push(image);
@@ -1212,7 +1217,7 @@ export function collectSearchPlanImages(
         );
     }
 
-    list = pinSimilarSourceImages(list, plan.search, plan.imageList);
+    list = pinSimilarSourceImages(list, plan.search);
 
     if (options.skipResults !== false || options.takeResults !== false) {
         const skipped = options.skipResults !== false
@@ -1428,7 +1433,7 @@ export async function searchImagesStreaming(
         finalImages = withException;
     }
 
-    finalImages = pinSimilarSourceImages(finalImages, search, plan.imageList);
+    finalImages = pinSimilarSourceImages(finalImages, search);
 
     return {
         orderedIds: finalImages.map((image) => image.id),
@@ -1506,7 +1511,9 @@ export function buildMatcher(
         }
 
         let type: MatchType = 'positive';
-        if (allRegex.test(x)) type = 'all';
+        // IMG before ALL: `IMG all <ids…>` is an embedding mode; ALL is also a metadata keyword.
+        if (imgRegex.test(x) || imgOnlyRegex.test(x)) type = 'img';
+        else if (allRegex.test(x)) type = 'all';
         else if (negativeRegex.test(x)) type = 'negative';
         else if (folderRegex.test(x)) type = 'folder';
         else if (paramRegex.test(x)) type = 'params';
@@ -1517,7 +1524,6 @@ export function buildMatcher(
         else if (similarRegex.test(x)) type = 'similar';
         else if (idRegex.test(x)) type = 'id';
         else if (videoRegex.test(x) || videoOnlyRegex.test(x)) type = 'video';
-        else if (imgRegex.test(x) || imgOnlyRegex.test(x)) type = 'img';
 
         let similarRef: string | undefined;
         let similarSourceId: string | undefined;

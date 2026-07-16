@@ -1398,6 +1398,8 @@
                         } else {
                             searchFilter.set(`IMG ${ids[0]} ${threshold}`);
                         }
+                        if (selecting)
+                            cancelSelect();
                         commitSearchNow();
                     },
                 },

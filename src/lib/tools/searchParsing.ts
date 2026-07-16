@@ -588,11 +588,12 @@ export function pinIdsToFront(ids: string[], frontIds: string[]): string[] {
     if (!frontIds.length)
         return ids;
 
+    const idSet = new Set(ids);
     const seen = new Set<string>();
     const result: string[] = [];
 
     for (const id of frontIds) {
-        if (seen.has(id))
+        if (!idSet.has(id) || seen.has(id))
             continue;
         result.push(id);
         seen.add(id);

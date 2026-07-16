@@ -15,6 +15,7 @@ import {
     parseWeightedImgQueryClauses,
     parseSearchTargetWithOptionalImgLimit,
     parseImgQueryBody,
+    extractImgSearchTarget,
 } from '../src/lib/tools/searchParsing.ts';
 import {
     abbreviateImageId,
@@ -84,6 +85,12 @@ assert.deepEqual(
     pinIdsToFront(['b', 'c', 'a'], ['a', 'b']),
     ['a', 'b', 'c'],
     'pins source ids to the front without duplicates',
+);
+
+assert.deepEqual(
+    pinIdsToFront(['b', 'c'], ['a', 'b']),
+    ['b', 'c'],
+    'does not inject source ids missing from the result pool',
 );
 
 assert.deepEqual(
@@ -340,6 +347,22 @@ assert.deepEqual(
     'parses IMG avg mode with space-separated hex ids',
 );
 
+assert.equal(
+    extractImgSearchTarget(`IMG all ${fullImageId} ${secondImageId} 0.8`),
+    `all ${fullImageId} ${secondImageId} 0.8`,
+    'keeps all mode name when extracting IMG target (ALL is also a keyword)',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(
+        parseSearchTargetWithOptionalImgLimit(
+            extractImgSearchTarget(`IMG all ${fullImageId} ${secondImageId} 0.8`),
+        ).text,
+    ),
+    { kind: 'mode', mode: 'all', imageIds: [fullImageId, secondImageId] },
+    'parses IMG all mode after extractImgSearchTarget and threshold strip',
+);
+
 assert.deepEqual(
     parseImgQueryBody(`ALL ${fullImageId} ${secondImageId}`),
     { kind: 'mode', mode: 'all', imageIds: [fullImageId, secondImageId] },
@@ -374,6 +397,17 @@ const imgAllModeSearch = `IMG all ${fullImageId} ${secondImageId} 0.8`;
 const imgAllClauses = tokenizeSearchClauses(imgAllModeSearch);
 assert.equal(imgAllClauses.length, 1, 'keeps IMG all mode in a single clause despite ALL keyword');
 assert.match(imgAllClauses[0]?.text ?? '', /^IMG all /i, 'preserves IMG all mode body');
+
+// Both ALL and IMG regexes match `IMG all …`; matcher must prefer IMG.
+{
+    const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'IMGSIM'];
+    const keywordPattern = `((${searchKeywords.join('|')}) )*`;
+    const allRegex = new RegExp(`^${keywordPattern}ALL `, 'i');
+    const imgRegex = new RegExp(`^${keywordPattern}IMG `, 'i');
+    const part = `IMG all ${fullImageId} ${secondImageId} 0.01`;
+    assert.equal(imgRegex.test(part), true, 'IMG all matches img regex');
+    assert.equal(allRegex.test(part), true, 'IMG all also matches all regex (precedence matters)');
+}
 
 const modeDisplay = getSearchDisplay(`IMG avg ${fullImageId} ${secondImageId} 0.8`);
 assert.equal(
