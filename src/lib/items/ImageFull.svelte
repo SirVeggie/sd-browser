@@ -50,6 +50,7 @@
   export let image: ClientImage | undefined;
   export let data: ImageInfo | undefined;
   export let enabled = true;
+  export let live = false;
 
   let hiddenElementFull: HTMLDivElement;
   let hiddenElementPos: HTMLDivElement;
@@ -757,7 +758,7 @@
     on:click={cancel}
     transition:fade={{ duration: 300, easing: cubicOut }}
   >
-    <div class="layout" class:full>
+    <div class="layout" class:full class:live>
       <div class="card-frame">
         <div class="card-stack">
           <div class="card" use:bindCardEl on:scroll={onCardScroll}>
@@ -1146,6 +1147,10 @@
           padding-inline: 1em 0.4em;
           background-color: #111b;
           box-shadow: 0 0 1em 1em #111b;
+        }
+
+        &.live .card {
+          justify-content: center;
         }
       }
     }

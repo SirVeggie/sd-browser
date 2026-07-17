@@ -2211,6 +2211,7 @@
     enabled={!!currentImage || !!live}
     image={live ? newestImage : currentImage}
     data={info}
+    {live}
     cancel={closeImage}
 />
 
