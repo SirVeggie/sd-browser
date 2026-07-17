@@ -1,5 +1,40 @@
 # Migrations
 
+## In-memory JS IMG search; optimized query setting removed (2026-07)
+
+### What changed
+
+- IMG embedding search always scores with JavaScript cosine over an in-process vector cache (loaded on first need from `embeddings.sqlite3` / sqlite-vec `vec0`).
+- The cache is idle-evicted after **1 hour**.
+- sqlite-vec KNN is no longer used for search ranking (vectors remain on disk in `vec0`).
+- `useOptimizedEmbeddingQuery` was removed from embedding settings and the Settings UI.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| Global / localStorage `embeddingSettings.useOptimizedEmbeddingQuery` | Orphaned; ignored |
+| Process memory | May hold ~0.9–1.1 GB while the vector cache is warm |
+
+No on-disk embedding rewrite.
+
+### Migration code
+
+- [`src/lib/server/embeddingDb.ts`](../src/lib/server/embeddingDb.ts) — vector cache, JS-only `findSimilarImage`
+- [`src/lib/types/embeddings.ts`](../src/lib/types/embeddings.ts) — field removed from type / normalize
+- [`src/routes/settings/+page.svelte`](../src/routes/settings/+page.svelte) — checkbox removed
+
+### How to verify
+
+1. Run `IMG turtle` — first query after idle shows `[img-timing] EmbeddingDB.vectorCache.load` (~seconds); subsequent warm queries score without reloading.
+2. Warm `IMG turtle` completes faster than cold; no `path=knn` / `knn-filtered` timing lines.
+3. Settings → Embedding settings has no “Use optimized embedding query” checkbox.
+4. After 1 hour without embedding reads, the next IMG query reloads the cache.
+
+### Removal
+
+N/A (this is the removal of the optimized-query path). Drop leftover `useOptimizedEmbeddingQuery` keys from stored settings JSON when convenient.
+
 ## Image search references (2026-07)
 
 ### What changed
@@ -209,9 +244,7 @@ Existing localStorage and global `embeddingSettings` values lack this field. The
 
 ### Removal
 
-Keep the defaulting behavior while stored settings from before this field existed may be loaded.
-
-## MMR search and uniqueness index (2026-07)
+Superseded by **In-memory JS IMG search; optimized query setting removed (2026-07)**. Leftover stored booleans are ignored.
 
 ### What changed
 

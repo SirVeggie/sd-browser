@@ -274,7 +274,7 @@ export type BulkTagOptions = {
     tags: string[];
 };
 
-export type BulkEmbeddingConfig = Omit<EmbeddingSettings, 'apiKey' | 'useOptimizedEmbeddingQuery' | 'imageSimilarityThreshold'> & {
+export type BulkEmbeddingConfig = Omit<EmbeddingSettings, 'apiKey' | 'imageSimilarityThreshold'> & {
     apiKey?: string;
 };
 

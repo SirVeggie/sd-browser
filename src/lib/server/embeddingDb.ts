@@ -9,8 +9,8 @@ const META_TABLE = 'embedding_meta';
 const VEC_TABLE = 'image_embeddings';
 const UNIQUENESS_TABLE = 'uniqueness_scores';
 const DIMENSIONS_KEY = 'dimensions';
-/** sqlite-vec vec0 KNN hard limit; queries with k above this fail at runtime. */
-const VEC0_KNN_MAX = 4096;
+/** Drop the in-process vector cache after this much idle time. */
+const VECTOR_CACHE_IDLE_MS = 60 * 60 * 1000;
 
 export class EmbeddingDimensionMismatchError extends Error {
     readonly expected: number;
@@ -35,6 +35,12 @@ function assertEmbeddingDimensions(embedding: Float32Array): number {
     if (!embedding.length)
         throw new Error('Embedding vector is empty');
     return embedding.length;
+}
+
+/** Copy into an owned Float32Array so the cache does not retain SQLite Buffer memory. */
+function ownedFloat32Array(buffer: Buffer): Float32Array {
+    const view = bufferToFloat32Array(buffer);
+    return new Float32Array(view);
 }
 
 function ensureEmbeddingMetaTable(db: BetterSqlite3): void {
@@ -103,11 +109,13 @@ export class EmbeddingDB {
     private static db: BetterSqlite3;
     private static dimensions: number | null = null;
 
+    private static vectorCache: Map<string, Float32Array> | null = null;
+    private static vectorCacheLastUsedAt = 0;
+    private static vectorCacheIdleTimer: ReturnType<typeof setTimeout> | undefined;
+
     private static stmtHasImage: Statement<unknown[], unknown> | undefined;
     private static stmtSetImage: Statement<unknown[], unknown> | undefined;
     private static stmtDeleteImage: Statement<unknown[], unknown> | undefined;
-    private static stmtFindSimilar: Statement<unknown[], unknown> | undefined;
-    private static stmtFindSimilarIn: Statement<unknown[], unknown> | undefined;
     private static stmtSelectAllIds: Statement<unknown[], unknown> | undefined;
     private static stmtSelectAllEmbeddings: Statement<unknown[], unknown> | undefined;
     private static stmtSelectEmbeddingsByIds: Statement<unknown[], unknown> | undefined;
@@ -173,8 +181,6 @@ export class EmbeddingDB {
             EmbeddingDB.stmtHasImage = undefined;
             EmbeddingDB.stmtSetImage = undefined;
             EmbeddingDB.stmtDeleteImage = undefined;
-            EmbeddingDB.stmtFindSimilar = undefined;
-            EmbeddingDB.stmtFindSimilarIn = undefined;
             EmbeddingDB.stmtSelectAllIds = undefined;
             EmbeddingDB.stmtSelectAllEmbeddings = undefined;
             EmbeddingDB.stmtSelectEmbeddingsByIds = undefined;
@@ -191,23 +197,6 @@ export class EmbeddingDB {
         EmbeddingDB.stmtDeleteImage = EmbeddingDB.db.prepare(
             `DELETE FROM ${VEC_TABLE} WHERE id = ?`,
         );
-        EmbeddingDB.stmtFindSimilar = EmbeddingDB.db.prepare(`
-            SELECT id, (1.0 - distance) AS similarity
-            FROM ${VEC_TABLE}
-            WHERE embedding MATCH ?
-              AND k = ?
-              AND distance <= ?
-            ORDER BY distance
-        `);
-        EmbeddingDB.stmtFindSimilarIn = EmbeddingDB.db.prepare(`
-            SELECT id, (1.0 - distance) AS similarity
-            FROM ${VEC_TABLE}
-            WHERE embedding MATCH ?
-              AND k = ?
-              AND distance <= ?
-              AND id IN (SELECT value FROM json_each(?))
-            ORDER BY distance
-        `);
         EmbeddingDB.stmtSelectAllIds = EmbeddingDB.db.prepare(`SELECT id FROM ${VEC_TABLE}`);
         EmbeddingDB.stmtSelectAllEmbeddings = EmbeddingDB.db.prepare(
             `SELECT id, embedding FROM ${VEC_TABLE}`,
@@ -218,6 +207,71 @@ export class EmbeddingDB {
             WHERE id IN (SELECT value FROM json_each(?))
         `);
         EmbeddingDB.stmtCount = EmbeddingDB.db.prepare(`SELECT COUNT(*) AS count FROM ${VEC_TABLE}`);
+    }
+
+    private static clearVectorCache(): void {
+        if (EmbeddingDB.vectorCacheIdleTimer !== undefined) {
+            clearTimeout(EmbeddingDB.vectorCacheIdleTimer);
+            EmbeddingDB.vectorCacheIdleTimer = undefined;
+        }
+        EmbeddingDB.vectorCache = null;
+        EmbeddingDB.vectorCacheLastUsedAt = 0;
+    }
+
+    private static scheduleVectorCacheIdleEviction(): void {
+        if (EmbeddingDB.vectorCacheIdleTimer !== undefined)
+            clearTimeout(EmbeddingDB.vectorCacheIdleTimer);
+
+        EmbeddingDB.vectorCacheIdleTimer = setTimeout(() => {
+            EmbeddingDB.vectorCacheIdleTimer = undefined;
+            if (!EmbeddingDB.vectorCache)
+                return;
+            const idleFor = Date.now() - EmbeddingDB.vectorCacheLastUsedAt;
+            if (idleFor < VECTOR_CACHE_IDLE_MS) {
+                EmbeddingDB.scheduleVectorCacheIdleEviction();
+                return;
+            }
+            const count = EmbeddingDB.vectorCache.size;
+            EmbeddingDB.vectorCache = null;
+            EmbeddingDB.vectorCacheLastUsedAt = 0;
+            console.log(`[img-timing] EmbeddingDB.vectorCache.evict: idle (${count} vectors)`);
+        }, VECTOR_CACHE_IDLE_MS);
+        // Allow Node to exit without waiting for the idle timer.
+        EmbeddingDB.vectorCacheIdleTimer.unref?.();
+    }
+
+    private static touchVectorCache(): void {
+        EmbeddingDB.vectorCacheLastUsedAt = Date.now();
+        EmbeddingDB.scheduleVectorCacheIdleEviction();
+    }
+
+    /**
+     * Ensure all embeddings are loaded into process memory for JS scoring.
+     * No-op when already warm (updates idle timer).
+     */
+    private static ensureVectorCache(): Map<string, Float32Array> {
+        if (EmbeddingDB.vectorCache) {
+            EmbeddingDB.touchVectorCache();
+            return EmbeddingDB.vectorCache;
+        }
+
+        const startedAt = startSearchTiming();
+        if (!EmbeddingDB.stmtSelectAllEmbeddings) {
+            EmbeddingDB.vectorCache = new Map();
+            EmbeddingDB.touchVectorCache();
+            logSearchTiming('EmbeddingDB.vectorCache.load', startedAt, { count: 0 });
+            return EmbeddingDB.vectorCache;
+        }
+
+        const rows = EmbeddingDB.stmtSelectAllEmbeddings.all() as { id: string; embedding: Buffer }[];
+        const cache = new Map<string, Float32Array>();
+        for (const row of rows)
+            cache.set(row.id, ownedFloat32Array(row.embedding));
+
+        EmbeddingDB.vectorCache = cache;
+        EmbeddingDB.touchVectorCache();
+        logSearchTiming('EmbeddingDB.vectorCache.load', startedAt, { count: cache.size });
+        return cache;
     }
 
     private static ensureDimensionsForWrite(embedding: Float32Array): void {
@@ -253,14 +307,13 @@ export class EmbeddingDB {
     static close() {
         if (!EmbeddingDB.isOpen)
             return;
+        EmbeddingDB.clearVectorCache();
         EmbeddingDB.isOpen = false;
         EmbeddingDB.isSetup = false;
         EmbeddingDB.dimensions = null;
         EmbeddingDB.stmtHasImage = undefined;
         EmbeddingDB.stmtSetImage = undefined;
         EmbeddingDB.stmtDeleteImage = undefined;
-        EmbeddingDB.stmtFindSimilar = undefined;
-        EmbeddingDB.stmtFindSimilarIn = undefined;
         EmbeddingDB.stmtSelectAllIds = undefined;
         EmbeddingDB.stmtSelectAllEmbeddings = undefined;
         EmbeddingDB.stmtSelectEmbeddingsByIds = undefined;
@@ -276,19 +329,37 @@ export class EmbeddingDB {
 
     static hasImageEmbedding(id: string): boolean {
         EmbeddingDB.setup();
+        if (EmbeddingDB.vectorCache)
+            return EmbeddingDB.vectorCache.has(id);
         if (!EmbeddingDB.vecTableReady())
             return false;
         return Boolean(EmbeddingDB.stmtHasImage!.get(id));
     }
 
+    /**
+     * When the vector cache is warm, return ids from memory.
+     * When cold, use a light DB id select (does not load vectors — for presence-only paths).
+     */
     static getAllImageIds(): Set<string> {
         const startedAt = startSearchTiming();
         EmbeddingDB.setup();
+        if (EmbeddingDB.vectorCache) {
+            EmbeddingDB.touchVectorCache();
+            const ids = new Set(EmbeddingDB.vectorCache.keys());
+            logSearchTiming('EmbeddingDB.getAllImageIds', startedAt, {
+                count: ids.size,
+                source: 'cache',
+            });
+            return ids;
+        }
         if (!EmbeddingDB.stmtSelectAllIds)
             return new Set();
         const rows = EmbeddingDB.stmtSelectAllIds.all() as { id: string }[];
         const ids = new Set(rows.map((row) => row.id));
-        logSearchTiming('EmbeddingDB.getAllImageIds', startedAt, { count: ids.size });
+        logSearchTiming('EmbeddingDB.getAllImageIds', startedAt, {
+            count: ids.size,
+            source: 'db',
+        });
         return ids;
     }
 
@@ -301,6 +372,11 @@ export class EmbeddingDB {
             EmbeddingDB.stmtDeleteImage!.run(id);
             EmbeddingDB.stmtSetImage!.run(id, buffer);
         }).immediate();
+
+        if (EmbeddingDB.vectorCache) {
+            EmbeddingDB.vectorCache.set(id, new Float32Array(embedding));
+            EmbeddingDB.touchVectorCache();
+        }
     }
 
     static deleteImage(id: string) {
@@ -309,6 +385,10 @@ export class EmbeddingDB {
             EmbeddingDB.stmtDeleteImage.run(id);
         if (EmbeddingDB.stmtDeleteUniquenessScore)
             EmbeddingDB.stmtDeleteUniquenessScore.run(id);
+        if (EmbeddingDB.vectorCache) {
+            EmbeddingDB.vectorCache.delete(id);
+            EmbeddingDB.touchVectorCache();
+        }
         EmbeddingDB.resetIfEmpty();
     }
 
@@ -323,6 +403,11 @@ export class EmbeddingDB {
                     EmbeddingDB.stmtDeleteUniquenessScore?.run(id);
                 }
             }).immediate(ids);
+        }
+        if (EmbeddingDB.vectorCache) {
+            for (const id of ids)
+                EmbeddingDB.vectorCache.delete(id);
+            EmbeddingDB.touchVectorCache();
         }
         EmbeddingDB.resetIfEmpty();
     }
@@ -340,6 +425,7 @@ export class EmbeddingDB {
     }
 
     private static resetSchema(): void {
+        EmbeddingDB.clearVectorCache();
         if (vecTableExists(EmbeddingDB.db)) {
             EmbeddingDB.db.exec(`DROP TABLE IF EXISTS ${VEC_TABLE}`);
         }
@@ -349,19 +435,23 @@ export class EmbeddingDB {
         EmbeddingDB.prepareStatements();
     }
 
+    /**
+     * Load embeddings for the given ids. Ensures the in-memory vector cache
+     * (used by IMG/MMR/IMGSIM scoring paths).
+     */
     static getEmbeddingsByIds(ids: string[]): { id: string; embedding: Float32Array }[] {
         EmbeddingDB.setup();
-        if (!ids.length || !EmbeddingDB.stmtSelectEmbeddingsByIds)
+        if (!ids.length)
             return [];
 
-        const rows = EmbeddingDB.stmtSelectEmbeddingsByIds.all(
-            JSON.stringify(ids),
-        ) as { id: string; embedding: Buffer }[];
-
-        return rows.map((row) => ({
-            id: row.id,
-            embedding: bufferToFloat32Array(row.embedding),
-        }));
+        const cache = EmbeddingDB.ensureVectorCache();
+        const result: { id: string; embedding: Float32Array }[] = [];
+        for (const id of ids) {
+            const embedding = cache.get(id);
+            if (embedding)
+                result.push({ id, embedding });
+        }
+        return result;
     }
 
     static getUniquenessScores(ids: string[]): Map<string, number> {
@@ -401,144 +491,57 @@ export class EmbeddingDB {
         minSimilarity: number,
         k?: number,
         candidateIds?: Set<string>,
-        useOptimizedQuery = true,
-        forceJsSimilarity = false,
     ): Map<string, number> {
         const startedAt = startSearchTiming();
         EmbeddingDB.setup();
-        if (!EmbeddingDB.stmtFindSimilar)
+        if (!EmbeddingDB.stmtSelectAllEmbeddings && !EmbeddingDB.vectorCache)
             return new Map();
 
         EmbeddingDB.assertQueryDimensions(query);
 
-        const maxDistance = 1 - minSimilarity;
-        const queryBuffer = embeddingToBuffer(query);
-        const count = (EmbeddingDB.stmtCount!.get() as { count: number }).count;
-        if (!count)
+        const cache = EmbeddingDB.ensureVectorCache();
+        if (!cache.size)
             return new Map();
 
         let effectiveCandidates = candidateIds;
         if (effectiveCandidates !== undefined) {
             if (!effectiveCandidates.size)
                 return new Map();
-            if (effectiveCandidates.size >= count)
+            if (effectiveCandidates.size >= cache.size)
                 effectiveCandidates = undefined;
         }
 
-        const requested = k !== undefined ? Math.max(1, k) : Math.max(1, count);
-        const useVecQuery = !forceJsSimilarity && (
-            (k !== undefined && requested <= VEC0_KNN_MAX)
-            || (useOptimizedQuery && k === undefined)
-        );
-        if (!useVecQuery) {
-            const result = EmbeddingDB.findSimilarImageCandidates(
-                query,
-                minSimilarity,
-                k === undefined ? undefined : requested,
-                effectiveCandidates ?? EmbeddingDB.getAllImageIds(),
-                count,
-            );
-            logSearchTiming('EmbeddingDB.findSimilarImage', startedAt, {
-                path: 'js',
-                candidates: effectiveCandidates?.size ?? count,
-                matches: result.size,
-                k: k ?? 'all',
-                minSimilarity,
-            });
-            return result;
-        }
-
-        const limit = Math.min(requested, VEC0_KNN_MAX);
-        if (effectiveCandidates !== undefined) {
-            if (!EmbeddingDB.stmtFindSimilarIn)
-                return new Map();
-            const rows = EmbeddingDB.stmtFindSimilarIn.all(
-                queryBuffer,
-                limit,
-                maxDistance,
-                JSON.stringify([...effectiveCandidates]),
-            ) as { id: string; similarity: number }[];
-            const result = new Map(rows.map((row) => [row.id, row.similarity]));
-            logSearchTiming('EmbeddingDB.findSimilarImage', startedAt, {
-                path: 'knn-filtered',
-                candidates: effectiveCandidates.size,
-                matches: result.size,
-                k: limit,
-                minSimilarity,
-            });
-            return result;
-        }
-
-        const rows = EmbeddingDB.stmtFindSimilar.all(
-            queryBuffer,
-            limit,
-            maxDistance,
-        ) as { id: string; similarity: number }[];
-
-        const result = new Map(rows.map((row) => [row.id, row.similarity]));
-        logSearchTiming('EmbeddingDB.findSimilarImage', startedAt, {
-            path: 'knn',
-            embeddings: count,
-            matches: result.size,
-            k: limit,
-            minSimilarity,
-        });
-        return result;
-    }
-
-    private static findSimilarImageCandidates(
-        query: Float32Array,
-        minSimilarity: number,
-        limit: number | undefined,
-        candidateIds: Set<string>,
-        totalCount: number,
-    ): Map<string, number> {
-        const loadStartedAt = startSearchTiming();
-        const loadAll = candidateIds.size > totalCount / 2;
-        const rows = EmbeddingDB.getCandidateEmbeddingRows(candidateIds, totalCount);
-        logSearchTiming('EmbeddingDB.findSimilarImageCandidates.load', loadStartedAt, {
-            loadAll,
-            requested: candidateIds.size,
-            loaded: rows.length,
-            total: totalCount,
-        });
         const scoreStartedAt = startSearchTiming();
         const scores: { id: string; similarity: number }[] = [];
-        for (const row of rows) {
-            if (!candidateIds.has(row.id))
+        const iterateIds = effectiveCandidates ?? cache.keys();
+        let scored = 0;
+        for (const id of iterateIds) {
+            const embedding = cache.get(id);
+            if (!embedding)
                 continue;
-            const embedding = bufferToFloat32Array(row.embedding);
+            scored++;
             const similarity = cosineSimilarity(query, embedding);
             if (similarity >= minSimilarity)
-                scores.push({ id: row.id, similarity });
+                scores.push({ id, similarity });
         }
 
         scores.sort((a, b) => b.similarity - a.similarity);
+        const limit = k === undefined ? undefined : Math.max(1, k);
         const result = new Map(
             (limit === undefined ? scores : scores.slice(0, limit))
                 .map((row) => [row.id, row.similarity]),
         );
-        logSearchTiming('EmbeddingDB.findSimilarImageCandidates.score', scoreStartedAt, {
-            scored: rows.length,
+        logSearchTiming('EmbeddingDB.findSimilarImage.score', scoreStartedAt, {
+            scored,
             matches: result.size,
         });
+        logSearchTiming('EmbeddingDB.findSimilarImage', startedAt, {
+            path: 'js-cache',
+            candidates: effectiveCandidates?.size ?? cache.size,
+            matches: result.size,
+            k: k ?? 'all',
+            minSimilarity,
+        });
         return result;
-    }
-
-    private static getCandidateEmbeddingRows(
-        candidateIds: Set<string>,
-        totalCount: number,
-    ): { id: string; embedding: Buffer }[] {
-        if (candidateIds.size > totalCount / 2) {
-            if (!EmbeddingDB.stmtSelectAllEmbeddings)
-                return [];
-            return EmbeddingDB.stmtSelectAllEmbeddings.all() as { id: string; embedding: Buffer }[];
-        }
-
-        if (!EmbeddingDB.stmtSelectEmbeddingsByIds)
-            return [];
-        return EmbeddingDB.stmtSelectEmbeddingsByIds.all(
-            JSON.stringify([...candidateIds]),
-        ) as { id: string; embedding: Buffer }[];
     }
 }

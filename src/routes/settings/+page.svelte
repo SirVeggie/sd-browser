@@ -834,14 +834,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                     <NumInput bind:value={$embeddingStore.imageSimilarityThreshold} />
                 </label>
 
-                <label
-                    class="checkbox"
-                    title="Uses sqlite-vec KNN for IMG search without an explicit k (max 4096). Explicit k ≤ 4096 always uses vec KNN; larger k uses JS similarity."
-                >
-                    Use optimized embedding query (results limited to max 4096):
-                    <input type="checkbox" bind:checked={$embeddingStore.useOptimizedEmbeddingQuery} />
-                </label>
-
                 <p class="embedding-section-title">MMR search</p>
 
                 <!-- svelte-ignore a11y-label-has-associated-control -->

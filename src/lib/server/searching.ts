@@ -228,11 +228,11 @@ function resolveImgSimilaritySearchLimits(
     effectiveThreshold: number,
     k: number | undefined,
     explicitThreshold: boolean,
-): { minSimilarity: number; effectiveK: number | undefined; forceJs: boolean } {
-    const forceJs = k === -1;
-    const effectiveK = forceJs ? undefined : k;
+): { minSimilarity: number; effectiveK: number | undefined } {
+    // k === -1 means unlimited matches (no top-k cap).
+    const effectiveK = k === -1 ? undefined : k;
     const minSimilarity = effectiveK !== undefined && !explicitThreshold ? 0 : effectiveThreshold;
-    return { minSimilarity, effectiveK, forceJs };
+    return { minSimilarity, effectiveK };
 }
 
 function isImgSearchPart(part: string): boolean {
@@ -566,8 +566,6 @@ async function findImgModeMatches(
     k: number | undefined,
     candidateIds: Set<string>,
     explicitThreshold: boolean,
-    useOptimizedEmbeddingQuery: boolean,
-    forceJs: boolean,
     options: SearchAbortOptions,
 ): Promise<Map<string, number>> {
     assertImgModeArity(modeQuery.mode, modeQuery.imageIds);
@@ -580,12 +578,11 @@ async function findImgModeMatches(
         }
     }
 
-    const { minSimilarity, effectiveK, forceJs: resolvedForceJs } = resolveImgSimilaritySearchLimits(
+    const { minSimilarity, effectiveK } = resolveImgSimilaritySearchLimits(
         effectiveThreshold,
         k,
         explicitThreshold,
     );
-    const knnForceJs = forceJs || resolvedForceJs;
 
     switch (modeQuery.mode) {
         case 'avg': {
@@ -595,8 +592,6 @@ async function findImgModeMatches(
                 minSimilarity,
                 effectiveK,
                 candidateIds,
-                useOptimizedEmbeddingQuery,
-                knnForceJs,
             );
         }
         case 'more': {
@@ -610,8 +605,6 @@ async function findImgModeMatches(
                 minSimilarity,
                 effectiveK,
                 candidateIds,
-                useOptimizedEmbeddingQuery,
-                knnForceJs,
             );
         }
         case 'diff': {
@@ -621,8 +614,6 @@ async function findImgModeMatches(
                 minSimilarity,
                 effectiveK,
                 candidateIds,
-                useOptimizedEmbeddingQuery,
-                knnForceJs,
             );
         }
         case 'shared': {
@@ -632,8 +623,6 @@ async function findImgModeMatches(
                 minSimilarity,
                 effectiveK,
                 candidateIds,
-                useOptimizedEmbeddingQuery,
-                knnForceJs,
             );
         }
         case 'analogy': {
@@ -647,8 +636,6 @@ async function findImgModeMatches(
                 minSimilarity,
                 effectiveK,
                 candidateIds,
-                useOptimizedEmbeddingQuery,
-                knnForceJs,
             );
         }
         case 'all':
@@ -787,19 +774,12 @@ export async function resolveImgSearchContext(
                     parsedQuery.mode,
                     settings.imageSimilarityThreshold,
                 );
-                const { forceJs } = resolveImgSimilaritySearchLimits(
-                    effectiveThreshold,
-                    k,
-                    explicitThreshold,
-                );
                 matchScores = await findImgModeMatches(
                     parsedQuery,
                     effectiveThreshold,
                     k,
                     candidateIds,
                     explicitThreshold,
-                    settings.useOptimizedEmbeddingQuery,
-                    forceJs,
                     options,
                 );
             } else {
@@ -814,7 +794,7 @@ export async function resolveImgSearchContext(
                             ? settings.imageSimilarityThreshold
                             : IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
                 );
-                const { minSimilarity, effectiveK, forceJs } = resolveImgSimilaritySearchLimits(
+                const { minSimilarity, effectiveK } = resolveImgSimilaritySearchLimits(
                     effectiveThreshold,
                     k,
                     explicitThreshold,
@@ -839,8 +819,6 @@ export async function resolveImgSearchContext(
                         minSimilarity,
                         effectiveK,
                         candidateIds,
-                        settings.useOptimizedEmbeddingQuery,
-                        forceJs,
                     );
                 } else {
                     const textClause = weightedClauses[0];
@@ -859,8 +837,6 @@ export async function resolveImgSearchContext(
                         minSimilarity,
                         effectiveK,
                         candidateIds,
-                        settings.useOptimizedEmbeddingQuery,
-                        forceJs,
                     );
                 }
             }

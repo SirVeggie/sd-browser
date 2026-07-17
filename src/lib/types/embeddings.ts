@@ -13,8 +13,6 @@ export type EmbeddingSettings = {
     apiBatch: number;
     /** When set, IMG search text is sent as template with `{label}` replaced by the query. */
     searchTemplate: string;
-    /** Use sqlite-vec KNN for IMG searches when its result limit is sufficient. */
-    useOptimizedEmbeddingQuery: boolean;
     /** Default similarity cutoff for IMG searches with a 64-char image id (image-to-image). */
     imageSimilarityThreshold: number;
 };
@@ -26,7 +24,6 @@ export const embeddingStoreDefaults: EmbeddingSettings = {
     modelId: "",
     apiBatch: 32,
     searchTemplate: "",
-    useOptimizedEmbeddingQuery: true,
     imageSimilarityThreshold: 0.8,
 };
 
@@ -42,6 +39,8 @@ export function formatEmbeddingSearchQuery(label: string, template: string): str
 type StoredEmbeddingSettings = Partial<EmbeddingSettings> & {
     /** @deprecated Renamed to apiBatch */
     parallelCalls?: number;
+    /** @deprecated Removed; IMG search always uses in-memory JS scoring */
+    useOptimizedEmbeddingQuery?: boolean;
 };
 
 export function normalizeEmbeddingSettings(
@@ -51,13 +50,15 @@ export function normalizeEmbeddingSettings(
         return { ...embeddingStoreDefaults };
     }
     return {
-        ...embeddingStoreDefaults,
-        ...stored,
+        apiType: isEmbeddingApiType(stored.apiType) ? stored.apiType : embeddingStoreDefaults.apiType,
+        baseUrl: typeof stored.baseUrl === "string" ? stored.baseUrl : embeddingStoreDefaults.baseUrl,
+        apiKey: typeof stored.apiKey === "string" ? stored.apiKey : embeddingStoreDefaults.apiKey,
+        modelId: typeof stored.modelId === "string" ? stored.modelId : embeddingStoreDefaults.modelId,
         apiBatch: stored.apiBatch ?? stored.parallelCalls ?? embeddingStoreDefaults.apiBatch,
-        useOptimizedEmbeddingQuery:
-            typeof stored.useOptimizedEmbeddingQuery === "boolean"
-                ? stored.useOptimizedEmbeddingQuery
-                : embeddingStoreDefaults.useOptimizedEmbeddingQuery,
+        searchTemplate:
+            typeof stored.searchTemplate === "string"
+                ? stored.searchTemplate
+                : embeddingStoreDefaults.searchTemplate,
         imageSimilarityThreshold:
             typeof stored.imageSimilarityThreshold === "number"
                 ? stored.imageSimilarityThreshold
