@@ -14,6 +14,7 @@ import {
     unescapeSearchLiterals,
     parseWeightedImgQueryClauses,
     parseSearchTargetWithOptionalImgLimit,
+    resolveImgSimilaritySearchLimits,
     parseImgQueryBody,
     extractImgSearchTarget,
 } from '../src/lib/tools/searchParsing.ts';
@@ -261,7 +262,7 @@ assert.deepEqual(
 assert.deepEqual(
     parseSearchTargetWithOptionalImgLimit('- girl -1'),
     { text: '- girl', threshold: undefined, k: -1 },
-    'strips force-js k from leading-negative IMG query',
+    'strips all-results k from leading-negative IMG query',
 );
 
 assert.deepEqual(
@@ -299,19 +300,49 @@ assert.deepEqual(
 assert.deepEqual(
     parseSearchTargetWithOptionalImgLimit('cat -1 0.8'),
     { text: 'cat', threshold: 0.8, k: -1 },
-    'parses IMG query with force-js k and threshold',
+    'parses IMG query with all-results k and threshold',
 );
 
 assert.deepEqual(
     parseSearchTargetWithOptionalImgLimit('cat 0.8 -1'),
     { text: 'cat', threshold: 0.8, k: -1 },
-    'parses IMG query with threshold and force-js k in either order',
+    'parses IMG query with threshold and all-results k in either order',
 );
 
 assert.deepEqual(
     parseSearchTargetWithOptionalImgLimit('cat -1'),
     { text: 'cat', threshold: undefined, k: -1 },
-    'parses IMG query with force-js k only',
+    'parses IMG query with all-results k only',
+);
+
+assert.deepEqual(
+    resolveImgSimilaritySearchLimits(0.8, -1, false),
+    { minSimilarity: 0, effectiveK: undefined },
+    'k -1 returns all matches sorted without threshold filtering',
+);
+
+assert.deepEqual(
+    resolveImgSimilaritySearchLimits(0.8, -1, true),
+    { minSimilarity: 0, effectiveK: undefined },
+    'k -1 ignores an explicit threshold for filtering',
+);
+
+assert.deepEqual(
+    resolveImgSimilaritySearchLimits(0.8, 100, false),
+    { minSimilarity: 0, effectiveK: 100 },
+    'positive k without explicit threshold skips filtering',
+);
+
+assert.deepEqual(
+    resolveImgSimilaritySearchLimits(0.8, 100, true),
+    { minSimilarity: 0.8, effectiveK: 100 },
+    'positive k with explicit threshold filters before limiting',
+);
+
+assert.deepEqual(
+    resolveImgSimilaritySearchLimits(0.8, undefined, false),
+    { minSimilarity: 0.8, effectiveK: undefined },
+    'default query applies threshold without a k limit',
 );
 
 const implicitImgSearch = `landscape IMG ${fullImageId}`;

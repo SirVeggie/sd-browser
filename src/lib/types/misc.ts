@@ -200,7 +200,7 @@ export const searchKeywordHelpSections = [
                 keyword: 'IMG',
                 summary: 'Searches with image embeddings.',
                 details:
-                    'Bare IMG matches images that have embeddings. Text runs an embedding search. A 64-character hex id uses that image\'s embedding. Use #n or [n] for reference-strip slots (e.g. IMG #1 0.8). Mix ids and text with spaced + and - for positive and negative weights; a leading spaced - is negative-only. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count (either order). Use -1 as k to force full JavaScript scoring while keeping a threshold. Named multi-image modes are listed below.',
+                    'Bare IMG matches images that have embeddings. Text runs an embedding search. A 64-character hex id uses that image\'s embedding. Use #n or [n] for reference-strip slots (e.g. IMG #1 0.8). Mix ids and text with spaced + and - for positive and negative weights; a leading spaced - is negative-only. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count (either order). Use -1 as k to return all embedded matches sorted by score without threshold filtering. Named multi-image modes are listed below.',
                 example: 'IMG cat + #1 - beach 0.8',
             },
             {

@@ -687,6 +687,20 @@ export function parseSearchTargetWithOptionalImgLimit(raw: string): {
     return { text, threshold, k };
 }
 
+export function resolveImgSimilaritySearchLimits(
+    effectiveThreshold: number,
+    k: number | undefined,
+    explicitThreshold: boolean,
+): { minSimilarity: number; effectiveK: number | undefined } {
+    // k === -1: return every candidate sorted by score (no threshold filter, no top-k cap).
+    if (k === -1) {
+        return { minSimilarity: 0, effectiveK: undefined };
+    }
+    const effectiveK = k;
+    const minSimilarity = effectiveK !== undefined && !explicitThreshold ? 0 : effectiveThreshold;
+    return { minSimilarity, effectiveK };
+}
+
 export function parseSearchTargetWithOptionalThreshold(raw: string): { text: string; threshold?: number } {
     const trimmed = raw.trim();
     if (!trimmed) {

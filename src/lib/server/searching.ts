@@ -11,6 +11,7 @@ import {
     splitSearchParts,
     unescapeSearchLiterals,
     parseSearchTargetWithOptionalImgLimit,
+    resolveImgSimilaritySearchLimits,
     parseImgQueryBody,
     extractImgSearchTarget,
     type ParsedWeightedImgQueryClause,
@@ -222,17 +223,6 @@ function subtractIds(ids: Set<string>, excludedIds: Set<string>): Set<string> {
             remaining.add(id);
     }
     return remaining;
-}
-
-function resolveImgSimilaritySearchLimits(
-    effectiveThreshold: number,
-    k: number | undefined,
-    explicitThreshold: boolean,
-): { minSimilarity: number; effectiveK: number | undefined } {
-    // k === -1 means unlimited matches (no top-k cap).
-    const effectiveK = k === -1 ? undefined : k;
-    const minSimilarity = effectiveK !== undefined && !explicitThreshold ? 0 : effectiveThreshold;
-    return { minSimilarity, effectiveK };
 }
 
 function isImgSearchPart(part: string): boolean {
