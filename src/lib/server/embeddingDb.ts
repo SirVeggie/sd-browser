@@ -3,6 +3,7 @@ import path from 'path';
 import { cosineSimilarity, bufferToFloat32Array } from '$lib/tools/vectorMath';
 import { datapath } from './paths';
 import { openDatabase } from './sqlite';
+import { logSearchTiming, startSearchTiming } from './searchTiming';
 
 const META_TABLE = 'embedding_meta';
 const VEC_TABLE = 'image_embeddings';
@@ -281,11 +282,14 @@ export class EmbeddingDB {
     }
 
     static getAllImageIds(): Set<string> {
+        const startedAt = startSearchTiming();
         EmbeddingDB.setup();
         if (!EmbeddingDB.stmtSelectAllIds)
             return new Set();
         const rows = EmbeddingDB.stmtSelectAllIds.all() as { id: string }[];
-        return new Set(rows.map((row) => row.id));
+        const ids = new Set(rows.map((row) => row.id));
+        logSearchTiming('EmbeddingDB.getAllImageIds', startedAt, { count: ids.size });
+        return ids;
     }
 
     static setImageEmbedding(id: string, embedding: Float32Array) {
@@ -400,6 +404,7 @@ export class EmbeddingDB {
         useOptimizedQuery = true,
         forceJsSimilarity = false,
     ): Map<string, number> {
+        const startedAt = startSearchTiming();
         EmbeddingDB.setup();
         if (!EmbeddingDB.stmtFindSimilar)
             return new Map();
@@ -412,11 +417,12 @@ export class EmbeddingDB {
         if (!count)
             return new Map();
 
-        if (candidateIds !== undefined) {
-            if (!candidateIds.size)
+        let effectiveCandidates = candidateIds;
+        if (effectiveCandidates !== undefined) {
+            if (!effectiveCandidates.size)
                 return new Map();
-            if (candidateIds.size >= count)
-                candidateIds = undefined;
+            if (effectiveCandidates.size >= count)
+                effectiveCandidates = undefined;
         }
 
         const requested = k !== undefined ? Math.max(1, k) : Math.max(1, count);
@@ -425,26 +431,42 @@ export class EmbeddingDB {
             || (useOptimizedQuery && k === undefined)
         );
         if (!useVecQuery) {
-            return EmbeddingDB.findSimilarImageCandidates(
+            const result = EmbeddingDB.findSimilarImageCandidates(
                 query,
                 minSimilarity,
                 k === undefined ? undefined : requested,
-                candidateIds ?? EmbeddingDB.getAllImageIds(),
+                effectiveCandidates ?? EmbeddingDB.getAllImageIds(),
                 count,
             );
+            logSearchTiming('EmbeddingDB.findSimilarImage', startedAt, {
+                path: 'js',
+                candidates: effectiveCandidates?.size ?? count,
+                matches: result.size,
+                k: k ?? 'all',
+                minSimilarity,
+            });
+            return result;
         }
 
         const limit = Math.min(requested, VEC0_KNN_MAX);
-        if (candidateIds !== undefined) {
+        if (effectiveCandidates !== undefined) {
             if (!EmbeddingDB.stmtFindSimilarIn)
                 return new Map();
             const rows = EmbeddingDB.stmtFindSimilarIn.all(
                 queryBuffer,
                 limit,
                 maxDistance,
-                JSON.stringify([...candidateIds]),
+                JSON.stringify([...effectiveCandidates]),
             ) as { id: string; similarity: number }[];
-            return new Map(rows.map((row) => [row.id, row.similarity]));
+            const result = new Map(rows.map((row) => [row.id, row.similarity]));
+            logSearchTiming('EmbeddingDB.findSimilarImage', startedAt, {
+                path: 'knn-filtered',
+                candidates: effectiveCandidates.size,
+                matches: result.size,
+                k: limit,
+                minSimilarity,
+            });
+            return result;
         }
 
         const rows = EmbeddingDB.stmtFindSimilar.all(
@@ -453,7 +475,15 @@ export class EmbeddingDB {
             maxDistance,
         ) as { id: string; similarity: number }[];
 
-        return new Map(rows.map((row) => [row.id, row.similarity]));
+        const result = new Map(rows.map((row) => [row.id, row.similarity]));
+        logSearchTiming('EmbeddingDB.findSimilarImage', startedAt, {
+            path: 'knn',
+            embeddings: count,
+            matches: result.size,
+            k: limit,
+            minSimilarity,
+        });
+        return result;
     }
 
     private static findSimilarImageCandidates(
@@ -463,7 +493,16 @@ export class EmbeddingDB {
         candidateIds: Set<string>,
         totalCount: number,
     ): Map<string, number> {
+        const loadStartedAt = startSearchTiming();
+        const loadAll = candidateIds.size > totalCount / 2;
         const rows = EmbeddingDB.getCandidateEmbeddingRows(candidateIds, totalCount);
+        logSearchTiming('EmbeddingDB.findSimilarImageCandidates.load', loadStartedAt, {
+            loadAll,
+            requested: candidateIds.size,
+            loaded: rows.length,
+            total: totalCount,
+        });
+        const scoreStartedAt = startSearchTiming();
         const scores: { id: string; similarity: number }[] = [];
         for (const row of rows) {
             if (!candidateIds.has(row.id))
@@ -475,10 +514,15 @@ export class EmbeddingDB {
         }
 
         scores.sort((a, b) => b.similarity - a.similarity);
-        return new Map(
+        const result = new Map(
             (limit === undefined ? scores : scores.slice(0, limit))
                 .map((row) => [row.id, row.similarity]),
         );
+        logSearchTiming('EmbeddingDB.findSimilarImageCandidates.score', scoreStartedAt, {
+            scored: rows.length,
+            matches: result.size,
+        });
+        return result;
     }
 
     private static getCandidateEmbeddingRows(

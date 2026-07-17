@@ -11,6 +11,7 @@ import {
     normalizeEmbeddingSettings,
 } from "$lib/types/embeddings";
 import { getEmbeddingImagePath } from "$lib/tools/misc";
+import { logSearchTiming, startSearchTiming } from "./searchTiming";
 
 const EMBEDDING_REQUEST_TIMEOUT_MS = 120_000;
 const PROPS_REQUEST_TIMEOUT_MS = 15_000;
@@ -372,17 +373,27 @@ export async function embedQuery(
     text: string,
     options: { signal?: AbortSignal } = {},
 ): Promise<Float32Array> {
+    const startedAt = startSearchTiming();
     const api = toApiConfig(config);
+    let embedding: Float32Array;
     switch (api.apiType) {
         case "llama-cpp":
-            return requestLlamaQueryEmbedding(api, text, options);
+            embedding = await requestLlamaQueryEmbedding(api, text, options);
+            break;
         case "sv-embed":
-            return requestSvEmbed(api, [{ type: "text", text }], options);
+            embedding = await requestSvEmbed(api, [{ type: "text", text }], options);
+            break;
         default: {
             const _exhaustive: never = api.apiType;
             throw new Error(`Unknown embedding API type: ${_exhaustive}`);
         }
     }
+    logSearchTiming('embedQuery', startedAt, {
+        api: api.apiType,
+        dims: embedding.length,
+        chars: text.length,
+    });
+    return embedding;
 }
 
 async function embedImagePaths(
