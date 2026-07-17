@@ -49,7 +49,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400&family=Source+Sans+3:wght@400&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Sans+3:wght@400;600&display=swap"
         rel="stylesheet"
     />
     {#if $fullscreenState}
@@ -85,9 +85,9 @@
         left: 0;
         right: 0;
         min-height: 100dvh;
-        background-color: #242424;
+        background-color: var(--bg);
         box-sizing: border-box;
-        color: #ddd;
+        color: var(--ink);
 
         --main-padding: 2em;
         --flyout-width: 0px;

@@ -116,26 +116,27 @@
     h1 {
         margin: 0 0 0.35em;
         font-size: 1.35em;
+        color: var(--ink);
     }
 
     h2 {
         margin: 0;
         font-size: 1em;
         font-weight: 600;
-        color: #ccc;
+        color: var(--muted);
     }
 
     p {
         margin: 0;
-        color: #ccc;
+        color: var(--muted);
         line-height: 1.4;
     }
 
     code {
         font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas,
             monospace;
-        color: #8fd3ff;
-        background: #00000033;
+        color: var(--keyword);
+        background: rgba(0, 0, 0, 0.28);
         border-radius: 3px;
         padding: 0.1em 0.35em;
     }
@@ -176,9 +177,9 @@
         flex-direction: column;
         gap: 0.45em;
         padding: 0.75em;
-        border: 1px solid #aaa3;
+        border: 1px solid var(--line);
         border-radius: 0.5em;
-        background: #ffffff06;
+        background: rgba(255, 255, 255, 0.03);
         text-align: left;
         color: inherit;
         font: inherit;
@@ -192,13 +193,13 @@
             cursor: pointer;
 
             &:hover {
-                background: #ffffff0a;
-                border-color: #aaa6;
+                background: rgba(255, 255, 255, 0.05);
+                border-color: rgba(235, 228, 216, 0.16);
             }
 
             &.expanded {
-                border-color: #8fd3ff66;
-                background: #ffffff0a;
+                border-color: rgba(196, 165, 116, 0.4);
+                background: var(--accent-soft);
             }
         }
 
@@ -207,7 +208,7 @@
         }
 
         &:focus-visible {
-            outline: 1px solid rgb(63, 187, 236);
+            outline: 1px solid var(--accent);
             outline-offset: 2px;
         }
 
@@ -235,8 +236,8 @@
         width: 0.4em;
         height: 0.4em;
         margin-top: 0.35em;
-        border-right: 2px solid #aaa;
-        border-bottom: 2px solid #aaa;
+        border-right: 2px solid var(--muted);
+        border-bottom: 2px solid var(--muted);
         transform: rotate(-45deg);
         transition: transform 0.2s ease;
 
@@ -247,12 +248,12 @@
     }
 
     .summary {
-        color: #eee;
+        color: var(--ink);
         font-weight: 600;
     }
 
     .details {
-        color: #bbb;
+        color: var(--muted);
         font-size: 0.95em;
     }
 
@@ -261,7 +262,7 @@
         flex-wrap: wrap;
         gap: 0.4em;
         align-items: baseline;
-        color: #aaa;
+        color: var(--muted);
         font-size: 0.9em;
     }
 </style>

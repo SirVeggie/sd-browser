@@ -2015,136 +2015,142 @@
 />
 
 <div class="anchor" bind:this={anchorElement} />
-<div class="topbar">
-    <div class="quickbar">
-        <span class="image-count">
-            Images: {viewportImageIndex} /
-            <span class:pending={!searchCountComplete}>{$imageAmountStore}</span>
-        </span>
 
-        <Select
-            id="sorting"
-            prefix="Sorting"
-            bind:value={sorting}
-            options={sortingOptions}
-            on:change={selectChange}
-        />
+<div class="dock">
+    <ImageRefStrip />
 
-        <Select
-            id="collapse"
-            prefix="Collapse"
-            bind:value={$explorationMode}
-            options={explorationModes}
-            on:change={selectChange}
-        />
-
-        <FilterMultiSelect onChange={selectChange} />
-
-        {#if $showNsfwFilter}
-            <label for="nsfw">
-                NSFW:
-                <input
-                    type="checkbox"
-                    id="nsfw"
-                    bind:checked={$nsfwMode}
-                    on:change={selectChange}
-                />
-            </label>
-        {/if}
-    </div>
-
-    {#if quickTagActive}
-        <div class="nav quick-tag-nav">
-            <QuickTagToolbar
-                tagMode={quickTagMode}
-                bind:selectedTags={quickTagSelectedTags}
-                canUndo={quickTagHistory.length > 0}
-                canRevert={quickTagHistory.length > 0}
-                on:undo={undoQuickTag}
-                on:revert={revertQuickTag}
-                on:done={doneQuickTag}
+    <div class="chrome">
+        <div class="chrome-meta">
+            <Select
+                id="sorting"
+                prefix="Sorting"
+                bind:value={sorting}
+                options={sortingOptions}
+                chrome
+                dropUp
+                on:change={selectChange}
             />
+
+            <Select
+                id="collapse"
+                prefix="Collapse"
+                bind:value={$explorationMode}
+                options={explorationModes}
+                chrome
+                dropUp
+                on:change={selectChange}
+            />
+
+            <FilterMultiSelect chrome dropUp onChange={selectChange} />
+
+            {#if $showNsfwFilter}
+                <label class="nsfw" for="nsfw">
+                    NSFW
+                    <input
+                        type="checkbox"
+                        id="nsfw"
+                        bind:checked={$nsfwMode}
+                        on:change={selectChange}
+                    />
+                </label>
+            {/if}
+
+            <span class="image-count" title="Visible / total">
+                {viewportImageIndex}/<span class:pending={!searchCountComplete}>{$imageAmountStore}</span>
+            </span>
         </div>
-    {:else if !selecting}
-        <div class="nav" bind:this={navEl}>
-            <SearchInput
-                bind:element={inputElement}
-                bind:value={$searchFilter}
-                placeholder="Search"
-                on:input={inputChange}
-            />
-            <div class="nav-burger-menu">
-                <button
-                    type="button"
-                    class="nav-menu-toggle"
-                    aria-expanded={navMenuOpen}
-                    aria-haspopup="menu"
-                    aria-label="Actions menu"
-                    on:click|stopPropagation={toggleNavMenu}
-                >
-                    <span class="burger" aria-hidden="true">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </span>
-                </button>
-                <div class="nav-burger-actions" class:open={navMenuOpen} role="menu">
-                    <Button
-                        on:click={() => {
-                            closeNavMenu();
-                            openOverlay("selection");
-                        }}>Select</Button
-                    >
-                    <Button
-                        on:click={() => {
-                            closeNavMenu();
-                            openQuickTagSetup();
-                        }}>Quick tag</Button
-                    >
-                    <div class="nav-collapsed-actions">
-                        <Button
-                            on:click={() => {
-                                closeNavMenu();
-                                openLive();
-                            }}>Live</Button
+
+        <div class="chrome-nav">
+            {#if quickTagActive}
+                <QuickTagToolbar
+                    tagMode={quickTagMode}
+                    bind:selectedTags={quickTagSelectedTags}
+                    canUndo={quickTagHistory.length > 0}
+                    canRevert={quickTagHistory.length > 0}
+                    on:undo={undoQuickTag}
+                    on:revert={revertQuickTag}
+                    on:done={doneQuickTag}
+                />
+            {:else if !selecting}
+                <div class="nav" bind:this={navEl}>
+                    <SearchInput
+                        bind:element={inputElement}
+                        bind:value={$searchFilter}
+                        placeholder="Search"
+                        on:input={inputChange}
+                    />
+                    <div class="nav-burger-menu">
+                        <button
+                            type="button"
+                            class="nav-menu-toggle"
+                            aria-expanded={navMenuOpen}
+                            aria-haspopup="menu"
+                            aria-label="Actions menu"
+                            on:click|stopPropagation={toggleNavMenu}
                         >
-                        <Button
-                            on:click={() => {
-                                closeNavMenu();
-                                openBulk();
-                            }}>Bulk</Button
-                        >
-                        <Link to="/settings" on:click={closeNavMenu}>Settings</Link>
+                            <span class="burger" aria-hidden="true">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </span>
+                        </button>
+                        <div class="nav-burger-actions" class:open={navMenuOpen} role="menu">
+                            <Button
+                                on:click={() => {
+                                    closeNavMenu();
+                                    openOverlay("selection");
+                                }}>Select</Button
+                            >
+                            <Button
+                                on:click={() => {
+                                    closeNavMenu();
+                                    openQuickTagSetup();
+                                }}>Quick tag</Button
+                            >
+                            <div class="nav-collapsed-actions">
+                                <Button
+                                    on:click={() => {
+                                        closeNavMenu();
+                                        openLive();
+                                    }}>Live</Button
+                                >
+                                <Button
+                                    on:click={() => {
+                                        closeNavMenu();
+                                        openBulk();
+                                    }}>Bulk</Button
+                                >
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nav-actions">
+                        <Button on:click={openLive}>Live</Button>
+                        <Button on:click={openBulk}>Bulk</Button>
+                        </div>
+                    <Link class="icon settings-btn" to="/settings" aria-label="Settings">
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                            <path
+                                fill="currentColor"
+                                d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.83 14.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.8a.5.5 0 0 0 .49-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
+                            />
+                        </svg>
+                    </Link>
+
+                </div>
+            {:else}
+                <div class="nav selection-nav" bind:this={navEl}>
+                    <div class="nav-actions" role="menu">
+                        <Button on:click={deleteSelected}>Delete</Button>
+                        <Button on:click={(e) => void handleSelectionButton("move")(e)}>Move</Button>
+                        <Button on:click={(e) => void handleSelectionButton("copy")(e)}>Copy</Button>
+                        <Button on:click={fillSelected}>Fill</Button>
+                        <div class="flexspacer" />
+                        <Button on:click={cancelSelect}>Cancel</Button>
                     </div>
                 </div>
-            </div>
-            <div class="nav-actions">
-                <Button on:click={openLive}>Live</Button>
-                <Button on:click={openBulk}>Bulk</Button>
-                <Link to="/settings">Settings</Link>
-            </div>
+            {/if}
         </div>
-    {:else}
-        <div class="nav selection-nav" bind:this={navEl}>
-            <div class="nav-actions" role="menu">
-                <Button
-                    on:click={deleteSelected}>Delete</Button
-                >
-                <Button
-                    on:click={(e) => void handleSelectionButton("move")(e)}>Move</Button
-                >
-                <Button
-                    on:click={(e) => void handleSelectionButton("copy")(e)}>Copy</Button
-                >
-                <Button on:click={fillSelected}>Fill</Button
-                >
-                <div class="flexspacer" />
-                <Button on:click={cancelSelect}>Cancel</Button>
-            </div>
-        </div>
-    {/if}
-
-    <ImageRefStrip />
+    </div>
 </div>
 
 <div
@@ -2256,35 +2262,112 @@
 <style lang="scss">
     @use "$lib/items/dropdownAnimations.scss" as dropdown;
 
-    .topbar {
-        position: sticky;
-        top: 0;
-        background-color: #242424;
-        z-index: 2;
-        padding-inline: calc(var(--main-padding) / 1);
-        padding-top: calc(var(--main-padding) / 4);
-        box-shadow: 0 35px 10px -32px rgba(0, 0, 0, 0.5);
+    .dock {
+        position: fixed;
+        left: max(10px, calc(var(--main-padding) / 2));
+        right: calc(max(10px, calc(var(--main-padding) / 2)) + var(--flyout-width));
+        bottom: 10px;
+        z-index: 8;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        pointer-events: none;
+
+        :global(.flanimate) & {
+            transition: right 0.2s ease;
+        }
 
         @media (width < 501px) {
-            padding-inline: calc(var(--main-padding) / 2);
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            left: 8px;
+            right: calc(8px + var(--flyout-width));
+            bottom: 8px;
         }
     }
 
-    .quickbar {
+    .chrome {
+        pointer-events: auto;
+        position: relative;
+        z-index: 3;
         display: flex;
-        justify-content: space-between;
-        gap: 0.5em;
+        flex-direction: column;
+        gap: 0.4rem;
+        width: 100%;
+        padding: 0.45rem 0.55rem;
+        border-radius: 14px;
+        background: var(--glass);
+        backdrop-filter: blur(16px) saturate(1.2);
+        border: 1px solid var(--line);
+        box-shadow:
+            0 0 18px rgba(0, 0, 0, 0.5),
+            0 0 42px rgba(0, 0, 0, 0.62),
+            0 0 88px rgba(0, 0, 0, 0.55);
+        font-size: 0.72rem;
+        color: var(--muted);
+        user-select: none;
+        box-sizing: border-box;
+    }
+
+    .chrome-meta {
+        display: flex;
         flex-wrap: wrap;
         align-items: center;
-        user-select: none;
-        font-size: 0.8em;
-        color: #ddd;
-        margin-bottom: 0.5em;
+        gap: 0.35rem 0.45rem;
+        width: 100%;
+    }
 
-        .image-count .pending {
+    .chrome-nav {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        width: 100%;
+        min-width: 0;
+
+        :global(.quick-tag-toolbar) {
+            width: 100%;
+        }
+
+        /* Match SearchInput field fill (Live / Bulk / quick-tag / selection actions). */
+        :global(.nav-actions button),
+        :global(.quick-tag-toolbar .actions button) {
+            background-color: rgba(0, 0, 0, 0.34);
+
+            &:hover,
+            &:focus-visible {
+                background-color: rgba(0, 0, 0, 0.44);
+            }
+
+            &:active {
+                background-color: rgba(0, 0, 0, 0.28);
+            }
+        }
+    }
+
+    .image-count {
+        flex: 0 0 auto;
+        margin-left: auto;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        color: rgba(235, 228, 216, 0.75);
+        white-space: nowrap;
+        padding: 0 0.15rem;
+
+        .pending {
             opacity: 0.45;
         }
+    }
+
+    .nsfw {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.7rem;
+        cursor: pointer;
+        flex: 0 0 auto;
+        white-space: nowrap;
+        padding: 0 0.15rem;
+        color: var(--muted);
     }
 
     .nav {
@@ -2292,13 +2375,14 @@
         container-name: nav;
         position: relative;
         display: flex;
-        gap: 0.5em;
+        gap: 0.4rem;
         align-items: center;
-        padding-bottom: 0.5em;
+        width: 100%;
+        min-width: 0;
 
         & > :global(.input) {
             flex: 1 1 0;
-            min-width: 0;
+            min-width: 7rem;
         }
     }
 
@@ -2317,22 +2401,24 @@
         flex-shrink: 0;
         appearance: none;
         margin: 0;
-        padding: 0.45em;
+        box-sizing: border-box;
+        min-height: calc(0.8rem * 1.2 + 1em);
+        min-width: calc(0.8rem * 1.2 + 1em);
+        padding: 0.5em;
         border: none;
-        border-radius: 0.35em;
+        border-radius: 0.4em;
         background: transparent;
-        color: #ddd;
+        color: var(--ink);
         cursor: pointer;
         line-height: 0;
-        transition: background-color 0.12s ease;
+        transition: color 0.12s ease, background-color 0.12s ease;
 
         .burger {
             display: flex;
             flex-direction: column;
             justify-content: center;
-            gap: 0.22em;
-            width: 1.1em;
-            height: 1em;
+            gap: 3px;
+            width: 14px;
 
             span {
                 display: block;
@@ -2344,11 +2430,8 @@
 
         &:hover,
         &:focus-visible {
-            background: #ffffff10;
-        }
-
-        &:active {
-            background: #ffffff18;
+            color: var(--accent);
+            background: transparent;
         }
 
         &:focus {
@@ -2358,9 +2441,13 @@
 
     .nav-actions {
         display: flex;
-        gap: 0.5em;
+        gap: 5px;
         flex-shrink: 0;
         align-items: center;
+    }
+
+    :global(.settings-btn) {
+        flex-shrink: 0;
     }
 
     .nav-burger-actions {
@@ -2372,19 +2459,21 @@
             display: flex;
             flex-direction: column;
             position: absolute;
-            top: calc(100% - 0.5em);
+            bottom: calc(100% + 6px);
             right: 0;
             z-index: 10;
             box-sizing: border-box;
             gap: 0.15em;
             width: max-content;
-            min-width: 6.5em;
-            max-width: min(12em, 100%);
-            padding: 0.25em;
-            background: #2a2a2a;
+            min-width: 8.75rem;
+            max-width: min(14rem, 80vw);
+            padding: 0.3em;
+            background: var(--bg-elev);
+            border: none;
             border-radius: 0.35em;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-            @include dropdown.panel-animation;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+            @include dropdown.panel-animation-up;
+            @include dropdown.reduced-motion;
 
             :global(a),
             :global(button) {
@@ -2393,29 +2482,37 @@
                 width: 100%;
                 min-width: 0;
                 margin: 0;
-                padding: 0.35em 0.55em;
+                padding: 0.42em 0.7em;
                 border: none;
                 border-radius: 0.25em;
                 background: transparent;
-                color: #ddd;
-                font-size: 0.8rem;
-                line-height: 1.2;
+                color: var(--ink);
+                font-size: 0.875rem;
+                line-height: 1.25;
                 text-align: left;
                 text-decoration: none;
+                white-space: nowrap;
                 transform: none;
                 transition: background-color 0.12s ease;
+                @include dropdown.option-animation-up;
+                @include dropdown.reduced-motion;
 
                 &:hover,
                 &:focus-visible {
-                    background: #ffffff12;
+                    background: rgba(255, 255, 255, 0.08);
                     border-color: transparent;
                     transform: none;
                 }
 
                 &:active {
-                    background: #ffffff1a;
+                    background: rgba(255, 255, 255, 0.12);
                     transform: none;
                 }
+            }
+
+            :global(a.accent) {
+                background: var(--accent-soft);
+                color: var(--accent);
             }
         }
     }
@@ -2424,12 +2521,6 @@
         display: none;
         flex-direction: column;
         gap: 0.15em;
-    }
-
-    .nav.quick-tag-nav {
-        & > :global(.quick-tag-toolbar) {
-            width: 100%;
-        }
     }
 
     @container nav (max-width: 540px) {
@@ -2475,6 +2566,7 @@
     .grid {
         --gallery-gap: 0.8em;
         padding: calc(var(--main-padding) / 2) var(--main-padding);
+        padding-bottom: 8.5rem;
         min-height: 100vh;
         overflow-anchor: none;
         position: relative;
@@ -2535,9 +2627,10 @@
                 margin: 0;
                 padding: 0.5em 1em;
                 border-radius: 0.35em;
-                background-color: rgba(36, 36, 36, 0.85);
+                background-color: var(--glass);
+                border: 1px solid var(--line);
                 font-size: 0.9em;
-                color: #bbb;
+                color: var(--muted);
             }
 
             &.visible {
@@ -2556,11 +2649,13 @@
         &.spacing-compact {
             --gallery-gap: 2px;
             padding: 5px;
+            padding-bottom: 8.5rem;
         }
 
         &.spacing-mosaic {
             --gallery-gap: 0px;
             padding: 0;
+            padding-bottom: 8.5rem;
         }
 
         @media (width > 1200px) {
@@ -2572,6 +2667,7 @@
         @media (width < 501px) {
             --gallery-gap: 0.2em;
             padding: 5px;
+            padding-bottom: 8rem;
 
             .masonry-probe {
                 width: calc(130px + var(--size-offset));
@@ -2580,20 +2676,22 @@
             &.spacing-compact {
                 --gallery-gap: 2px;
                 padding: 5px;
+                padding-bottom: 8rem;
             }
 
             &.spacing-mosaic {
                 --gallery-gap: 0px;
                 padding: 0;
+                padding-bottom: 8rem;
             }
         }
     }
 
     .slideshow {
         position: fixed;
-        top: 1.5em;
-        right: calc(2em + var(--flyout-width));
-        z-index: 5;
+        right: calc(1rem + var(--flyout-width));
+        bottom: 1rem;
+        z-index: 45;
 
         :global(.flanimate) & {
             transition: right 0.2s ease;
@@ -2605,7 +2703,7 @@
     }
 
     .spacer2 {
-        height: 60vh;
+        height: 2rem;
     }
 
     .flexspacer {
@@ -2613,6 +2711,8 @@
     }
 
     .loader {
+        padding-bottom: 8rem;
+
         & > :global(:first-child) {
             display: flex;
             justify-content: center;
@@ -2624,29 +2724,26 @@
             background-color: transparent;
             border: none;
             font-size: 1em;
-            color: #ddd;
+            color: var(--muted);
             display: block;
             margin: 1em 0 0 0;
         }
 
         button {
             cursor: pointer;
+            color: var(--ink);
+
+            &:hover {
+                color: var(--accent);
+            }
         }
     }
 
-    label {
-        display: flex;
-        align-items: center;
-        gap: 0.5em;
-        cursor: pointer;
-        user-select: none;
-    }
-
-    input[type="checkbox"] {
+    .nsfw input[type="checkbox"] {
         appearance: none;
-        background-color: #333;
+        -webkit-appearance: none;
+        background-color: #2a2420;
         border-radius: 0.2em;
-        font-size: 1em;
         width: 13px;
         height: 13px;
         margin: 0;
@@ -2654,12 +2751,14 @@
         border: none;
         cursor: pointer;
         position: relative;
-        outline: 1px solid #aaa3;
+        outline: none;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+        flex-shrink: 0;
 
         &::before {
             content: "";
             position: absolute;
-            background-color: rgb(63, 187, 236);
+            background-color: var(--accent);
             top: 2px;
             left: 2px;
             right: 2px;

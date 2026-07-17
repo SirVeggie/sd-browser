@@ -9,6 +9,8 @@
     import { bindDropdownOutsideClick } from "$lib/tools/dropdownOutsideClick";
 
     export let onChange: (() => void) | undefined = undefined;
+    export let dropUp = false;
+    export let chrome = false;
 
     const dispatch = createEventDispatcher<{ change: void }>();
 
@@ -55,15 +57,16 @@
     });
 </script>
 
-<div class="filter-multi-select" bind:this={rootEl}>
+<div class="filter-multi-select" class:chrome bind:this={rootEl}>
     <button
         type="button"
         class="trigger"
+        class:chrome
         aria-expanded={open}
         aria-haspopup="listbox"
         on:click|stopPropagation={() => (open = !open)}
     >
-        <span class="prefix">Filters:</span>
+        <span class="prefix">Filters{chrome ? "" : ":"}</span>
         <span class="value" bind:this={valueEl}>{label}</span>
         <span class="chevron" class:open aria-hidden="true" />
     </button>
@@ -71,6 +74,7 @@
     {#if open}
         <div
             class="panel"
+            class:drop-up={dropUp}
             role="group"
             aria-label="Custom filters"
             style:left="{panelLeft}px"
@@ -107,6 +111,14 @@
         display: inline-flex;
     }
 
+    .filter-multi-select.chrome {
+        font-size: 0.7rem;
+
+        @media (width < 701px) {
+            font-size: 0.82rem;
+        }
+    }
+
     .trigger {
         display: inline-flex;
         align-items: center;
@@ -116,9 +128,28 @@
         border: none;
         background: none;
         font-size: 1em;
-        color: #ddd;
+        color: var(--ink);
         cursor: pointer;
         user-select: none;
+
+        &.chrome {
+            gap: 0.25rem;
+            padding: 0.28rem 0.45rem;
+            box-sizing: border-box;
+            border-radius: 7px;
+            border: 1px solid var(--line);
+            background: rgba(0, 0, 0, 0.22);
+            white-space: nowrap;
+
+            .prefix {
+                color: var(--muted);
+            }
+
+            .value {
+                font-weight: 600;
+                color: var(--ink);
+            }
+        }
 
         &:focus {
             outline: none;
@@ -126,7 +157,11 @@
 
         &:focus-visible {
             border-radius: 0.2em;
-            background: #ffffff10;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        &.chrome:focus-visible {
+            background: rgba(0, 0, 0, 0.32);
         }
     }
 
@@ -143,8 +178,8 @@
         flex-shrink: 0;
         width: 0.35em;
         height: 0.35em;
-        border-right: 2px solid #ccc;
-        border-bottom: 2px solid #ccc;
+        border-right: 2px solid var(--muted);
+        border-bottom: 2px solid var(--muted);
         transform: rotate(45deg);
         transition: transform 0.2s ease;
         margin-top: -0.15em;
@@ -158,18 +193,31 @@
 
     .panel {
         position: absolute;
-        top: calc(100% + 0.35em);
         z-index: 10;
         display: flex;
         flex-direction: column;
         gap: 0.15em;
         min-width: max(100%, 8em);
         max-width: 20em;
-        background: #2a2a2a;
+        background: var(--bg-elev);
+        border: none;
         border-radius: 0.35em;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
         @include dropdown.panel-animation;
         @include dropdown.reduced-motion;
+
+        top: calc(100% + 0.35em);
+
+        &.drop-up {
+            top: auto;
+            bottom: calc(100% + 0.35em);
+            flex-direction: column-reverse;
+            @include dropdown.panel-animation-up;
+
+            .option {
+                @include dropdown.option-animation-up;
+            }
+        }
     }
 
     .option {
@@ -181,7 +229,7 @@
         border: none;
         background: none;
         font-size: inherit;
-        color: #ddd;
+        color: var(--ink);
         cursor: pointer;
         white-space: nowrap;
         text-align: left;
@@ -189,8 +237,13 @@
         @include dropdown.option-animation;
         @include dropdown.reduced-motion;
 
+        @media (width < 701px) {
+            padding: 0.7em 0.85em 0.7em 1em;
+            font-size: 1rem;
+        }
+
         &:hover {
-            background: #ffffff10;
+            background: rgba(255, 255, 255, 0.06);
         }
 
         &:focus {
@@ -198,7 +251,7 @@
         }
 
         &:focus-visible {
-            background: #ffffff14;
+            background: rgba(255, 255, 255, 0.08);
         }
 
         &.selected {
@@ -211,7 +264,7 @@
         width: 0.42em;
         height: 0.42em;
         border-radius: 50%;
-        background: #5b9cf5;
+        background: var(--accent);
     }
 
     .name {
@@ -219,10 +272,15 @@
     }
 
     .empty {
-        color: #999;
+        color: var(--muted);
         font-size: 0.95em;
         padding: 0.5em 0.7em;
         @include dropdown.option-animation;
         @include dropdown.reduced-motion;
+
+        @media (width < 701px) {
+            padding: 0.7em 0.85em;
+            font-size: 1rem;
+        }
     }
 </style>

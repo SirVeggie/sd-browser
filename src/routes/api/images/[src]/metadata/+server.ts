@@ -1,4 +1,4 @@
-import { buildImageInfoForClient } from '$lib/server/imageUtils';
+import { attachImageFileStats, buildImageInfoForClient } from '$lib/server/imageUtils';
 import { MetaDB } from '$lib/server/db';
 import { getImage } from '$lib/server/dataIndex';
 import { error, success } from '$lib/server/responses.js';
@@ -23,8 +23,9 @@ export async function GET(e) {
         return success(blobs);
     }
 
-    const info = buildImageInfoForClient(getImage(src));
-    if (!info)
+    const image = getImage(src);
+    const info = buildImageInfoForClient(image);
+    if (!info || !image)
         return error('Image not found', 404);
-    return success(info);
+    return success(await attachImageFileStats(info, image));
 }

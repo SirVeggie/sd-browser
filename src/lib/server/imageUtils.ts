@@ -5,6 +5,7 @@ import { isMetadataFiletype, isVideo } from '$lib/tools/misc';
 import crypto from 'crypto';
 import exifr from 'exifr';
 import fs from 'fs/promises';
+import path from 'path';
 import { fileExists, removeBasePath } from "./filetools";
 import { MetaDB } from "./db";
 import { populateMediaDimensions } from "./imageDimensions";
@@ -219,6 +220,25 @@ export function buildImageInfoForClient(image: ServerImage | undefined): ImageIn
         tags: info.tags,
         width: info.width,
         height: info.height,
+        fileExt: info.fileExt,
+        fileSize: info.fileSize,
         blobsDeferred: true,
     };
+}
+
+/** Attach extension + on-disk size (no DB persistence). */
+export async function attachImageFileStats(
+    info: ImageInfo,
+    image: ServerImage,
+): Promise<ImageInfo> {
+    const ext = path.extname(image.file).replace(/^\./, "").toLowerCase();
+    if (ext)
+        info.fileExt = ext;
+    try {
+        const stats = await fs.stat(image.file);
+        info.fileSize = stats.size;
+    } catch {
+        // File may be missing; leave size unset.
+    }
+    return info;
 }

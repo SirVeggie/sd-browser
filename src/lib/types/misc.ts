@@ -188,26 +188,21 @@ export const searchKeywordHelpSections = [
                 keyword: 'SIMILAR|SM',
                 summary: 'Finds images with similar prompts.',
                 details:
-                    'Pass an image id to compare prompt text. A trailing number overrides the similarity threshold. This is prompt-only; use IMG for embedding similarity.',
-                example: 'SM abc123 0.6',
+                    'Pass an image reference (#n or [n]) or image id to compare prompt text. A trailing number overrides the similarity threshold. This is prompt-only; use IMG for embedding similarity.',
+                example: 'SM #1 0.6',
             },
         ],
     },
     {
-        title: 'IMG',
+        title: 'Image modes',
         entries: [
             {
                 keyword: 'IMG',
                 summary: 'Searches with image embeddings.',
                 details:
-                    'Bare IMG matches images that have embeddings. Text runs an embedding search. A 64-character hex id uses that image\'s embedding. Use #n or [n] for reference-strip slots (e.g. IMG #1 0.8). Mix ids and text with spaced + and - for positive and negative weights; a leading spaced - is negative-only. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count (either order). Use -1 as k to force full JavaScript scoring while keeping a threshold. Named multi-image modes each have their own section below.',
+                    'Bare IMG matches images that have embeddings. Text runs an embedding search. A 64-character hex id uses that image\'s embedding. Use #n or [n] for reference-strip slots (e.g. IMG #1 0.8). Mix ids and text with spaced + and - for positive and negative weights; a leading spaced - is negative-only. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count (either order). Use -1 as k to force full JavaScript scoring while keeping a threshold. Named multi-image modes are listed below.',
                 example: 'IMG cat + #1 - beach 0.8',
             },
-        ],
-    },
-    {
-        title: 'IMG avg',
-        entries: [
             {
                 keyword: 'IMG avg',
                 summary: 'Blends reference embeddings into a centroid.',
@@ -215,11 +210,6 @@ export const searchKeywordHelpSections = [
                     'Averages the reference image embeddings, renormalizes, then runs nearest-neighbor search. Soft blend of shared traits. Default for multi-select Similar images. Needs one or more hex ids (or #n refs). Space-separated ids, no +.',
                 example: 'IMG avg #1 #2 #3 0.8',
             },
-        ],
-    },
-    {
-        title: 'IMG all',
-        entries: [
             {
                 keyword: 'IMG all',
                 summary: 'Must resemble every reference.',
@@ -227,11 +217,6 @@ export const searchKeywordHelpSections = [
                     'Scores by geometric mean of similarity to each reference (same idea as weighted IMG a + b). Candidates that miss any ref score poorly. Needs one or more hex ids. Inside an IMG clause, all is a mode name, not the ALL metadata keyword.',
                 example: 'IMG all #1 #2',
             },
-        ],
-    },
-    {
-        title: 'IMG any',
-        entries: [
             {
                 keyword: 'IMG any',
                 summary: 'Matches the closest reference.',
@@ -239,11 +224,6 @@ export const searchKeywordHelpSections = [
                     'Uses the maximum similarity to any reference. Good for moodboards or mixed themes where matching one ref is enough. Needs one or more hex ids.',
                 example: 'IMG any #1 #2 #3',
             },
-        ],
-    },
-    {
-        title: 'IMG more',
-        entries: [
             {
                 keyword: 'IMG more',
                 summary: 'Extrapolates past A away from B.',
@@ -251,11 +231,6 @@ export const searchKeywordHelpSections = [
                     'Builds normalize(A + α(A−B)) and searches near that vector. Emphasizes what distinguishes A from B. Requires exactly two ids: IMG more <idA> <idB>. Order matters.',
                 example: 'IMG more #1 #2',
             },
-        ],
-    },
-    {
-        title: 'IMG fringe',
-        entries: [
             {
                 keyword: 'IMG fringe',
                 summary: 'Related but atypical vs the set.',
@@ -263,11 +238,6 @@ export const searchKeywordHelpSections = [
                     'Prefers images near at least one reference but unlike the set centroid: weird cousins, hybrids, near-misses. Needs one or more hex ids. Mode names only apply when followed by hex ids, so IMG fringe of trees stays a text query.',
                 example: 'IMG fringe #1 #2',
             },
-        ],
-    },
-    {
-        title: 'IMG diff',
-        entries: [
             {
                 keyword: 'IMG diff',
                 summary: 'Searches along the A−B difference.',
@@ -275,11 +245,6 @@ export const searchKeywordHelpSections = [
                     'Uses the difference vector between two embeddings. Aligns with what changes from B to A without requiring a match to A itself. Requires exactly two ids. Order matters (A−B ≠ B−A).',
                 example: 'IMG diff #1 #2',
             },
-        ],
-    },
-    {
-        title: 'IMG shared',
-        entries: [
             {
                 keyword: 'IMG shared',
                 summary: 'Keeps stable traits across references.',
@@ -287,11 +252,6 @@ export const searchKeywordHelpSections = [
                     'Inverse-variance weights the reference mean: dims that vary a lot within the set are downweighted relative to stable ones, then KNN as usual. Better than avg when refs share a subject but disagree on outfit or lighting. Needs at least two hex ids.',
                 example: 'IMG shared #1 #2 #3',
             },
-        ],
-    },
-    {
-        title: 'IMG analogy',
-        entries: [
             {
                 keyword: 'IMG analogy',
                 summary: 'A:B as C:? relational search.',
@@ -299,11 +259,6 @@ export const searchKeywordHelpSections = [
                     'Builds normalize(C + (B − A)) and searches near it. Apply the A→B transform to C. Requires exactly three ids: IMG analogy <A> <B> <C>.',
                 example: 'IMG analogy #1 #2 #3',
             },
-        ],
-    },
-    {
-        title: 'IMG affinity',
-        entries: [
             {
                 keyword: 'IMG affinity',
                 summary: 'Expands a cohesive reference set.',

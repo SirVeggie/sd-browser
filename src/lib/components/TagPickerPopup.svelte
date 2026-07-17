@@ -15,19 +15,34 @@
         close: void;
     }>();
 
-    let top = 0;
+    let rootEl: HTMLDivElement | undefined;
+    let top: number | undefined = 0;
+    let bottom: number | undefined = undefined;
     let left = 0;
+    let openUp = false;
 
     function pillColor(name: string): string {
         return getTagColor($tagsStore, name) ?? DEFAULT_TAG_COLOR;
     }
 
     function updatePosition() {
-        if (!anchor)
+        if (!anchor) {
             return;
+        }
         const rect = anchor.getBoundingClientRect();
-        top = rect.bottom + 4;
-        left = rect.left;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        openUp = spaceBelow < 220;
+
+        if (openUp) {
+            top = undefined;
+            bottom = window.innerHeight - rect.top + 4;
+        } else {
+            top = rect.bottom + 4;
+            bottom = undefined;
+        }
+
+        const maxLeft = Math.max(8, window.innerWidth - 8 - Math.min(24 * 16, window.innerWidth * 0.9));
+        left = Math.min(Math.max(8, rect.left), maxLeft);
     }
 
     function close() {
@@ -35,10 +50,14 @@
     }
 
     onMount(() => {
+        if (rootEl) {
+            document.body.appendChild(rootEl);
+        }
         updatePosition();
         window.addEventListener("resize", updatePosition);
         window.addEventListener("scroll", updatePosition, true);
         return () => {
+            rootEl?.remove();
             window.removeEventListener("resize", updatePosition);
             window.removeEventListener("scroll", updatePosition, true);
         };
@@ -47,48 +66,53 @@
     $: anchor, updatePosition();
 </script>
 
-<button
-    type="button"
-    class="backdrop"
-    aria-label="Close tag picker"
-    on:click|stopPropagation={close}
-></button>
+<div class="tag-picker-root" bind:this={rootEl}>
+    <button
+        type="button"
+        class="backdrop"
+        aria-label="Close tag picker"
+        on:click|stopPropagation={close}
+    ></button>
 
-<div
-    class="picker"
-    style={`top: ${top}px; left: ${left}px`}
-    transition:fly={{ y: -8, duration: 180, easing: cubicOut }}
->
-    <div class="picker-header">
-        <span class="title">select tags</span>
-        <button type="button" class="add-new" on:click|stopPropagation={() => dispatch("createNew")}>
-            + add new
-        </button>
-    </div>
-    {#if tags.length}
-        <div class="picker-tags">
-            {#each tags as tag, index (tag)}
-                <span
-                    class="picker-tag-entry"
-                    in:fade={{ duration: 160, delay: index * 35, easing: cubicOut }}
-                    on:click|stopPropagation={() => dispatch("select", tag)}
-                >
-                    <Tag color={pillColor(tag)} highlightOnHover>
-                        {tag}
-                    </Tag>
-                </span>
-            {/each}
+    <div
+        class="picker"
+        style:top={top === undefined ? "auto" : `${top}px`}
+        style:bottom={bottom === undefined ? "auto" : `${bottom}px`}
+        style:left={`${left}px`}
+        transition:fly={{ y: openUp ? 8 : -8, duration: 180, easing: cubicOut }}
+    >
+        <div class="picker-header">
+            <span class="title">select tags</span>
+            <button type="button" class="add-new" on:click|stopPropagation={() => dispatch("createNew")}>
+                + add new
+            </button>
         </div>
-    {:else}
-        <p class="empty" in:fade={{ duration: 160, easing: cubicOut }}>All registry tags are on this image.</p>
-    {/if}
+        {#if tags.length}
+            <div class="picker-tags">
+                {#each tags as tag, index (tag)}
+                    <button
+                        type="button"
+                        class="picker-tag-entry"
+                        in:fade={{ duration: 160, delay: index * 35, easing: cubicOut }}
+                        on:click|stopPropagation={() => dispatch("select", tag)}
+                    >
+                        <Tag color={pillColor(tag)} highlightOnHover interactive={false}>
+                            {tag}
+                        </Tag>
+                    </button>
+                {/each}
+            </div>
+        {:else}
+            <p class="empty" in:fade={{ duration: 160, easing: cubicOut }}>All registry tags are on this image.</p>
+        {/if}
+    </div>
 </div>
 
 <style lang="scss">
     .backdrop {
         position: fixed;
         inset: 0;
-        z-index: 101;
+        z-index: 200;
         margin: 0;
         padding: 0;
         border: none;
@@ -98,14 +122,17 @@
 
     .picker {
         position: fixed;
-        z-index: 102;
+        z-index: 201;
         min-width: min(18em, 70vw);
         max-width: min(24em, 90vw);
-        background: #1a1a1ef0;
-        border: 1px solid #fff2;
-        border-radius: 0.45em;
-        box-shadow: 0 0.35em 1em #0008;
-        overflow: hidden;
+        max-height: min(50vh, 20rem);
+        overflow-y: auto;
+        background: var(--glass);
+        backdrop-filter: blur(16px) saturate(1.2);
+        border: none;
+        border-radius: 0.5em;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+        color: var(--ink);
     }
 
     .picker-header {
@@ -113,31 +140,38 @@
         align-items: center;
         justify-content: space-between;
         gap: 0.75em;
-        padding: 0.45em 0.6em;
-        background: #112a;
-        border-bottom: 1px solid #fff1;
+        padding: 0.5em 0.7em;
+        background: rgba(0, 0, 0, 0.22);
+        border-bottom: 1px solid var(--line);
         font-size: 0.82em;
+        position: sticky;
+        top: 0;
+        z-index: 1;
     }
 
     .title {
-        color: #ccc;
+        color: var(--muted);
         text-transform: lowercase;
         user-select: none;
+        font-weight: 600;
     }
 
     .add-new {
         appearance: none;
         border: none;
         background: none;
-        color: rgb(63, 187, 236);
+        color: var(--accent);
         font: inherit;
         font-size: 0.95em;
+        font-weight: 600;
         cursor: pointer;
-        padding: 0.15em 0.25em;
+        padding: 0.15em 0.35em;
         border-radius: 0.25em;
+        transition: background-color 0.12s ease, color 0.12s ease;
 
         &:hover {
-            background: rgb(63 187 236 / 12%);
+            background: var(--accent-soft);
+            color: var(--ink);
         }
     }
 
@@ -150,12 +184,19 @@
 
     .picker-tag-entry {
         display: inline-flex;
+        appearance: none;
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        line-height: 0;
     }
 
     .empty {
         margin: 0;
         padding: 0.65em 0.75em;
         font-size: 0.82em;
-        color: #aaa;
+        color: var(--muted);
     }
 </style>

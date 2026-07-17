@@ -17,39 +17,23 @@
 </div>
 
 <style lang="scss">
-    $app-bg: #242424;
-    $surface: #2a2a2a;
-
     .placeholder {
         position: relative;
         display: block;
         width: 100%;
         height: 100%;
         min-height: inherit;
-        background-color: $surface;
+        background-color: var(--bg-elev);
         border-radius: 0.5em;
         overflow: hidden;
         isolation: isolate;
-
-        &:not(.mosaic) {
-            box-shadow:
-                inset 0 0 18px 6px $app-bg,
-                inset 0 0 36px 12px rgba($app-bg, 0.85);
-        }
+        box-shadow:
+            inset 0 0 18px 6px var(--bg),
+            inset 0 0 36px 12px color-mix(in srgb, var(--bg) 85%, transparent);
 
         &.mosaic {
             border-radius: 0;
-
-            &::after {
-                content: "";
-                position: absolute;
-                inset: 0;
-                z-index: 2;
-                box-shadow:
-                    inset 0 0 18px 6px $app-bg,
-                    inset 0 0 36px 12px rgba($app-bg, 0.85);
-                pointer-events: none;
-            }
+            box-shadow: none;
         }
     }
 
@@ -62,9 +46,9 @@
         background: linear-gradient(
             108deg,
             transparent 28%,
-            rgba(210, 218, 228, 0.03) 40%,
-            rgba(225, 232, 240, 0.07) 50%,
-            rgba(210, 218, 228, 0.03) 60%,
+            color-mix(in srgb, var(--ink) 4%, transparent) 40%,
+            color-mix(in srgb, var(--accent) 10%, transparent) 50%,
+            color-mix(in srgb, var(--ink) 4%, transparent) 60%,
             transparent 72%
         );
         z-index: 1;

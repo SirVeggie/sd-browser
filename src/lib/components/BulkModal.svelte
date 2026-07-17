@@ -764,7 +764,7 @@
 
     .subtitle {
         margin-top: 0;
-        color: #aaa;
+        color: var(--muted);
         font-size: 0.9em;
 
     }
@@ -803,7 +803,7 @@
 
     .hint {
         font-size: 0.8em;
-        color: #aaa;
+        color: var(--muted);
     }
 
     .llm-warning {
@@ -816,17 +816,17 @@
     textarea {
         width: 100%;
         min-width: min(500px, 80vw);
-        background-color: #333;
-        color: #ddd;
-        border-radius: 0.5em;
-        border: 1px solid #1118;
+        background-color: rgba(0, 0, 0, 0.28);
+        color: var(--ink);
+        border-radius: 9px;
+        border: 1px solid var(--line);
         padding: 0.5em;
         box-sizing: border-box;
         resize: vertical;
 
         &:focus {
             outline: none;
-            border-color: #aaad;
+            border-color: rgba(196, 165, 116, 0.45);
         }
     }
 
@@ -851,7 +851,7 @@
     .field-label {
         display: block;
         margin-bottom: 0.35em;
-        color: #ccc;
+        color: var(--muted);
     }
 
     .tag-bulk {
@@ -867,7 +867,7 @@
 
     .separator {
         border: none;
-        border-top: 1px solid #aaa4;
+        border-top: 1px solid var(--line);
         margin: 0.5em 0 0.75em;
     }
 
@@ -890,7 +890,7 @@
     .progress {
         width: 100%;
         height: 0.75em;
-        background: #333;
+        background: rgba(0, 0, 0, 0.28);
         border-radius: 0.5em;
         overflow: hidden;
     }
@@ -902,8 +902,8 @@
         transform: translateX(-50%);
         min-width: 14em;
         padding: 0.6em 0.75em;
-        background: #222;
-        border: 1px solid #555;
+        background: var(--bg-elev);
+        border: 1px solid var(--line);
         border-radius: 0.5em;
         box-shadow: 0 4px 12px #0008;
         z-index: 1;
@@ -916,7 +916,7 @@
             top: 100%;
             transform: translateX(-50%);
             border: 6px solid transparent;
-            border-top-color: #555;
+            border-top-color: var(--line);
         }
     }
 
@@ -933,11 +933,11 @@
     }
 
     .label {
-        color: #aaa;
+        color: var(--muted);
     }
 
     .value {
-        color: #eee;
+        color: var(--ink);
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
 
@@ -948,14 +948,14 @@
 
     .bar {
         height: 100%;
-        background: rgb(63, 187, 236);
+        background: var(--accent);
         transition: width 0.15s ease;
     }
 
     .progress-text {
         margin: 0.35em 0 0;
         font-size: 0.9em;
-        color: #aaa;
+        color: var(--muted);
         text-align: center;
     }
 
@@ -968,7 +968,7 @@
 
     input[type="checkbox"] {
         appearance: none;
-        background-color: #333;
+        background-color: #2a2420;
         border-radius: 0.2em;
         width: 13px;
         height: 13px;
@@ -976,12 +976,12 @@
         border: none;
         cursor: pointer;
         position: relative;
-        outline: 1px solid #aaa3;
+        outline: 1px solid rgba(235, 228, 216, 0.28);
 
         &::before {
             content: "";
             position: absolute;
-            background-color: rgb(63, 187, 236);
+            background-color: var(--accent);
             top: 2px;
             left: 2px;
             right: 2px;

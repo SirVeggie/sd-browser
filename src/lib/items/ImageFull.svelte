@@ -16,7 +16,6 @@
     getComfyMetadataSections,
     getMetadataVersion,
     getModelCandidates,
-    getModelHash,
     getPrimaryModel,
     getPrompts,
     getSeed,
@@ -285,13 +284,28 @@
     return d.prompt != null || d.workflow != null || d.extra != null;
   }
 
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024)
+      return `${bytes} B`;
+    if (bytes < 1024 * 1024) {
+      const kb = bytes / 1024;
+      return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+    }
+    const mb = bytes / (1024 * 1024);
+    return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  }
+
+  function formatMetaDate(ms: number): string {
+    const d = new Date(ms);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   function extractBasic(d: ImageInfo): string {
     let primary: string;
-    let hash = "";
     if (hasBlobs(d)) {
       const candidates = getModelCandidates(d.prompt, d.workflow, d.extra);
       primary = getPrimaryModel(candidates, d.extra);
-      hash = getModelHash(d.prompt);
     } else {
       const modelsText = d.models ?? "";
       primary = !modelsText
@@ -300,14 +314,17 @@
           ? MULTIPLE_MODELS
           : modelsText;
     }
-    let info = "";
-    info += `Model:\u00a0${primary}`;
-    if (hash) info += ` [${hash}]`;
-    if (d.width && d.height) info += `\nSize:\u00a0${d.width}x${d.height}`;
-    info += `\nCreated:\u00a0${new Date(d.createdDate).toLocaleDateString()}`;
-    info += `\nModified:\u00a0${new Date(d.modifiedDate).toLocaleDateString()}`;
-    if (d.folder) info += `\nFolder:\u00a0${d.folder}`;
-    return info;
+
+    const parts: string[] = [];
+    if (d.width && d.height)
+      parts.push(`${d.width} × ${d.height}`);
+    if (d.fileExt)
+      parts.push(d.fileExt);
+    if (d.fileSize != null)
+      parts.push(formatFileSize(d.fileSize));
+    parts.push(formatMetaDate(d.modifiedDate));
+
+    return `${parts.join(" · ")}\nModel: ${primary}`;
   }
 
   function buildPromptInfo(d: ImageInfo): PromptFragment[] {
@@ -949,13 +966,13 @@
 <style lang="scss">
   .image_overlay {
     position: fixed;
-    z-index: 2;
+    z-index: 40;
     top: 0;
     left: 0;
     right: var(--flyout-width);
     // right: 0;
     bottom: 0;
-    background-color: #000a;
+    background-color: rgba(0, 0, 0, 0.55);
     --pad: min(5vh, 5vw);
     padding: var(--pad);
     backdrop-filter: blur(10px);
@@ -991,8 +1008,10 @@
       }
 
       .card {
-        background-color: #111b;
+        background-color: rgba(17, 14, 12, 0.78);
+        border: 1px solid var(--line);
         border-radius: 0.5em;
+        box-sizing: border-box;
         overflow-x: hidden;
         overflow-y: auto;
         overscroll-behavior-y: contain;
@@ -1001,7 +1020,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        color: #ddd;
+        color: var(--ink);
         font-size: 2em;
         scrollbar-width: none;
 
@@ -1069,12 +1088,12 @@
         }
 
         .dot-loader {
-          --loader-accent: rgb(63, 187, 236);
+          --loader-accent: var(--accent);
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 0.45em;
-          filter: drop-shadow(0 0 0.35em rgba(63, 187, 236, 0.75));
+          filter: drop-shadow(0 0 0.35em rgba(196, 165, 116, 0.75));
           pointer-events: none;
 
           span {
@@ -1083,8 +1102,8 @@
             border-radius: 50%;
             background: var(--loader-accent);
             box-shadow:
-              0 0 0.45em rgba(63, 187, 236, 0.9),
-              0 0 1em rgba(63, 187, 236, 0.35);
+              0 0 0.45em rgba(196, 165, 116, 0.9),
+              0 0 1em rgba(196, 165, 116, 0.35);
             opacity: 0.65;
             animation: loader-dot-wave 900ms ease-in-out infinite;
           }
@@ -1178,6 +1197,7 @@
 
         .card {
           border-radius: 0;
+          border: none;
           background-color: transparent;
         }
 
@@ -1198,8 +1218,8 @@
           max-width: auto;
           width: min(calc(100% - max(10vw, 10vh)), 1200px);
           padding-inline: 1em 0.4em;
-          background-color: #111b;
-          box-shadow: 0 0 1em 1em #111b;
+          background-color: rgba(17, 14, 12, 0.78);
+          box-shadow: 0 0 1em 1em rgba(17, 14, 12, 0.78);
         }
 
         &.live .card {
@@ -1218,13 +1238,12 @@
       --section-pad-x: 1em;
 
       & > div:not(.tags-row) {
-        // background-color: #123a;
-        background-color: #4444;
+        background-color: rgba(68, 60, 52, 0.35);
         line-height: 1.3em;
         border-radius: 0.5em;
         margin: 1em 0;
         overflow: hidden;
-        border: 1px solid #fff1;
+        border: 1px solid var(--line);
       }
 
       .tags-row {
@@ -1245,51 +1264,55 @@
 
       .basic {
         position: relative;
-        padding: 0.7em var(--section-pad-x);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.65rem 0.75rem;
         border-radius: 0.5em;
         margin: 1em 0;
+        background-color: rgba(68, 60, 52, 0.35);
+        border: 1px solid var(--line);
+        line-height: 1.35;
+
+        p {
+          flex: 1;
+          min-width: 0;
+          margin: 0;
+          color: var(--muted);
+          white-space: pre-line;
+        }
 
         &::after {
-          content: "";
-          position: absolute;
-          top: 0;
-          right: 0;
-          width: min(9em, 65%);
-          height: min(7em, 100%);
-          background: radial-gradient(
-            circle at top right,
-            rgba(0, 0, 0, 0.65),
-            rgba(0, 0, 0, 0.32) 38%,
-            transparent 72%
-          );
-          pointer-events: none;
+          display: none;
         }
       }
 
       .metadata-menu-button {
-        position: absolute;
-        top: 0.3em;
-        right: 0.35em;
+        position: relative;
+        top: auto;
+        right: auto;
+        flex-shrink: 0;
         z-index: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 0.13em;
-        width: 1.9em;
-        height: 1.9em;
+        width: 2rem;
+        height: 2rem;
         appearance: none;
         border: none;
         border-radius: 50%;
         background: transparent;
-        color: #ddd;
+        color: var(--ink);
         cursor: pointer;
         transition: background-color 0.15s ease, color 0.15s ease;
 
         &:hover,
         &:focus-visible {
-          background-color: #ffffff14;
-          color: #fff;
+          background-color: rgba(255, 255, 255, 0.08);
+          color: var(--ink);
           outline: none;
         }
 
@@ -1311,20 +1334,29 @@
       .header {
         margin: 0;
         font-size: 0.8em;
-        background-color: #112a;
+        background-color: rgba(68, 60, 52, 0.35);
         padding: 0.2em var(--section-pad-x);
         overflow-wrap: anywhere;
         word-break: break-word;
+        color: var(--accent);
+        font-weight: 700;
 
         button {
           background-color: transparent;
-          border: none;
-          color: #aaa;
+          border: 1px solid var(--line);
+          border-radius: 6px;
+          color: var(--muted);
           margin: 0;
-          padding: 0;
+          padding: 0.15rem 0.45rem;
           cursor: pointer;
-          transition: color 0.2s ease;
+          transition: color 0.2s ease, border-color 0.2s ease;
           float: right;
+          font-size: 0.85em;
+
+          &:hover {
+            color: var(--ink);
+            border-color: rgba(196, 165, 116, 0.35);
+          }
         }
       }
     }

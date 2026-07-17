@@ -22,14 +22,37 @@
     }
 }
 
+@keyframes dropdown-option-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(0.35em);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 @mixin panel-animation {
     transform-origin: top center;
+    animation: dropdown-panel-in 0.16s ease-out both;
+}
+
+@mixin panel-animation-up {
+    transform-origin: bottom center;
     animation: dropdown-panel-in 0.16s ease-out both;
 }
 
 @mixin option-animation {
     opacity: 0;
     animation: dropdown-option-in 0.18s ease-out both;
+    animation-delay: calc(0.04s + var(--stagger-i, 0) * 0.02s);
+}
+
+@mixin option-animation-up {
+    opacity: 0;
+    animation: dropdown-option-in-up 0.18s ease-out both;
     animation-delay: calc(0.04s + var(--stagger-i, 0) * 0.02s);
 }
 

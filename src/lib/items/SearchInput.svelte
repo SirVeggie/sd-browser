@@ -193,7 +193,7 @@
         font-size: 13.3333px;
         line-height: normal;
         width: 100%;
-        border-radius: 0.5em;
+        border-radius: 9px;
         padding: 0.5em 0.5em;
         box-sizing: border-box;
         white-space: pre;
@@ -203,9 +203,9 @@
         position: relative;
         background-color: transparent;
         color: transparent;
-        caret-color: #ddd;
-        box-shadow: inset 0px 2px 3px #0005;
-        border: 1px solid #1118;
+        caret-color: var(--ink);
+        border: none;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 
         &::placeholder {
             color: transparent;
@@ -213,7 +213,7 @@
 
         &:focus {
             outline: none;
-            border: 1px solid #aaad;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.36);
         }
     }
 
@@ -222,9 +222,9 @@
         inset: 0;
         overflow: hidden;
         pointer-events: none;
-        background-color: #333;
-        color: #ddd;
-        border: 1px solid transparent;
+        background-color: rgba(0, 0, 0, 0.34);
+        color: var(--ink);
+        border: none;
     }
 
     .highlightText {
@@ -235,19 +235,21 @@
     }
 
     .keyword {
-        color: #8fd3ff;
+        color: var(--keyword);
+        font-weight: 600;
     }
 
     .unknown-tag {
-        color: #f0a0a0;
+        color: var(--danger);
     }
 
     .abbreviated-id {
-        color: #ffd18f;
+        color: #d4c4a0;
     }
 
     .placeholder {
-        color: #ddd7;
+        color: var(--muted);
+        opacity: 0.65;
     }
 
     button {
@@ -256,7 +258,16 @@
         border: none;
         position: absolute;
         right: 0.5em;
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        padding: 0;
+        height: 1.25em;
+        width: 1.25em;
         cursor: pointer;
-        color: #ddd3;
+        color: var(--muted);
     }
 </style>

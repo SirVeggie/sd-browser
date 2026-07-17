@@ -80,18 +80,19 @@
     button {
         line-height: 0;
         z-index: 99;
-        color: #ddda;
+        color: var(--ink);
         appearance: none;
-        border: 1px solid #fff3;
-        background-color: #222a;
-        border-radius: 5px 0px 0px 5px;
+        border: 1px solid var(--line);
+        background-color: var(--glass);
+        backdrop-filter: blur(12px) saturate(1.2);
+        border-radius: 14px 0 0 14px;
         border-right: none;
         padding: 15px;
         position: fixed;
         right: calc(var(--flyout-width) * var(--flyout-button-reset));
         cursor: pointer;
         top: auto;
-        bottom: 50px;
+        bottom: 9.5rem;
         
         &.isTop {
             top: 90px;

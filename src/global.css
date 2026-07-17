@@ -2,6 +2,19 @@
     interpolate-size: allow-keywords;
     --font-body: "Inter", sans-serif;
     --font-tag: "Source Sans 3", sans-serif;
+
+    /* Darkroom palette */
+    --bg: #161310;
+    --bg-elev: #1c1814;
+    --ink: #ebe4d8;
+    --muted: #9a8f82;
+    --accent: #c4a574;
+    --accent-soft: rgba(196, 165, 116, 0.16);
+    --glass: rgba(40, 35, 30, 0.84);
+    --line: rgba(235, 228, 216, 0.1);
+    --danger: #c47a6a;
+    --keyword: #d4b896;
+    --ok-tag: #8fb89a;
 }
 
 * {
@@ -13,8 +26,8 @@ html {
     line-height: 1.5;
     font-family: var(--font-body);
     font-weight: 400;
-    color: #ddd;
-    background-color: #242424;
+    color: var(--ink);
+    background-color: var(--bg);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: clip;

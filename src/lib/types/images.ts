@@ -90,6 +90,10 @@ export type ImageInfo = {
     tags?: string[];
     width?: number;
     height?: number;
+    /** File extension without dot, e.g. `png`. */
+    fileExt?: string;
+    /** On-disk file size in bytes. */
+    fileSize?: number;
     /** True when prompt/workflow/extra were omitted; client should fetch `?blobs=1`. */
     blobsDeferred?: boolean;
 };

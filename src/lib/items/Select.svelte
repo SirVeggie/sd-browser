@@ -15,6 +15,8 @@
     export let id: string | undefined = undefined;
     export let disabled = false;
     export let title: string | undefined = undefined;
+    export let dropUp = false;
+    export let chrome = false;
 
     const dispatch = createEventDispatcher<{ change: string }>();
 
@@ -23,6 +25,7 @@
     let valueEl: HTMLSpanElement;
     let panelLeft = 0;
     let panelTop = 0;
+    let panelBottom = 0;
     let panelMinWidth = 0;
     let panelMaxHeight = 0;
     let removePositionListeners: (() => void) | undefined;
@@ -57,9 +60,20 @@
         const fontSize = parseFloat(getComputedStyle(rootEl).fontSize);
         const gap = fontSize * 0.35;
         panelLeft = rootRect.left + alignDropdownPanel(rootEl, valueEl);
-        panelTop = rootRect.bottom + gap;
-        panelMinWidth = Math.max(rootRect.width, fontSize * 8);
-        panelMaxHeight = Math.max(120, window.innerHeight - panelTop - 8);
+        if (dropUp) {
+            panelTop = 0;
+            panelBottom = window.innerHeight - rootRect.top + gap;
+        } else {
+            panelTop = rootRect.bottom + gap;
+            panelBottom = 0;
+        }
+        panelMinWidth = Math.max(
+            valueEl.getBoundingClientRect().width + fontSize * 2.2,
+            fontSize * 6,
+        );
+        panelMaxHeight = dropUp
+            ? Math.max(120, rootRect.top - 8)
+            : Math.max(120, window.innerHeight - panelTop - 8);
     }
 
     function startPositionListeners() {
@@ -134,11 +148,12 @@
     }
 </script>
 
-<div class="select" bind:this={rootEl}>
+<div class="select" class:chrome bind:this={rootEl}>
     <button
         type="button"
         class="trigger"
         class:disabled
+        class:chrome
         {id}
         {disabled}
         {title}
@@ -148,7 +163,7 @@
         on:keydown={handleKeydown}
     >
         {#if prefix}
-            <span class="prefix">{prefix}:</span>
+            <span class="prefix">{prefix}{chrome ? "" : ":"}</span>
         {/if}
         <span class="value" bind:this={valueEl}>{selectedLabel}</span>
         <span class="chevron" class:open aria-hidden="true" />
@@ -157,9 +172,10 @@
     {#if open && !disabled}
         <div
             class="panel"
+            class:drop-up={dropUp}
             role="listbox"
             aria-labelledby={id}
-            style="left: {panelLeft}px; top: {panelTop}px; min-width: {panelMinWidth}px; max-height: {panelMaxHeight}px;"
+            style="left: {panelLeft}px;{dropUp ? ` bottom: ${panelBottom}px;` : ` top: ${panelTop}px;`} min-width: {panelMinWidth}px; max-height: {panelMaxHeight}px;"
         >
             {#each normalized as option, index (option.value)}
                 <button
@@ -187,6 +203,14 @@
         display: inline-flex;
     }
 
+    .select.chrome {
+        font-size: 0.7rem;
+
+        @media (width < 701px) {
+            font-size: 0.82rem;
+        }
+    }
+
     .trigger {
         display: inline-flex;
         align-items: center;
@@ -196,9 +220,29 @@
         border: none;
         background: none;
         font-size: 1em;
-        color: #ddd;
+        color: var(--ink);
         cursor: pointer;
         user-select: none;
+
+        &.chrome {
+            gap: 0.25rem;
+            padding: 0.28rem 0.45rem;
+            box-sizing: border-box;
+            border-radius: 7px;
+            border: 1px solid var(--line);
+            background: rgba(0, 0, 0, 0.22);
+            white-space: nowrap;
+
+            .prefix {
+                color: var(--muted);
+                font-style: normal;
+            }
+
+            .value {
+                font-weight: 600;
+                color: var(--ink);
+            }
+        }
 
         &:focus {
             outline: none;
@@ -206,7 +250,11 @@
 
         &:focus-visible {
             border-radius: 0.2em;
-            background: #ffffff10;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        &.chrome:focus-visible {
+            background: rgba(0, 0, 0, 0.32);
         }
 
         &.disabled {
@@ -228,8 +276,8 @@
         flex-shrink: 0;
         width: 0.35em;
         height: 0.35em;
-        border-right: 2px solid #ccc;
-        border-bottom: 2px solid #ccc;
+        border-right: 2px solid var(--muted);
+        border-bottom: 2px solid var(--muted);
         transform: rotate(45deg);
         transition: transform 0.2s ease;
         margin-top: -0.15em;
@@ -248,11 +296,21 @@
         flex-direction: column;
         gap: 0.15em;
         overflow-y: auto;
-        background: #2a2a2a;
+        background: var(--bg-elev);
+        border: none;
         border-radius: 0.35em;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
         @include dropdown.panel-animation;
         @include dropdown.reduced-motion;
+
+        &.drop-up {
+            flex-direction: column-reverse;
+            @include dropdown.panel-animation-up;
+
+            .option {
+                @include dropdown.option-animation-up;
+            }
+        }
     }
 
     .option {
@@ -264,7 +322,7 @@
         border: none;
         background: none;
         font-size: inherit;
-        color: #ddd;
+        color: var(--ink);
         cursor: pointer;
         white-space: nowrap;
         text-align: left;
@@ -272,8 +330,13 @@
         @include dropdown.option-animation;
         @include dropdown.reduced-motion;
 
+        @media (width < 701px) {
+            padding: 0.7em 0.85em;
+            font-size: 1rem;
+        }
+
         &:hover {
-            background: #ffffff10;
+            background: rgba(255, 255, 255, 0.06);
         }
 
         &:focus {
@@ -281,7 +344,7 @@
         }
 
         &:focus-visible {
-            background: #ffffff14;
+            background: rgba(255, 255, 255, 0.08);
         }
 
         &.selected::before {
@@ -291,12 +354,12 @@
             top: 0.35em;
             bottom: 0.35em;
             width: 0.22em;
-            background: #5b9cf5;
+            background: var(--accent);
             border-radius: 0 0.18em 0.18em 0;
         }
 
         &.selected:hover {
-            background: #ffffff10;
+            background: rgba(255, 255, 255, 0.06);
         }
     }
 </style>

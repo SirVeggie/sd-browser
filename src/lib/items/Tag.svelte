@@ -19,15 +19,13 @@
         class:selected
         class:deletable
         class:highlight-on-hover={highlightOnHover}
-        style={`--tag-color: ${add ? "#888" : color}`}
+        style={`--tag-color: ${add ? "transparent" : color}`}
         {disabled}
         aria-label={add ? (ariaLabel ?? "Add tag") : undefined}
         on:click
     >
         {#if add}
-            <svg class="add-icon" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M8 4.5v7M4.5 8h7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-            </svg>
+            + add
         {:else}
             <slot />
         {/if}
@@ -51,8 +49,8 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid color-mix(in srgb, var(--tag-color, #5b9cf5) 65%, #000);
-        background: color-mix(in srgb, var(--tag-color, #5b9cf5) 22%, #222);
+        border: 1px solid color-mix(in srgb, var(--tag-color, #5b9cf5) 32%, transparent);
+        background: color-mix(in srgb, var(--tag-color, #5b9cf5) 28%, #1c1814);
         color: #eee;
         border-radius: 999px;
         padding: var(--tag-pad-y) var(--tag-pad-x);
@@ -64,9 +62,9 @@
         cursor: pointer;
         transition:
             background 200ms ease,
-            border-color 200ms ease,
             color 200ms ease,
-            filter 200ms ease;
+            filter 200ms ease,
+            box-shadow 200ms ease;
 
         &:disabled {
             opacity: 0.55;
@@ -79,21 +77,29 @@
         }
 
         &.add {
-            padding: var(--tag-pad-y);
-            width: var(--tag-height);
+            background: transparent;
+            color: var(--muted);
+            border: 1px dashed rgba(235, 228, 216, 0.28);
+            padding: var(--tag-pad-y) var(--tag-pad-x);
+            font-weight: 600;
+
+            &:not(:disabled):hover {
+                color: var(--accent);
+                border-color: rgba(196, 165, 116, 0.45);
+                background: var(--accent-soft);
+            }
         }
 
         &.selected {
-            box-shadow: 0 0 0 1px var(--tag-color, #5b9cf5);
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--tag-color, #5b9cf5) 70%, transparent);
         }
 
         &.highlight-on-hover:not(:disabled):hover {
-            filter: brightness(1.08);
+            filter: brightness(1.1);
         }
 
         &.deletable:not(:disabled):hover {
-            background: color-mix(in srgb, #c44 42%, #222);
-            border-color: color-mix(in srgb, #c44 62%, #000);
+            background: color-mix(in srgb, #c44 42%, #1c1814);
             color: transparent;
 
             &::after {
@@ -114,10 +120,4 @@
         }
     }
 
-    .add-icon {
-        display: block;
-        width: 14px;
-        height: 14px;
-        flex-shrink: 0;
-    }
 </style>

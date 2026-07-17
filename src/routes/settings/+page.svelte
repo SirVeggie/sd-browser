@@ -547,18 +547,21 @@
     }
 </script>
 
-<div class="container">
-    <div class="buttons">
-        <Link to="/">Back</Link>
-        <Button on:click={reset}>Reset</Button>
-        {#if $authStore.password}
-            <Button on:click={logout}>Logout</Button>
-        {/if}
+<div class="settings">
+    <div class="top">
+        <h3>Settings</h3>
+        <div class="top-actions">
+            <Link class="ghost" to="/">← Back</Link>
+            <button type="button" class="ghost danger" on:click={reset}>Reset</button>
+            {#if $authStore.password}
+                <button type="button" class="ghost" on:click={logout}>Logout</button>
+            {/if}
+        </div>
     </div>
 
     <div class="help-row">
-        <div class="gray help-block">
-            Keyboard shortcuts:<br />
+        <div class="help-block">
+            <strong>Keyboard shortcuts</strong>
             <div class="list">
                 <span>Esc: Cancel</span>
                 <span>Arrows: Browse images</span>
@@ -569,19 +572,22 @@
 
         <button
             type="button"
-            class="gray help-block keyword-help-trigger"
+            class="help-block keyword-help-trigger"
             title="Open detailed search keyword help"
             on:click={() => (keywordHelpOpen = true)}
         >
-            Search keywords:<br /><span>
-                {searchKeywords.join(", ").replaceAll("|", " | ")}
-            </span>
+            <strong>Search keywords</strong>
+            <div class="list">
+                <span>{searchKeywords.join(", ").replaceAll("|", " | ")}</span>
+            </div>
         </button>
     </div>
 
-    <div class="sgroup">
+    <div class="cards">
+    <div class="settings-card">
+        <h4>Flyout</h4>
         <label class="checkbox">
-            Flyout enabled:
+            Flyout enabled
             <input type="checkbox" bind:checked={$flyoutStore.enabled} />
         </label>
 
@@ -599,7 +605,7 @@
                 </label>
 
                 <div class="select-field">
-                    <span>Styling:</span>
+                    <span>Styling</span>
                     <Select
                         id="flyout-mode"
                         bind:value={flyoutMode}
@@ -609,12 +615,12 @@
                 </div>
 
                 <label class="checkbox">
-                    Show button:
+                    Show button
                     <input type="checkbox" bind:checked={$flyoutButton} />
                 </label>
 
                 <div class="select-field">
-                    <span>Button position:</span>
+                    <span>Button position</span>
                     <Select
                         id="flyout-button-position"
                         bind:value={flyoutButtonPosition}
@@ -626,33 +632,36 @@
         </div>
     </div>
 
-    <div class="settings-group">
-        <span class="gray"> Visual style settings </span>
+    <div class="settings-card">
+        <h4>Visual</h4>
+        <div class="settings-group visual-group">
 
         <label
             class="checkbox"
             title="Opens the full image view edge-to-edge."
         >
-            Maximize fullscreen image size:
+            Maximize fullscreen image size
             <input type="checkbox" bind:checked={$fullscreenStyle} />
         </label>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label
+            class="inline"
             title="0 disables fade (instant swap); higher values smooth the reveal (nicer on slow networks)."
         >
-            Image fade-in (ms):
+            Image fade-in (ms)
             <NumInput bind:value={$imageFadeMs} />
         </label>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label
+            class="inline"
             title="Adjusts thumbnail column width. Use pixels (e.g. -100) or a CSS length expression (e.g. 10vw + 50px). Negative values make thumbnails smaller; positive values make them larger."
         >
-            Image grid size offset:
+            Image grid size offset
             <Input
                 bind:value={$imageSize}
-                placeholder="-100 (pixels) or 10vw + 50px"
+                placeholder="-100 or 10vw + 50px"
             />
         </label>
 
@@ -662,7 +671,7 @@
 Compact: Tightens the gallery grid with smaller gaps and padding.
 Mosaic: No gaps or rounded corners; images meet edge to edge."
         >
-            <span>Image spacing:</span>
+            <span>Image spacing</span>
             <Select
                 id="image-spacing"
                 bind:value={$imageSpacing}
@@ -675,7 +684,7 @@ Mosaic: No gaps or rounded corners; images meet edge to edge."
             title="Grid: Classic grid layout. Can leave gaps between images.
 Masonry: Tile images by placing them in the shortest column, like a photo wall."
         >
-            <span>Image flow:</span>
+            <span>Image flow</span>
             <Select
                 id="image-flow"
                 bind:value={$imageFlow}
@@ -683,7 +692,10 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             />
         </div>
     </div>
+    </div>
 
+    <div class="settings-card">
+        <h4>LLM / embeddings</h4>
     <div class="sgroup llm-settings">
         <button
             type="button"
@@ -716,7 +728,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                 </label>
 
                 <!-- svelte-ignore a11y-label-has-associated-control -->
-                <label>
+                <label class="inline">
                     Parallel API calls
                     <NumInput bind:value={$llmStore.parallelCalls} />
                 </label>
@@ -726,7 +738,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
                     {#if $llmStore.systemInstructions.length}
                         <div class="select-field">
-                            <span>Instruction:</span>
+                            <span>Instruction</span>
                             <Select
                                 id="saved-instruction"
                                 bind:value={selectedInstructionId}
@@ -782,7 +794,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
                 <!-- svelte-ignore a11y-label-has-associated-control -->
                 <div class="select-field">
-                    <span>API type:</span>
+                    <span>API type</span>
                     <Select
                         id="embedding-api-type"
                         bind:value={$embeddingStore.apiType}
@@ -814,7 +826,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                 {/if}
 
                 <!-- svelte-ignore a11y-label-has-associated-control -->
-                <label>
+                <label class="inline">
                     Batch size
                     <NumInput bind:value={$embeddingStore.apiBatch} />
                 </label>
@@ -829,7 +841,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                 </label>
 
                 <!-- svelte-ignore a11y-label-has-associated-control -->
-                <label>
+                <label class="inline">
                     Image similarity threshold
                     <NumInput bind:value={$embeddingStore.imageSimilarityThreshold} />
                 </label>
@@ -848,6 +860,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
                 <!-- svelte-ignore a11y-label-has-associated-control -->
                 <label
+                    class="inline"
                     title="Blend weight for MMR: higher values favor intrinsic uniqueness, lower values favor diversity from already selected images."
                 >
                     MMR diversity weight (0–1)
@@ -864,6 +877,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                 </p>
             </div>
         </div>
+    </div>
     </div>
 
     {#if instructionModalOpen}
@@ -902,6 +916,8 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         <SearchKeywordHelpModal on:close={() => (keywordHelpOpen = false)} />
     {/if}
 
+    <div class="settings-card">
+        <h4>Tags &amp; filters</h4>
     <div class="tags-inline">
         <span class="subsection-title">Tags</span>
         <TagPillRow
@@ -919,7 +935,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         />
     </div>
 
-    <div class="sgroup llm-settings">
+    <div class="sgroup llm-settings custom-filters-section">
         <button
             type="button"
             class="llm-summary"
@@ -984,10 +1000,13 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             </div>
         </div>
     </div>
+    </div>
 
+    <div class="settings-card">
+        <h4>Search defaults</h4>
     <div class="settings-group">
         <label class="checkbox">
-            Show NSFW filter:
+            Show NSFW filter
             <input type="checkbox" bind:checked={$showNsfwFilter} />
         </label>
 
@@ -1003,12 +1022,12 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         {/if}
 
         <div class="select-field">
-            <span>Matching:</span>
+            <span>Matching</span>
             <Select id="matching" bind:value={$matchingMode} options={searchModes} />
         </div>
 
         <div class="select-field">
-            <span>Similarity algorithm:</span>
+            <span>Similarity algorithm</span>
             <Select
                 id="similarityAlgorithm"
                 bind:value={$similarityAlgorithm}
@@ -1018,6 +1037,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
         <label
+            class="inline"
             title="Prompt similarity cutoff (0–1) for similar exploration. Images are included when their prompt similarity to the previous selection is below this value. Lower values keep only more distinct images; higher values allow more similar prompts."
         >
             Similarity threshold
@@ -1025,7 +1045,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         </label>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
-        <label>
+        <label class="inline">
             Sparse frequency (every Nth image)
             <NumInput bind:value={$sparseFrequency} />
         </label>
@@ -1037,16 +1057,17 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         </div>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->
-        <label>
+        <label class="inline">
             Slideshow interval (milliseconds)
             <NumInput bind:value={$slideDelay} />
         </label>
     </div>
+    </div>
 
+    <div class="settings-card">
+        <h4>Image quality</h4>
     <div class="settings-group">
-        <span class="gray">
-            Image quality settings:
-            <br />
+        <p class="gray quality-hint">
             When using locally, recommended to use original and low
             <br />
             When using remotely, recommended to use medium and low for faster loading
@@ -1056,20 +1077,20 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             Setting thumbnails to low allows for smoother scrolling even locally
             <br />
             * medium, low, and minimal are slightly slower when seeing an image for the first time
-        </span>
+        </p>
 
         <div class="select-field">
-            <span>Full size quality:</span>
+            <span>Full size quality</span>
             <Select id="fullimage" bind:value={$compressedMode} options={qualityModes} />
         </div>
 
         <div class="select-field">
-            <span>Thumbnail quality:</span>
+            <span>Thumbnail quality</span>
             <Select id="thumbnail" bind:value={$thumbMode} options={qualityModes} />
         </div>
 
         <label class="checkbox">
-            Animate thumbnail for videos:
+            Animate thumbnail for videos
             <input type="checkbox" bind:checked={$animatedThumb} />
         </label>
 
@@ -1085,28 +1106,31 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             </Button>
         </div>
     </div>
+    </div>
 
+    <div class="settings-card">
+        <h4>PWA</h4>
     <div class="settings-group">
-        <span class="gray">
-            PWA fullscreen:
-            <br />
+        <p class="gray">
             Enable this setting before adding to homescreen to disable mobile UI elements
             <br />
             Results depend on browser support (status bar, taskbar on tablets)
-        </span>
+        </p>
 
         <label class="checkbox">
-            PWA fullscreen:
+            PWA fullscreen
             <input type="checkbox" bind:checked={$fullscreenState} />
         </label>
     </div>
+    </div>
 
-    <div class="sgroup">
-        <span class="subsection-title">Data management</span>
-        <span class="gray">
+    <div class="settings-card">
+        <h4>Maintenance</h4>
+    <div class="sgroup maintenance-group">
+        <p class="gray">
             Rebuild derived prompt, model, and hash fields from stored metadata.
             Annotations and tags are preserved.
-        </span>
+        </p>
         <div class="inline-action">
             <Button disabled={extradataRecalcRunning} on:click={onRecalculateExtradata}>
                 {extradataRecalcRunning ? 'Recalculating...' : 'Recalculate extra data'}
@@ -1116,10 +1140,12 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             <p class="gray progress-detail">{extradataRecalcOp.done} / {extradataRecalcOp.total}</p>
         {/if}
     </div>
+    </div>
+    </div>
 </div>
 
 <style lang="scss">
-    .container {
+    .settings {
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
@@ -1127,54 +1153,174 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        gap: 1.5em;
+        gap: 1rem;
+        background:
+            radial-gradient(ellipse 70% 40% at 50% 0%, rgba(196, 165, 116, 0.07), transparent 55%),
+            var(--bg);
+        min-height: 100%;
     }
 
-    .settings-group {
+    .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+
+        h3 {
+            margin: 0;
+            font-size: 1.35rem;
+            font-weight: 600;
+            color: var(--ink);
+        }
+    }
+
+    .top-actions {
+        display: flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+
+    :global(a.ghost),
+    .ghost {
+        border: none;
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 0.4rem 0.85rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        appearance: none;
+        line-height: 1.2;
+        transition: background-color 0.12s ease;
+
+        &:hover,
+        &:focus-visible {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        &.danger {
+            color: var(--danger);
+
+            &:hover,
+            &:focus-visible {
+                background: rgba(196, 122, 106, 0.16);
+            }
+        }
+    }
+
+    .cards {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+
+        @media (width < 700px) {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .settings-card {
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 0.85rem 0.95rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        min-width: 0;
+
+        h4 {
+            margin: 0 0 0.35rem;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 0.02em;
+        }
+    }
+
+    .settings-group,
+    .sgroup,
+    .tags-inline {
         width: 100%;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        gap: 0.75em;
+        gap: 0.45rem;
     }
 
-    .buttons :global(.disabled) {
-        opacity: 0.5;
-        filter: grayscale(1);
+    .sgroup,
+    .maintenance-group {
+        --gap: 6px;
+        outline: none;
+        border-radius: 0;
+        padding: 0;
+        margin: 0;
     }
 
     .gray {
         font-size: 0.8em;
-        color: #aaa;
+        color: var(--muted);
+        margin: 0;
     }
 
     .help-row {
         width: 100%;
         box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        gap: 1em;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.65rem;
         align-items: stretch;
+
+        @media (width < 700px) {
+            grid-template-columns: 1fr;
+        }
     }
 
     .help-block {
         width: 100%;
         box-sizing: border-box;
         overflow-wrap: break-word;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 14px;
+        padding: 0.75rem 0.85rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+        text-align: left;
+
+        strong {
+            display: block;
+            color: var(--ink);
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+
+        .list {
+            display: grid;
+            gap: 0.15rem;
+            color: var(--muted);
+            font-size: inherit;
+            font-family: inherit;
+            font-weight: inherit;
+            line-height: 1.45;
+            word-break: break-word;
+        }
     }
 
     .keyword-help-trigger {
-        appearance: none;
-        border: none;
-        background: none;
-        padding: 0;
-        margin: 0;
-        text-align: left;
         cursor: pointer;
+        appearance: none;
+        margin: 0;
+        font-family: inherit;
+        font-size: 0.78rem;
+        line-height: inherit;
+        color: inherit;
 
         &:hover,
         &:focus-visible {
-            color: #ddd;
+            color: var(--ink);
         }
 
         &:focus {
@@ -1182,9 +1328,8 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         }
 
         &:focus-visible {
-            outline: 1px solid rgb(63, 187, 236);
+            outline: 1px solid rgba(196, 165, 116, 0.45);
             outline-offset: 3px;
-            border-radius: 3px;
         }
     }
 
@@ -1200,28 +1345,11 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     }
 
     .tags-inline {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5em;
-
         .subsection-title {
-            color: #ccc;
+            color: var(--accent);
+            font-weight: 600;
+            font-size: 0.8rem;
         }
-    }
-
-    .sgroup {
-        --gap: 6px;
-        width: 100%;
-        box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        gap: var(--gap);
-        // border: 1px solid #aaaa;
-        outline: solid 1px #aaa4;
-        outline-offset: 10px;
-        border-radius: 5px;
-        padding: 10px;
-        margin-block: 0.75em;
     }
 
     .llm-settings {
@@ -1248,8 +1376,8 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             width: 0.45em;
             height: 0.45em;
             margin-left: 1em;
-            border-right: 2px solid #ccc;
-            border-bottom: 2px solid #ccc;
+            border-right: 2px solid var(--muted);
+            border-bottom: 2px solid var(--muted);
             transform: rotate(-45deg);
             transition: transform 0.5s ease;
 
@@ -1267,14 +1395,14 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         .hint-inline {
             margin: 0;
             font-size: 0.85em;
-            color: #aaa;
+            color: var(--muted);
             line-height: 1.4;
         }
 
         .embedding-warning {
             margin: 0;
             font-size: 0.9em;
-            color: #e8a060;
+            color: #d4a870;
             line-height: 1.4;
         }
 
@@ -1286,7 +1414,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         .hint {
             margin: 0;
             font-size: 0.85em;
-            color: #aaa;
+            color: var(--muted);
             line-height: 1.4;
         }
 
@@ -1294,12 +1422,13 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             display: flex;
             flex-direction: column;
             gap: var(--gap);
-            border-top: dashed 1px #aaa4;
+            border-top: 1px solid var(--line);
             padding-top: var(--gap);
         }
 
         .subsection-title {
-            color: #ccc;
+            color: var(--accent);
+            font-weight: 600;
         }
 
         .instruction-buttons {
@@ -1330,10 +1459,10 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             display: flex;
             flex-direction: column;
             gap: 0.3em;
-            padding: 0.2em 0.4em 0.4em 0.4em;
-            border-radius: 4px;
-            background: #ffffff06;
-            border: 1px solid #aaa2;
+            padding: 0.35em 0.45em;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.18);
+            border: 1px solid var(--line);
             min-width: 0;
             width: 100%;
             box-sizing: border-box;
@@ -1372,7 +1501,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             font: inherit;
             line-height: 1;
             cursor: pointer;
-            color: #888;
+            color: var(--muted);
             transition: color 0.15s ease;
             display: inline-flex;
             align-items: center;
@@ -1385,7 +1514,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             }
 
             &:focus-visible {
-                outline: 1px solid rgb(63, 187, 236);
+                outline: 1px solid rgba(196, 165, 116, 0.45);
                 outline-offset: 2px;
             }
         }
@@ -1395,7 +1524,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             padding: 0 0.35em;
 
             &:hover {
-                color: rgb(63, 187, 236);
+                color: var(--accent);
             }
         }
 
@@ -1405,7 +1534,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             padding: 0;
 
             &:hover {
-                color: #e55;
+                color: var(--danger);
             }
         }
 
@@ -1417,9 +1546,9 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas,
                 monospace;
             font-size: 0.8em;
-            color: #aaa;
-            background: #00000033;
-            border-radius: 3px;
+            color: var(--muted);
+            background: rgba(0, 0, 0, 0.22);
+            border-radius: 6px;
             padding: 0.35em 0.5em;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1458,7 +1587,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             margin: 0;
 
             & > :first-child {
-                border-top: dashed 1px #aaa4;
+                border-top: 1px solid var(--line);
                 padding-top: var(--gap);
             }
         }
@@ -1474,70 +1603,115 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         user-select: none;
         width: 100%;
         box-sizing: border-box;
+        font-size: 0.8rem;
+        color: var(--muted);
+        padding: 0.45rem 0;
+        border-bottom: 1px solid var(--line);
 
-        &:not(.checkbox) {
+        &:last-child {
+            border-bottom: none;
+        }
+
+        &:not(.checkbox):not(.inline) {
             display: flex;
             flex-direction: column;
             gap: 0.25em;
         }
 
-        &.checkbox {
+        &.checkbox,
+        &.inline {
             display: flex;
+            flex-direction: row;
             align-items: center;
-            gap: 0.5em;
+            justify-content: space-between;
+            gap: 0.75rem;
             width: auto;
+        }
+
+        &.inline :global(.num) {
+            flex: 0 0 auto;
+            width: auto;
+            max-width: 9rem;
+        }
+
+        &.inline :global(.input) {
+            flex: 0 1 auto;
+            width: auto;
+            max-width: 11rem;
+            min-width: 5.5rem;
         }
     }
 
     .select-field {
         display: flex;
         align-items: center;
-        gap: 0.5em;
+        justify-content: space-between;
+        gap: 0.75rem;
         user-select: none;
         width: 100%;
         box-sizing: border-box;
+        font-size: 0.8rem;
+        color: var(--muted);
+        padding: 0.45rem 0;
+        border-bottom: 1px solid var(--line);
+
+        &:last-child {
+            border-bottom: none;
+        }
+
+        span {
+            flex-shrink: 0;
+        }
 
         :global(.select) {
-            flex: 1 1 auto;
-            min-width: 0;
+            flex: 0 0 auto;
             width: auto;
-            max-width: 100%;
+            max-width: none;
+            margin-left: auto;
+            justify-content: flex-end;
         }
     }
 
     input[type="checkbox"] {
         appearance: none;
-        background-color: #333;
-        border-radius: 0.2em;
-        font-size: 1em;
-        width: 13px;
-        height: 13px;
+        width: 2.2rem;
+        height: 1.2rem;
         margin: 0;
         padding: 0;
+        border-radius: 999px;
         border: none;
+        background: #2a2420;
         cursor: pointer;
         position: relative;
-        outline: 1px solid #aaa3;
+        flex-shrink: 0;
+        outline: none;
+        transition: background-color 0.18s ease;
 
         &::before {
             content: "";
             position: absolute;
-            background-color: rgb(63, 187, 236);
             top: 2px;
             left: 2px;
-            right: 2px;
-            bottom: 2px;
-            transform: scale(0);
-            opacity: 0;
-            transition:
-                120ms transform ease,
-                120ms opacity ease;
-            border-radius: 0.15em;
+            width: 0.9rem;
+            height: 0.9rem;
+            border-radius: 50%;
+            background: #f0e6d8;
+            transform: translateX(0);
+            transition: transform 0.18s ease, background-color 0.18s ease;
+        }
+
+        &:checked {
+            background: rgba(196, 165, 116, 0.35);
         }
 
         &:checked::before {
-            transform: scale(1);
-            opacity: 1;
+            transform: translateX(calc(2.2rem - 0.9rem - 4px));
+            background: var(--accent);
+        }
+
+        &:focus-visible {
+            outline: 1px solid rgba(196, 165, 116, 0.45);
+            outline-offset: 2px;
         }
     }
 </style>

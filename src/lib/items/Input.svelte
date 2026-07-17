@@ -55,20 +55,17 @@
 
     input {
         width: 100%;
-        // height: 2.2em;
-        background-color: #333;
-        color: #ddd;
-        border-radius: 0.5em;
-        border: 0px solid transparent;
+        background-color: rgba(0, 0, 0, 0.22);
+        color: var(--ink);
+        border-radius: 9px;
+        border: none;
         padding: 0.5em 0.5em;
-        box-shadow: inset 0px 2px 3px #0005;
-        border: 1px solid #1118;
-        // border: 1px solid #fff;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
         box-sizing: border-box;
 
         &:focus {
             outline: none;
-            border: 1px solid #aaad;
+            box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.55);
         }
     }
 
@@ -82,7 +79,16 @@
         border: none;
         position: absolute;
         right: 0.5em;
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        padding: 0;
+        height: 1.25em;
+        width: 1.25em;
         cursor: pointer;
-        color: #ddd3;
+        color: var(--muted);
     }
 </style>

@@ -186,17 +186,17 @@
 </div>
 
 <style lang="scss">
-    $accent-blue: rgb(63, 187, 236);
-    $accent-glow: rgba(63, 187, 236, 0.45);
-    $accent-glow-soft: rgba(63, 187, 236, 0.2);
+    $accent: var(--accent);
+    $accent-glow: color-mix(in srgb, var(--accent) 45%, transparent);
+    $accent-glow-soft: color-mix(in srgb, var(--accent) 20%, transparent);
 
     .base {
         position: relative;
         display: block;
-        background-color: #242424;
-        color: #ddd;
+        background-color: var(--bg);
+        color: var(--ink);
         border-radius: 0.5em;
-        box-shadow: 0px 3px 5px #0005;
+        box-shadow: 0 3px 5px rgba(0, 0, 0, 0.35);
         overflow: hidden;
         box-sizing: border-box;
         transition:
@@ -244,7 +244,7 @@
         }
 
         &.selected {
-            outline: 2px solid $accent-blue;
+            outline: 2px solid $accent;
             outline-offset: -2px;
 
             .overlay {
@@ -324,17 +324,17 @@
             }
 
             &.selected {
-                outline: 2px solid $accent-blue;
+                outline: 2px solid $accent;
 
                 .overlay {
-                    outline: 2px solid $accent-blue;
+                    outline: 2px solid $accent;
                 }
             }
         }
 
         &.active:hover,
         &.active:has(:focus-visible) {
-            outline: 1px solid #fffa;
+            outline: 1px solid color-mix(in srgb, var(--ink) 65%, transparent);
 
             &:not(.spacing-compact):not(.spacing-mosaic) {
                 @media (width > 500px) {

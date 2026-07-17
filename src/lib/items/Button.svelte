@@ -39,23 +39,23 @@
         line-height: 1.2;
         display: inline-block;
         appearance: none;
+        box-sizing: border-box;
         padding: 0.5em 1em;
-        border: 1px solid rgb(63, 187, 236);
+        border: none;
         border-radius: 0.4em;
-        background-color: rgb(62, 138, 168);
-        color: rgb(255, 255, 255);
+        background-color: var(--accent-soft);
+        color: var(--ink);
         cursor: pointer;
-        transition: border-color 0.2s ease, background-color 0.08s ease,
-            transform 0.08s ease;
+        transition: background-color 0.08s ease, transform 0.08s ease;
 
         &:hover,
         &:focus-visible {
-            border-color: white;
-            transform: translateY(-2px);
+            background-color: rgba(196, 165, 116, 0.24);
+            transform: translateY(-1px);
         }
 
         &:active {
-            background-color: rgba(62, 138, 168, 0.5);
+            background-color: rgba(196, 165, 116, 0.12);
             transform: translateY(0px);
         }
 

@@ -181,17 +181,26 @@
         display: flex;
         flex-direction: column;
         gap: 0.12em;
-        padding: 0.2em;
-        background: rgba(18, 18, 18, 0.82);
-        border-radius: 0.35em;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        padding: 0.25em;
+        background:
+            linear-gradient(
+                155deg,
+                rgba(196, 165, 116, 0.1) 0%,
+                rgba(28, 24, 20, 0.92) 36%,
+                rgba(16, 14, 12, 0.96) 100%
+            );
+        border: none;
+        border-radius: 0.45em;
+        box-shadow:
+            0 8px 28px rgba(0, 0, 0, 0.45),
+            inset 0 1px 0 rgba(235, 228, 216, 0.06);
         overflow-y: auto;
         min-width: 7.5em;
         max-height: calc(100vh - 16px);
 
         position: fixed;
 
-        backdrop-filter: blur(8px);
+        backdrop-filter: blur(14px) saturate(1.15);
         transform-origin: top left;
         @include dropdown.panel-animation;
         @include dropdown.reduced-motion;
@@ -217,7 +226,7 @@
         gap: 1.25em;
         appearance: none;
         border: none;
-        color: #ddd;
+        color: var(--ink);
         background-color: transparent;
         white-space: nowrap;
         padding: 0.38em 0.55em;
@@ -225,21 +234,21 @@
         text-align: start;
         width: 100%;
         cursor: pointer;
-        border-radius: 0.2em;
+        border-radius: 0.25em;
         @include dropdown.option-animation;
         @include dropdown.reduced-motion;
 
         &:hover:not(.disabled):not(:disabled) {
-            background: #ffffff10;
+            background: var(--accent-soft);
         }
 
         &:active:not(.disabled):not(:disabled) {
-            background: #ffffff14;
+            background: rgba(196, 165, 116, 0.24);
         }
 
         &.disabled,
         &:disabled {
-            color: #999;
+            color: var(--muted);
             cursor: default;
         }
     }
@@ -253,8 +262,8 @@
         flex-shrink: 0;
         width: 0.35em;
         height: 0.35em;
-        border-right: 2px solid #888;
-        border-bottom: 2px solid #888;
+        border-right: 2px solid var(--muted);
+        border-bottom: 2px solid var(--muted);
         transform: rotate(-45deg);
     }
 </style>

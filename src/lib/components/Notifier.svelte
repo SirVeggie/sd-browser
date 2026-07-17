@@ -84,36 +84,36 @@
 	}
 
 	.notification {
-		color: #ddd;
+		color: var(--ink);
 		display: flex;
 		justify-content: flex-end;
 
 		& > div {
-			background-color: #222c;
+			background-color: var(--glass);
 			padding: 1em;
-			border: 1px solid #333;
+			border: 1px solid var(--line);
 			border-radius: 0.5em;
 			margin-bottom: 0.5em;
-			box-shadow: 0px 3px 5px #0005;
+			box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 			pointer-events: all;
 			user-select: none;
 
-			backdrop-filter: blur(5px);
+			backdrop-filter: blur(12px) saturate(1.2);
 		}
 
 		.success {
-			border-color: #afa5;
-			color: #afa;
+			border-color: rgba(143, 184, 154, 0.45);
+			color: var(--ok-tag);
 		}
 
 		.warn {
-			border-color: #ff55;
-			color: #ee7;
+			border-color: rgba(196, 165, 116, 0.45);
+			color: var(--accent);
 		}
 
 		.error {
-			border-color: #f55;
-			color: #f55;
+			border-color: rgba(196, 122, 106, 0.55);
+			color: var(--danger);
 		}
 	}
 </style>

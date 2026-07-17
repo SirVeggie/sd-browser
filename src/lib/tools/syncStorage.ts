@@ -1,5 +1,5 @@
 import { pushGlobalSettings } from "$lib/requests/settingRequests";
-import { addGlobalSetting } from "$lib/stores/globalSettings";
+import { addGlobalSetting, isApplyingRemoteSettings } from "$lib/stores/globalSettings";
 import type { Writable } from "svelte/store";
 
 export function syncMemory<T>(name: string, store: Writable<T>, global = false) {
@@ -14,7 +14,7 @@ export function syncMemory<T>(name: string, store: Writable<T>, global = false) 
     
     store.subscribe(x => {
         localStorage.setItem(name, JSON.stringify(x));
-        if (global) {
+        if (global && !isApplyingRemoteSettings()) {
             pushGlobalSettings({
                 settingsJson: JSON.stringify({ [name]: x }),
             });
