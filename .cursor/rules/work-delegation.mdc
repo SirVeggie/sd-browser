@@ -1,11 +1,9 @@
 ---
-description: Delegate implementation to composer-2.5 subagents when the main model is not Composer; review all subagent changes.
-alwaysApply: true
+alwaysApply: false
 ---
-
 # Work delegation
 
-When the current model is **not** Composer, follow this workflow for implementation work.
+When the current model is **not** Composer or Grok, follow this workflow for implementation work.
 
 ## When to delegate
 
