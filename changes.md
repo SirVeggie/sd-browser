@@ -1,6 +1,15 @@
 # Changes
 
-User-facing updates from the last 154 commits (`052193d` → `53b0eb0`), relative to the state before that range. Intermediate regressions fixed within the same work (for example, a bug introduced and patched in later commits in this batch) are folded into the feature they belong to and not listed separately.
+User-facing updates from the last 156 commits (`052193d` → `31118b8`), relative to the state before that range. Intermediate regressions fixed within the same work (for example, a bug introduced and patched in later commits in this batch) are folded into the feature they belong to and not listed separately.
+
+---
+
+## UI and theming
+
+- **Darkroom theme** across gallery chrome, shared controls, and Settings: warm dark palette, glass surfaces, and gold accent styling.
+- **Bottom search dock** restyled; fullscreen chrome, nav arrows, and IMG reference strip polished to match.
+- **Modals and tag pickers** portaled above backdrop-filter layers so blur stacking stays correct.
+- Shared form controls (buttons, inputs, selects, tags, context menus, dropdowns) updated for consistent Darkroom styling.
 
 ---
 
@@ -117,7 +126,7 @@ User-facing updates from the last 154 commits (`052193d` → `53b0eb0`), relativ
 - **Stable Comfy params export order** by workflow node id so repeated runs produce consistent text.
 - **Manual extradata recalculation** in Settings → Data management: rebuild derived metadata in background worker threads with a progress banner, without blocking the gallery. Annotations and tags are preserved.
 - **Open workflow in ComfyUI** from the fullscreen image viewer (with optional API token).
-- **Deferred Comfy metadata blobs** so fullscreen opens faster on slow networks; large workflow JSON loads on demand.
+- **Deferred Comfy metadata blobs** so fullscreen opens faster on slow networks; large workflow JSON loads on demand. Fullscreen metadata shows file extension and on-disk size when loaded.
 - Fullscreen **metadata actions** moved into a context menu instead of inline buttons.
 
 ---
