@@ -172,6 +172,12 @@ export class MetaDB {
         return main;
     }
 
+    /** Blobs-only row from workflows.sqlite3 (no short metadata join). */
+    static getBlobs(id: string): ServerImagePartial | undefined {
+        MetaDB.setup();
+        return MetaDB.stmtGetF.get(id) as ServerImagePartial | undefined;
+    }
+
     static getMany(ids: string[]): ServerImageFull[] {
         MetaDB.setup();
         const results = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE id IN('${ids.join("', '")}')`).all() as ServerImageFull[];

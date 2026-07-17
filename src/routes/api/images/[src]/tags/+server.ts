@@ -21,7 +21,7 @@ export async function GET(e) {
     const err = invalidAuth(e);
     if (err) return err;
 
-    const info = buildImageInfo(getImage(e.params.src));
+    const info = buildImageInfo(getImage(e.params.src), { includeBlobs: false });
     if (!info)
         return error('Image not found', 404);
 
@@ -32,7 +32,7 @@ export async function POST(e) {
     const err = invalidAuth(e);
     if (err) return err;
 
-    const info = buildImageInfo(getImage(e.params.src));
+    const info = buildImageInfo(getImage(e.params.src), { includeBlobs: false });
     if (!info)
         return error('Image not found', 404);
 

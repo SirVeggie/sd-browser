@@ -90,6 +90,15 @@ export type ImageInfo = {
     tags?: string[];
     width?: number;
     height?: number;
+    /** True when prompt/workflow/extra were omitted; client should fetch `?blobs=1`. */
+    blobsDeferred?: boolean;
+};
+
+export type ImageBlobs = {
+    id: string;
+    prompt?: string;
+    workflow?: string;
+    extra?: string;
 };
 
 export type ModelCandidate = {

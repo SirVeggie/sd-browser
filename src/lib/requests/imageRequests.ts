@@ -17,8 +17,8 @@ import type {
     UpdateRequest,
     UpdateResponse,
 } from '$lib/types/requests';
-import { isImageInfo, type ImageInfo } from '$lib/types/images';
-import type { GeneratedQualityMode, QualityMode } from '$lib/types/misc';
+import { isImageInfo, type ImageBlobs, type ImageInfo } from '$lib/types/images';
+import { testType, type GeneratedQualityMode, type QualityMode } from '$lib/types/misc';
 
 export type StreamHandlers = {
     onInit: (init: StreamInitResponse) => void;
@@ -275,6 +275,10 @@ export function getPreviewParam(type: 'image' | 'video' | undefined, animated: b
     return `preview=${type === 'video' && !animated}`;
 }
 
+function isImageBlobs(object: unknown): object is ImageBlobs {
+    return testType(object, ['id']);
+}
+
 export async function getImageInfo(imageid: string, fetch?: FetchType): Promise<ImageInfo | undefined> {
     let url = `/api/images/${imageid}/metadata`;
     if (!fetch)
@@ -283,6 +287,48 @@ export async function getImageInfo(imageid: string, fetch?: FetchType): Promise<
     if (isImageInfo(res))
         return res;
     return undefined;
+}
+
+export async function getImageBlobs(imageid: string, fetch?: FetchType): Promise<ImageBlobs | undefined> {
+    let url = `/api/images/${imageid}/metadata?blobs=1`;
+    if (!fetch)
+        url = get(page).url.origin + url;
+    const res = await (fetch ? doGet(url, fetch) : doServerGet(url));
+    if (isImageBlobs(res))
+        return res;
+    return undefined;
+}
+
+export function mergeImageBlobs(info: ImageInfo, blobs: ImageBlobs): ImageInfo {
+    return {
+        ...info,
+        prompt: blobs.prompt,
+        workflow: blobs.workflow,
+        extra: blobs.extra,
+        blobsDeferred: undefined,
+    };
+}
+
+/** Load metadata; if blobs were deferred, fetch and merge them. Calls `onInfo` as soon as short data is ready. */
+export async function loadImageInfoProgressive(
+    imageid: string,
+    onInfo: (info: ImageInfo) => void,
+    isStale?: () => boolean,
+    fetch?: FetchType,
+): Promise<ImageInfo | undefined> {
+    const info = await getImageInfo(imageid, fetch);
+    if (!info || isStale?.())
+        return undefined;
+    onInfo(info);
+    if (!info.blobsDeferred)
+        return info;
+
+    const blobs = await getImageBlobs(imageid, fetch);
+    if (!blobs || isStale?.())
+        return info;
+    const merged = mergeImageBlobs(info, blobs);
+    onInfo(merged);
+    return merged;
 }
 
 export async function generateCompressedImages(

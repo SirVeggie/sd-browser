@@ -22,6 +22,8 @@
     getSeed,
     getSvNegativePrompt,
     getSvPositivePrompt,
+    MULTIPLE_MODELS,
+    UNKNOWN_MODEL,
   } from "$lib/tools/metadataInterpreter";
   import { compressedMode, useSmartSubsampling } from "$lib/stores/searchStore";
   import {
@@ -252,12 +254,17 @@
   $: promptInfo = !data ? [] : buildPromptInfo(data);
   $: annotationText = data?.annotation ?? "";
   $: fullPrompt = !data ? "" : data.prompt;
-  $: prompts = !data
+  $: hasMetadataBlobs = !!(data?.prompt != null || data?.workflow != null || data?.extra != null);
+  $: prompts = !data || !hasMetadataBlobs
     ? undefined
     : getPrompts(data.prompt, data.workflow, data.extra, true);
-  $: svPositivePrompt = !data ? "" : prompts?.ogpos || getSvPositivePrompt(data.prompt);
-  $: svNegativePrompt = !data ? "" : prompts?.ogneg || getSvNegativePrompt(data.prompt);
-  $: paramsPrompt = !data ? "" : prompts!.params;
+  $: svPositivePrompt = !data
+    ? ""
+    : prompts?.ogpos || (hasMetadataBlobs ? getSvPositivePrompt(data.prompt) : "");
+  $: svNegativePrompt = !data
+    ? ""
+    : prompts?.ogneg || (hasMetadataBlobs ? getSvNegativePrompt(data.prompt) : "");
+  $: paramsPrompt = !data ? "" : (prompts?.params ?? data.params ?? "");
   $: workflowPrompt = !data ? "" : data.workflow;
   $: {
     showOriginal = showOriginal && !!image;
@@ -274,10 +281,25 @@
     comfyWorkflowAuthRequired = false;
   }
 
+  function hasBlobs(d: ImageInfo): boolean {
+    return d.prompt != null || d.workflow != null || d.extra != null;
+  }
+
   function extractBasic(d: ImageInfo): string {
-    const candidates = getModelCandidates(d.prompt, d.workflow, d.extra);
-    const primary = getPrimaryModel(candidates, d.extra);
-    const hash = getModelHash(d.prompt);
+    let primary: string;
+    let hash = "";
+    if (hasBlobs(d)) {
+      const candidates = getModelCandidates(d.prompt, d.workflow, d.extra);
+      primary = getPrimaryModel(candidates, d.extra);
+      hash = getModelHash(d.prompt);
+    } else {
+      const modelsText = d.models ?? "";
+      primary = !modelsText
+        ? UNKNOWN_MODEL
+        : modelsText.includes("\n")
+          ? MULTIPLE_MODELS
+          : modelsText;
+    }
     let info = "";
     info += `Model:\u00a0${primary}`;
     if (hash) info += ` [${hash}]`;
@@ -289,7 +311,9 @@
   }
 
   function buildPromptInfo(d: ImageInfo): PromptFragment[] {
-    const blocks = formatMetadata(d.prompt, d.workflow, d.extra, d.models);
+    const blocks = hasBlobs(d)
+      ? formatMetadata(d.prompt, d.workflow, d.extra, d.models)
+      : formatStoredMetadata(d);
     if (!d.annotation) return blocks;
 
     blocks.unshift({
@@ -297,6 +321,35 @@
       content: d.annotation,
       action: copyAnnotation,
     });
+    return blocks;
+  }
+
+  function formatStoredMetadata(d: ImageInfo): PromptFragment[] {
+    const blocks: PromptFragment[] = [];
+    const modelsText = d.models ?? "";
+    if (modelsText.includes("\n"))
+      blocks.push({
+        header: "models",
+        content: modelsText,
+      });
+    if (d.positive)
+      blocks.push({
+        header: "positive prompt",
+        content: d.positive,
+        action: copyPositive,
+      });
+    if (d.negative)
+      blocks.push({
+        header: "negative prompt",
+        content: d.negative,
+        action: copyNegative,
+      });
+    if (d.params)
+      blocks.push({
+        header: "parameters",
+        content: d.params,
+        action: copyParams,
+      });
     return blocks;
   }
 
@@ -489,11 +542,11 @@
   }
 
   function copyPositive() {
-    copyInfo(hiddenElementPos, prompts?.pos, "positive");
+    copyInfo(hiddenElementPos, prompts?.pos ?? data?.positive, "positive");
   }
 
   function copyNegative() {
-    copyInfo(hiddenElementNeg, prompts?.neg, "negative");
+    copyInfo(hiddenElementNeg, prompts?.neg ?? data?.negative, "negative");
   }
 
   function copySvPositive() {

@@ -13,6 +13,7 @@
         generateCompressedImages,
         getImageInfo,
         imageAction,
+        loadImageInfoProgressive,
         subscribeImageStream,
     } from "$lib/requests/imageRequests";
     import { expandClientImages, formatSearchDateMinute } from "$lib/tools/misc";
@@ -654,13 +655,21 @@
         return str;
     }
 
+    function loadFullscreenImageInfo(imageId: string) {
+        void loadImageInfoProgressive(
+            imageId,
+            (res) => {
+                info = res;
+            },
+            () => currentImage?.id !== imageId,
+        );
+    }
+
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         // do nothing if not left click
         if (e && e instanceof MouseEvent && e.button !== 0) return;
         currentImage = img;
-        getImageInfo(img.id).then((res) => {
-            info = res;
-        });
+        loadFullscreenImageInfo(img.id);
 
         if (isGeneratedQualityMode($compressedMode)) {
             const currentImages = $imageStore;
@@ -707,9 +716,7 @@
         } else if (leftArrow) {
             currentImage = galleryImages[prevIndex];
             scrollToImage();
-            getImageInfo(currentImage!.id).then((res) => {
-                info = res;
-            });
+            loadFullscreenImageInfo(currentImage!.id);
 
             if (slideTimer && slideDir === "right") {
                 startSlideshow("left", false);
@@ -730,9 +737,7 @@
                 loadMore();
             }
             scrollToImage();
-            getImageInfo(currentImage!.id).then((res) => {
-                info = res;
-            });
+            loadFullscreenImageInfo(currentImage!.id);
 
             if (slideTimer && slideDir === "left") {
                 startSlideshow("right", false);
