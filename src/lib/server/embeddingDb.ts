@@ -437,7 +437,7 @@ export class EmbeddingDB {
 
     /**
      * Load embeddings for the given ids. Ensures the in-memory vector cache
-     * (used by IMG/MMR/IMGSIM scoring paths).
+     * (used by IMG/MMR/PRUNE scoring paths).
      */
     static getEmbeddingsByIds(ids: string[]): { id: string; embedding: Float32Array }[] {
         EmbeddingDB.setup();

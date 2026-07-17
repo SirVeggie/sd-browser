@@ -1,18 +1,18 @@
-import type { ParsedImgSimDirective } from '$lib/tools/searchParsing';
+import type { ParsedPruneDirective } from '$lib/tools/searchParsing';
 import { selectByTimeNeighbors } from '$lib/tools/mmrMath';
 import { EmbeddingDB } from './embeddingDb';
 import { getImageList } from './dataIndex';
 
-export type ImgSimSearchContext = {
-    /** Fixed IMGSIM result order for this search session. */
+export type PruneSearchContext = {
+    /** Fixed PRUNE result order for this search session. */
     orderedIds: string[];
     error?: string;
 };
 
-export function buildImgSimSearchContext(
+export function buildPruneSearchContext(
     matchingIds: string[],
-    directive: ParsedImgSimDirective,
-): ImgSimSearchContext {
+    directive: ParsedPruneDirective,
+): PruneSearchContext {
     const imageList = getImageList();
     const embeddings = new Map(
         EmbeddingDB.getEmbeddingsByIds(matchingIds).map((row) => [row.id, row.embedding]),
@@ -36,7 +36,7 @@ export function buildImgSimSearchContext(
     if (!dateOrderedCandidates.length) {
         return {
             orderedIds: [],
-            error: 'IMGSIM requires saved image embeddings for at least one matching image',
+            error: 'PRUNE requires saved image embeddings for at least one matching image',
         };
     }
 

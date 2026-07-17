@@ -4,10 +4,10 @@ import {
     parseSimilarSearchTarget,
     pinIdsToFront,
     parseMmrDirective,
-    parseImgSimDirective,
+    parsePruneDirective,
     stripResultShapingParts,
     isMmrSearchPart,
-    isImgSimSearchPart,
+    isPruneSearchPart,
     splitSearchParts,
     unescapeSearchLiterals,
     parseSearchTargetWithOptionalImgLimit,
@@ -56,11 +56,11 @@ import { formatEmbeddingSearchQuery } from "$lib/types/embeddings";
 import { computeSimilarity, getExplorationPool } from "./exploration";
 import { getFreshImages, getImageList } from "./dataIndex";
 import { buildMmrSearchContext, type MmrSearchContext } from "./mmrRanking";
-import { buildImgSimSearchContext, type ImgSimSearchContext } from "./imgSimRanking";
+import { buildPruneSearchContext, type PruneSearchContext } from "./pruneRanking";
 import { getServerMmrSettings } from "./mmrSettings";
 
 export type { MmrSearchContext } from "./mmrRanking";
-export type { ImgSimSearchContext } from "./imgSimRanking";
+export type { PruneSearchContext } from "./pruneRanking";
 
 const keywordPattern = `((${searchKeywords.join('|')}) )*`;
 const keywordFlags = 'i';
@@ -243,7 +243,7 @@ function isStructuralSearchPart(part: string): boolean {
     return skipRegex.test(part)
         || takeRegex.test(part)
         || isMmrSearchPart(part)
-        || isImgSimSearchPart(part);
+        || isPruneSearchPart(part);
 }
 
 function buildNonImgSearchQuery(search: string): string {
@@ -937,7 +937,7 @@ type SearchPlanBase = {
     pool: Set<string>;
     matcher: (image: ServerImage) => boolean;
     imgSearchContext?: ImgSearchContext;
-    imgsimSearchContext?: ImgSimSearchContext;
+    pruneSearchContext?: PruneSearchContext;
     mmrSearchContext?: MmrSearchContext;
 };
 
@@ -952,9 +952,9 @@ export type SearchPlan = SearchPlanBase & (
         imgSearchContext: ImgSearchContext;
     }
     | {
-        kind: 'imgsim-ranked';
+        kind: 'prune-ranked';
         orderedIds: string[];
-        imgsimSearchContext: ImgSimSearchContext;
+        pruneSearchContext: PruneSearchContext;
     }
     | {
         kind: 'mmr-ranked';
@@ -1018,8 +1018,8 @@ async function applyResultShaping(
     options: SearchAbortOptions = {},
 ): Promise<SearchPlan> {
     const mmrDirective = parseMmrDirective(plan.search);
-    const imgsimDirective = parseImgSimDirective(plan.search);
-    if (!mmrDirective && !imgsimDirective)
+    const pruneDirective = parsePruneDirective(plan.search);
+    if (!mmrDirective && !pruneDirective)
         return plan as SearchPlan;
 
     let matchingIds = await collectMatchingIds(
@@ -1029,10 +1029,10 @@ async function applyResultShaping(
         options,
     );
 
-    let imgsimSearchContext: ImgSimSearchContext | undefined;
-    if (imgsimDirective) {
-        imgsimSearchContext = buildImgSimSearchContext(matchingIds, imgsimDirective);
-        matchingIds = imgsimSearchContext.orderedIds;
+    let pruneSearchContext: PruneSearchContext | undefined;
+    if (pruneDirective) {
+        pruneSearchContext = buildPruneSearchContext(matchingIds, pruneDirective);
+        matchingIds = pruneSearchContext.orderedIds;
     }
 
     if (mmrDirective) {
@@ -1053,24 +1053,24 @@ async function applyResultShaping(
                     imageList: plan.imageList,
                 },
             ),
-            imgsimSearchContext,
+            pruneSearchContext,
             mmrSearchContext,
         };
     }
 
-    if (imgsimSearchContext) {
+    if (pruneSearchContext) {
         return {
             ...plan,
-            kind: 'imgsim-ranked',
+            kind: 'prune-ranked',
             orderedIds: orderShapedResultIds(
-                imgsimSearchContext.orderedIds,
+                pruneSearchContext.orderedIds,
                 plan.sorting,
                 {
                     imgSearchContext: plan.imgSearchContext,
                     imageList: plan.imageList,
                 },
             ),
-            imgsimSearchContext,
+            pruneSearchContext,
         };
     }
 
@@ -1292,8 +1292,8 @@ export type SearchImagesResult = {
     images: ServerImage[];
     imgSearchError?: string;
     imgSearchContext?: ImgSearchContext;
-    imgsimSearchError?: string;
-    imgsimSearchContext?: ImgSimSearchContext;
+    pruneSearchError?: string;
+    pruneSearchContext?: PruneSearchContext;
     mmrSearchError?: string;
     mmrSearchContext?: MmrSearchContext;
 };
@@ -1309,8 +1309,8 @@ export async function searchImagesAsync(
         images: collectSearchPlanImages(plan, options),
         imgSearchError: plan.imgSearchContext?.error,
         imgSearchContext: plan.imgSearchContext,
-        imgsimSearchError: plan.imgsimSearchContext?.error,
-        imgsimSearchContext: plan.imgsimSearchContext,
+        pruneSearchError: plan.pruneSearchContext?.error,
+        pruneSearchContext: plan.pruneSearchContext,
         mmrSearchError: plan.mmrSearchContext?.error,
         mmrSearchContext: plan.mmrSearchContext,
     };
@@ -1344,7 +1344,7 @@ export type SearchStreamResult = {
     /** The stable search-pool order used for this session. */
     sourceOrder: string[];
     imgSearchContext?: ImgSearchContext;
-    imgsimSearchContext?: ImgSimSearchContext;
+    pruneSearchContext?: PruneSearchContext;
     mmrSearchContext?: MmrSearchContext;
 };
 
@@ -1497,7 +1497,7 @@ export async function searchImagesStreaming(
         amount: finalImages.length,
         sourceOrder: plan.orderedIds,
         imgSearchContext: plan.imgSearchContext,
-        imgsimSearchContext: plan.imgsimSearchContext,
+        pruneSearchContext: plan.pruneSearchContext,
         mmrSearchContext: plan.mmrSearchContext,
     };
 }

@@ -15,7 +15,7 @@ import {
     replaceSessionResults,
     resumeSession,
     setSessionImgSearchContext,
-    setSessionImgSimSearchContext,
+    setSessionPruneSearchContext,
     setSessionMmrSearchContext,
 } from '$lib/server/searchSessions';
 import { mapServerImageToClient } from '$lib/tools/misc';
@@ -195,7 +195,7 @@ export async function POST(e) {
                             type: 'ready',
                             amount: resumedSession.orderedIds.length,
                             imgSearchError: resumedSession.imgSearchError,
-                            imgsimSearchError: resumedSession.imgsimSearchError,
+                            pruneSearchError: resumedSession.pruneSearchError,
                             mmrSearchError: resumedSession.mmrSearchError,
                         };
                         if (!safeEnqueue(controller, init) || !safeEnqueue(controller, ready)) {
@@ -278,14 +278,14 @@ export async function POST(e) {
 
                     finalizeSession(sessionId, result.orderedIds, result.sourceOrder);
                     setSessionImgSearchContext(sessionId!, result.imgSearchContext);
-                    setSessionImgSimSearchContext(sessionId!, result.imgsimSearchContext);
+                    setSessionPruneSearchContext(sessionId!, result.pruneSearchContext);
                     setSessionMmrSearchContext(sessionId!, result.mmrSearchContext);
 
                     const ready: StreamReadyResponse = {
                         type: 'ready',
                         amount: result.amount,
                         imgSearchError: result.imgSearchContext?.error,
-                        imgsimSearchError: result.imgsimSearchContext?.error,
+                        pruneSearchError: result.pruneSearchContext?.error,
                         mmrSearchError: result.mmrSearchContext?.error,
                     };
 

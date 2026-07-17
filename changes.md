@@ -22,7 +22,7 @@ User-facing updates from the last 156 commits (`052193d` → `31118b8`), relativ
 - **Multi-image IMG modes**: `avg`, `all`, `any`, `more`, `fringe`, `diff`, `shared`, `analogy`, and `affinity` for combined embedding queries.
 - **ID** search keyword for direct lookup by image hash.
 - **VIDEO** search keyword; videos are vectorized from their preview PNGs.
-- **MMR** search for diverse result shaping; **IMGSIM** prunes results to time-neighbors of a seed image.
+- **MMR** search for diverse result shaping; **PRUNE** prunes results to time-neighbors of a seed image.
 - Image-to-image similarity moved from **SIMILAR** into **IMG**; **SIMILAR** remains for text-based similarity.
 - **Temporary sort modes** (`similar`, `similar (inverse)`, `uniqueness`) auto-apply during IMG and SIMILAR searches; source/reference images pin to the top of results.
 - **In-memory JavaScript scoring** for IMG search; use `k -1` to force full client-side scoring while keeping a threshold. The separate optimized-KNN setting was removed.

@@ -16,4 +16,4 @@ assert.deepEqual(
     'recalculates adjacent distances after each time-neighbor pruning step',
 );
 
-console.log('imgsim.test.ts: all tests passed');
+console.log('prune.test.ts: all tests passed');

@@ -26,7 +26,7 @@
 		"test:search-references": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs scripts/searchReferences.test.ts",
 		"test:similarity-sort": "node --experimental-strip-types scripts/similaritySort.test.ts",
 		"test:mmr": "node --experimental-strip-types scripts/mmr.test.ts",
-		"test:imgsim": "node --experimental-strip-types scripts/imgsim.test.ts"
+		"test:prune": "node --experimental-strip-types scripts/prune.test.ts"
 	},
 	"dependencies": {
 		"better-sqlite3": "^11.0.0",

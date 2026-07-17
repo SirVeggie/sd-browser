@@ -140,7 +140,7 @@
     let searchSessionId = "";
     let lastImgSearchNotifyKey = "";
     let lastMmrSearchNotifyKey = "";
-    let lastImgSimSearchNotifyKey = "";
+    let lastPruneSearchNotifyKey = "";
     let live = false;
     let sorting: SortingMethod = "date";
     let temporarySortState: TemporarySortState = {
@@ -1172,14 +1172,14 @@
         );
     }
 
-    function maybeNotifyImgSimSearchError(error: string | undefined, search: string) {
+    function maybeNotifyPruneSearchError(error: string | undefined, search: string) {
         if (!error) {
-            lastImgSimSearchNotifyKey = "";
+            lastPruneSearchNotifyKey = "";
             return;
         }
         const key = `${search}\0${error}`;
-        if (key === lastImgSimSearchNotifyKey) return;
-        lastImgSimSearchNotifyKey = key;
+        if (key === lastPruneSearchNotifyKey) return;
+        lastPruneSearchNotifyKey = key;
         notify(error, "warn");
     }
 
@@ -1283,7 +1283,7 @@
                     imageAmountStore.set(ready.amount);
                     searchCountComplete = true;
                     maybeNotifyImgSearchError(ready.imgSearchError, search.search);
-                    maybeNotifyImgSimSearchError(ready.imgsimSearchError, search.search);
+                    maybeNotifyPruneSearchError(ready.pruneSearchError, search.search);
                     maybeNotifyMmrSearchError(ready.mmrSearchError, search.search);
                     if (!hasReceivedImages && ready.amount === 0) {
                         applySearchViewReset();

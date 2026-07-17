@@ -59,7 +59,7 @@ export type ImageResponse = {
     amount: number;
     timestamp: number;
     imgSearchError?: string;
-    imgsimSearchError?: string;
+    pruneSearchError?: string;
     mmrSearchError?: string;
 };
 export function isImageResponse(object: any): object is ImageResponse {
@@ -149,7 +149,7 @@ export type StreamReadyResponse = {
     type: 'ready';
     amount: number;
     imgSearchError?: string;
-    imgsimSearchError?: string;
+    pruneSearchError?: string;
     mmrSearchError?: string;
 };
 

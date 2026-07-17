@@ -283,42 +283,67 @@ No automatic uniqueness-index build runs on startup or migration. Users rebuild 
 
 Keep the `uniqueness_scores` table and `mmrSettings` defaulting while older clients or stored settings may still omit them.
 
-## IMGSIM time-neighbor pruning (2026-07)
+## PRUNE time-neighbor pruning (2026-07)
 
 ### What changed
 
-- Search syntax now supports `IMGSIM <count>` as a position-independent result-shaping keyword.
-- After ordinary filters and `IMG` clauses resolve, IMGSIM keeps only embedded matches, orders them by date (image id tie-break), and repeatedly removes the image whose minimum cosine distance to either direct time neighbor is smallest until `<count>` images remain.
-- Search sessions may store `imgsimSearchContext` with the fixed pruned order so live updates revalidate membership without repopulating or reordering the set.
-- The former MMR candidate strategy `time-neighbors` was removed. Use `IMGSIM` instead.
+- Search syntax now supports `PRUNE <count>` as a position-independent result-shaping keyword.
+- After ordinary filters and `IMG` clauses resolve, PRUNE keeps only embedded matches, orders them by date (image id tie-break), and repeatedly removes the image whose minimum cosine distance to either direct time neighbor is smallest until `<count>` images remain.
+- Search sessions may store `pruneSearchContext` with the fixed pruned order so live updates revalidate membership without repopulating or reordering the set.
+- The former MMR candidate strategy `time-neighbors` was removed. Use `PRUNE` instead.
 
 ### Affected data
 
 | Location | Change |
 |----------|--------|
-| Search sessions | May store `imgsimSearchContext` with fixed IMGSIM order |
+| Search sessions | May store `pruneSearchContext` with fixed PRUNE order |
 | Global settings `mmrSettings.candidatePoolStrategy` | Stored `time-neighbors` values normalize back to `n-select` via `normalizeMmrSettings()` |
 
 ### Migration code
 
-- [`src/lib/tools/searchParsing.ts`](../src/lib/tools/searchParsing.ts) — `IMGSIM` parsing, validation, and stripping via `stripResultShapingParts()`
-- [`src/lib/server/imgSimRanking.ts`](../src/lib/server/imgSimRanking.ts) — time-neighbor pruning over embedded matches
+- [`src/lib/tools/searchParsing.ts`](../src/lib/tools/searchParsing.ts) — `PRUNE` parsing, validation, and stripping via `stripResultShapingParts()`
+- [`src/lib/server/pruneRanking.ts`](../src/lib/server/pruneRanking.ts) — time-neighbor pruning over embedded matches
 - [`src/lib/tools/mmrMath.ts`](../src/lib/tools/mmrMath.ts) — shared `selectByTimeNeighbors()` heap primitive
-- [`src/lib/server/searching.ts`](../src/lib/server/searching.ts) — applies IMGSIM after matching, before optional MMR
-- [`src/lib/server/imageUpdates.ts`](../src/lib/server/imageUpdates.ts) — strips IMGSIM from live-update matcher checks; fixed IMGSIM membership
+- [`src/lib/server/searching.ts`](../src/lib/server/searching.ts) — applies PRUNE after matching, before optional MMR
+- [`src/lib/server/imageUpdates.ts`](../src/lib/server/imageUpdates.ts) — strips PRUNE from live-update matcher checks; fixed PRUNE membership
 - [`src/lib/types/mmr.ts`](../src/lib/types/mmr.ts) — removed `time-neighbors` from MMR candidate strategies
 
 ### How to verify
 
-1. Vectorize some images, then run `IMGSIM 1000` — the gallery returns at most 1,000 embedded matches in stable date order after time-neighbor pruning.
-2. Run `IMG misty forest AND IMGSIM 1000` and `IMGSIM 1000 AND IMG misty forest` — both return the same membership.
+1. Vectorize some images, then run `PRUNE 1000` — the gallery returns at most 1,000 embedded matches in stable date order after time-neighbor pruning.
+2. Run `IMG misty forest AND PRUNE 1000` and `PRUNE 1000 AND IMG misty forest` — both return the same membership.
 3. Confirm results remain visible past the 10-second live-update check.
-4. Run `IMGSIM 1000 AND MMR 50` — IMGSIM prunes first, then MMR diversifies within the pruned set.
+4. Run `PRUNE 1000 AND MMR 50` — PRUNE prunes first, then MMR diversifies within the pruned set.
 5. Settings → Embedding settings — the MMR candidate strategy list no longer includes `time-neighbors`.
 
 ### Removal
 
 Keep `normalizeMmrSettings()` fallback for stored `time-neighbors` values until all clients and saved settings have moved on.
+
+## IMGSIM keyword renamed to PRUNE (2026-07)
+
+### What changed
+
+- The result-shaping search keyword `IMGSIM` was renamed to `PRUNE` to match its behavior.
+- Internal session fields and APIs were renamed from `imgsimSearchContext` / `imgsimSearchError` to `pruneSearchContext` / `pruneSearchError`.
+- `src/lib/server/imgSimRanking.ts` was renamed to [`pruneRanking.ts`](../src/lib/server/pruneRanking.ts).
+
+### Affected versions
+
+| Before | After |
+|--------|-------|
+| `IMGSIM 200` | `PRUNE 200` |
+| `imgsimSearchContext` | `pruneSearchContext` |
+| `imgsimSearchError` | `pruneSearchError` |
+
+### Migration code
+
+No backward-compatibility alias for `IMGSIM` — update saved searches and docs to use `PRUNE`.
+
+### How to verify
+
+1. `PRUNE 100` returns the same gallery results the old `IMGSIM 100` syntax produced.
+2. Stream resume still preserves pruned order via `pruneSearchContext`.
 
 ## Folder filter → custom filters (2026-06)
 

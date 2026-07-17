@@ -137,7 +137,7 @@ Search `red` matches `scarred`
 
 ## Keywords
 
-Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT, MODEL | MD, ANNOTATION | AN, TAG, SIMILAR | SM, IMG, ID, VIDEO | VID, SKIP, TAKE, MMR, IMGSIM`. Keywords are case insensitive. Prefix keywords can be stacked in any order within a clause: `NOT FOLDER img2img` and `FOLDER NOT img2img` are equivalent.
+Available searching keywords are `AND, NOT, ALL, NEGATIVE | NEG, FOLDER | FD, PARAMS | PR, DATE | DT, MODEL | MD, ANNOTATION | AN, TAG, SIMILAR | SM, IMG, ID, VIDEO | VID, SKIP, TAKE, MMR, PRUNE`. Keywords are case insensitive. Prefix keywords can be stacked in any order within a clause: `NOT FOLDER img2img` and `FOLDER NOT img2img` are equivalent.
 
 ### Combining clauses
 
@@ -204,8 +204,8 @@ Example: `landscape TAKE 20` or `landscape SKIP 10 TAKE 5`
 `MMR`: Returns a diverse subset of embedding-ranked matches. First number is result count; optional second is candidate pool size.  
 Example: `IMG cat AND MMR 100 1000`
 
-`IMGSIM`: After other filters, prunes embedded matches to a count by dropping near-duplicates in time order.  
-Example: `IMG red dress AND IMGSIM 200`
+`PRUNE`: After other filters, prunes embedded matches to a count by dropping near-duplicates in time order.  
+Example: `IMG red dress AND PRUNE 200`
 
 ## Embeddings and IMG search
 

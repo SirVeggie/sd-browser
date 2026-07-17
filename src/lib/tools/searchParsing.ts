@@ -17,7 +17,7 @@ const SEARCH_KEYWORD_ENTRIES = [
     'SKIP',
     'TAKE',
     'MMR',
-    'IMGSIM',
+    'PRUNE',
 ] as const;
 
 export type SearchClause = {
@@ -387,7 +387,7 @@ function parseThresholdSuffix(value: string): number | undefined {
     return parsed;
 }
 
-const searchKeywordPrefix = '(?:AND|NOT|ALL|NEGATIVE|NEG|FOLDER|FD|PARAMS|PR|DATE|DT|MODEL|MD|ANNOTATION|AN|TAG|ID|VIDEO|VID|SKIP|TAKE|MMR|IMGSIM)';
+const searchKeywordPrefix = '(?:AND|NOT|ALL|NEGATIVE|NEG|FOLDER|FD|PARAMS|PR|DATE|DT|MODEL|MD|ANNOTATION|AN|TAG|ID|VIDEO|VID|SKIP|TAKE|MMR|PRUNE)';
 const similarPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*(?:SIMILAR|SM)\\s+`, 'i');
 const imgPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*IMG(?:\\s+|$)`, 'i');
 const notPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*NOT\\s+`, 'i');
@@ -406,9 +406,9 @@ function resolveMmrCandidateCount(resultCount: number, explicit?: number): numbe
 }
 const mmrPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*MMR\\s+`, 'i');
 const mmrOnlyRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*MMR$`, 'i');
-const imgsimPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*IMGSIM\\s+`, 'i');
-const imgsimOnlyRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*IMGSIM$`, 'i');
-export const IMGSIM_MAX_RESULT_COUNT = 50_000;
+const prunePrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*PRUNE\\s+`, 'i');
+const pruneOnlyRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*PRUNE$`, 'i');
+export const PRUNE_MAX_RESULT_COUNT = 50_000;
 
 export function extractSimilarSearchTarget(rawOrPart: string): string {
     return rawOrPart.trim().replace(similarPrefixRegex, '');
@@ -492,41 +492,41 @@ export function parseMmrDirective(search: string): ParsedMmrDirective | undefine
     return undefined;
 }
 
-export type ParsedImgSimDirective = {
+export type ParsedPruneDirective = {
     resultCount: number;
 };
 
-export function isImgSimSearchPart(part: string): boolean {
+export function isPruneSearchPart(part: string): boolean {
     const trimmed = part.trim();
-    return imgsimPrefixRegex.test(trimmed) || imgsimOnlyRegex.test(trimmed);
+    return prunePrefixRegex.test(trimmed) || pruneOnlyRegex.test(trimmed);
 }
 
-export function hasImgSimSearchParts(search: string): boolean {
-    return splitSearchParts(search).some((part) => isImgSimSearchPart(part) && !isNegatedSearchPart(part));
+export function hasPruneSearchParts(search: string): boolean {
+    return splitSearchParts(search).some((part) => isPruneSearchPart(part) && !isNegatedSearchPart(part));
 }
 
-export function parseImgSimDirective(search: string): ParsedImgSimDirective | undefined {
+export function parsePruneDirective(search: string): ParsedPruneDirective | undefined {
     for (const part of splitSearchParts(search)) {
-        if (!isImgSimSearchPart(part) || isNegatedSearchPart(part))
+        if (!isPruneSearchPart(part) || isNegatedSearchPart(part))
             continue;
 
-        const raw = part.replace(imgsimPrefixRegex, '').trim();
+        const raw = part.replace(prunePrefixRegex, '').trim();
         if (!raw)
-            throw new Error('IMGSIM requires a result count');
+            throw new Error('PRUNE requires a result count');
 
         const tokens = raw.split(/\s+/).filter(Boolean);
         if (!tokens.length)
-            throw new Error('IMGSIM requires a result count');
+            throw new Error('PRUNE requires a result count');
 
         const resultCount = parsePositiveInteger(tokens[0]);
         if (resultCount === undefined)
-            throw new Error('IMGSIM result count must be a positive integer');
+            throw new Error('PRUNE result count must be a positive integer');
 
-        if (resultCount > IMGSIM_MAX_RESULT_COUNT)
-            throw new Error(`IMGSIM result count cannot exceed ${IMGSIM_MAX_RESULT_COUNT}`);
+        if (resultCount > PRUNE_MAX_RESULT_COUNT)
+            throw new Error(`PRUNE result count cannot exceed ${PRUNE_MAX_RESULT_COUNT}`);
 
         if (tokens.length > 1)
-            throw new Error('IMGSIM accepts only one number: the remaining result count');
+            throw new Error('PRUNE accepts only one number: the remaining result count');
 
         return { resultCount };
     }
@@ -536,7 +536,7 @@ export function parseImgSimDirective(search: string): ParsedImgSimDirective | un
 
 export function stripResultShapingParts(search: string): string {
     return splitSearchParts(search)
-        .filter((part) => !isMmrSearchPart(part) && !isImgSimSearchPart(part))
+        .filter((part) => !isMmrSearchPart(part) && !isPruneSearchPart(part))
         .join(' AND ');
 }
 

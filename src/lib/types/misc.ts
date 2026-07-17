@@ -73,7 +73,7 @@ export function isMatchType(object: any): object is MatchType {
     return matchTypes.includes(object);
 }
 
-export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'IMGSIM'] as const;
+export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'PRUNE'] as const;
 export type SearchKeyword = typeof searchKeywords[number];
 export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);
@@ -291,11 +291,11 @@ export const searchKeywordHelpSections = [
                 example: 'cat AND MMR 100 1000',
             },
             {
-                keyword: 'IMGSIM',
+                keyword: 'PRUNE',
                 summary: 'Prunes by image-embedding uniqueness.',
                 details:
                     'Use a result count. After ordinary filters and IMG clauses, keeps embedded matches and repeatedly drops near-duplicates in time order until the count remains.',
-                example: 'IMG red dress AND IMGSIM 200',
+                example: 'IMG red dress AND PRUNE 200',
             },
         ],
     },

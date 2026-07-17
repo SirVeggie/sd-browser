@@ -4,7 +4,7 @@ import type { SortingMethod } from '$lib/types/misc';
 import type { StreamRequest } from '$lib/types/requests';
 import { getImage, getImageList } from './dataIndex';
 import { getPositiveSimilarSourceIds, pinIdsToFront } from '$lib/tools/searchParsing';
-import type { ImgSearchContext, ImgSimSearchContext, MmrSearchContext } from './searching';
+import type { ImgSearchContext, PruneSearchContext, MmrSearchContext } from './searching';
 import { orderShapedResultIds, sortImages } from './searching';
 
 export const imageLimit = 1000;
@@ -25,8 +25,8 @@ export type SearchSession = {
     complete?: boolean;
     imgSearchContext?: ImgSearchContext;
     imgSearchError?: string;
-    imgsimSearchContext?: ImgSimSearchContext;
-    imgsimSearchError?: string;
+    pruneSearchContext?: PruneSearchContext;
+    pruneSearchError?: string;
     mmrSearchContext?: MmrSearchContext;
     mmrSearchError?: string;
 };
@@ -254,7 +254,7 @@ export function sortSessionIds(ids: string[], session: SearchSession): string[] 
             const positionB = positions.get(b) ?? Number.POSITIVE_INFINITY;
             return positionA - positionB;
         });
-    } else if (session.mmrSearchContext || session.imgsimSearchContext) {
+    } else if (session.mmrSearchContext || session.pruneSearchContext) {
         sorted = orderShapedResultIds(ids, session.sorting, {
             imgSearchContext: session.imgSearchContext,
             mmrSearchContext: session.mmrSearchContext,
@@ -306,16 +306,16 @@ export function setSessionImgSearchContext(sessionId: string, imgSearchContext: 
     }
 }
 
-export function setSessionImgSimSearchContext(sessionId: string, imgsimSearchContext: ImgSimSearchContext | undefined): void {
+export function setSessionPruneSearchContext(sessionId: string, pruneSearchContext: PruneSearchContext | undefined): void {
     const session = sessions.get(sessionId);
     if (session) {
-        session.imgsimSearchContext = imgsimSearchContext;
-        session.imgsimSearchError = imgsimSearchContext?.error;
+        session.pruneSearchContext = pruneSearchContext;
+        session.pruneSearchError = pruneSearchContext?.error;
     }
 }
 
-export function getSessionImgSimSearchError(session: SearchSession | undefined): string | undefined {
-    return session?.imgsimSearchContext?.error ?? session?.imgsimSearchError;
+export function getSessionPruneSearchError(session: SearchSession | undefined): string | undefined {
+    return session?.pruneSearchContext?.error ?? session?.pruneSearchError;
 }
 
 export function setSessionMmrSearchContext(sessionId: string, mmrSearchContext: MmrSearchContext | undefined): void {

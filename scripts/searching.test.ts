@@ -4,11 +4,11 @@ import {
     parseSimilarSearchTarget,
     pinIdsToFront,
     parseMmrDirective,
-    parseImgSimDirective,
+    parsePruneDirective,
     stripMmrParts,
     stripResultShapingParts,
     hasMmrSearchParts,
-    hasImgSimSearchParts,
+    hasPruneSearchParts,
     splitSearchParts,
     tokenizeSearchClauses,
     unescapeSearchLiterals,
@@ -125,53 +125,53 @@ assert.equal(
 assert.equal(hasMmrSearchParts('MMR 10'), true, 'detects MMR search parts');
 
 assert.deepEqual(
-    parseImgSimDirective('IMGSIM 1000'),
+    parsePruneDirective('PRUNE 1000'),
     { resultCount: 1000 },
-    'parses IMGSIM result count',
+    'parses PRUNE result count',
 );
 
 assert.throws(
-    () => parseImgSimDirective('IMGSIM'),
+    () => parsePruneDirective('PRUNE'),
     /result count must be a positive integer/,
-    'rejects IMGSIM without a result count',
+    'rejects PRUNE without a result count',
 );
 
 assert.throws(
-    () => parseImgSimDirective('IMGSIM 10 20'),
+    () => parsePruneDirective('PRUNE 10 20'),
     /only one number/,
-    'rejects IMGSIM with extra numbers',
+    'rejects PRUNE with extra numbers',
 );
 
 assert.equal(
-    stripResultShapingParts('TAG favourite AND IMGSIM 10'),
+    stripResultShapingParts('TAG favourite AND PRUNE 10'),
     'TAG favourite',
-    'removes IMGSIM clause from matcher input',
+    'removes PRUNE clause from matcher input',
 );
 
 assert.equal(
-    stripResultShapingParts('MMR 5 AND IMGSIM 10'),
+    stripResultShapingParts('MMR 5 AND PRUNE 10'),
     '',
-    'removes both MMR and IMGSIM clauses from matcher input',
+    'removes both MMR and PRUNE clauses from matcher input',
 );
 
 assert.equal(
-    stripMmrParts('TAG favourite AND IMGSIM 10'),
+    stripMmrParts('TAG favourite AND PRUNE 10'),
     'TAG favourite',
-    'stripMmrParts removes IMGSIM through result-shaping strip',
+    'stripMmrParts removes PRUNE through result-shaping strip',
 );
 
-assert.equal(hasImgSimSearchParts('IMGSIM 10'), true, 'detects IMGSIM search parts');
+assert.equal(hasPruneSearchParts('PRUNE 10'), true, 'detects PRUNE search parts');
 
 assert.deepEqual(
-    parseImgSimDirective('TAG landscape AND IMGSIM 25'),
+    parsePruneDirective('TAG landscape AND PRUNE 25'),
     { resultCount: 25 },
-    'parses IMGSIM position-independently',
+    'parses PRUNE position-independently',
 );
 
 assert.deepEqual(
-    parseImgSimDirective('TAG landscape IMGSIM 25'),
+    parsePruneDirective('TAG landscape PRUNE 25'),
     { resultCount: 25 },
-    'parses implicitly chained IMGSIM',
+    'parses implicitly chained PRUNE',
 );
 
 const splitCases: Array<{ search: string; parts: string[] }> = [
@@ -431,7 +431,7 @@ assert.match(imgAllClauses[0]?.text ?? '', /^IMG all /i, 'preserves IMG all mode
 
 // Both ALL and IMG regexes match `IMG all …`; matcher must prefer IMG.
 {
-    const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'IMGSIM'];
+    const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'PRUNE'];
     const keywordPattern = `((${searchKeywords.join('|')}) )*`;
     const allRegex = new RegExp(`^${keywordPattern}ALL `, 'i');
     const imgRegex = new RegExp(`^${keywordPattern}IMG `, 'i');

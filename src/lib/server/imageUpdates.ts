@@ -31,7 +31,7 @@ function getSessionResultImages(
     );
     const maxResults = take || Number.POSITIVE_INFINITY;
     const isFixedResultSession = session.mmrSearchContext !== undefined
-        || session.imgsimSearchContext !== undefined;
+        || session.pruneSearchContext !== undefined;
     const existingIds = new Set(session.orderedIds);
     const freshImages = getFreshImages(query.timestamp);
     const sourceOrder = session.sourceOrder;
