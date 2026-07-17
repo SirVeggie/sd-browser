@@ -13,3 +13,6 @@ vite.config.ts.timestamp-*
 **/devLocalData
 **/devImages
 test_images
+
+# Local design exploration HTML (served from /designs/...)
+/static/designs/
