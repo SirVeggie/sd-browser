@@ -284,7 +284,7 @@ export const searchKeywordHelpSections = [
                 keyword: 'IMG shared',
                 summary: 'Keeps stable traits across references.',
                 details:
-                    'Downweights dimensions that vary a lot within the reference set, then searches near that shared subspace. Better than avg when refs share a subject but disagree on outfit or lighting. Needs at least two hex ids.',
+                    'Inverse-variance weights the reference mean: dims that vary a lot within the set are downweighted relative to stable ones, then KNN as usual. Better than avg when refs share a subject but disagree on outfit or lighting. Needs at least two hex ids.',
                 example: 'IMG shared #1 #2 #3',
             },
         ],

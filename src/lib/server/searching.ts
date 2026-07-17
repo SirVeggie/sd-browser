@@ -20,7 +20,6 @@ import {
 import {
     averageEmbeddings,
     analogyEmbedding,
-    buildImgAffinityRefStats,
     clampUnitScore,
     cosineSimilarity,
     differenceEmbedding,
@@ -96,7 +95,6 @@ function defaultImgModeThreshold(mode: ImgSearchMode, imageSimilarityThreshold: 
         case 'fringe':
             return FRINGE_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
         case 'all':
-        case 'affinity':
             // Same default as positive-only weighted `IMG a + b`.
             return IMAGE_EMBEDDING_SIMILARITY_THRESHOLD;
         case 'diff':
@@ -107,6 +105,8 @@ function defaultImgModeThreshold(mode: ImgSearchMode, imageSimilarityThreshold: 
         case 'any':
         case 'more':
         case 'shared':
+        case 'affinity':
+            // Affinity scores are mean-similarity-scale (~0..1), same ballpark as avg/shared.
             return imageSimilarityThreshold;
         default: {
             const _exhaustive: never = mode;
@@ -680,16 +680,14 @@ async function findImgModeMatches(
                 { excludeIds },
             );
         }
-        case 'affinity': {
-            const stats = buildImgAffinityRefStats(refEmbeddings);
+        case 'affinity':
             return findScoredImgMatches(
                 candidateIds,
                 effectiveThreshold,
                 k,
                 explicitThreshold,
-                (candidate) => scoreImgAffinityMode(refEmbeddings, stats, candidate),
+                (candidate) => scoreImgAffinityMode(refEmbeddings, candidate),
             );
-        }
         default: {
             const _exhaustive: never = modeQuery.mode;
             return _exhaustive;

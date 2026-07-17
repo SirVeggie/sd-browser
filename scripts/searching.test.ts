@@ -26,7 +26,7 @@ import {
 import {
     averageEmbeddings,
     analogyEmbedding,
-    buildImgAffinityRefStats,
+    cosineSimilarity,
     differenceEmbedding,
     extrapolateEmbedding,
     normalizeEmbedding,
@@ -507,12 +507,60 @@ assert.ok(
     'sharedSubspaceEmbedding keeps the stable axis stronger than varying dims',
 );
 
-const affinityStats = buildImgAffinityRefStats([axisX, axisY]);
-const affinityMid = scoreImgAffinityMode([axisX, axisY], affinityStats, midXY);
-const affinityFar = scoreImgAffinityMode([axisX, axisY], affinityStats, axisZ);
+// Imbalanced varying dim still pollutes the mean; inverse-variance should diverge from avg.
+const sharedRefs = [
+    normalizeEmbedding(new Float32Array([1, 0.9, 0.02, 0.01])),
+    normalizeEmbedding(new Float32Array([1, -0.85, 0.02, 0.01])),
+    normalizeEmbedding(new Float32Array([1, 0.8, 0.02, 0.01])),
+    normalizeEmbedding(new Float32Array([1, 0.75, 0.02, 0.01])),
+];
+const sharedAvg = averageEmbeddings(sharedRefs);
+const sharedInv = sharedSubspaceEmbedding(sharedRefs);
+const sharedVsAvg = cosineSimilarity(sharedInv, sharedAvg);
+assert.ok(
+    sharedVsAvg < 0.95,
+    `shared inverse-variance diverges from avg when a varying dim pollutes the mean (cos=${sharedVsAvg})`,
+);
+assert.ok(
+    Math.abs(sharedInv[0]) > Math.abs(sharedInv[1]),
+    'shared keeps the stable dim stronger than the polluted varying dim',
+);
+
+const affinityMid = scoreImgAffinityMode([axisX, axisY], midXY);
+const affinityFar = scoreImgAffinityMode([axisX, axisY], axisZ);
 assert.ok(
     affinityMid > affinityFar,
     `affinity prefers a bridge between refs over an orthogonal point (${affinityMid} > ${affinityFar})`,
 );
 
+const affinitySpecialist = scoreImgAffinityMode([axisX, axisY], axisX);
+assert.ok(
+    affinityMid > affinitySpecialist,
+    `affinity prefers an even mid match over a one-ref specialist (${affinityMid} > ${affinitySpecialist})`,
+);
+
+// Higher mean similarity but uneven vs lower mean but even → avg (∝ μ) and affinity diverge.
+const unevenHighMean = unitVec(0.95, 0.35, 0.158113883);
+const evenLowerMean = unitVec(0.6, 0.6, 0.529150262);
+const unevenMean =
+    (clampUnitCos(axisX, unevenHighMean) + clampUnitCos(axisY, unevenHighMean)) / 2;
+const evenMean =
+    (clampUnitCos(axisX, evenLowerMean) + clampUnitCos(axisY, evenLowerMean)) / 2;
+assert.ok(unevenMean > evenMean, 'fixture: uneven candidate has higher mean similarity');
+const affinityUneven = scoreImgAffinityMode([axisX, axisY], unevenHighMean);
+const affinityEven = scoreImgAffinityMode([axisX, axisY], evenLowerMean);
+assert.ok(
+    affinityEven > affinityUneven,
+    `affinity prefers even membership over higher uneven mean (${affinityEven} > ${affinityUneven})`,
+);
+
 console.log('searching.test.ts: all tests passed');
+
+function clampUnitCos(a: Float32Array, b: Float32Array): number {
+    const similarity = cosineSimilarity(a, b);
+    if (similarity <= 0)
+        return 0;
+    if (similarity >= 1)
+        return 1;
+    return similarity;
+}

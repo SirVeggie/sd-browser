@@ -248,7 +248,6 @@ score(c) = cosine(c, q)</div>
       <h2>Shared subspace</h2>
       <div class="tagrow">
         <span class="pill fast">single query vector</span>
-        <span class="pill defer">deferred · needs PCA</span>
       </div>
       <p class="hook">Ignore what the selected images <em>disagree</em> on; search using only what they stably share.</p>
 
@@ -256,48 +255,48 @@ score(c) = cosine(c, q)</div>
       <p>
         You select five images of the same character in different outfits, lighting, and crops.
         Centroid still averages the outfits in. Soft <code>all</code> demands every outfit trait a bit.
-        <strong>Shared subspace</strong> finds axes of <em>variation within the set</em> and throws them out —
-        what’s left is closer to “character identity” (or shared medium, shared composition — whatever is stable).
+        <strong>Shared</strong> downweights embedding dims that vary within the set — what’s left is closer to
+        “character identity” (or shared medium, shared composition — whatever is stable).
       </p>
 
-      <h3>Math (sketch)</h3>
-      <div class="eq">X = stack of N ref embeddings (N small, e.g. 3–20)
-find principal components of X (or of X − mean)
-project refs (or the mean) into the complementary subspace —
-  drop top-k high-variance directions within the set
-q = normalize(projected mean)
+      <h3>Math</h3>
+      <div class="eq">mean = average of ref embeddings
+var_i = within-set variance of dim i
+ε = median(var)   // relative to this set; not absolute 1
+q_i = mean_i / (var_i + ε)
+q = normalize(q)
 then ordinary KNN</div>
       <p>
-        Alternate cheap version: for each dimension, down-weight coords with high variance across refs,
-        then average. Same idea, no full SVD.
+        Absolute <code>mean/(1+var)</code> is a no-op on L2-normalized high-d embeddings (var ≪ 1).
+        Median-scaled inverse-variance actually reweights peer dims. Cheaper than PCA; enough for small N.
       </p>
 
       <h3>What shows up</h3>
       <ul>
         <li>More of the same subject / motif despite style churn in the selection</li>
-        <li>Fewer “outfit average” or “lighting average” false friends than plain <code>avg</code></li>
+        <li>Fewer “outfit average” or “lighting average” false friends than plain <code>avg</code> when those traits still pollute the mean</li>
         <li>If the set only shares something weak (all “colorful”), you get weak/generic results</li>
       </ul>
 
       <div class="vs">
         <div>
           <b>vs avg</b>
-          Avg keeps disagreeing traits at half strength. Subspace tries to zero them out.
+          Avg keeps disagreeing traits at whatever strength they survive averaging. Shared crushes high-variance dims relative to stable ones.
         </div>
         <div>
           <b>vs all</b>
-          <code>all</code> requires candidates to match each ref’s private traits too. Subspace forgives private traits.
+          <code>all</code> requires candidates to match each ref’s private traits too. Shared forgives private traits.
         </div>
       </div>
 
       <h3>Fits IMG as</h3>
       <span class="syntax">IMG shared &lt;id&gt; &lt;id&gt;…</span>
-      <p style="margin-top:0.6rem">Needs ≥3 ids to estimate variance meaningfully; with 2 it’s almost the same as projecting out A−B (cousin of difference).</p>
+      <p style="margin-top:0.6rem">Needs ≥2 ids. With nearly identical refs, collapses to <code>avg</code> (all vars ≈ 0).</p>
 
       <div class="warn">
         Assumes “disagreement within the set = nuisance.” Wrong when you <em>wanted</em> the varying trait
-        (five different art styles and you care about style range). Also: PCA on N≪dims is underdetermined —
-        you only remove a few directions, which is usually enough for this use case.
+        (five different art styles and you care about style range). Axis-aligned only — correlated multi-dim
+        variation is only partially suppressed.
       </div>
     </section>
 
@@ -365,7 +364,6 @@ find d maximizing cosine(d − C, B − A)
       <h2>Set affinity</h2>
       <div class="tagrow">
         <span class="pill slow">score-space</span>
-        <span class="pill defer">deferred</span>
       </div>
       <p class="hook">Not “near the average” — “would this image <em>belong in the set</em>?”</p>
 
@@ -377,35 +375,36 @@ find d maximizing cosine(d − C, B − A)
         Affinity scores how well the candidate fits the <em>structure</em> of the set.
       </p>
 
-      <h3>Math (a few variants)</h3>
-      <div class="eq">// cohesion gain
-score(c) = mean_pairwise_sim({refs ∪ c}) − mean_pairwise_sim({refs})
+      <h3>Math</h3>
+      <div class="eq">// consistency-penalized membership
+μ = mean_i sim(c, ref_i)
+σ = stdev_i sim(c, ref_i)
+score(c) = clamp(μ / (1 + λσ))   // λ = 1
 
-// silhouette-ish
-score(c) = mean_i sim(c, ref_i) − penalty for being closer to "outsiders"
-  (outsiders = hard; often skip)
-
-// soft membership
-score(c) = geom_mean_i sim(c, ref_i)     // collapses toward `all`
-         or harmonic mean / min           // stricter membership</div>
+// Rejected: cohesion gain ranks identically to avg
+// (ref pairwise baseline is constant → only Σ sim(c, ref) varies)</div>
       <p>
-        The interesting version is <strong>cohesion gain</strong> (or leave-one-out variants):
-        reward candidates that increase internal connectivity, including bridges between two modes
-        in a multi-theme selection. Plain geom mean is basically <code>all</code> again — affinity only
-        earns a new name if the score uses set structure, not just distance to each ref independently.
+        Mean similarity alone is <code>avg</code> in ranking disguise. The <strong>σ penalty</strong> is what
+        earns the name: one-ref specialists (high max, uneven profile) drop; even membership across the
+        set rises. Softer than <code>all</code> (geom mean zeros on a single miss) and tighter than
+        <code>any</code>.
       </p>
 
       <h3>What shows up</h3>
       <ul>
         <li>Collection completers: images that “fit the moodboard”</li>
-        <li>Bridges when the selection is bi-modal (can look odd next to centroid results)</li>
         <li>Fewer lonely outliers than <code>any</code>; less muddy than <code>avg</code> on mixed sets</li>
+        <li>Graded scores when a set has legitimate diversity (unlike hard geom-mean <code>all</code>)</li>
       </ul>
 
       <div class="vs">
         <div>
           <b>vs all</b>
-          <code>all</code> = independently similar to each ref. Affinity can prefer a bridge that isn’t max-similar to every ref.
+          <code>all</code> = geom mean (harsh on a single weak link). Affinity stays graded via μ/(1+σ).
+        </div>
+        <div>
+          <b>vs avg</b>
+          Same mean signal, but uneven match is penalized — rankings diverge when a high-μ specialist competes with a lower-μ even fit.
         </div>
         <div>
           <b>vs fringe</b>
@@ -415,20 +414,17 @@ score(c) = geom_mean_i sim(c, ref_i)     // collapses toward `all`
 
       <h3>Fits IMG as</h3>
       <span class="syntax">IMG affinity &lt;id&gt; &lt;id&gt;…</span>
-      <p style="margin-top:0.6rem">Natural multi-select mode for “expand this collection.” Heavier than KNN; fine for N refs small and a capped candidate pool (e.g. union of neighbors first, then affinity re-rank).</p>
+      <p style="margin-top:0.6rem">Natural multi-select mode for “expand this collection.” Score-space scan (not KNN); default threshold matches other image-similarity modes.</p>
 
       <div class="warn">
-        Cohesion-gain needs care: adding something similar to everything raises pairwise means trivially.
-        Practical recipe: take union-neighborhood candidates, then rank by cohesion gain or by
-        “mean sim to refs × (1 − max sim to already-selected results)” if used iteratively.
+        Still O(N refs × candidates). Fine for small reference strips; for huge galleries prefer a neighbor shortlist then affinity re-rank if needed.
       </div>
     </section>
 
     <footer>
-      These four stay out of v1 (<code>avg</code> / <code>all</code> / <code>any</code> / <code>more</code> / <code>fringe</code>).
-      Closest cousins already shipping: <strong>more</strong> ≈ anchored push;
-      <strong>all</strong> ≈ crude affinity; <strong>fringe</strong> ≈ opposite of affinity.
-      Difference and analogy are one linear-algebra family; subspace is “smarter avg”; affinity is “smarter all.”
+      Closest cousins: <strong>more</strong> ≈ anchored push;
+      <strong>all</strong> ≈ strict soft-AND; <strong>fringe</strong> ≈ opposite of affinity.
+      Difference and analogy are one linear-algebra family; subspace is “smarter avg”; affinity is consistency-penalized membership.
     </footer>
   </div>
 </body>

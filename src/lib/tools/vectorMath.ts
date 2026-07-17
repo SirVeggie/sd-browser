@@ -154,8 +154,9 @@ export function analogyEmbedding(
 }
 
 /**
- * Shared-subspace query: mean embedding with high within-set variance dims downweighted.
- * Cheaper than PCA; enough for small reference sets.
+ * Shared-subspace query: mean embedding with high within-set variance dims
+ * downweighted via inverse-variance relative to median(var).
+ * Using (1+var) is a no-op on L2-normalized high-d embeddings (var ≪ 1).
  */
 export function sharedSubspaceEmbedding(embeddings: Float32Array[]): Float32Array {
     if (!embeddings.length)
@@ -185,52 +186,50 @@ export function sharedSubspaceEmbedding(embeddings: Float32Array[]): Float32Arra
     for (let index = 0; index < dimensions; index++)
         variance[index] *= invN;
 
+    const sortedVariance = Float32Array.from(variance);
+    sortedVariance.sort();
+    const medianVariance = sortedVariance[Math.floor(dimensions / 2)];
+    const epsilon = Math.max(medianVariance, Number.EPSILON);
+
     const query = new Float32Array(dimensions);
     for (let index = 0; index < dimensions; index++)
-        query[index] = mean[index] / (1 + variance[index]);
+        query[index] = mean[index] / (variance[index] + epsilon);
 
     return normalizeEmbedding(query);
 }
 
-export type ImgAffinityRefStats = {
-    refPairSum: number;
-    refPairCount: number;
-};
-
-/** Precompute pairwise cohesion among refs for affinity scoring. */
-export function buildImgAffinityRefStats(refEmbeddings: Float32Array[]): ImgAffinityRefStats {
-    let refPairSum = 0;
-    let refPairCount = 0;
-    for (let i = 0; i < refEmbeddings.length; i++) {
-        for (let j = i + 1; j < refEmbeddings.length; j++) {
-            refPairSum += clampUnitScore(cosineSimilarity(refEmbeddings[i], refEmbeddings[j]));
-            refPairCount++;
-        }
-    }
-    return { refPairSum, refPairCount };
-}
+/** Spread penalty weight for affinity: score = μ / (1 + λσ). */
+export const IMG_AFFINITY_CONSISTENCY_LAMBDA = 1;
 
 /**
- * Set affinity via cohesion gain when adding the candidate.
- * Mapped to ~0..1 with (gain + 1) / 2 so thresholds behave like weighted IMG.
+ * Set membership via mean similarity to refs, penalizing uneven match:
+ * clamp(μ / (1 + λσ)). Prefers collection fits over one-ref specialists.
  */
 export function scoreImgAffinityMode(
     refEmbeddings: Float32Array[],
-    stats: ImgAffinityRefStats,
     candidate: Float32Array,
+    lambda = IMG_AFFINITY_CONSISTENCY_LAMBDA,
 ): number {
     if (!refEmbeddings.length)
         return 0;
     if (refEmbeddings.length === 1)
         return clampUnitScore(cosineSimilarity(refEmbeddings[0], candidate));
 
-    let toCandidate = 0;
-    for (const ref of refEmbeddings)
-        toCandidate += clampUnitScore(cosineSimilarity(ref, candidate));
+    const count = refEmbeddings.length;
+    const similarities = new Array<number>(count);
+    let sum = 0;
+    for (let index = 0; index < count; index++) {
+        const similarity = clampUnitScore(cosineSimilarity(refEmbeddings[index], candidate));
+        similarities[index] = similarity;
+        sum += similarity;
+    }
 
-    const baseMean = stats.refPairCount > 0 ? stats.refPairSum / stats.refPairCount : 0;
-    const newCount = stats.refPairCount + refEmbeddings.length;
-    const newMean = (stats.refPairSum + toCandidate) / newCount;
-    const gain = newMean - baseMean;
-    return clampUnitScore((gain + 1) / 2);
+    const mean = sum / count;
+    let varianceSum = 0;
+    for (let index = 0; index < count; index++) {
+        const delta = similarities[index] - mean;
+        varianceSum += delta * delta;
+    }
+    const stdev = Math.sqrt(varianceSum / count);
+    return clampUnitScore(mean / (1 + lambda * stdev));
 }

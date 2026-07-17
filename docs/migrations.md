@@ -129,7 +129,7 @@ No migration helper; the old `SIMILAR img` form is unsupported.
 - `more <A> <B>` — extrapolate past A away from B
 - `fringe` — related but atypical vs the selection centroid
 - `diff <A> <B>` — search along normalize(A − B)
-- `shared` — centroid with high within-set variance dims downweighted
+- `shared` — centroid with inverse-variance dim weights (ε = median within-set variance)
 - `analogy <A> <B> <C>` — A:B :: C:? via normalize(C + (B − A))
 - `affinity` — mean similarity to refs with uneven-match penalty (μ / (1 + σ))
 
