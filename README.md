@@ -1,6 +1,6 @@
 # Stable Diffusion Image Browser
 
-A standalone image browser (not a webui extension) made with Node and SvelteKit.
+A standalone image browser (not a webui extension) made with Node and SvelteKit. Browse large local libraries with fast search, tags, semantic image search, bulk tools, and ComfyUI / A1111 metadata support.
 
 <details>
 <summary>Preview images</summary>
@@ -14,12 +14,12 @@ A standalone image browser (not a webui extension) made with Node and SvelteKit.
 
 ## Installation
 
-1) Install latest version of Node.js
-2) Clone or download the project.
-3) Copy the `.env.example` file and rename it to `.env`
-4) Set `IMG_FOLDER` to the output folder of stable diffusion (or any other folder containing images)
-5) Run command `npm run setup` using command line in the project root folder
-6) Run command `npm start` to start the application
+1) Install latest version of Node.js  
+2) Clone or download the project.  
+3) Copy the `.env.example` file and rename it to `.env`  
+4) Set `IMG_FOLDER` to the output folder of stable diffusion (or any other folder containing images)  
+5) Run command `npm run setup` using command line in the project root folder  
+6) Run command `npm start` to start the application  
 7) Open `localhost:[PORT]` in your browser (default `PORT` is `4200`)
 
 When starting for the first time, the images will be indexed. Depending on the amount of images, this can take seconds (5,000 images), or a tens of minutes (200,000+ images). Indexing speed will also depend on if you're using txt files or embedded image metadata, as well as the speed of your drive. My SSD takes about 4 minutes for 230,000 pngs with exif metadata.
@@ -30,14 +30,14 @@ After the indexing, the following starts will only take a couple of seconds.
 
 ## Updating
 
-1) Pull latest changes with `git pull` in the project root folder (if you used git to download)
-2) Run command `npm run setup`
+1) Pull latest changes with `git pull` in the project root folder (if you used git to download)  
+2) Run command `npm run setup`  
 3) Start the application with `npm start` like normal
 
 ## Authentication
 
-Simple password authentication is supported to prevent third parties from browsing images (when port forwarded for example).
-The environment variable `PASS` defines the current password. Deleting `PASS` from the `.env` file or setting it as blank disables authentication.
+Simple password authentication is supported to prevent third parties from browsing images (when port forwarded for example).  
+The environment variable `PASS` defines the current password. Deleting `PASS` from the `.env` file or setting it as blank disables authentication.  
 The browser will remember the password, but it can be cleared by pressing `logout` from the settings page.
 
 ## Notes
@@ -46,13 +46,46 @@ Subfolders under `IMG_FOLDER` are scanned automatically, but setting multiple se
 
 Symlinks work, but currently do not support file watching, so the images only update during startup. However switching the direction of the symlink so that the original folder is inside the main image browser, and the link is outside does work.
 
+Optional `.env` values:
+
+- `COMFY_URL` — ComfyUI base URL for **Open in ComfyUI** (defaults to `http://127.0.0.1:8188`)
+- `COMFY_TOKEN` — ComfyUI-Login API token, if your Comfy instance requires it
+
 ### ~ I'm open to feedback! ~
 
 # Usage
-## Collapse mode
-Hides duplicate images with the same prompt. Browsing old prompts is much easier with this mode. Combine with `random` sorting mode to maximize inspiration from old prompts.
+
+## Gallery
+
+The gallery uses windowed rendering so large libraries stay responsive at deep scroll. Thumbnails show shimmer placeholders while loading and fade in after decode (duration configurable in Settings).
+
+Layout options in Settings include grid or masonry flow, image spacing, and thumbnail/full-size quality tiers (`original`, `medium`, `low`, `minimal`).
+
+## Exploration modes
+
+Beyond plain search, exploration modes vary how results are picked as you browse:
+
+- **Unique** — hides duplicate images with the same content hash (the old collapse mode). Combine with `random` sorting to rediscover old prompts.
+- **Similar** — walks through images with dissimilar prompts using the similarity cache.
+- **Sparse** — shows every Nth match for lighter browsing.
+
+Exploration pools persist across restarts. Settings also control similarity algorithm, threshold, and cache rebuild.
+
+## Tags and annotations
+
+Images support a global tag registry (name + color) managed in Settings. Tags can be edited per image, searched with the `TAG` keyword, and applied in bulk from the selection menu.
+
+**Quick tag** mode tags images one-by-one from the gallery with a minimal toolbar. Pick tags once, then click through results; tagged images leave the queue until you press Done.
+
+**Annotations** are per-image notes stored by this app (not in file metadata). Search them with `ANNOTATION` / `AN`, edit them in fullscreen view, or generate them in bulk with an LLM.
+
+NSFW and favourites are handled as tags (`nsfw`, `favourite` are seeded on fresh installs).
 
 ## Searching
+
+Search, custom filters, and optional NSFW filtering share one query string. Toggle saved custom filters from the gallery; define and reorder them in Settings.
+
+Results stream in over SSE with live match counts. Browser back/forward restores search state. For full syntax reference, open **Search keyword help** in Settings.
 
 ### Dates
 
@@ -144,54 +177,104 @@ Example: `red hair NOT ALL girl|boy` (girl or boy not mentioned in any part of t
 
 `DATE`: Uses special date syntax to restrict search to some time frame (examples above)
 
+`MODEL`: Matches detected model names from image metadata  
+Example: `MD pony`
+
+`ANNOTATION`: Matches per-image annotations stored in this app  
+Example: `AN favorite lighting`
+
+`TAG`: Matches assigned image tags  
+Example: `TAG landscape` or `NOT TAG hidden`
+
+`ID`: Matches specific image ids (64-character hashes)  
+Example: `ID abc123… def456…`
+
+`VIDEO`: Keeps only video files (vectorized from preview PNGs when using IMG search)  
+Example: `VID`
+
+`SIMILAR`: Finds images with similar **prompt text** to a reference image (`#n`, `[n]`, or hex id). Optional trailing number sets the similarity threshold. Use `IMG` for embedding-based similarity.  
+Example: `SM #1 0.6`
+
 `SKIP`: Skips the first N results after sorting.  
 Example: `landscape SKIP 20`
 
-`TAKE`: Limits results to the first N matching images after sorting (and after any numeric SKIP).  
+`TAKE`: Limits results to the first N matching images after sorting (and after any numeric SKIP). Can refill with more matches as you browse.  
 Example: `landscape TAKE 20` or `landscape SKIP 10 TAKE 5`
 
-## Sorting
-- Date: Sorts images based on file modification date
-- Name: Sorts images based on file name
-- Random: Sorts images randomly
+`MMR`: Returns a diverse subset of embedding-ranked matches. First number is result count; optional second is candidate pool size.  
+Example: `IMG cat AND MMR 100 1000`
 
-## Image Management
-Able to select and delete multiple images.
+`IMGSIM`: After other filters, prunes embedded matches to a count by dropping near-duplicates in time order.  
+Example: `IMG red dress AND IMGSIM 200`
+
+## Embeddings and IMG search
+
+Semantic image search uses embeddings stored in sqlite-vec. Configure an embedding API in Settings → **LLM / embeddings** (sv-embed or llama.cpp with a vision model), then run **Bulk vectorize** from Settings → Data management.
+
+`IMG` searches by embedding similarity:
+- Bare `IMG` matches images that already have embeddings.
+- Text runs a text-to-image embedding search (optional search template in Settings).
+- A 64-character hex id uses that image's embedding.
+- Reference strip slots: `#1`, `[1]`, etc. (managed from the gallery UI).
+- Weighted clauses: `IMG cat + #1 - beach` (spaced `+` / `-`; leading spaced `-` is negative-only).
+- `IMG ~text` skips the search template for that text clause.
+- Trailing decimal sets similarity threshold; trailing integer limits result count (either order). Use `-1` as k to force full in-memory JavaScript scoring.
+
+Multi-image modes (each needs reference ids): `avg`, `all`, `any`, `more`, `fringe`, `diff`, `shared`, `analogy`, `affinity`. See **Search keyword help** in Settings for mode details and examples.
+
+During IMG and SIMILAR searches, results temporarily sort by similarity and pin reference images to the top.
+
+## Sorting
+
+- **Date** / **Date (asc)**: file modification date
+- **Name** / **Name (desc)**: file name
+- **Random**: random order (SKIP and TAKE apply after random sort)
+
+IMG and SIMILAR searches also use temporary **similar** / **similar (inverse)** sort modes. MMR can use a **uniqueness** sort while building its candidate pool.
+
+## Image management
+
+Select multiple images to move, copy, delete, tag, or LLM-annotate in bulk. Progress streams over SSE. Bulk actions follow the current search session order.
+
+Context-menu actions include **Show similar**, **Jump** (similarity browsing), and **Tag as…** for quick bulk tagging.
 
 ## Live
+
 Opens a fullscreen image to always show the latest image. (The browser gets file updates so it updates in near real time)  
 Works as a bigger preview view when used alongside the webui.
 
 ## Flyout sidebar
-You can use the flyout to embed the stable diffusion or comfy webui, so you can use it seamlessly without switching tabs/applications on mobile.
+
+You can use the flyout to embed the stable diffusion or comfy webui, so you can use it seamlessly without switching tabs/applications on mobile.  
 You can change the url of the webui in the settings if necessary.
 
 ## Slideshow
+
 Cycles through images in order every 4 seconds. The delay can be modified in the settings.
 
 ## Hotkeys
+
 You can use the `arrow keys` to cycle through images while in fullscreen.  
 You can use `Space` to start and stop the slideshow.
 
 ## Mobile
+
 Optimized for both desktop and mobile use.
 
-The image browser has been setup as PWA compatible, so you can set it on your homescreen on mobile to open it in fullscreen (without a url bar).
+The image browser has been setup as PWA compatible, so you can set it on your homescreen on mobile to open it in fullscreen (without a url bar). A responsive burger menu handles narrow topbars.
 
 # ComfyUI support
 
-Due to the nature of ComfyUI it can be difficult to parse information out of the workflow. Currently the image browser will try to detect and show the following information:
-- Positive prompt
-- Negative prompt
-- Model
-- Seed
+The browser parses ComfyUI workflow metadata embedded in images. It detects positive and negative prompts, models, seeds, and other node details — including subgraphs and less common node layouts. LoRA and auxiliary models are listed separately from the primary checkpoint.
 
-For the app to succesfully find this information, consider renaming the nodes' titles with the following
-- Positive prompt -> has to have "positive" or "prompt" in the title
-- Negative prompt -> has to have "negative" in the title
-- Model -> has to have "model" or "checkpoint" in the title
-- Seed -> has to have "seed" in the title
+Fullscreen view can **open the workflow in ComfyUI** (set `COMFY_URL` and optionally `COMFY_TOKEN` in `.env`). Large workflow JSON is loaded on demand so fullscreen opens quickly on slow networks.
 
-The first two are the most important, since the latter two should already work out of the box.
+For reliable automatic detection, consider renaming node titles:
+- Positive prompt → has to have "positive" or "prompt" in the title
+- Negative prompt → has to have "negative" in the title
+- Model → has to have "model" or "checkpoint" in the title
+- Seed → has to have "seed" in the title
 
-In addition to these, all of the nodes are formatted and shown, so you can still find all relevant information. It can get pretty unreadable though if you have a lot of nodes.
+The first two are the most important; model and seed detection usually works without renaming.
+
+All nodes are still formatted and shown in metadata, so you can find anything even when auto-detection misses. Settings → Data management can rebuild derived metadata in the background without blocking the gallery.
