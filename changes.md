@@ -42,6 +42,7 @@ User-facing updates from the last 156 commits (`052193d` → `31118b8`), relativ
 - **Bulk modal** for acting on the current search: move, copy, delete, and LLM annotate, with streaming progress.
 - **MODEL** and **ANNOTATION** search keywords, backed by indexed model metadata and stored annotations.
 - **Annotations** stored per image and shown in the fullscreen image view (annotation section moved to the top of the metadata panel).
+- **Add/edit annotation** from the fullscreen metadata menu opens a modal for freeform notes (including clearing text).
 - **LLM annotate** sends JPEG-encoded images (quality 80) for broader API compatibility and smaller payloads.
 - **Bulk annotation progress** shows elapsed time, average/effective task time, ETA, and a fail count for empty LLM responses; hover the progress bar for detailed stats.
 - **Saved annotate system instructions** in Settings: reusable presets selectable in the annotate dialog.

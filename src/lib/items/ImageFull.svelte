@@ -32,7 +32,9 @@
     imageAction,
     openWorkflowInComfy,
   } from "$lib/requests/imageRequests";
+  import { updateImageAnnotation } from "$lib/requests/annotationRequests";
   import { updateImageTags } from "$lib/requests/tagRequests";
+  import AnnotationModal from "$lib/components/AnnotationModal.svelte";
   import TagPillRow from "$lib/components/TagPillRow.svelte";
   import TagPickerPopup from "$lib/components/TagPickerPopup.svelte";
   import TagModal from "$lib/components/TagModal.svelte";
@@ -65,6 +67,9 @@
   let showOriginal = false;
   let tagPickerOpen = false;
   let tagModalOpen = false;
+  let annotationModalOpen = false;
+  let annotationDraft = "";
+  let annotationSaving = false;
   let modalTagName = "";
   let modalTagColor = DEFAULT_TAG_COLOR;
   let imageTags: string[] = [];
@@ -458,6 +463,15 @@
   function handleEsc(e: KeyboardEvent) {
     if (!image?.id) return;
     if (e.key === "Escape") {
+      if (annotationModalOpen) {
+        if (!annotationSaving)
+          annotationModalOpen = false;
+        return;
+      }
+      if (tagModalOpen) {
+        tagModalOpen = false;
+        return;
+      }
       if (tagPickerOpen) {
         tagPickerOpen = false;
         return;
@@ -489,6 +503,11 @@
     actions.push({
       name: "Copy ID",
       handler: copyId,
+    });
+
+    actions.push({
+      name: data?.annotation ? "Edit annotation" : "Add annotation",
+      handler: openAnnotationModal,
     });
 
     actions.push({ name: "Delete", handler: deleteImage });
@@ -681,6 +700,31 @@
     } catch (cause) {
       console.error(cause);
       notify(cause instanceof Error ? cause.message : "Failed to update tags", "warn");
+    }
+  }
+
+  function openAnnotationModal() {
+    annotationDraft = data?.annotation ?? "";
+    annotationModalOpen = true;
+  }
+
+  function closeAnnotationModal() {
+    if (annotationSaving) return;
+    annotationModalOpen = false;
+  }
+
+  async function saveAnnotation(event: CustomEvent<{ text: string }>) {
+    if (!image?.id || annotationSaving) return;
+    annotationSaving = true;
+    try {
+      const annotation = await updateImageAnnotation(image.id, event.detail.text);
+      if (data) data = { ...data, annotation };
+      annotationModalOpen = false;
+    } catch (cause) {
+      console.error(cause);
+      notify(cause instanceof Error ? cause.message : "Failed to save annotation", "warn");
+    } finally {
+      annotationSaving = false;
     }
   }
 
@@ -957,6 +1001,15 @@
       bind:color={modalTagColor}
       on:save={saveNewTag}
       on:close={closeCreateTagModal}
+    />
+  {/if}
+  {#if annotationModalOpen}
+    <AnnotationModal
+      title={data?.annotation ? "Edit annotation" : "Add annotation"}
+      bind:text={annotationDraft}
+      saving={annotationSaving}
+      on:save={saveAnnotation}
+      on:close={closeAnnotationModal}
     />
   {/if}
 {/if}
