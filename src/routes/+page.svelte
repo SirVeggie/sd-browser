@@ -1898,14 +1898,7 @@
         }
     }
 
-    async function doneQuickTag() {
-        if (quickTagHistory.length > 0) {
-            const confirmed = await askConfirmation(
-                "Exit quick tag",
-                "Exit quick tag? You will lose the ability to undo or revert recent changes.",
-            );
-            if (!confirmed) return;
-        }
+    function doneQuickTag() {
         const taggedIds = new Set(quickTagHistory.map((entry) => entry.imageId));
         if (taggedIds.size) {
             imageStore.update((images) => images.filter((image) => !taggedIds.has(image.id)));
