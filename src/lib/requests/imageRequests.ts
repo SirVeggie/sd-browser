@@ -4,6 +4,7 @@ import { doGet, doPost, doServerGet, doServerPost, type FetchType } from '../too
 import { page } from '$app/stores';
 import type {
     ActionRequest,
+    BulkEmbeddingConfig,
     ImagePageRequest,
     ImageResponse,
     MultiActionRequest,
@@ -339,6 +340,50 @@ export async function openWorkflowInComfy(imageId: string, comfyToken?: string, 
         throw new Error(res.error);
     if ('message' in res)
         return;
+}
+
+export type ImageEmbedEnsureStatus = "exists" | "created" | "failed";
+
+export type ImageEmbedEnsureResult = {
+    id: string;
+    status: ImageEmbedEnsureStatus;
+    error?: string;
+};
+
+function isImageEmbedEnsureStatus(value: unknown): value is ImageEmbedEnsureStatus {
+    return value === "exists" || value === "created" || value === "failed";
+}
+
+export async function ensureImageEmbedding(
+    id: string,
+    embedding: BulkEmbeddingConfig,
+    fetch?: FetchType,
+): Promise<ImageEmbedEnsureResult> {
+    let url = `/api/images/${id}/embed`;
+    if (!fetch) {
+        url = get(page).url.origin + url;
+    }
+
+    const res = await (fetch ? doPost(url, fetch, { embedding }) : doServerPost(url, { embedding }));
+    if ("error" in res && typeof res.error === "string") {
+        return { id, status: "failed", error: res.error };
+    }
+
+    const status = "status" in res ? res.status : undefined;
+    if (isImageEmbedEnsureStatus(status)) {
+        const error = "error" in res && typeof res.error === "string" ? res.error : undefined;
+        return { id, status, error };
+    }
+
+    return { id, status: "failed", error: "Unexpected embed response" };
+}
+
+export async function ensureImageEmbeddings(
+    ids: string[],
+    embedding: BulkEmbeddingConfig,
+    fetch?: FetchType,
+): Promise<ImageEmbedEnsureResult[]> {
+    return Promise.all(ids.map((id) => ensureImageEmbedding(id, embedding, fetch)));
 }
 
 export async function getComfyWorkflowOpenStatus(comfyToken?: string, fetch?: FetchType): Promise<ComfyWorkflowOpenStatus> {

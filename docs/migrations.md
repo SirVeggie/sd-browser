@@ -1,5 +1,35 @@
 # Migrations
 
+## Image search references (2026-07)
+
+### What changed
+
+IMG search can reference client-side image slots with `#n` or `[n]` syntax (e.g. `IMG #1 0.8`). Slots are stored in localStorage until cleared manually; they are not synced through global settings.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| localStorage `imageSearchRefs` | New key: array of `{ slot: number, id: string }` (slot 1–20, 64-char hex id) |
+
+No server-side migration. Search expansion happens in the client before API requests.
+
+### Migration code
+
+- [`src/lib/stores/imageRefStore.ts`](../src/lib/stores/imageRefStore.ts) — store, validation, `syncImageRefsWithLocalStorage()`
+- [`src/lib/tools/searchReferences.ts`](../src/lib/tools/searchReferences.ts) — expansion, invalid-ref detection, highlight ranges
+
+### How to verify
+
+1. Add image refs via the reference strip (context menu **Add reference**, drag-and-drop, or `addImageRefs()` in devtools); confirm `imageSearchRefs` in localStorage.
+2. Search `IMG #1` with slot 1 populated — results use that image's embedding.
+3. Search `IMG #99` with no slot 99 — search returns zero results.
+4. Reload — refs persist from localStorage.
+
+### Removal
+
+Drop `imageSearchRefs` from localStorage and remove the store/sync when the feature is removed.
+
 ## initialImages setting removed (2026-07)
 
 ### What changed
@@ -101,7 +131,7 @@ No migration helper; the old `SIMILAR img` form is unsupported.
 - `diff <A> <B>` — search along normalize(A − B)
 - `shared` — centroid with high within-set variance dims downweighted
 - `analogy <A> <B> <C>` — A:B :: C:? via normalize(C + (B − A))
-- `affinity` — cohesion gain of joining the reference set
+- `affinity` — mean similarity to refs with uneven-match penalty (μ / (1 + σ))
 
 Weighted `+/-` image+text queries are unchanged. Mode names are recognized only when followed by hex ids, so `IMG fringe of trees` remains a text query.
 

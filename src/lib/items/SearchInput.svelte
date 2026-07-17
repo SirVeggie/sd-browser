@@ -1,6 +1,7 @@
 <script lang="ts">
     import { createEventDispatcher, tick } from "svelte";
     import { searchKeywords } from "$lib/types/misc";
+    import { imageRefs } from "$lib/stores/imageRefStore";
     import { tagsStore } from "$lib/stores/tagsStore";
     import { tagRegistryNames } from "$lib/types/tags";
     import { getUnknownExactTagRanges, segmentOverlapsRange } from "$lib/tools/tagSearch";
@@ -11,6 +12,7 @@
         mapDisplaySelectionToCanonical,
         shouldCollapseExpandedSearch,
     } from "$lib/tools/searchDisplay";
+    import { getSearchReferenceRanges } from "$lib/tools/searchReferences";
 
     export let placeholder = "";
     export let value = "";
@@ -21,6 +23,8 @@
         keyword: boolean;
         unknownTag: boolean;
         abbreviatedId: boolean;
+        validSearchRef: boolean;
+        invalidSearchRef: boolean;
     };
 
     const keywordAliases = new Set([
@@ -39,7 +43,8 @@
     $: registryNames = tagRegistryNames($tagsStore);
     $: display = getSearchDisplay(value);
     $: abbreviatedIdRanges = showExpandedIds ? [] : display.ranges;
-    $: segments = getSegments(displayValue, registryNames, abbreviatedIdRanges);
+    $: searchRefRanges = getSearchReferenceRanges(displayValue, $imageRefs);
+    $: segments = getSegments(displayValue, registryNames, abbreviatedIdRanges, searchRefRanges);
     $: if (element)
         element.dataset.canonicalValue = value;
 
@@ -111,8 +116,11 @@
         text: string,
         names: Set<string>,
         idRanges: { start: number; end: number }[],
+        refRanges: { start: number; end: number; valid: boolean }[],
     ): Segment[] {
         const unknownRanges = getUnknownExactTagRanges(text, names);
+        const validRefRanges = refRanges.filter((range) => range.valid);
+        const invalidRefRanges = refRanges.filter((range) => !range.valid);
         let offset = 0;
         return Array.from(text.matchAll(tokenRegex), match => {
             const token = match[0];
@@ -127,6 +135,8 @@
                 keyword: !escapedKeyword && keywordAliases.has(token.toLowerCase()),
                 unknownTag: segmentOverlapsRange(segmentStart, segmentEnd, unknownRanges),
                 abbreviatedId: segmentOverlapsRange(segmentStart, segmentEnd, idRanges),
+                validSearchRef: segmentOverlapsRange(segmentStart, segmentEnd, validRefRanges),
+                invalidSearchRef: segmentOverlapsRange(segmentStart, segmentEnd, invalidRefRanges),
             };
         });
     }
@@ -140,8 +150,8 @@
                     {#each segments as segment}
                         <span
                             class:keyword={segment.keyword}
-                            class:unknown-tag={segment.unknownTag}
-                            class:abbreviated-id={segment.abbreviatedId}
+                            class:unknown-tag={segment.unknownTag || segment.invalidSearchRef}
+                            class:abbreviated-id={segment.abbreviatedId || segment.validSearchRef}
                         >{segment.text}</span>
                     {/each}
                 {:else}

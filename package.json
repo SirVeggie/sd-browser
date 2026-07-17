@@ -22,6 +22,8 @@
 		"test:models": "node --experimental-strip-types scripts/model-parser.test.ts",
 		"test:exploration": "node --experimental-strip-types scripts/exploration.unique.test.ts",
 		"test:searching": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs scripts/searching.test.ts",
+		"test:searchReferences": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs scripts/searchReferences.test.ts",
+		"test:search-references": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs scripts/searchReferences.test.ts",
 		"test:similarity-sort": "node --experimental-strip-types scripts/similaritySort.test.ts",
 		"test:mmr": "node --experimental-strip-types scripts/mmr.test.ts",
 		"test:imgsim": "node --experimental-strip-types scripts/imgsim.test.ts"

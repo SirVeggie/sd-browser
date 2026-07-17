@@ -9,6 +9,7 @@ import { syncBulkModalWithLocalStorage } from "$lib/stores/bulkStore";
 import { syncTagsWithLocalStorage } from "$lib/stores/tagsStore";
 import { syncLlmWithLocalStorage } from "$lib/stores/llmStore";
 import { syncEmbeddingWithLocalStorage } from "$lib/stores/embeddingStore";
+import { syncImageRefsWithLocalStorage } from "$lib/stores/imageRefStore";
 import { syncMmrWithLocalStorage } from "$lib/stores/mmrStore";
 import { migrateFolderFilterToCustomFilters } from "$lib/migrations/folderFilterMigration";
 import { subscribeAuth } from "$lib/tools/requests";
@@ -26,6 +27,7 @@ export async function load() {
         syncStyleWithLocalStorage();
         syncLlmWithLocalStorage();
         syncEmbeddingWithLocalStorage();
+        syncImageRefsWithLocalStorage();
         syncMmrWithLocalStorage();
         syncBulkModalWithLocalStorage();
         syncTagsWithLocalStorage();

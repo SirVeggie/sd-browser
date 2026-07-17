@@ -1,5 +1,11 @@
 import { getActiveCustomFilterStrings } from "$lib/stores/customFiltersStore";
+import { getImageRefMap } from "$lib/stores/imageRefStore";
 import { combineSearchQuery } from "$lib/tools/searchQuery";
+import {
+    expandSearchReferences,
+    hasInvalidSearchReferences,
+    INVALID_REF_SEARCH,
+} from "$lib/tools/searchReferences";
 import { syncMemory } from "$lib/tools/syncStorage";
 import {
     defaultExplorationSettings,
@@ -43,7 +49,12 @@ export function buildSearchParams(searchText?: string): SearchParams {
     const algorithm = get(similarityAlgorithm);
     if (get(showNsfwFilter) && !get(nsfwMode) && get(nsfwFilter)) filters.push(get(nsfwFilter));
     filters.push(...getActiveCustomFilterStrings());
-    const search = combineSearchQuery(searchText ?? get(searchFilter), filters);
+    const userSearch = searchText ?? get(searchFilter);
+    const refs = getImageRefMap();
+    const queryText = hasInvalidSearchReferences(userSearch, refs)
+        ? INVALID_REF_SEARCH
+        : expandSearchReferences(userSearch, refs);
+    const search = combineSearchQuery(queryText, filters);
     return {
         search,
         matching: get(matchingMode),

@@ -102,6 +102,7 @@
     import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
     import QuickTagSetupModal from "$lib/components/QuickTagSetupModal.svelte";
     import QuickTagToolbar from "$lib/components/QuickTagToolbar.svelte";
+    import ImageRefStrip from "$lib/components/ImageRefStrip.svelte";
     import type { BulkTagMode } from "$lib/stores/bulkStore";
     import {
         computeQuickTagResult,
@@ -110,6 +111,11 @@
         saveQuickTagSelectedTags,
         type QuickTagHistoryEntry,
     } from "$lib/tools/quickTag";
+    import {
+        addReferencesWithFeedback,
+        IMAGE_DRAG_MIME,
+        parseImageDragIds,
+    } from "$lib/tools/imageRefActions";
 
     type ActionMode = "manual" | "auto";
 
@@ -1492,6 +1498,34 @@
         }
     }
 
+    function handleGalleryDragStart(e: DragEvent, id: string) {
+        if (!e.dataTransfer) {
+            return;
+        }
+
+        const ids = selecting && $selection.includes(id) ? [...$selection] : [id];
+        e.dataTransfer.setData(IMAGE_DRAG_MIME, ids.join(" "));
+        e.dataTransfer.setData("text/plain", ids.join(" "));
+        e.dataTransfer.effectAllowed = "copy";
+    }
+
+    function handleWindowDragOver(e: DragEvent) {
+        if (!e.dataTransfer?.types.includes(IMAGE_DRAG_MIME)) {
+            return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+    }
+
+    function handleWindowDrop(e: DragEvent) {
+        const ids = parseImageDragIds(e.dataTransfer);
+        if (ids.length === 0) {
+            return;
+        }
+        e.preventDefault();
+        void addReferencesWithFeedback(ids);
+    }
+
     function handleImgContext(id: string) {
         return async (e: InputEvent) => {
             const pos = getEventCoords(e);
@@ -1547,6 +1581,17 @@
                         if (selecting)
                             cancelSelect();
                         commitSearchNow();
+                    },
+                },
+                {
+                    name: "Add reference",
+                    visible: !selecting || $selection.length > 0,
+                    async handler() {
+                        const ids = selecting ? [...$selection] : [id];
+                        await addReferencesWithFeedback(ids);
+                        if (selecting) {
+                            cancelSelect();
+                        }
                     },
                 },
                 {
@@ -1958,7 +2003,11 @@
     }
 </script>
 
-<svelte:window on:keydown={handleEsc} />
+<svelte:window
+    on:keydown={handleEsc}
+    on:dragover={handleWindowDragOver}
+    on:drop={handleWindowDrop}
+/>
 
 <div class="anchor" bind:this={anchorElement} />
 <div class="topbar">
@@ -2089,6 +2138,8 @@
             </div>
         </div>
     {/if}
+
+    <ImageRefStrip />
 </div>
 
 <div
@@ -2116,8 +2167,10 @@
                     id={`img_${img.id}`}
                     class="gallery-tile"
                     class:selecting
+                    draggable="true"
                     style={`top:${tile.top}px;left:${tile.left}px;width:${tile.width}px;height:${tile.height}px`}
                     on:click={selectImg(img.id)}
+                    on:dragstart={(e) => handleGalleryDragStart(e, img.id)}
                 >
                     <ImageDisplay
                         {img}
