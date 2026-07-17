@@ -1,5 +1,6 @@
 <script lang="ts">
     import "../global.css";
+    import "../scroll.css";
     import Webui from "$lib/components/Webui.svelte";
     import { flyoutState, flyoutStore } from "$lib/stores/flyoutStore";
     import Notifier from "../lib/components/Notifier.svelte";

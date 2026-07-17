@@ -8,7 +8,6 @@
 
 <script lang="ts">
   import { browser } from "$app/environment";
-  import "../../scroll.css";
   import { onDestroy } from "svelte";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
@@ -68,9 +67,16 @@
   let modalTagColor = DEFAULT_TAG_COLOR;
   let imageTags: string[] = [];
   let tagsRowEl: HTMLDivElement | undefined;
+  let cardEl: HTMLDivElement | undefined;
   let mediaLoaded = false;
   let imgElement: HTMLImageElement | undefined;
   let videoElement: HTMLVideoElement | undefined;
+  let overlayScrollbarVisible = false;
+  let overlayScrollbarActive = false;
+  let overlayThumbTop = 0;
+  let overlayThumbHeight = 0;
+  let overlayScrollFadeTimer: ReturnType<typeof setTimeout> | undefined;
+  let cardResizeObserver: ResizeObserver | undefined;
   let comfyStatusImageId: string | undefined;
   let comfyWorkflowOpenAvailable = false;
   let comfyWorkflowAuthRequired = false;
@@ -145,6 +151,7 @@
     placeholderVisible = false;
     placeholderLeaving = false;
     mediaLoaded = true;
+    requestAnimationFrame(updateOverlayScrollbar);
   }
 
   function startReveal(expectedUrl: string) {
@@ -669,9 +676,76 @@
     selection.removeAllRanges();
   }
 
+  function clearOverlayScrollFadeTimer() {
+    if (!overlayScrollFadeTimer) return;
+    clearTimeout(overlayScrollFadeTimer);
+    overlayScrollFadeTimer = undefined;
+  }
+
+  function updateOverlayScrollbar() {
+    if (!cardEl) {
+      overlayScrollbarVisible = false;
+      return;
+    }
+
+    const { scrollTop, scrollHeight, clientHeight } = cardEl;
+    const overflow = scrollHeight - clientHeight;
+    if (overflow <= 1) {
+      overlayScrollbarVisible = false;
+      return;
+    }
+
+    const trackHeight = clientHeight;
+    const thumbHeight = Math.max(28, (clientHeight / scrollHeight) * trackHeight);
+    const maxThumbTop = Math.max(0, trackHeight - thumbHeight);
+    overlayThumbHeight = thumbHeight;
+    overlayThumbTop = maxThumbTop === 0 ? 0 : (scrollTop / overflow) * maxThumbTop;
+    overlayScrollbarVisible = true;
+  }
+
+  function onCardScroll() {
+    updateOverlayScrollbar();
+    overlayScrollbarActive = true;
+    clearOverlayScrollFadeTimer();
+    overlayScrollFadeTimer = setTimeout(() => {
+      overlayScrollbarActive = false;
+      overlayScrollFadeTimer = undefined;
+    }, 900);
+  }
+
+  function bindCardEl(node: HTMLDivElement) {
+    cardEl = node;
+    updateOverlayScrollbar();
+    cardResizeObserver?.disconnect();
+    cardResizeObserver = new ResizeObserver(() => updateOverlayScrollbar());
+    cardResizeObserver.observe(node);
+    for (const child of node.children) {
+      if (child instanceof HTMLElement)
+        cardResizeObserver.observe(child);
+    }
+
+    return {
+      destroy() {
+        if (cardEl === node)
+          cardEl = undefined;
+        cardResizeObserver?.disconnect();
+        cardResizeObserver = undefined;
+        clearOverlayScrollFadeTimer();
+      },
+    };
+  }
+
+  $: if (enabled && image?.id && data) {
+    // Recalculate after metadata / layout changes settle.
+    queueMicrotask(updateOverlayScrollbar);
+  }
+
   onDestroy(() => {
     clearRevealTimer();
     clearMediaRetryTimer();
+    clearOverlayScrollFadeTimer();
+    cardResizeObserver?.disconnect();
+    cardResizeObserver = undefined;
   });
 </script>
 
@@ -684,15 +758,16 @@
     transition:fade={{ duration: 300, easing: cubicOut }}
   >
     <div class="layout" class:full>
-      <div>
-        <div class="card">
-          <div
-            class="media-container"
-            class:full
-            class:has-aspect={!!(image?.width && image?.height)}
-            class:no-fade={$imageFadeMs <= 0}
-            style={mediaStyle}
-          >
+      <div class="card-frame">
+        <div class="card-stack">
+          <div class="card" use:bindCardEl on:scroll={onCardScroll}>
+            <div
+              class="media-container"
+              class:full
+              class:has-aspect={!!(image?.width && image?.height)}
+              class:no-fade={$imageFadeMs <= 0}
+              style={mediaStyle}
+            >
             {#if placeholderVisible}
               <div class="loading-slot" class:leaving={placeholderLeaving}>
                 <div class="dot-loader" aria-hidden="true">
@@ -770,6 +845,19 @@
               {/each}
             </div>
           {/if}
+          </div>
+          {#if overlayScrollbarVisible}
+            <div
+              class="overlay-scrollbar"
+              class:active={overlayScrollbarActive}
+              aria-hidden="true"
+            >
+              <div
+                class="overlay-scrollbar-thumb"
+                style="height: {overlayThumbHeight}px; transform: translateY({overlayThumbTop}px);"
+              ></div>
+            </div>
+          {/if}
         </div>
       </div>
     </div>
@@ -802,7 +890,7 @@
   {/if}
 {/if}
 
-<svelte:window on:keydown={handleEsc} />
+<svelte:window on:keydown={handleEsc} on:resize={updateOverlayScrollbar} />
 
 <style lang="scss">
   .image_overlay {
@@ -828,25 +916,73 @@
       height: 100%;
       position: relative;
 
-      & > div {
+      .card-frame {
+        position: relative;
         max-height: 100%;
         max-width: 100%;
         min-width: min(500px, 100%);
+        min-height: 0;
         display: flex;
         flex-direction: column;
         justify-content: center;
+      }
+
+      .card-stack {
+        position: relative;
+        max-height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        max-width: 100%;
       }
 
       .card {
         background-color: #111b;
         border-radius: 0.5em;
         overflow-x: hidden;
+        overflow-y: auto;
         overscroll-behavior-y: contain;
+        max-height: 100%;
+        min-height: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
         color: #ddd;
         font-size: 2em;
+        scrollbar-width: none;
+
+        &::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
+        }
+      }
+
+      .overlay-scrollbar {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 12px;
+        pointer-events: none;
+        z-index: 120;
+        opacity: 0.28;
+        transition: opacity 0.35s ease;
+
+        &.active {
+          opacity: 0.9;
+        }
+      }
+
+      .overlay-scrollbar-thumb {
+        position: absolute;
+        top: 0;
+        right: 3px;
+        width: 4px;
+        border-radius: 999px;
+        background: #ffffffaa;
+        box-shadow: 0 0 0.35em #0008;
+        will-change: transform;
       }
 
       .media-container {
@@ -974,13 +1110,19 @@
         right: 0;
         bottom: 0;
 
-        & > div {
+        & > .card-frame {
           height: 100%;
           width: 100%;
+          min-width: 0;
+        }
+
+        .card-stack,
+        .card {
+          width: 100%;
+          height: 100%;
         }
 
         .card {
-          width: 100%;
           border-radius: 0;
           background-color: transparent;
         }

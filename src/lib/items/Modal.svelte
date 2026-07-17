@@ -30,6 +30,8 @@
         right: 0;
         bottom: 0;
         z-index: 100;
+        padding: 2em;
+        box-sizing: border-box;
     }
 
     .box {
@@ -39,8 +41,8 @@
         box-shadow: 0px 5px 5px #0005;
         min-width: min(200px, 100%);
         min-height: min(150px, 100%);
-        max-width: calc(100vw - 2em);
-        max-height: calc(100dvh - 2em);
+        max-width: 100%;
+        max-height: 100%;
         box-sizing: border-box;
         overflow-x: hidden;
         overflow-y: auto;

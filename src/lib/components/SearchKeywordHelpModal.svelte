@@ -40,7 +40,7 @@
             <Button on:click={close}>Close</Button>
         </div>
 
-        <div class="sections">
+        <div class="sections compact-scrollbar">
             {#each searchKeywordHelpSections as section (section.title)}
                 <section class="help-section">
                     <h2>{section.title}</h2>
@@ -90,7 +90,7 @@
     .keyword-help {
         width: 100%;
         max-width: 850px;
-        max-height: calc(100dvh - 4em);
+        max-height: min(850px, calc(100dvh - 6em));
         display: flex;
         flex-direction: column;
         gap: 1em;
@@ -149,6 +149,7 @@
         min-height: 0;
         min-width: 0;
         flex: 1 1 auto;
+        padding-right: 0.15em;
     }
 
     .help-section {

@@ -1,39 +1,73 @@
 * {
-  scrollbar-width: thin;
-  scrollbar-color: #000a #0005;
+    scrollbar-width: thin;
+    scrollbar-color: #ffffff28 transparent;
 }
 
 /* Works on Chrome, Edge, and Safari */
 ::-webkit-scrollbar {
-  width: 10px;
-  background-color: #0000;
+    width: 6px;
+    height: 6px;
+    background-color: transparent;
 }
 
 ::-webkit-scrollbar-track {
-  background-color: #0001;
+    background-color: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #000a;
-  border-radius: 3px;
-  border: 1px solid #0005;
+    background-color: #ffffff28;
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #ffffff40;
 }
 
 ::-webkit-resizer {
-  appearance: none;
-  background: linear-gradient(to right bottom, #0000 0%, #0000 68%, #0003 68%, #0003 76%, #0000 77%, #0000 84%, #0003 84%, #0003 90%, #0000 93%, #0000 100%);
+    appearance: none;
+    background: linear-gradient(
+        to right bottom,
+        #0000 0%,
+        #0000 68%,
+        #0003 68%,
+        #0003 76%,
+        #0000 77%,
+        #0000 84%,
+        #0003 84%,
+        #0003 90%,
+        #0000 93%,
+        #0000 100%
+    );
 }
 
 ::-webkit-scrollbar-corner {
-  background: #0000;
-  border-top: 16px solid #0001;
-  border-left: 16px solid #0001;
-  border-right: 16px solid transparent;
-  border-bottom: 16px solid transparent;
+    background: transparent;
+}
+
+.compact-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #ffffff28 transparent;
+}
+
+.compact-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.compact-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #ffffff28;
+    border-radius: 999px;
+}
+
+.compact-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #ffffff40;
 }
 
 /* hide scrollbar with class .no-scrollbar */
-
 .no-scrollbar {
-  scrollbar-width: none;
+    scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
 }
