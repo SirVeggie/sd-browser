@@ -2,11 +2,24 @@
     import { createEventDispatcher } from "svelte";
     import Modal from "$lib/items/Modal.svelte";
     import Button from "$lib/items/Button.svelte";
-    import { searchKeywordHelp } from "$lib/types/misc";
+    import {
+        searchKeywordHelpSections,
+        type SearchKeywordHelpEntry,
+    } from "$lib/types/misc";
 
     const dispatch = createEventDispatcher<{
         close: void;
     }>();
+
+    let expandedKey: string | null = null;
+
+    function entryKey(sectionTitle: string, entry: SearchKeywordHelpEntry): string {
+        return `${sectionTitle}::${entry.keyword}`;
+    }
+
+    function toggle(key: string) {
+        expandedKey = expandedKey === key ? null : key;
+    }
 
     function close() {
         dispatch("close");
@@ -27,20 +40,46 @@
             <Button on:click={close}>Close</Button>
         </div>
 
-        <div class="keyword-list">
-            {#each searchKeywordHelp as entry (entry.keyword)}
-                <section class="keyword-card">
-                    <div class="keyword-title">
-                        {#each entry.keyword.split("|") as alias (alias)}
-                            <code>{alias}</code>
+        <div class="sections">
+            {#each searchKeywordHelpSections as section (section.title)}
+                <section class="help-section">
+                    <h2>{section.title}</h2>
+                    <div class="keyword-list">
+                        {#each section.entries as entry (entry.keyword)}
+                            {@const key = entryKey(section.title, entry)}
+                            {@const details = "details" in entry ? entry.details : undefined}
+                            {@const expandable = !!details}
+                            {@const open = expandedKey === key}
+                            <button
+                                type="button"
+                                class="keyword-card"
+                                class:expandable
+                                class:expanded={open}
+                                aria-expanded={expandable ? open : undefined}
+                                disabled={!expandable}
+                                on:click={() => expandable && toggle(key)}
+                            >
+                                <div class="card-top">
+                                    <div class="keyword-title">
+                                        {#each entry.keyword.split(/[|\s]+/).filter(Boolean) as alias (alias)}
+                                            <code>{alias}</code>
+                                        {/each}
+                                    </div>
+                                    {#if expandable}
+                                        <span class="chevron" class:open aria-hidden="true" />
+                                    {/if}
+                                </div>
+                                <p class="summary">{entry.summary}</p>
+                                {#if open && details}
+                                    <p class="details">{details}</p>
+                                {/if}
+                                <p class="example">
+                                    <span>Example:</span>
+                                    <code>{entry.example}</code>
+                                </p>
+                            </button>
                         {/each}
                     </div>
-                    <p class="summary">{entry.summary}</p>
-                    <p>{entry.details}</p>
-                    <p class="example">
-                        <span>Example:</span>
-                        <code>{entry.example}</code>
-                    </p>
                 </section>
             {/each}
         </div>
@@ -49,10 +88,15 @@
 
 <style lang="scss">
     .keyword-help {
-        width: min(850px, calc(100vw - 2em));
+        width: 100%;
+        max-width: 850px;
+        max-height: calc(100dvh - 4em);
         display: flex;
         flex-direction: column;
         gap: 1em;
+        box-sizing: border-box;
+        overflow: hidden;
+        min-width: 0;
     }
 
     .header {
@@ -60,11 +104,25 @@
         justify-content: space-between;
         align-items: flex-start;
         gap: 1em;
+        flex-shrink: 0;
+        min-width: 0;
+    }
+
+    .header > div {
+        min-width: 0;
+        flex: 1 1 auto;
     }
 
     h1 {
         margin: 0 0 0.35em;
         font-size: 1.35em;
+    }
+
+    h2 {
+        margin: 0;
+        font-size: 1em;
+        font-weight: 600;
+        color: #ccc;
     }
 
     p {
@@ -82,10 +140,34 @@
         padding: 0.1em 0.35em;
     }
 
+    .sections {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25em;
+        overflow-x: hidden;
+        overflow-y: auto;
+        min-height: 0;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .help-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55em;
+        min-width: 0;
+    }
+
     .keyword-list {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+        grid-template-columns: 1fr;
         gap: 0.75em;
+    }
+
+    @media (width >= 700px) {
+        .keyword-list:has(> :nth-child(2)) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 
     .keyword-card {
@@ -96,17 +178,81 @@
         border: 1px solid #aaa3;
         border-radius: 0.5em;
         background: #ffffff06;
+        text-align: left;
+        color: inherit;
+        font: inherit;
+        box-sizing: border-box;
+        min-width: 0;
+        appearance: none;
+        width: 100%;
+        cursor: default;
+
+        &.expandable {
+            cursor: pointer;
+
+            &:hover {
+                background: #ffffff0a;
+                border-color: #aaa6;
+            }
+
+            &.expanded {
+                border-color: #8fd3ff66;
+                background: #ffffff0a;
+            }
+        }
+
+        &:focus {
+            outline: none;
+        }
+
+        &:focus-visible {
+            outline: 1px solid rgb(63, 187, 236);
+            outline-offset: 2px;
+        }
+
+        &:disabled {
+            opacity: 1;
+        }
+    }
+
+    .card-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.5em;
     }
 
     .keyword-title {
         display: flex;
         flex-wrap: wrap;
         gap: 0.35em;
+        min-width: 0;
+    }
+
+    .chevron {
+        flex-shrink: 0;
+        width: 0.4em;
+        height: 0.4em;
+        margin-top: 0.35em;
+        border-right: 2px solid #aaa;
+        border-bottom: 2px solid #aaa;
+        transform: rotate(-45deg);
+        transition: transform 0.2s ease;
+
+        &.open {
+            transform: rotate(45deg);
+            margin-top: 0.45em;
+        }
     }
 
     .summary {
         color: #eee;
         font-weight: 600;
+    }
+
+    .details {
+        color: #bbb;
+        font-size: 0.95em;
     }
 
     .example {

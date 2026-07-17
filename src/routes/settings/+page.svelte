@@ -1128,13 +1128,19 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
 <style lang="scss">
     .container {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
         padding: var(--main-padding);
         display: flex;
         flex-direction: column;
+        align-items: stretch;
         gap: 1.5em;
     }
 
     .settings-group {
+        width: 100%;
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         gap: 0.75em;
@@ -1151,15 +1157,18 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     }
 
     .help-row {
+        width: 100%;
+        box-sizing: border-box;
         display: flex;
-        flex-wrap: wrap;
-        column-gap: 2em;
-        row-gap: 1em;
-        align-items: flex-start;
+        flex-direction: column;
+        gap: 1em;
+        align-items: stretch;
     }
 
     .help-block {
-        flex: 0 0 auto;
+        width: 100%;
+        box-sizing: border-box;
+        overflow-wrap: break-word;
     }
 
     .keyword-help-trigger {
@@ -1168,7 +1177,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         background: none;
         padding: 0;
         margin: 0;
-        font: inherit;
         text-align: left;
         cursor: pointer;
 
@@ -1186,13 +1194,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             outline-offset: 3px;
             border-radius: 3px;
         }
-    }
-
-    .help-block + .help-block {
-        flex: 1 1 auto;
-        min-width: min(100%, 50%);
-        max-width: 100%;
-        overflow-wrap: break-word;
     }
 
     .similar-cache-action {
@@ -1218,6 +1219,8 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
     .sgroup {
         --gap: 6px;
+        width: 100%;
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         gap: var(--gap);
@@ -1477,11 +1480,20 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     label {
         cursor: pointer;
         user-select: none;
+        width: 100%;
+        box-sizing: border-box;
+
+        &:not(.checkbox) {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25em;
+        }
 
         &.checkbox {
             display: flex;
             align-items: center;
             gap: 0.5em;
+            width: auto;
         }
     }
 
@@ -1490,6 +1502,15 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         align-items: center;
         gap: 0.5em;
         user-select: none;
+        width: 100%;
+        box-sizing: border-box;
+
+        :global(.select) {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: auto;
+            max-width: 100%;
+        }
     }
 
     input[type="checkbox"] {

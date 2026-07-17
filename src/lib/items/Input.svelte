@@ -49,6 +49,8 @@
         position: relative;
         display: flex;
         align-items: center;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     input {

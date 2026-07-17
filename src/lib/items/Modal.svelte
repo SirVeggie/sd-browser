@@ -37,11 +37,12 @@
         padding: 1em 2em;
         border-radius: 0.5em;
         box-shadow: 0px 5px 5px #0005;
-        min-width: min(200px, 100vw);
-        min-height: min(150px, 100dvh);
-        max-width: 100vw;
-        max-height: 100dvh;
+        min-width: min(200px, 100%);
+        min-height: min(150px, 100%);
+        max-width: calc(100vw - 2em);
+        max-height: calc(100dvh - 2em);
         box-sizing: border-box;
+        overflow-x: hidden;
         overflow-y: auto;
     }
 </style>

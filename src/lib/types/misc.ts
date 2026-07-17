@@ -79,123 +79,272 @@ export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);
 }
 
-export type SearchKeywordHelp = {
-    keyword: SearchKeyword;
+/** Help card for a search keyword or IMG mode. Expandable when `details` is set. */
+export type SearchKeywordHelpEntry = {
+    /** Display tokens shown as code chips, joined with `|` for aliases. */
+    keyword: string;
     summary: string;
-    details: string;
+    /** Longer explanation shown when the card is expanded. Omit when summary is enough. */
+    details?: string;
     example: string;
 };
 
-export const searchKeywordHelp = [
+export type SearchKeywordHelpSection = {
+    title: string;
+    entries: readonly SearchKeywordHelpEntry[];
+};
+
+export const searchKeywordHelpSections = [
     {
-        keyword: 'AND',
-        summary: 'Separates search clauses.',
-        details: 'Use AND when you want to start another clause, especially before another keyword. Each clause must match for an image to stay in the results.',
-        example: 'cat AND FOLDER favorites',
+        title: 'Clauses',
+        entries: [
+            {
+                keyword: 'AND',
+                summary: 'Separates search clauses.',
+                details:
+                    'Start a new clause with AND, especially before another keyword. Every clause must match for an image to stay in the results.',
+                example: 'cat AND FOLDER favorites',
+            },
+            {
+                keyword: 'NOT',
+                summary: 'Excludes matches for the next clause.',
+                details: 'Put NOT before any keyword or text clause to invert that clause.',
+                example: 'cat AND NOT TAG hidden',
+            },
+        ],
     },
     {
-        keyword: 'NOT',
-        summary: 'Excludes matches for the next clause.',
-        details: 'Put NOT before any other keyword or text clause to invert it.',
-        example: 'cat AND NOT TAG hidden',
+        title: 'Text and metadata',
+        entries: [
+            {
+                keyword: 'ALL',
+                summary: 'Searches across all stored metadata.',
+                details:
+                    'Matches prompt, workflow, extra metadata, and folder text instead of only the positive prompt.',
+                example: 'ALL sampler_name',
+            },
+            {
+                keyword: 'NEGATIVE|NEG',
+                summary: 'Searches the negative prompt.',
+                details: 'Matches text in the negative prompt field instead of the positive prompt.',
+                example: 'NEG low quality',
+            },
+            {
+                keyword: 'FOLDER|FD',
+                summary: 'Searches the image folder path.',
+                details: 'Narrow results to a directory or path fragment.',
+                example: 'FD portraits',
+            },
+            {
+                keyword: 'PARAMS|PR',
+                summary: 'Searches generation parameters.',
+                details: 'Matches parameter text such as sampler, steps, seed, or other metadata stored with the image.',
+                example: 'PR steps: 30',
+            },
+            {
+                keyword: 'DATE|DT',
+                summary: 'Filters by modified date.',
+                details:
+                    'Supports absolute dates, timestamps, relative offsets like -7d, and ranges with TO.',
+                example: 'DT 2026.07.01 TO 2026.07.12',
+            },
+            {
+                keyword: 'MODEL|MD',
+                summary: 'Searches detected model names.',
+                details: 'Matches the model list extracted from image metadata.',
+                example: 'MD pony',
+            },
+            {
+                keyword: 'ANNOTATION|AN',
+                summary: 'Searches local annotations.',
+                details: 'Only checks annotation text saved in this app.',
+                example: 'AN favorite lighting',
+            },
+            {
+                keyword: 'TAG',
+                summary: 'Searches image tags.',
+                details:
+                    'Matches assigned tags. Exact tag names are checked directly when the term is written as an exact tag.',
+                example: 'TAG landscape',
+            },
+            {
+                keyword: 'VIDEO|VID',
+                summary: 'Filters videos.',
+                details: 'Keeps only files detected as video.',
+                example: 'VID',
+            },
+            {
+                keyword: 'ID',
+                summary: 'Matches specific image ids.',
+                details: 'Use one or more image ids to pin the search to those images.',
+                example: 'ID abc123 def456',
+            },
+        ],
     },
     {
-        keyword: 'ALL',
-        summary: 'Searches across all stored metadata.',
-        details: 'Matches prompt, workflow, extra metadata, and folder text instead of only the positive prompt.',
-        example: 'ALL sampler_name',
+        title: 'Similarity',
+        entries: [
+            {
+                keyword: 'SIMILAR|SM',
+                summary: 'Finds images with similar prompts.',
+                details:
+                    'Pass an image id to compare prompt text. A trailing number overrides the similarity threshold. This is prompt-only; use IMG for embedding similarity.',
+                example: 'SM abc123 0.6',
+            },
+        ],
     },
     {
-        keyword: 'NEGATIVE|NEG',
-        summary: 'Searches the negative prompt.',
-        details: 'NEG is the short alias for NEGATIVE.',
-        example: 'NEG low quality',
+        title: 'IMG',
+        entries: [
+            {
+                keyword: 'IMG',
+                summary: 'Searches with image embeddings.',
+                details:
+                    'Bare IMG matches images that have embeddings. Text runs an embedding search. A 64-character hex id uses that image\'s embedding. Use #n or [n] for reference-strip slots (e.g. IMG #1 0.8). Mix ids and text with spaced + and - for positive and negative weights; a leading spaced - is negative-only. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count (either order). Use -1 as k to force full JavaScript scoring while keeping a threshold. Named multi-image modes each have their own section below.',
+                example: 'IMG cat + #1 - beach 0.8',
+            },
+        ],
     },
     {
-        keyword: 'FOLDER|FD',
-        summary: 'Searches the image folder path.',
-        details: 'Useful for narrowing results to a directory or path fragment. FD is the short alias.',
-        example: 'FD portraits',
+        title: 'IMG avg',
+        entries: [
+            {
+                keyword: 'IMG avg',
+                summary: 'Blends reference embeddings into a centroid.',
+                details:
+                    'Averages the reference image embeddings, renormalizes, then runs nearest-neighbor search. Soft blend of shared traits. Default for multi-select Similar images. Needs one or more hex ids (or #n refs). Space-separated ids, no +.',
+                example: 'IMG avg #1 #2 #3 0.8',
+            },
+        ],
     },
     {
-        keyword: 'PARAMS|PR',
-        summary: 'Searches generation parameters.',
-        details: 'Matches parameter text such as sampler, steps, seed, or other metadata stored with the image. PR is the short alias.',
-        example: 'PR steps: 30',
+        title: 'IMG all',
+        entries: [
+            {
+                keyword: 'IMG all',
+                summary: 'Must resemble every reference.',
+                details:
+                    'Scores by geometric mean of similarity to each reference (same idea as weighted IMG a + b). Candidates that miss any ref score poorly. Needs one or more hex ids. Inside an IMG clause, all is a mode name, not the ALL metadata keyword.',
+                example: 'IMG all #1 #2',
+            },
+        ],
     },
     {
-        keyword: 'DATE|DT',
-        summary: 'Filters by modified date.',
-        details: 'Supports absolute dates, timestamps, relative offsets like -7d, and ranges with TO. DT is the short alias.',
-        example: 'DT 2026.07.01 TO 2026.07.12',
+        title: 'IMG any',
+        entries: [
+            {
+                keyword: 'IMG any',
+                summary: 'Matches the closest reference.',
+                details:
+                    'Uses the maximum similarity to any reference. Good for moodboards or mixed themes where matching one ref is enough. Needs one or more hex ids.',
+                example: 'IMG any #1 #2 #3',
+            },
+        ],
     },
     {
-        keyword: 'MODEL|MD',
-        summary: 'Searches detected model names.',
-        details: 'Matches the model list extracted from image metadata. MD is the short alias.',
-        example: 'MD pony',
+        title: 'IMG more',
+        entries: [
+            {
+                keyword: 'IMG more',
+                summary: 'Extrapolates past A away from B.',
+                details:
+                    'Builds normalize(A + α(A−B)) and searches near that vector. Emphasizes what distinguishes A from B. Requires exactly two ids: IMG more <idA> <idB>. Order matters.',
+                example: 'IMG more #1 #2',
+            },
+        ],
     },
     {
-        keyword: 'ANNOTATION|AN',
-        summary: 'Searches local annotations.',
-        details: 'Only checks annotation text saved in this app. AN is the short alias.',
-        example: 'AN favorite lighting',
+        title: 'IMG fringe',
+        entries: [
+            {
+                keyword: 'IMG fringe',
+                summary: 'Related but atypical vs the set.',
+                details:
+                    'Prefers images near at least one reference but unlike the set centroid: weird cousins, hybrids, near-misses. Needs one or more hex ids. Mode names only apply when followed by hex ids, so IMG fringe of trees stays a text query.',
+                example: 'IMG fringe #1 #2',
+            },
+        ],
     },
     {
-        keyword: 'TAG',
-        summary: 'Searches image tags.',
-        details: 'Matches assigned tags. Exact tag names are checked directly when the term is written as an exact tag.',
-        example: 'TAG landscape',
+        title: 'IMG diff',
+        entries: [
+            {
+                keyword: 'IMG diff',
+                summary: 'Searches along the A−B difference.',
+                details:
+                    'Uses the difference vector between two embeddings. Aligns with what changes from B to A without requiring a match to A itself. Requires exactly two ids. Order matters (A−B ≠ B−A).',
+                example: 'IMG diff #1 #2',
+            },
+        ],
     },
     {
-        keyword: 'SIMILAR|SM',
-        summary: 'Finds images similar to another image.',
-        details: 'Use an image id after the keyword to compare prompt text. A trailing number can override the similarity threshold.',
-        example: 'SM abc123 0.6',
+        title: 'IMG shared',
+        entries: [
+            {
+                keyword: 'IMG shared',
+                summary: 'Keeps stable traits across references.',
+                details:
+                    'Downweights dimensions that vary a lot within the reference set, then searches near that shared subspace. Better than avg when refs share a subject but disagree on outfit or lighting. Needs at least two hex ids.',
+                example: 'IMG shared #1 #2 #3',
+            },
+        ],
     },
     {
-        keyword: 'IMG',
-        summary: 'Uses image embeddings.',
-        details: 'With no text, matches images that have embeddings. With text, runs an embedding search. A 64-character hex image id uses that image\'s embedding instead of text. Multi-image modes: avg (centroid), all (match every ref), any (match any ref), more <A> <B> (extrapolate past A away from B), fringe (related but atypical), diff <A> <B> (difference axis), shared (stable traits across refs), analogy <A> <B> <C> (A:B as C:?), affinity (belongs with the set). Mode form: IMG avg <id> <id>… — space-separated ids, no +. Mix image ids and text with spaced + and - (positive and negative weights); a leading spaced - works for negative-only queries. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count. Both can be used together in either order. Use -1 as k to force full JavaScript scoring while keeping a threshold.',
-        example: 'IMG avg <id1> <id2> 0.8',
+        title: 'IMG analogy',
+        entries: [
+            {
+                keyword: 'IMG analogy',
+                summary: 'A:B as C:? relational search.',
+                details:
+                    'Builds normalize(C + (B − A)) and searches near it. Apply the A→B transform to C. Requires exactly three ids: IMG analogy <A> <B> <C>.',
+                example: 'IMG analogy #1 #2 #3',
+            },
+        ],
     },
     {
-        keyword: 'ID',
-        summary: 'Matches specific image ids.',
-        details: 'Use one or more image ids to pin the search to those images.',
-        example: 'ID abc123 def456',
+        title: 'IMG affinity',
+        entries: [
+            {
+                keyword: 'IMG affinity',
+                summary: 'Expands a cohesive reference set.',
+                details:
+                    'Scores mean similarity to the references, penalizing uneven match (μ / (1 + σ)). Tighter than any on mixed sets, less muddy than avg — prefers collection fits over one-ref specialists. Needs at least two hex ids.',
+                example: 'IMG affinity #1 #2 #3',
+            },
+        ],
     },
     {
-        keyword: 'VIDEO|VID',
-        summary: 'Filters videos.',
-        details: 'Matches images whose file type is detected as video. VID is the short alias.',
-        example: 'VID',
+        title: 'Result shaping',
+        entries: [
+            {
+                keyword: 'SKIP',
+                summary: 'Drops results from the front.',
+                details: 'Applied after matching. Use a positive integer to skip that many results.',
+                example: 'cat AND SKIP 50',
+            },
+            {
+                keyword: 'TAKE',
+                summary: 'Limits the number of results.',
+                details: 'Applied after matching. Use a positive integer to keep only that many results.',
+                example: 'cat AND TAKE 100',
+            },
+            {
+                keyword: 'MMR',
+                summary: 'Returns diverse embedding-ranked results.',
+                details:
+                    'Use a result count, with an optional candidate count. Requires embeddings and ranks for uniqueness within the current matches.',
+                example: 'cat AND MMR 100 1000',
+            },
+            {
+                keyword: 'IMGSIM',
+                summary: 'Prunes by image-embedding uniqueness.',
+                details:
+                    'Use a result count. After ordinary filters and IMG clauses, keeps embedded matches and repeatedly drops near-duplicates in time order until the count remains.',
+                example: 'IMG red dress AND IMGSIM 200',
+            },
+        ],
     },
-    {
-        keyword: 'SKIP',
-        summary: 'Drops results from the front.',
-        details: 'Applied after matching. Use a positive integer to skip that many results.',
-        example: 'cat AND SKIP 50',
-    },
-    {
-        keyword: 'TAKE',
-        summary: 'Limits the number of results.',
-        details: 'Applied after matching. Use a positive integer to keep only that many results.',
-        example: 'cat AND TAKE 100',
-    },
-    {
-        keyword: 'MMR',
-        summary: 'Returns diverse embedding-ranked results.',
-        details: 'Use a result count, with an optional candidate count. Requires embeddings and ranks for uniqueness/diversity within the current matches.',
-        example: 'cat AND MMR 100 1000',
-    },
-    {
-        keyword: 'IMGSIM',
-        summary: 'Fills remaining results by image similarity.',
-        details: 'Use a result count. It expands from positive IMG matches using image embeddings.',
-        example: 'IMG red dress AND IMGSIM 200',
-    },
-] satisfies readonly SearchKeywordHelp[];
+] as const satisfies readonly SearchKeywordHelpSection[];
 
 export type GlobalSettings = {
     nsfwFilter: string;
