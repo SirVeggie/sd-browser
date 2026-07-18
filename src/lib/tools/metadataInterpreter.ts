@@ -620,13 +620,87 @@ function isComfyProxyWidget(entry: unknown): entry is [string | number, string] 
         && typeof entry[1] === 'string';
 }
 
-function collectNumericWidgetValues(node: ComfyWorkflowNode): number[] {
-    const values: number[] = [];
-    for (const value of asWidgetValues(node.widgets_values)) {
-        if (typeof value === 'number' && Number.isFinite(value))
-            values.push(value);
+function isWorkflowInputWired(input: ComfyWorkflowNodeInput): boolean {
+    return input.link != null;
+}
+
+function isPromptInputWired(value: unknown): boolean {
+    return Array.isArray(value);
+}
+
+function isWidgetValueOverriddenByWire(
+    input: ComfyWorkflowNodeInput,
+    promptNode: ComfyNode | undefined,
+): boolean {
+    if (isWorkflowInputWired(input))
+        return true;
+    if (!promptNode?.inputs)
+        return false;
+    for (const key of [input.name, input.widget?.name]) {
+        if (!key)
+            continue;
+        const value = promptNode.inputs[key];
+        if (value !== undefined && isPromptInputWired(value))
+            return true;
     }
-    return values;
+    return false;
+}
+
+/**
+ * Numeric widget values that are still active (not overwritten by an incoming wire).
+ * Wired widgets keep stale numbers in `widgets_values`; those must not be treated as seeds.
+ */
+function collectActiveNumericWidgetFields(
+    node: ComfyWorkflowNode,
+    promptNode: ComfyNode | undefined,
+): { label: string; value: number; inputKey: string; }[] {
+    const values = asWidgetValues(node.widgets_values);
+    const widgetInputs = (node.inputs ?? []).filter(input => !!input.widget);
+    const results: { label: string; value: number; inputKey: string; }[] = [];
+
+    if (!widgetInputs.length) {
+        for (const value of values) {
+            if (typeof value === 'number' && Number.isFinite(value))
+                results.push({ label: '', value, inputKey: '' });
+        }
+        return results;
+    }
+
+    // When counts match, zip widgets_values to widget-bearing inputs and skip wired ones.
+    if (widgetInputs.length === values.length) {
+        for (let i = 0; i < widgetInputs.length; i++) {
+            const input = widgetInputs[i];
+            if (isWidgetValueOverriddenByWire(input, promptNode))
+                continue;
+            const value = values[i];
+            if (typeof value !== 'number' || !Number.isFinite(value))
+                continue;
+            const inputKey = input.widget?.name ?? input.name;
+            results.push({
+                label: resolveInputLabel(input, inputKey),
+                value,
+                inputKey,
+            });
+        }
+        return results;
+    }
+
+    // Extra control widgets (e.g. control_after_generate) break index alignment.
+    // Prompt literals already exclude wired inputs — prefer those when available.
+    if (promptNode)
+        return collectNumericLiteralFields(promptNode, node);
+
+    // Workflow-only fallback: when any widget is wired we can't map indices safely, so
+    // drop seed-like numbers (covers noise_seed etc. that SEED_RE word-boundaries miss).
+    const hasWiredWidget = widgetInputs.some(isWorkflowInputWired);
+    for (const value of values) {
+        if (typeof value !== 'number' || !Number.isFinite(value))
+            continue;
+        if (hasWiredWidget && isSeedLikeInteger(value))
+            continue;
+        results.push({ label: '', value, inputKey: '' });
+    }
+    return results;
 }
 
 function isLiteralInput(value: unknown): value is string | number | boolean {
@@ -1085,20 +1159,27 @@ function collectComfySeedEntries(
     if (!ctx)
         return entries;
 
-    const collectFromWorkflowNode = (node: ComfyWorkflowNode) => {
-        const nodeLabel = resolveSeedEntryLabel(node.id, prompt[String(node.id)], node, ctx);
-        for (const value of collectNumericWidgetValues(node)) {
-            if (shouldTreatAsSeed(nodeLabel, value))
-                add(nodeLabel, value);
+    const collectFromWorkflowNode = (
+        node: ComfyWorkflowNode,
+        promptNode: ComfyNode | undefined,
+        nodeId: string | number = node.id,
+    ) => {
+        const nodeLabel = resolveSeedEntryLabel(nodeId, promptNode, node, ctx);
+        for (const field of collectActiveNumericWidgetFields(node, promptNode)) {
+            if (shouldTreatAsSeed(nodeLabel, field.value, field.label, field.inputKey))
+                add(nodeLabel, field.value, field.label, field.inputKey);
         }
     };
 
-    for (const node of ctx.workflow.nodes ?? [])
-        collectFromWorkflowNode(node);
-
-    for (const subgraph of ctx.subgraphsByType.values()) {
-        for (const node of subgraph.nodes ?? [])
-            collectFromWorkflowNode(node);
+    for (const node of ctx.workflow.nodes ?? []) {
+        const subgraph = getSubgraphDefinition(ctx, node);
+        if (subgraph) {
+            // Inner prompt keys are "containerId:innerId" — never bare inner ids.
+            for (const inner of subgraph.nodes ?? [])
+                collectFromWorkflowNode(inner, prompt[`${node.id}:${inner.id}`], `${node.id}:${inner.id}`);
+            continue;
+        }
+        collectFromWorkflowNode(node, prompt[String(node.id)]);
     }
 
     return entries;
