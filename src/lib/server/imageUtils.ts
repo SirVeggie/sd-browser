@@ -53,7 +53,10 @@ export function populateServerImage(image: ServerImage, info: ImageExtraData): S
     image.params = info.params;
     image.models = info.models ?? '';
     image.hash = info.hash;
-    image.annotation = info.annotation ?? '';
+    if (info.annotation !== undefined)
+        image.annotation = info.annotation ?? '';
+    else if (image.annotation === undefined)
+        image.annotation = '';
     if (info.tags !== undefined)
         image.tags = info.tags ?? [];
     else if (image.tags === undefined)

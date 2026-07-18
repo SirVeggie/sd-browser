@@ -24,7 +24,6 @@ export function computeExtradataFromFull(full: ServerImageFull): ImageExtraData 
         params,
         models: getModels(full.prompt, full.workflow, full.extra),
         hash: hashPromptFields({ positive, negative, params }),
-        annotation: '',
     };
 }
 
