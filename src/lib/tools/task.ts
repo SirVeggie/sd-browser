@@ -85,7 +85,9 @@ export class TaskManager<T> {
 
             if (task) {
                 this.running.push(task);
-                task.start().finally(() => this.removeRunning(task!));
+                // Rejection is delivered to waiters via task.wait(); swallow here so a
+                // failed task does not become an unhandled rejection and crash Node.
+                task.start().finally(() => this.removeRunning(task!)).catch(() => undefined);
             } else if (this.running.length > 0) {
                 await sleep(this.idleDelay);
             } else {
@@ -128,7 +130,11 @@ export class TaskManager<T> {
     }
 
     waitOne() {
-        return Promise.race(this.running.map(task => task.wait()));
+        // Settle on success or failure so a rejected task frees a slot instead of
+        // aborting the loop.
+        return Promise.race(
+            this.running.map(task => task.wait().then(() => undefined, () => undefined)),
+        );
     }
 
     waitForStart() {

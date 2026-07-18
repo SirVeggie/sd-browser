@@ -10,7 +10,7 @@ export type MediaDimensions = {
 
 export async function readImageDimensions(filepath: string): Promise<MediaDimensions | undefined> {
     try {
-        const meta = await sharp(filepath).metadata();
+        const meta = await sharp(filepath, { failOn: 'truncated' }).metadata();
         if (meta.width && meta.height) {
             return { width: meta.width, height: meta.height };
         }

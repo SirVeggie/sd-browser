@@ -9,6 +9,9 @@ import { skipGeneration } from '$lib/tools/misc';
 import type { EmbeddingApiType } from '$lib/types/embeddings';
 import type { GeneratedQualityMode } from '$lib/types/misc';
 
+/** Local library images (cameras/phones) often have minor JPEG marker issues. */
+const TRUSTED_IMAGE_INPUT: sharp.SharpOptions = { failOn: 'truncated' };
+
 export type QualityTierSettings = {
     width?: number;
     quality: number;
@@ -61,7 +64,7 @@ export function fitImageToMaxTotalPixels(
 }
 
 export async function encodeImageForLlm(imagepath: string): Promise<Buffer> {
-    return sharp(imagepath).jpeg({ quality: 80 }).toBuffer();
+    return sharp(imagepath, TRUSTED_IMAGE_INPUT).jpeg({ quality: 80 }).toBuffer();
 }
 
 /** Encode an image for the configured embedding API. */
@@ -69,7 +72,7 @@ export async function encodeImageForEmbedding(
     imagepath: string,
     apiType: EmbeddingApiType = 'llama-cpp',
 ): Promise<Buffer> {
-    const image = sharp(imagepath);
+    const image = sharp(imagepath, TRUSTED_IMAGE_INPUT);
 
     const metadata = await image.metadata();
     const width = metadata.width;
@@ -127,7 +130,7 @@ export async function generateQualityImage(
 ): Promise<string> {
     const settings = QUALITY_TIER_SETTINGS[tier];
     const webpOptions = buildWebpOptions(settings, smartSubsample);
-    let pipeline = sharp(imagepath);
+    let pipeline = sharp(imagepath, TRUSTED_IMAGE_INPUT);
     if (settings.width) {
         pipeline = pipeline.resize({ width: settings.width });
     }
