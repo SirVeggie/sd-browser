@@ -24,9 +24,8 @@
     MULTIPLE_MODELS,
     UNKNOWN_MODEL,
   } from "$lib/tools/metadataInterpreter";
-  import { compressedMode, useSmartSubsampling } from "$lib/stores/searchStore";
+  import { compressedMode } from "$lib/stores/searchStore";
   import {
-    buildImageQueryParams,
     ComfyAuthRequiredError,
     getComfyWorkflowOpenStatus,
     imageAction,
@@ -41,16 +40,18 @@
   import { tagsStore, upsertTagDefinition } from "$lib/stores/tagsStore";
   import { DEFAULT_TAG_COLOR } from "$lib/types/tags";
   import { fullscreenStyle, imageFadeMs } from "$lib/stores/styleStore";
-  import { get } from "svelte/store";
   import type { ClientImage, ImageInfo } from "$lib/types/images";
   import {
     closeAllContextMenus,
     openContextMenu,
     type ContextMenuOption,
   } from "./ContextMenuManager.svelte";
+  import FullscreenMediaStage from "./FullscreenMediaStage.svelte";
 
   export let cancel: () => void;
   export let image: ClientImage | undefined;
+  export let prevImage: ClientImage | undefined = undefined;
+  export let nextImage: ClientImage | undefined = undefined;
   export let data: ImageInfo | undefined;
   export let enabled = true;
   export let live = false;
@@ -75,9 +76,6 @@
   let imageTags: string[] = [];
   let tagsRowEl: HTMLDivElement | undefined;
   let cardEl: HTMLDivElement | undefined;
-  let mediaLoaded = false;
-  let imgElement: HTMLImageElement | undefined;
-  let videoElement: HTMLVideoElement | undefined;
   let overlayScrollbarVisible = false;
   let overlayScrollbarActive = false;
   let overlayThumbTop = 0;
@@ -87,325 +85,78 @@
   let comfyStatusImageId: string | undefined;
   let comfyWorkflowOpenAvailable = false;
   let comfyWorkflowAuthRequired = false;
-  let loadingMediaUrl = "";
-  let displayMediaUrl = "";
-  let displayMediaIsVideo = false;
-  let displayMediaWidth: number | undefined;
-  let displayMediaHeight: number | undefined;
-  let pendingMediaUrl = "";
-  let placeholderVisible = true;
-  let staleHolding = false;
-  let revealTimer: ReturnType<typeof setTimeout> | undefined;
-  let mediaRetryTimer: ReturnType<typeof setTimeout> | undefined;
-  let staleHoldTimer: ReturnType<typeof setTimeout> | undefined;
-  let mediaRetryCount = 0;
-  let preloadImgElement: HTMLImageElement | undefined;
-  let preloadVideoElement: HTMLVideoElement | undefined;
+
+  let stageId = "";
+  let stageWidth: number | undefined;
+  let stageHeight: number | undefined;
+  /** Info for the on-stage frame only (lags selection while a target loads). */
+  let stageInfo: ImageInfo | undefined;
 
   const comfyTokenStorageKey = "comfyWorkflowOpenToken";
-  const maxMediaRetries = 6;
-  const mediaRetryDelayMs = 400;
-  const staleHoldMs = 200;
 
-  function clearRevealTimer() {
-    if (!revealTimer) return;
-    clearTimeout(revealTimer);
-    revealTimer = undefined;
-  }
-
-  function clearMediaRetryTimer() {
-    if (!mediaRetryTimer) return;
-    clearTimeout(mediaRetryTimer);
-    mediaRetryTimer = undefined;
-  }
-
-  function clearStaleHoldTimer() {
-    if (!staleHoldTimer) return;
-    clearTimeout(staleHoldTimer);
-    staleHoldTimer = undefined;
-  }
-
-  function buildDisplayMediaUrl(baseUrl: string, retryCount: number): string {
-    if (!baseUrl) return "";
-    if (retryCount === 0) return baseUrl;
-    const separator = baseUrl.includes("?") ? "&" : "?";
-    return `${baseUrl}${separator}retry=${retryCount}`;
-  }
-
-  function prefersReducedMotion() {
-    return browser && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }
-
-  function urlsMatch(left: string, right: string): boolean {
-    if (!left || !right) return false;
-    try {
-      return new URL(left, location.origin).href === new URL(right, location.origin).href;
-    } catch {
-      return left === right;
-    }
-  }
-
-  function syncDisplayMediaLayout() {
-    displayMediaIsVideo = image?.type === "video";
-    displayMediaWidth = image?.width;
-    displayMediaHeight = image?.height;
-  }
-
-  function abandonStale(expectedUrl: string) {
-    if (imageUrl !== expectedUrl || !staleHolding) return;
-    staleHolding = false;
-    staleHoldTimer = undefined;
-    displayMediaUrl = pendingMediaUrl || buildDisplayMediaUrl(expectedUrl, mediaRetryCount);
-    syncDisplayMediaLayout();
-    pendingMediaUrl = "";
-    mediaLoaded = false;
-    placeholderVisible = true;
-  }
-
-  function commitStaleSwap(expectedUrl: string) {
-    if (imageUrl !== expectedUrl || !staleHolding) return;
-    clearStaleHoldTimer();
-    staleHolding = false;
-    displayMediaUrl = pendingMediaUrl || buildDisplayMediaUrl(expectedUrl, mediaRetryCount);
-    syncDisplayMediaLayout();
-    pendingMediaUrl = "";
-    mediaLoaded = true;
-    placeholderVisible = false;
-    requestAnimationFrame(updateOverlayScrollbar);
-  }
-
-  function resetReveal(nextUrl: string) {
-    clearRevealTimer();
-    clearMediaRetryTimer();
-    clearStaleHoldTimer();
-    mediaRetryCount = 0;
-    loadingMediaUrl = nextUrl;
-
-    const keepStale = mediaLoaded && !!displayMediaUrl && !!nextUrl;
-    if (keepStale) {
-      staleHolding = true;
-      placeholderVisible = false;
-      pendingMediaUrl = buildDisplayMediaUrl(nextUrl, 0);
-      staleHoldTimer = setTimeout(() => {
-        staleHoldTimer = undefined;
-        abandonStale(nextUrl);
-      }, staleHoldMs);
-      return;
-    }
-
-    staleHolding = false;
-    pendingMediaUrl = "";
-    displayMediaUrl = buildDisplayMediaUrl(nextUrl, 0);
-    syncDisplayMediaLayout();
-    mediaLoaded = false;
-    placeholderVisible = !!nextUrl;
-  }
-
-  function scheduleMediaRetry(expectedBaseUrl: string) {
-    if (imageUrl !== expectedBaseUrl) return;
-    if (mediaRetryCount >= maxMediaRetries) return;
-
-    clearMediaRetryTimer();
-    mediaRetryCount += 1;
-
-    if (staleHolding) {
-      mediaRetryTimer = setTimeout(() => {
-        mediaRetryTimer = undefined;
-        if (imageUrl !== expectedBaseUrl || !staleHolding) return;
-        pendingMediaUrl = buildDisplayMediaUrl(expectedBaseUrl, mediaRetryCount);
-      }, mediaRetryDelayMs);
-      return;
-    }
-
-    placeholderVisible = true;
-    mediaLoaded = false;
-    mediaRetryTimer = setTimeout(() => {
-      mediaRetryTimer = undefined;
-      if (imageUrl !== expectedBaseUrl) return;
-      displayMediaUrl = buildDisplayMediaUrl(expectedBaseUrl, mediaRetryCount);
-    }, mediaRetryDelayMs);
-  }
-
-  function clearPlaceholderAfterFade(expectedUrl: string) {
-    if (imageUrl !== expectedUrl) return;
-    placeholderVisible = false;
-  }
-
-  function isPreloadMediaElement(element: EventTarget | null): boolean {
-    return element instanceof HTMLElement && element.classList.contains("media-preload");
-  }
-
-  function pendingMediaReady(): boolean {
-    if (!pendingMediaUrl) return false;
-    if (
-      preloadImgElement?.complete &&
-      preloadImgElement.naturalWidth > 0 &&
-      elementMatchesUrl(preloadImgElement, pendingMediaUrl)
-    ) {
-      return true;
-    }
-    if (
-      preloadVideoElement &&
-      preloadVideoElement.readyState >= 2 &&
-      elementMatchesUrl(preloadVideoElement, pendingMediaUrl)
-    ) {
-      return true;
-    }
-    return false;
-  }
-
-  function startReveal(expectedUrl: string) {
-    if (imageUrl !== expectedUrl) return;
-
-    if (staleHolding) {
-      if (!pendingMediaReady()) return;
-      commitStaleSwap(expectedUrl);
-      return;
-    }
-
-    if (mediaLoaded) return;
-
-    mediaLoaded = true;
-    requestAnimationFrame(updateOverlayScrollbar);
-
-    if (!placeholderVisible || prefersReducedMotion() || get(imageFadeMs) <= 0) {
-      placeholderVisible = false;
-      return;
-    }
-
-    clearRevealTimer();
-    revealTimer = setTimeout(() => {
-      revealTimer = undefined;
-      clearPlaceholderAfterFade(expectedUrl);
-    }, get(imageFadeMs));
-  }
-
-  function markMediaReady(expectedUrl: string) {
-    if (imageUrl !== expectedUrl) return;
-    startReveal(expectedUrl);
-  }
-
-  function createMediaReadyHandler(expectedUrl: string) {
-    return (event: Event) => {
-      if (staleHolding && !isPreloadMediaElement(event.currentTarget)) return;
-      markMediaReady(expectedUrl);
-    };
-  }
-
-  function createMediaErrorHandler(expectedUrl: string) {
-    return (event: Event) => {
-      if (staleHolding && !isPreloadMediaElement(event.currentTarget)) return;
-      scheduleMediaRetry(expectedUrl);
-    };
-  }
-
-  function createImageReadyHandler(expectedUrl: string) {
-    return async (event: Event) => {
-      const element = event.currentTarget;
-      if (!(element instanceof HTMLImageElement)) return;
-      if (staleHolding && !isPreloadMediaElement(element)) return;
-
-      try {
-        await element.decode();
-      } catch {
-        // A loaded image may reject decode for browser-specific reasons; still reveal it.
-      }
-      markMediaReady(expectedUrl);
-    };
-  }
-
-  function elementMatchesUrl(
-    element: HTMLImageElement | HTMLVideoElement,
-    expectedUrl: string,
-  ): boolean {
-    if (!expectedUrl) return false;
-    const elSrc = element.currentSrc || element.src;
-    return urlsMatch(elSrc, expectedUrl);
-  }
-
-  function checkMediaAlreadyReady() {
-    if (!imageUrl) return;
-
-    if (staleHolding && pendingMediaUrl) {
-      if (
-        preloadImgElement?.complete &&
-        preloadImgElement.naturalWidth > 0 &&
-        elementMatchesUrl(preloadImgElement, pendingMediaUrl)
-      ) {
-        startReveal(imageUrl);
-      } else if (
-        preloadVideoElement &&
-        preloadVideoElement.readyState >= 2 &&
-        elementMatchesUrl(preloadVideoElement, pendingMediaUrl)
-      ) {
-        startReveal(imageUrl);
-      }
-      return;
-    }
-
-    if (
-      imgElement?.complete &&
-      imgElement.naturalWidth > 0 &&
-      elementMatchesUrl(imgElement, displayMediaUrl)
-    ) {
-      startReveal(imageUrl);
-    } else if (
-      videoElement &&
-      videoElement.readyState >= 2 &&
-      elementMatchesUrl(videoElement, displayMediaUrl)
-    ) {
-      startReveal(imageUrl);
-    }
-  }
-
-  $: displayHasAspect = !!(displayMediaWidth && displayMediaHeight);
   $: mediaStyle = [
-    displayHasAspect
-      ? `--media-ratio: ${displayMediaWidth / displayMediaHeight}; aspect-ratio: ${displayMediaWidth} / ${displayMediaHeight}`
+    stageWidth && stageHeight
+      ? `--media-ratio: ${stageWidth / stageHeight}; aspect-ratio: ${stageWidth} / ${stageHeight}`
       : "",
     `--image-fade-ms: ${$imageFadeMs}ms`,
   ].filter(Boolean).join("; ");
 
-  $: if (data) imageTags = data.tags ?? [];
+  $: if (!stageId) {
+    stageInfo = undefined;
+  } else if (data?.id === stageId) {
+    stageInfo = data;
+  } else if (stageInfo?.id !== stageId) {
+    // Stage advanced before selection info arrived — hide stale metadata.
+    stageInfo = undefined;
+  }
+
+  $: if (stageInfo) imageTags = stageInfo.tags ?? [];
   $: availableTags = $tagsStore.tags
     .map((tag) => tag.name)
     .filter((name) => !imageTags.includes(name));
 
   $: full = $fullscreenStyle;
-  $: imageUrl = image?.id
-    ? `/api/images/${image.id}?${buildImageQueryParams(showOriginal ? "original" : $compressedMode, $useSmartSubsampling)}`
-    : "";
-  $: if (imageUrl !== loadingMediaUrl) resetReveal(imageUrl);
-  $: imageUrl, imgElement, videoElement, preloadImgElement, preloadVideoElement, pendingMediaUrl, checkMediaAlreadyReady();
-  $: basicInfo = !data ? "" : extractBasic(data);
-  $: promptInfo = !data ? [] : buildPromptInfo(data);
-  $: annotationText = data?.annotation ?? "";
-  $: fullPrompt = !data ? "" : data.prompt;
-  $: hasMetadataBlobs = !!(data?.prompt != null || data?.workflow != null || data?.extra != null);
-  $: prompts = !data || !hasMetadataBlobs
+  $: basicInfo = !stageInfo ? "" : extractBasic(stageInfo);
+  $: promptInfo = !stageInfo ? [] : buildPromptInfo(stageInfo);
+  $: annotationText = stageInfo?.annotation ?? "";
+  $: fullPrompt = !stageInfo ? "" : stageInfo.prompt;
+  $: hasMetadataBlobs = !!(stageInfo?.prompt != null || stageInfo?.workflow != null || stageInfo?.extra != null);
+  $: prompts = !stageInfo || !hasMetadataBlobs
     ? undefined
-    : getPrompts(data.prompt, data.workflow, data.extra, true);
-  $: svPositivePrompt = !data
+    : getPrompts(stageInfo.prompt, stageInfo.workflow, stageInfo.extra, true);
+  $: svPositivePrompt = !stageInfo
     ? ""
-    : prompts?.ogpos || (hasMetadataBlobs ? getSvPositivePrompt(data.prompt) : "");
-  $: svNegativePrompt = !data
+    : prompts?.ogpos || (hasMetadataBlobs ? getSvPositivePrompt(stageInfo.prompt) : "");
+  $: svNegativePrompt = !stageInfo
     ? ""
-    : prompts?.ogneg || (hasMetadataBlobs ? getSvNegativePrompt(data.prompt) : "");
-  $: paramsPrompt = !data ? "" : (prompts?.params ?? data.params ?? "");
-  $: workflowPrompt = !data ? "" : data.workflow;
+    : prompts?.ogneg || (hasMetadataBlobs ? getSvNegativePrompt(stageInfo.prompt) : "");
+  $: paramsPrompt = !stageInfo ? "" : (prompts?.params ?? stageInfo.params ?? "");
+  $: workflowPrompt = !stageInfo ? "" : stageInfo.workflow;
   $: {
     showOriginal = showOriginal && !!image;
   }
-  $: if (enabled && image?.id && data?.workflow && comfyStatusImageId !== image.id) {
-    comfyStatusImageId = image.id;
+  $: if (enabled && stageId && stageInfo?.workflow && comfyStatusImageId !== stageId) {
+    comfyStatusImageId = stageId;
     comfyWorkflowOpenAvailable = false;
     comfyWorkflowAuthRequired = false;
-    void refreshComfyWorkflowOpenStatus(image.id);
+    void refreshComfyWorkflowOpenStatus(stageId);
   }
-  $: if (!enabled || !image?.id || !data?.workflow) {
+  $: if (!enabled || !stageId || !stageInfo?.workflow) {
     comfyStatusImageId = undefined;
     comfyWorkflowOpenAvailable = false;
     comfyWorkflowAuthRequired = false;
+  }
+
+  function onStageChange(event: CustomEvent<{ id: string; width?: number; height?: number }>) {
+    stageId = event.detail.id;
+    stageWidth = event.detail.width;
+    stageHeight = event.detail.height;
+    if (data?.id === stageId) {
+      stageInfo = data;
+    } else if (stageInfo?.id !== stageId) {
+      stageInfo = undefined;
+    }
+    queueMicrotask(updateOverlayScrollbar);
   }
 
   function hasBlobs(d: ImageInfo): boolean {
@@ -611,7 +362,7 @@
   function getTopMetadataActions(): ContextMenuOption[] {
     const actions: ContextMenuOption[] = [];
 
-    if (data?.workflow) {
+    if (stageInfo?.workflow) {
       if (comfyWorkflowOpenAvailable) {
         actions.push({ name: "Open in ComfyUI", handler: openInComfy });
       } else if (comfyWorkflowAuthRequired) {
@@ -619,7 +370,7 @@
       } else {
         actions.push({ name: "Copy workflow", handler: copyWorkflow });
       }
-    } else if (data?.prompt) {
+    } else if (stageInfo?.prompt) {
       actions.push({ name: "Copy all", handler: copyPrompt });
     }
 
@@ -629,7 +380,7 @@
     });
 
     actions.push({
-      name: data?.annotation ? "Edit annotation" : "Add annotation",
+      name: stageInfo?.annotation ? "Edit annotation" : "Add annotation",
       handler: openAnnotationModal,
     });
 
@@ -662,7 +413,7 @@
     content: string | undefined,
     name: string,
   ) {
-    if (!image?.id) return;
+    if (!stageId) return;
     if (!element) return;
     if (!content) return notify(`No ${name} to copy`);
     if (!navigator?.clipboard?.writeText) {
@@ -683,11 +434,11 @@
   }
 
   function copyId() {
-    if (!image?.id) return;
+    if (!stageId) return;
     if (!navigator?.clipboard?.writeText) return notify("Clipboard unavailable");
 
     navigator.clipboard
-      .writeText(image.id)
+      .writeText(stageId)
       .then(() => {
         notify("Copied id to clipboard");
       })
@@ -701,11 +452,11 @@
   }
 
   function copyPositive() {
-    copyInfo(hiddenElementPos, prompts?.pos ?? data?.positive, "positive");
+    copyInfo(hiddenElementPos, prompts?.pos ?? stageInfo?.positive, "positive");
   }
 
   function copyNegative() {
-    copyInfo(hiddenElementNeg, prompts?.neg ?? data?.negative, "negative");
+    copyInfo(hiddenElementNeg, prompts?.neg ?? stageInfo?.negative, "negative");
   }
 
   function copySvPositive() {
@@ -754,12 +505,12 @@
   async function refreshComfyWorkflowOpenStatus(imageId: string) {
     try {
       const status = await getComfyWorkflowOpenStatus(getStoredComfyToken());
-      if (image?.id === imageId && data?.workflow) {
+      if (stageId === imageId && stageInfo?.workflow) {
         comfyWorkflowOpenAvailable = status.available;
         comfyWorkflowAuthRequired = !!status.authRequired;
       }
     } catch {
-      if (image?.id === imageId) {
+      if (stageId === imageId) {
         comfyWorkflowOpenAvailable = false;
         comfyWorkflowAuthRequired = false;
       }
@@ -767,11 +518,11 @@
   }
 
   async function connectComfy() {
-    if (!image?.id) return;
+    if (!stageId) return;
     const token = askComfyToken();
     if (!token) return;
 
-    await refreshComfyWorkflowOpenStatus(image.id);
+    await refreshComfyWorkflowOpenStatus(stageId);
     if (comfyWorkflowOpenAvailable) {
       notify("Connected to ComfyUI");
     } else {
@@ -780,16 +531,16 @@
   }
 
   async function openInComfy() {
-    if (!image?.id) return;
+    if (!stageId) return;
     try {
-      await openWorkflowInComfy(image.id, getStoredComfyToken());
+      await openWorkflowInComfy(stageId, getStoredComfyToken());
       notify("Opened workflow in ComfyUI");
     } catch (cause) {
       if (cause instanceof ComfyAuthRequiredError) {
         const token = askComfyToken();
         if (!token) return;
         try {
-          await openWorkflowInComfy(image.id, token);
+          await openWorkflowInComfy(stageId, token);
           comfyWorkflowOpenAvailable = true;
           comfyWorkflowAuthRequired = false;
           notify("Opened workflow in ComfyUI");
@@ -809,17 +560,18 @@
   }
 
   function deleteImage() {
-    if (!image?.id) return;
-    imageAction(image.id, {
+    if (!stageId) return;
+    imageAction(stageId, {
       type: "delete",
     }).then(cancel);
   }
 
   async function persistImageTags(next: string[]) {
-    if (!image?.id) return;
+    if (!stageId) return;
     try {
-      imageTags = await updateImageTags(image.id, next);
-      if (data) data = { ...data, tags: imageTags };
+      imageTags = await updateImageTags(stageId, next);
+      if (stageInfo) stageInfo = { ...stageInfo, tags: imageTags };
+      if (data?.id === stageId) data = { ...data, tags: imageTags };
     } catch (cause) {
       console.error(cause);
       notify(cause instanceof Error ? cause.message : "Failed to update tags", "warn");
@@ -827,7 +579,7 @@
   }
 
   function openAnnotationModal() {
-    annotationDraft = data?.annotation ?? "";
+    annotationDraft = stageInfo?.annotation ?? "";
     annotationModalOpen = true;
   }
 
@@ -837,11 +589,12 @@
   }
 
   async function saveAnnotation(event: CustomEvent<{ text: string }>) {
-    if (!image?.id || annotationSaving) return;
+    if (!stageId || annotationSaving) return;
     annotationSaving = true;
     try {
-      const annotation = await updateImageAnnotation(image.id, event.detail.text);
-      if (data) data = { ...data, annotation };
+      const annotation = await updateImageAnnotation(stageId, event.detail.text);
+      if (stageInfo) stageInfo = { ...stageInfo, annotation };
+      if (data?.id === stageId) data = { ...data, annotation };
       annotationModalOpen = false;
     } catch (cause) {
       console.error(cause);
@@ -973,15 +726,12 @@
     };
   }
 
-  $: if (enabled && image?.id && data) {
+  $: if (enabled && stageId && stageInfo) {
     // Recalculate after metadata / layout changes settle.
     queueMicrotask(updateOverlayScrollbar);
   }
 
   onDestroy(() => {
-    clearRevealTimer();
-    clearMediaRetryTimer();
-    clearStaleHoldTimer();
     clearOverlayScrollFadeTimer();
     cardResizeObserver?.disconnect();
     cardResizeObserver = undefined;
@@ -1003,74 +753,23 @@
             <div
               class="media-container"
               class:full
-              class:has-aspect={displayHasAspect}
+              class:has-aspect={!!(stageWidth && stageHeight)}
               class:no-fade={$imageFadeMs <= 0}
               style={mediaStyle}
             >
-            {#if placeholderVisible}
-              <div class="loading-slot">
-                <div class="dot-loader" aria-hidden="true">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              </div>
-            {/if}
-            {#if pendingMediaUrl}
-              {#key pendingMediaUrl}
-                {#if image.type === "video"}
-                  <video
-                    bind:this={preloadVideoElement}
-                    class="media-preload"
-                    muted
-                    preload="auto"
-                    src={pendingMediaUrl}
-                    on:canplay={createMediaReadyHandler(imageUrl)}
-                    on:error={createMediaErrorHandler(imageUrl)}
-                  >
-                    <source src={pendingMediaUrl} type="video/mp4" />
-                  </video>
-                {:else}
-                  <img
-                    bind:this={preloadImgElement}
-                    class="media-preload"
-                    src={pendingMediaUrl}
-                    alt=""
-                    on:load={createImageReadyHandler(imageUrl)}
-                    on:error={createMediaErrorHandler(imageUrl)}
-                  />
-                {/if}
-              {/key}
-            {/if}
-            {#key displayMediaUrl}
-              {#if displayMediaIsVideo}
-                <video
-                  bind:this={videoElement}
-                  autoplay
-                  loop
-                  muted
-                  preload="metadata"
-                  src={displayMediaUrl}
-                  class:hidden={!mediaLoaded}
-                  on:canplay={createMediaReadyHandler(imageUrl)}
-                  on:error={createMediaErrorHandler(imageUrl)}
-                >
-                  <source src={displayMediaUrl} type="video/mp4" />
-                </video>
-              {:else}
-                <img
-                  bind:this={imgElement}
-                  src={displayMediaUrl}
-                  alt={image.id}
-                  class:hidden={!mediaLoaded}
-                  on:load={createImageReadyHandler(imageUrl)}
-                  on:error={createMediaErrorHandler(imageUrl)}
-                />
-              {/if}
-            {/key}
+            <FullscreenMediaStage
+              {image}
+              {prevImage}
+              {nextImage}
+              {showOriginal}
+              bind:stageId
+              bind:stageWidth
+              bind:stageHeight
+              on:stagechange={onStageChange}
+            />
           </div>
           <!-- svelte-ignore a11y-click-events-have-key-events -->
-          {#if data}
+          {#if stageInfo}
             <div class="info" on:click={prevent}>
               <div class="basic">
                 <p>{basicInfo}</p>
@@ -1155,7 +854,7 @@
   {/if}
   {#if annotationModalOpen}
     <AnnotationModal
-      title={data?.annotation ? "Edit annotation" : "Add annotation"}
+      title={stageInfo?.annotation ? "Edit annotation" : "Add annotation"}
       bind:text={annotationDraft}
       saving={annotationSaving}
       on:save={saveAnnotation}
@@ -1260,7 +959,7 @@
         will-change: transform;
       }
 
-      .media-container {
+        .media-container {
         position: relative;
         display: grid;
         align-items: center;
@@ -1273,107 +972,29 @@
           aspect-ratio: var(--media-ratio);
         }
 
-        .loading-slot {
+        &.no-fade :global(img),
+        &.no-fade :global(video) {
+          transition: none;
+        }
+
+        :global(.stage) {
           grid-area: 1 / 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
           width: 100%;
           height: 100%;
           min-height: min(40vh, 20em);
         }
 
-        .media-preload {
-          position: absolute;
-          width: 0;
-          height: 0;
-          opacity: 0;
-          pointer-events: none;
-          visibility: hidden;
-        }
-
-        .dot-loader {
-          --loader-accent: var(--accent);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.45em;
-          filter: drop-shadow(0 0 0.35em rgba(196, 165, 116, 0.75));
-          pointer-events: none;
-
-          span {
-            width: 0.34em;
-            height: 0.34em;
-            border-radius: 50%;
-            background: var(--loader-accent);
-            box-shadow:
-              0 0 0.45em rgba(196, 165, 116, 0.9),
-              0 0 1em rgba(196, 165, 116, 0.35);
-            opacity: 0.65;
-            animation: loader-dot-wave 900ms ease-in-out infinite;
-          }
-
-          span:nth-child(2) {
-            animation-delay: 120ms;
-          }
-
-          span:nth-child(3) {
-            animation-delay: 240ms;
-          }
-        }
-
-        @keyframes loader-dot-wave {
-          0%,
-          80%,
-          100% {
-            opacity: 0.45;
-            transform: translateY(0);
-          }
-
-          40% {
-            opacity: 1;
-            transform: translateY(-0.45em);
-          }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .dot-loader span {
-            animation: none;
-            opacity: 0.8;
-          }
-        }
-
-        &.has-aspect .loading-slot {
+        &.has-aspect :global(.stage) {
           min-height: 0;
         }
 
-        &.no-fade {
-          img,
-          video {
-            transition: none;
-          }
+        &.full :global(.stage) {
+          min-height: 0;
         }
 
-        img,
-        video {
-          grid-area: 1 / 1;
-          display: block;
-          width: 100%;
-          height: 100%;
+        :global(img),
+        :global(video) {
           max-height: calc(100dvh - var(--pad) * 2);
-          max-width: 100%;
-          object-fit: contain;
-          transition: opacity var(--image-fade-ms, 180ms) ease;
-
-          &.hidden {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-          }
-        }
-
-        &.full .loading-slot {
-          min-height: 0;
         }
       }
 
@@ -1406,10 +1027,9 @@
             width: min(100%, calc(100dvh * var(--media-ratio)));
           }
 
-          img,
-          video {
+          :global(img),
+          :global(video) {
             max-height: 100dvh;
-            z-index: 100;
           }
         }
 

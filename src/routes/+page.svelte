@@ -668,6 +668,7 @@
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         // do nothing if not left click
         if (e && e instanceof MouseEvent && e.button !== 0) return;
+        inputElement?.blur();
         currentImage = img;
         loadFullscreenImageInfo(img.id);
 
@@ -2221,6 +2222,12 @@
 <ImageFull
     enabled={!!currentImage || !!live}
     image={live ? newestImage : currentImage}
+    prevImage={live || prevIndex < 0 ? undefined : galleryImages[prevIndex]}
+    nextImage={live
+        ? undefined
+        : nextIndex >= 0 && nextIndex < galleryImages.length
+          ? galleryImages[nextIndex]
+          : undefined}
     data={info}
     {live}
     cancel={closeImage}
@@ -2266,12 +2273,16 @@
         position: fixed;
         left: max(10px, calc(var(--main-padding) / 2));
         right: calc(max(10px, calc(var(--main-padding) / 2)) + var(--flyout-width));
-        bottom: 10px;
+        top: 0;
+        height: 100dvh;
         z-index: 8;
         display: flex;
         flex-direction: column;
+        justify-content: flex-end;
         align-items: flex-start;
         gap: 6px;
+        padding-bottom: 10px;
+        box-sizing: border-box;
         pointer-events: none;
 
         :global(.flanimate) & {
@@ -2281,7 +2292,7 @@
         @media (width < 501px) {
             left: 8px;
             right: calc(8px + var(--flyout-width));
-            bottom: 8px;
+            padding-bottom: 8px;
         }
     }
 
