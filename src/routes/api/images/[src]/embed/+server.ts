@@ -3,6 +3,7 @@ import { getImage } from "$lib/server/dataIndex.js";
 import { EmbeddingDB } from "$lib/server/embeddingDb.js";
 import { vectorizeImage } from "$lib/server/embeddings.js";
 import { error, success } from "$lib/server/responses.js";
+import { canVectorizeImage } from "$lib/tools/misc.js";
 import { isEmbeddingConfigured } from "$lib/types/embeddings.js";
 import type { BulkEmbeddingConfig } from "$lib/types/requests.js";
 
@@ -19,7 +20,8 @@ export async function POST(e) {
     if (err) return err;
 
     const id = e.params.src;
-    if (!getImage(id)) {
+    const image = getImage(id);
+    if (!image) {
         return error("Image not found", 404);
     }
 
@@ -32,6 +34,10 @@ export async function POST(e) {
 
     if (!isEmbedRequest(body) || !body.embedding?.baseUrl || !isEmbeddingConfigured(body.embedding)) {
         return error("Embedding settings are incomplete", 400);
+    }
+
+    if (!canVectorizeImage(image)) {
+        return success({ status: "skipped" });
     }
 
     if (EmbeddingDB.hasImageEmbedding(id)) {

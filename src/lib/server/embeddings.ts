@@ -10,7 +10,7 @@ import {
     isEmbeddingConfigured,
     normalizeEmbeddingSettings,
 } from "$lib/types/embeddings";
-import { getEmbeddingImagePath } from "$lib/tools/misc";
+import { canVectorizeImage, getEmbeddingImagePath } from "$lib/tools/misc";
 import { logSearchTiming, startSearchTiming } from "./searchTiming";
 
 const EMBEDDING_REQUEST_TIMEOUT_MS = 120_000;
@@ -396,19 +396,16 @@ export async function embedQuery(
     return embedding;
 }
 
-async function embedImagePaths(
+async function embedEncodedImages(
     config: EmbeddingRequestConfig,
-    imagePaths: string[],
+    buffers: Buffer[],
     mediaMarker?: string,
 ): Promise<Float32Array[]> {
-    if (imagePaths.length === 0) {
+    if (buffers.length === 0) {
         return [];
     }
 
     const api = toApiConfig(config);
-    const buffers = await Promise.all(
-        imagePaths.map((path) => encodeImageForEmbedding(path, api.apiType)),
-    );
     const imageBase64s = buffers.map((buffer) => buffer.toString("base64"));
 
     switch (api.apiType) {
@@ -426,10 +423,30 @@ async function embedImagePaths(
     }
 }
 
+async function embedImagePaths(
+    config: EmbeddingRequestConfig,
+    imagePaths: string[],
+    mediaMarker?: string,
+): Promise<Float32Array[]> {
+    if (imagePaths.length === 0) {
+        return [];
+    }
+
+    const api = toApiConfig(config);
+    const buffers = await Promise.all(
+        imagePaths.map((path) => encodeImageForEmbedding(path, api.apiType)),
+    );
+    return embedEncodedImages(config, buffers, mediaMarker);
+}
+
 export type VectorizeBatchFailure = {
     id: string;
     message: string;
 };
+
+function failureMessage(cause: unknown): string {
+    return cause instanceof Error ? cause.message : String(cause);
+}
 
 /** Vectorize up to apiBatch images in a single embedding API request. */
 export async function vectorizeImageBatch(
@@ -445,6 +462,9 @@ export async function vectorizeImageBatch(
         if (!image) {
             continue;
         }
+        if (!canVectorizeImage(image)) {
+            continue;
+        }
         if (!force && EmbeddingDB.hasImageEmbedding(id)) {
             continue;
         }
@@ -455,20 +475,63 @@ export async function vectorizeImageBatch(
         return [];
     }
 
+    const api = toApiConfig(config);
+    const failures: VectorizeBatchFailure[] = [];
+    const encoded: { id: string; buffer: Buffer }[] = [];
+
+    // Encode one-by-one so a corrupt file only fails that image.
+    for (const item of toProcess) {
+        try {
+            const buffer = await encodeImageForEmbedding(item.path, api.apiType);
+            encoded.push({ id: item.id, buffer });
+        } catch (cause) {
+            const message = failureMessage(cause);
+            console.error(`Vectorize encode failed (${item.id}): ${message}`);
+            failures.push({ id: item.id, message });
+        }
+    }
+
+    if (encoded.length === 0) {
+        return failures;
+    }
+
     try {
-        const embeddings = await embedImagePaths(
+        const embeddings = await embedEncodedImages(
             config,
-            toProcess.map((item) => item.path),
+            encoded.map((item) => item.buffer),
             options.mediaMarker,
         );
-        for (let i = 0; i < toProcess.length; i++) {
-            EmbeddingDB.setImageEmbedding(toProcess[i].id, embeddings[i]);
+        for (let i = 0; i < encoded.length; i++) {
+            EmbeddingDB.setImageEmbedding(encoded[i].id, embeddings[i]);
         }
-        return [];
+        return failures;
     } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.error(`Vectorize batch failed (${toProcess.length} images): ${message}`);
-        return toProcess.map((item) => ({ id: item.id, message }));
+        const message = failureMessage(cause);
+        // Batch API reject: retry singly so one bad image doesn't sink the rest.
+        if (encoded.length === 1) {
+            console.error(`Vectorize failed (${encoded[0].id}): ${message}`);
+            failures.push({ id: encoded[0].id, message });
+            return failures;
+        }
+
+        console.error(
+            `Vectorize batch failed (${encoded.length} images), retrying individually: ${message}`,
+        );
+        for (const item of encoded) {
+            try {
+                const [embedding] = await embedEncodedImages(
+                    config,
+                    [item.buffer],
+                    options.mediaMarker,
+                );
+                EmbeddingDB.setImageEmbedding(item.id, embedding);
+            } catch (individualCause) {
+                const individualMessage = failureMessage(individualCause);
+                console.error(`Vectorize failed (${item.id}): ${individualMessage}`);
+                failures.push({ id: item.id, message: individualMessage });
+            }
+        }
+        return failures;
     }
 }
 
@@ -488,6 +551,7 @@ export async function vectorizeImage(
 ): Promise<boolean> {
     const image = getImage(id);
     if (!image) return false;
+    if (!canVectorizeImage(image)) return false;
 
     const force = options.force ?? false;
     if (!force && EmbeddingDB.hasImageEmbedding(id)) {

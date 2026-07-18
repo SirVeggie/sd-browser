@@ -33,6 +33,13 @@ export function getImageType(image: ServerImage): undefined | 'video' {
     return isVideo(image.file) ? 'video' : undefined;
 }
 
+/** Videos need a preview PNG to embed; still images always can. */
+export function canVectorizeImage(image: { file: string; preview: string }): boolean {
+    if (!isVideo(image.file))
+        return true;
+    return Boolean(image.preview);
+}
+
 /** Image path used for embedding/vectorization (preview PNG for videos). */
 export function getEmbeddingImagePath(image: { file: string; preview: string }): string {
     if (!isVideo(image.file))

@@ -1,4 +1,4 @@
-import { limitedParallelMap, updateLine } from "$lib/tools/misc";
+import { canVectorizeImage, limitedParallelMap, updateLine } from "$lib/tools/misc";
 import type { BulkRequest } from "$lib/types/requests";
 import { isEmbeddingConfigured } from "$lib/types/embeddings";
 import { notifyMetadataChange } from "./imageChangeHub";
@@ -69,9 +69,30 @@ async function resolveBulkImageIds(request: BulkRequest): Promise<string[]> {
 
 function filterVectorizeWorkIds(ids: string[], force: boolean): string[] {
     return ids.filter((id) => {
-        if (!getImage(id)) return false;
+        const image = getImage(id);
+        if (!image || !canVectorizeImage(image)) return false;
         return force || !EmbeddingDB.hasImageEmbedding(id);
     });
+}
+
+function countVectorizeSkips(ids: string[], force: boolean): {
+    alreadyEmbedded: number;
+    noPreview: number;
+} {
+    let alreadyEmbedded = 0;
+    let noPreview = 0;
+    for (const id of ids) {
+        const image = getImage(id);
+        if (!image) continue;
+        if (!canVectorizeImage(image)) {
+            noPreview++;
+            continue;
+        }
+        if (!force && EmbeddingDB.hasImageEmbedding(id)) {
+            alreadyEmbedded++;
+        }
+    }
+    return { alreadyEmbedded, noPreview };
 }
 
 export async function runBulkAction(
@@ -306,11 +327,21 @@ export async function runBulkAction(
 
             const workIds = filterVectorizeWorkIds(ids, vectorizeOptions.force);
             const workTotal = workIds.length;
+            const skips = countVectorizeSkips(ids, vectorizeOptions.force);
             onProgress(completed, workTotal);
 
             if (workTotal === 0) {
                 updateLine("");
-                if (ids.length > 0) {
+                if (ids.length === 0) {
+                    return completeBulk(false);
+                }
+                console.log(
+                    `Bulk vectorize: nothing to embed`
+                    + (skips.alreadyEmbedded ? ` (${skips.alreadyEmbedded} already embedded)` : "")
+                    + (skips.noPreview ? ` (${skips.noPreview} videos without preview skipped)` : ""),
+                );
+                // Only error when every item was already embedded (nothing skipped for other reasons).
+                if (skips.alreadyEmbedded > 0 && skips.noPreview === 0) {
                     throw new Error(
                         `All ${ids.length} matching image${ids.length === 1 ? "" : "s"} `
                         + `${ids.length === 1 ? "is" : "are"} already embedded. `
@@ -322,11 +353,11 @@ export async function runBulkAction(
 
             const batchSize = Math.max(1, request.embedding.apiBatch || 1);
             const mediaMarker = await fetchMediaMarkerForConfig(request.embedding);
-            const skipped = ids.length - workTotal;
 
             console.log(
                 `Bulk vectorize: ${workTotal} images to embed`
-                + (skipped ? ` (${skipped} already embedded, skipped)` : "")
+                + (skips.alreadyEmbedded ? ` (${skips.alreadyEmbedded} already embedded, skipped)` : "")
+                + (skips.noPreview ? ` (${skips.noPreview} videos without preview skipped)` : "")
                 + `, ${batchSize} per API request`,
             );
             for (let i = 0; i < workIds.length; i += batchSize) {

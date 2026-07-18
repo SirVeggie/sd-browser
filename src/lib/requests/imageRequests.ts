@@ -388,7 +388,7 @@ export async function openWorkflowInComfy(imageId: string, comfyToken?: string, 
         return;
 }
 
-export type ImageEmbedEnsureStatus = "exists" | "created" | "failed";
+export type ImageEmbedEnsureStatus = "exists" | "created" | "failed" | "skipped";
 
 export type ImageEmbedEnsureResult = {
     id: string;
@@ -397,7 +397,7 @@ export type ImageEmbedEnsureResult = {
 };
 
 function isImageEmbedEnsureStatus(value: unknown): value is ImageEmbedEnsureStatus {
-    return value === "exists" || value === "created" || value === "failed";
+    return value === "exists" || value === "created" || value === "failed" || value === "skipped";
 }
 
 export async function ensureImageEmbedding(
