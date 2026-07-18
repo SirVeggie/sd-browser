@@ -89,19 +89,23 @@
   let comfyWorkflowAuthRequired = false;
   let loadingMediaUrl = "";
   let displayMediaUrl = "";
+  let displayMediaIsVideo = false;
+  let displayMediaWidth: number | undefined;
+  let displayMediaHeight: number | undefined;
+  let pendingMediaUrl = "";
   let placeholderVisible = true;
-  let placeholderLeaving = false;
+  let staleHolding = false;
   let revealTimer: ReturnType<typeof setTimeout> | undefined;
   let mediaRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  let staleHoldTimer: ReturnType<typeof setTimeout> | undefined;
   let mediaRetryCount = 0;
+  let preloadImgElement: HTMLImageElement | undefined;
+  let preloadVideoElement: HTMLVideoElement | undefined;
 
   const comfyTokenStorageKey = "comfyWorkflowOpenToken";
   const maxMediaRetries = 6;
   const mediaRetryDelayMs = 400;
-
-  function placeholderLeaveMs(fadeMs: number) {
-    return Math.max(0, Math.floor(fadeMs / 2));
-  }
+  const staleHoldMs = 200;
 
   function clearRevealTimer() {
     if (!revealTimer) return;
@@ -115,6 +119,12 @@
     mediaRetryTimer = undefined;
   }
 
+  function clearStaleHoldTimer() {
+    if (!staleHoldTimer) return;
+    clearTimeout(staleHoldTimer);
+    staleHoldTimer = undefined;
+  }
+
   function buildDisplayMediaUrl(baseUrl: string, retryCount: number): string {
     if (!baseUrl) return "";
     if (retryCount === 0) return baseUrl;
@@ -126,15 +136,69 @@
     return browser && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
+  function urlsMatch(left: string, right: string): boolean {
+    if (!left || !right) return false;
+    try {
+      return new URL(left, location.origin).href === new URL(right, location.origin).href;
+    } catch {
+      return left === right;
+    }
+  }
+
+  function syncDisplayMediaLayout() {
+    displayMediaIsVideo = image?.type === "video";
+    displayMediaWidth = image?.width;
+    displayMediaHeight = image?.height;
+  }
+
+  function abandonStale(expectedUrl: string) {
+    if (imageUrl !== expectedUrl || !staleHolding) return;
+    staleHolding = false;
+    staleHoldTimer = undefined;
+    displayMediaUrl = pendingMediaUrl || buildDisplayMediaUrl(expectedUrl, mediaRetryCount);
+    syncDisplayMediaLayout();
+    pendingMediaUrl = "";
+    mediaLoaded = false;
+    placeholderVisible = true;
+  }
+
+  function commitStaleSwap(expectedUrl: string) {
+    if (imageUrl !== expectedUrl || !staleHolding) return;
+    clearStaleHoldTimer();
+    staleHolding = false;
+    displayMediaUrl = pendingMediaUrl || buildDisplayMediaUrl(expectedUrl, mediaRetryCount);
+    syncDisplayMediaLayout();
+    pendingMediaUrl = "";
+    mediaLoaded = true;
+    placeholderVisible = false;
+    requestAnimationFrame(updateOverlayScrollbar);
+  }
+
   function resetReveal(nextUrl: string) {
     clearRevealTimer();
     clearMediaRetryTimer();
+    clearStaleHoldTimer();
     mediaRetryCount = 0;
     loadingMediaUrl = nextUrl;
+
+    const keepStale = mediaLoaded && !!displayMediaUrl && !!nextUrl;
+    if (keepStale) {
+      staleHolding = true;
+      placeholderVisible = false;
+      pendingMediaUrl = buildDisplayMediaUrl(nextUrl, 0);
+      staleHoldTimer = setTimeout(() => {
+        staleHoldTimer = undefined;
+        abandonStale(nextUrl);
+      }, staleHoldMs);
+      return;
+    }
+
+    staleHolding = false;
+    pendingMediaUrl = "";
     displayMediaUrl = buildDisplayMediaUrl(nextUrl, 0);
+    syncDisplayMediaLayout();
     mediaLoaded = false;
     placeholderVisible = !!nextUrl;
-    placeholderLeaving = false;
   }
 
   function scheduleMediaRetry(expectedBaseUrl: string) {
@@ -143,8 +207,17 @@
 
     clearMediaRetryTimer();
     mediaRetryCount += 1;
+
+    if (staleHolding) {
+      mediaRetryTimer = setTimeout(() => {
+        mediaRetryTimer = undefined;
+        if (imageUrl !== expectedBaseUrl || !staleHolding) return;
+        pendingMediaUrl = buildDisplayMediaUrl(expectedBaseUrl, mediaRetryCount);
+      }, mediaRetryDelayMs);
+      return;
+    }
+
     placeholderVisible = true;
-    placeholderLeaving = false;
     mediaLoaded = false;
     mediaRetryTimer = setTimeout(() => {
       mediaRetryTimer = undefined;
@@ -153,28 +226,58 @@
     }, mediaRetryDelayMs);
   }
 
-  function revealLoadedMedia(expectedUrl: string) {
+  function clearPlaceholderAfterFade(expectedUrl: string) {
     if (imageUrl !== expectedUrl) return;
     placeholderVisible = false;
-    placeholderLeaving = false;
-    mediaLoaded = true;
-    requestAnimationFrame(updateOverlayScrollbar);
+  }
+
+  function isPreloadMediaElement(element: EventTarget | null): boolean {
+    return element instanceof HTMLElement && element.classList.contains("media-preload");
+  }
+
+  function pendingMediaReady(): boolean {
+    if (!pendingMediaUrl) return false;
+    if (
+      preloadImgElement?.complete &&
+      preloadImgElement.naturalWidth > 0 &&
+      elementMatchesUrl(preloadImgElement, pendingMediaUrl)
+    ) {
+      return true;
+    }
+    if (
+      preloadVideoElement &&
+      preloadVideoElement.readyState >= 2 &&
+      elementMatchesUrl(preloadVideoElement, pendingMediaUrl)
+    ) {
+      return true;
+    }
+    return false;
   }
 
   function startReveal(expectedUrl: string) {
-    if (imageUrl !== expectedUrl || mediaLoaded) return;
-    if (!placeholderVisible || prefersReducedMotion() || get(imageFadeMs) <= 0) {
-      revealLoadedMedia(expectedUrl);
+    if (imageUrl !== expectedUrl) return;
+
+    if (staleHolding) {
+      if (!pendingMediaReady()) return;
+      commitStaleSwap(expectedUrl);
       return;
     }
 
-    const leaveMs = placeholderLeaveMs(get(imageFadeMs));
+    if (mediaLoaded) return;
+
+    mediaLoaded = true;
+    requestAnimationFrame(updateOverlayScrollbar);
+
+    if (!placeholderVisible || prefersReducedMotion() || get(imageFadeMs) <= 0) {
+      placeholderVisible = false;
+      return;
+    }
+
     clearRevealTimer();
-    placeholderLeaving = true;
     revealTimer = setTimeout(() => {
       revealTimer = undefined;
-      revealLoadedMedia(expectedUrl);
-    }, leaveMs);
+      clearPlaceholderAfterFade(expectedUrl);
+    }, get(imageFadeMs));
   }
 
   function markMediaReady(expectedUrl: string) {
@@ -183,13 +286,15 @@
   }
 
   function createMediaReadyHandler(expectedUrl: string) {
-    return () => {
+    return (event: Event) => {
+      if (staleHolding && !isPreloadMediaElement(event.currentTarget)) return;
       markMediaReady(expectedUrl);
     };
   }
 
   function createMediaErrorHandler(expectedUrl: string) {
-    return () => {
+    return (event: Event) => {
+      if (staleHolding && !isPreloadMediaElement(event.currentTarget)) return;
       scheduleMediaRetry(expectedUrl);
     };
   }
@@ -198,6 +303,7 @@
     return async (event: Event) => {
       const element = event.currentTarget;
       if (!(element instanceof HTMLImageElement)) return;
+      if (staleHolding && !isPreloadMediaElement(element)) return;
 
       try {
         await element.decode();
@@ -208,39 +314,56 @@
     };
   }
 
-  function elementMatchesUrl(element: HTMLImageElement | HTMLVideoElement): boolean {
-    if (!displayMediaUrl) return false;
+  function elementMatchesUrl(
+    element: HTMLImageElement | HTMLVideoElement,
+    expectedUrl: string,
+  ): boolean {
+    if (!expectedUrl) return false;
     const elSrc = element.currentSrc || element.src;
-    try {
-      return new URL(elSrc, location.origin).href === new URL(displayMediaUrl, location.origin).href;
-    } catch {
-      return false;
-    }
+    return urlsMatch(elSrc, expectedUrl);
   }
 
   function checkMediaAlreadyReady() {
     if (!imageUrl) return;
+
+    if (staleHolding && pendingMediaUrl) {
+      if (
+        preloadImgElement?.complete &&
+        preloadImgElement.naturalWidth > 0 &&
+        elementMatchesUrl(preloadImgElement, pendingMediaUrl)
+      ) {
+        startReveal(imageUrl);
+      } else if (
+        preloadVideoElement &&
+        preloadVideoElement.readyState >= 2 &&
+        elementMatchesUrl(preloadVideoElement, pendingMediaUrl)
+      ) {
+        startReveal(imageUrl);
+      }
+      return;
+    }
+
     if (
       imgElement?.complete &&
       imgElement.naturalWidth > 0 &&
-      elementMatchesUrl(imgElement)
+      elementMatchesUrl(imgElement, displayMediaUrl)
     ) {
       startReveal(imageUrl);
     } else if (
       videoElement &&
       videoElement.readyState >= 2 &&
-      elementMatchesUrl(videoElement)
+      elementMatchesUrl(videoElement, displayMediaUrl)
     ) {
       startReveal(imageUrl);
     }
   }
 
+  $: displayHasAspect = !!(displayMediaWidth && displayMediaHeight);
   $: mediaStyle = [
-    image?.width && image?.height
-      ? `--media-ratio: ${image.width / image.height}; aspect-ratio: ${image.width} / ${image.height}`
+    displayHasAspect
+      ? `--media-ratio: ${displayMediaWidth / displayMediaHeight}; aspect-ratio: ${displayMediaWidth} / ${displayMediaHeight}`
       : "",
     `--image-fade-ms: ${$imageFadeMs}ms`,
-    `--placeholder-fade-ms: ${placeholderLeaveMs($imageFadeMs)}ms`,
   ].filter(Boolean).join("; ");
 
   $: if (data) imageTags = data.tags ?? [];
@@ -253,7 +376,7 @@
     ? `/api/images/${image.id}?${buildImageQueryParams(showOriginal ? "original" : $compressedMode, $useSmartSubsampling)}`
     : "";
   $: if (imageUrl !== loadingMediaUrl) resetReveal(imageUrl);
-  $: imageUrl, imgElement, videoElement, checkMediaAlreadyReady();
+  $: imageUrl, imgElement, videoElement, preloadImgElement, preloadVideoElement, pendingMediaUrl, checkMediaAlreadyReady();
   $: basicInfo = !data ? "" : extractBasic(data);
   $: promptInfo = !data ? [] : buildPromptInfo(data);
   $: annotationText = data?.annotation ?? "";
@@ -858,6 +981,7 @@
   onDestroy(() => {
     clearRevealTimer();
     clearMediaRetryTimer();
+    clearStaleHoldTimer();
     clearOverlayScrollFadeTimer();
     cardResizeObserver?.disconnect();
     cardResizeObserver = undefined;
@@ -879,12 +1003,12 @@
             <div
               class="media-container"
               class:full
-              class:has-aspect={!!(image?.width && image?.height)}
+              class:has-aspect={displayHasAspect}
               class:no-fade={$imageFadeMs <= 0}
               style={mediaStyle}
             >
             {#if placeholderVisible}
-              <div class="loading-slot" class:leaving={placeholderLeaving}>
+              <div class="loading-slot">
                 <div class="dot-loader" aria-hidden="true">
                   <span></span>
                   <span></span>
@@ -892,8 +1016,34 @@
                 </div>
               </div>
             {/if}
+            {#if pendingMediaUrl}
+              {#key pendingMediaUrl}
+                {#if image.type === "video"}
+                  <video
+                    bind:this={preloadVideoElement}
+                    class="media-preload"
+                    muted
+                    preload="auto"
+                    src={pendingMediaUrl}
+                    on:canplay={createMediaReadyHandler(imageUrl)}
+                    on:error={createMediaErrorHandler(imageUrl)}
+                  >
+                    <source src={pendingMediaUrl} type="video/mp4" />
+                  </video>
+                {:else}
+                  <img
+                    bind:this={preloadImgElement}
+                    class="media-preload"
+                    src={pendingMediaUrl}
+                    alt=""
+                    on:load={createImageReadyHandler(imageUrl)}
+                    on:error={createMediaErrorHandler(imageUrl)}
+                  />
+                {/if}
+              {/key}
+            {/if}
             {#key displayMediaUrl}
-              {#if image.type === "video"}
+              {#if displayMediaIsVideo}
                 <video
                   bind:this={videoElement}
                   autoplay
@@ -1062,7 +1212,6 @@
 
       .card {
         background-color: rgba(17, 14, 12, 0.78);
-        border: 1px solid var(--line);
         border-radius: 0.5em;
         box-sizing: border-box;
         overflow-x: hidden;
@@ -1132,12 +1281,15 @@
           width: 100%;
           height: 100%;
           min-height: min(40vh, 20em);
-          opacity: 1;
-          transition: opacity var(--placeholder-fade-ms, 90ms) ease;
+        }
 
-          &.leaving {
-            opacity: 0;
-          }
+        .media-preload {
+          position: absolute;
+          width: 0;
+          height: 0;
+          opacity: 0;
+          pointer-events: none;
+          visibility: hidden;
         }
 
         .dot-loader {
@@ -1196,10 +1348,6 @@
         }
 
         &.no-fade {
-          .loading-slot {
-            transition: none;
-          }
-
           img,
           video {
             transition: none;
@@ -1250,7 +1398,6 @@
 
         .card {
           border-radius: 0;
-          border: none;
           background-color: transparent;
         }
 
@@ -1303,6 +1450,12 @@
         position: relative;
         padding: 0 var(--section-pad-x);
         margin: 0;
+
+        // Match section bottom margin when tags are the last content
+        // (no prompt/meta blocks after). Avoids doubling with .extra's top margin.
+        &:last-child {
+          margin-bottom: 1em;
+        }
       }
 
       p {
