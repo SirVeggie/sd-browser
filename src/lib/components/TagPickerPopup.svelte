@@ -112,7 +112,7 @@
     .backdrop {
         position: fixed;
         inset: 0;
-        z-index: 200;
+        z-index: 220;
         margin: 0;
         padding: 0;
         border: none;
@@ -122,7 +122,7 @@
 
     .picker {
         position: fixed;
-        z-index: 201;
+        z-index: 221;
         min-width: min(18em, 70vw);
         max-width: min(24em, 90vw);
         max-height: min(50vh, 20rem);

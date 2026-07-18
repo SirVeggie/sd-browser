@@ -291,7 +291,7 @@
 
     .panel {
         position: fixed;
-        z-index: 200;
+        z-index: 220;
         display: flex;
         flex-direction: column;
         gap: 0.15em;
