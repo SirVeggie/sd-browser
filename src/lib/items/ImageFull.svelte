@@ -203,7 +203,11 @@
       parts.push(formatFileSize(d.fileSize));
     parts.push(formatMetaDate(d.modifiedDate));
 
-    return `${parts.join(" · ")}\nModel: ${primary}`;
+    const lines = [parts.join(" · ")];
+    if (d.folder)
+      lines.push(`Folder: ${d.folder}`);
+    lines.push(`Model: ${primary}`);
+    return lines.join("\n");
   }
 
   function buildPromptInfo(d: ImageInfo): PromptFragment[] {
