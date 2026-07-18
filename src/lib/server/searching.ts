@@ -19,6 +19,11 @@ import {
     type ParsedImgModeQuery,
 } from "$lib/tools/searchParsing";
 import {
+    matchesAspectComparisons,
+    parseAspectComparisons,
+    type AspectComparison,
+} from "$lib/tools/aspectRatioSearch";
+import {
     averageEmbeddings,
     analogyEmbedding,
     clampUnitScore,
@@ -73,6 +78,7 @@ const negativeRegex = new RegExp(`^${keywordPattern}(NEGATIVE|NEG) `, keywordFla
 const folderRegex = new RegExp(`^${keywordPattern}(FOLDER|FD) `, keywordFlags);
 const paramRegex = new RegExp(`^${keywordPattern}(PARAMS|PR) `, keywordFlags);
 const dateRegex = new RegExp(`^${keywordPattern}(DATE|DT) `, keywordFlags);
+const aspectRegex = new RegExp(`^${keywordPattern}(ASPECT|ASP) `, keywordFlags);
 const modelRegex = new RegExp(`^${keywordPattern}(MODEL|MD) `, keywordFlags);
 const annotationRegex = new RegExp(`^${keywordPattern}(ANNOTATION|AN) `, keywordFlags);
 const tagRegex = new RegExp(`^${keywordPattern}TAG `, keywordFlags);
@@ -134,6 +140,8 @@ type SearchPart = {
     imgInvalid?: boolean;
     idTargets?: Set<string>;
     idInvalid?: boolean;
+    aspectComparisons?: AspectComparison[];
+    aspectInvalid?: boolean;
 };
 
 export type ImgSearchContext = {
@@ -1565,6 +1573,7 @@ export function buildMatcher(
         else if (folderRegex.test(x)) type = 'folder';
         else if (paramRegex.test(x)) type = 'params';
         else if (dateRegex.test(x)) type = 'date';
+        else if (aspectRegex.test(x)) type = 'aspect';
         else if (modelRegex.test(x)) type = 'model';
         else if (annotationRegex.test(x)) type = 'annotation';
         else if (tagRegex.test(x)) type = 'tag';
@@ -1597,6 +1606,17 @@ export function buildMatcher(
                 idInvalid = true;
             } else {
                 idTargets = new Set(imageIds);
+            }
+        }
+
+        let aspectComparisons: AspectComparison[] | undefined;
+        let aspectInvalid = false;
+        if (type === 'aspect') {
+            const parsed = parseAspectComparisons(raw);
+            if (!parsed) {
+                aspectInvalid = true;
+            } else {
+                aspectComparisons = parsed;
             }
         }
 
@@ -1635,13 +1655,15 @@ export function buildMatcher(
             imgInvalid,
             idTargets,
             idInvalid,
+            aspectComparisons,
+            aspectInvalid,
         };
 
         return part;
     }).filter((x): x is SearchPart => x !== undefined)
         .sort((a, b) => getSearchPartRank(a) - getSearchPartRank(b));
 
-    if (regexes.some(x => x.similarInvalid || x.imgInvalid || x.idInvalid))
+    if (regexes.some(x => x.similarInvalid || x.imgInvalid || x.idInvalid || x.aspectInvalid))
         return () => false;
 
     const embeddedImageIds = regexes.some(x => x.imgPresence)
@@ -1691,6 +1713,15 @@ export function buildMatcher(
                     const end = dates[1] ? parseSearchDate(dates[1], 'end') : undefined;
                     return image.modifiedDate >= start && (end === undefined || image.modifiedDate <= end);
                 }
+            }
+
+            if (x.type === 'aspect') {
+                const matched = matchesAspectComparisons(
+                    image.width,
+                    image.height,
+                    x.aspectComparisons!,
+                );
+                return XOR(x.not, matched);
             }
 
             if (x.type === 'tag') {
@@ -1748,7 +1779,7 @@ function getResultTakeCount(search: string): number {
 
 function getSearchPartRank(part: SearchPart): number {
     if (part.type === 'id') return 0;
-    if (part.type === 'date') return 1;
+    if (part.type === 'date' || part.type === 'aspect') return 1;
     if (part.type === 'folder' || part.type === 'tag' || part.type === 'video') return 2;
     if (part.type === 'model') return 3;
     if (part.type === 'positive' || part.type === 'negative' || part.type === 'annotation') return 4;
@@ -1785,6 +1816,8 @@ function getTextByType(image: ServerImage, type: MatchType): string {
             return image.folder;
         case 'date':
             return String(image.modifiedDate);
+        case 'aspect':
+            return '';
         case 'positive':
             return image.positive;
         case 'negative':

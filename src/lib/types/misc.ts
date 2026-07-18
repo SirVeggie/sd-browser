@@ -67,13 +67,13 @@ export const defaultExplorationSettings: ExplorationSettings = {
     similarityThreshold: 0.5,
 };
 
-const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'model', 'annotation', 'tag', 'similar', 'img', 'id', 'video'] as const;
+const matchTypes = ['all', 'positive', 'negative', 'params', 'folder', 'date', 'aspect', 'model', 'annotation', 'tag', 'similar', 'img', 'id', 'video'] as const;
 export type MatchType = typeof matchTypes[number];
 export function isMatchType(object: any): object is MatchType {
     return matchTypes.includes(object);
 }
 
-export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'PRUNE'] as const;
+export const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'ASPECT|ASP', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'PRUNE'] as const;
 export type SearchKeyword = typeof searchKeywords[number];
 export function isSearchKeyword(object: any): object is SearchKeyword {
     return searchKeywords.includes(object);
@@ -147,6 +147,13 @@ export const searchKeywordHelpSections = [
                 details:
                     'Supports absolute dates, timestamps, relative offsets like -7d, and ranges with TO.',
                 example: 'DT 2026.07.01 TO 2026.07.12',
+            },
+            {
+                keyword: 'ASPECT|ASP',
+                summary: 'Filters by image aspect ratio.',
+                details:
+                    'Compare width/height with =, !=, <, <=, >, >=. Values can be ratios (16:9) or decimals (1.7). Bare values mean equals. Equals in one clause are OR\'d; other comparisons are AND\'d. Comparisons use ±0.1 leeway. Zero or missing dimensions never match.',
+                example: 'ASP >= 1:1 <= 16:9',
             },
             {
                 keyword: 'MODEL|MD',

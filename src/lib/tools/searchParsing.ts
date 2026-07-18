@@ -1,3 +1,5 @@
+import { isAspectBodyToken } from './aspectRatioSearch';
+
 // Keep in sync with searchKeywords in src/lib/types/misc.ts
 const SEARCH_KEYWORD_ENTRIES = [
     'AND',
@@ -7,6 +9,7 @@ const SEARCH_KEYWORD_ENTRIES = [
     'FOLDER|FD',
     'PARAMS|PR',
     'DATE|DT',
+    'ASPECT|ASP',
     'MODEL|MD',
     'ANNOTATION|AN',
     'TAG',
@@ -186,10 +189,57 @@ function isDateBodyToken(word: string): boolean {
     return false;
 }
 
+function findConstrainedBodyBoundary(
+    search: string,
+    bodyStart: number,
+    isBodyToken: (word: string) => boolean,
+): { end: number; nextPos: number } {
+    let index = bodyStart;
+    while (index < search.length) {
+        if (isExplicitAndDelimiter(search, index))
+            return { end: index, nextPos: consumeExplicitAndDelimiter(search, index) };
+
+        index = skipWhitespace(search, index);
+        if (index >= search.length)
+            return { end: search.length, nextPos: search.length };
+
+        const keyword = readKeywordAt(search, index);
+        if (keyword && !keyword.escaped) {
+            const upper = keyword.canonical.toUpperCase();
+            if (upper === 'AND') {
+                let end = index;
+                while (end > bodyStart && /\s/.test(search[end - 1]))
+                    end--;
+                return { end, nextPos: consumeExplicitAndDelimiter(search, index) };
+            }
+            if (!isBodyToken(keyword.canonical)) {
+                let end = index;
+                while (end > bodyStart && /\s/.test(search[end - 1]))
+                    end--;
+                return { end, nextPos: index };
+            }
+        }
+
+        const wordEnd = findWordEnd(search, index);
+        const word = search.slice(index, wordEnd);
+        if (!isBodyToken(word)) {
+            let end = index;
+            while (end > bodyStart && /\s/.test(search[end - 1]))
+                end--;
+            return { end, nextPos: index };
+        }
+
+        index = wordEnd;
+    }
+
+    return { end: search.length, nextPos: search.length };
+}
+
 function findClauseBodyBoundary(
     search: string,
     bodyStart: number,
     hasDatePrefix: boolean,
+    hasAspectPrefix = false,
     hasImgPrefix = false,
 ): { end: number; nextPos: number } {
     const keywordAtBodyStart = readKeywordAt(search, bodyStart);
@@ -203,47 +253,11 @@ function findClauseBodyBoundary(
         return { end: bodyStart, nextPos };
     }
 
-    if (hasDatePrefix) {
-        let index = bodyStart;
-        while (index < search.length) {
-            if (isExplicitAndDelimiter(search, index))
-                return { end: index, nextPos: consumeExplicitAndDelimiter(search, index) };
+    if (hasDatePrefix)
+        return findConstrainedBodyBoundary(search, bodyStart, isDateBodyToken);
 
-            index = skipWhitespace(search, index);
-            if (index >= search.length)
-                return { end: search.length, nextPos: search.length };
-
-            const keyword = readKeywordAt(search, index);
-            if (keyword && !keyword.escaped) {
-                const upper = keyword.canonical.toUpperCase();
-                if (upper === 'AND') {
-                    let end = index;
-                    while (end > bodyStart && /\s/.test(search[end - 1]))
-                        end--;
-                    return { end, nextPos: consumeExplicitAndDelimiter(search, index) };
-                }
-                if (!isDateBodyToken(keyword.canonical)) {
-                    let end = index;
-                    while (end > bodyStart && /\s/.test(search[end - 1]))
-                        end--;
-                    return { end, nextPos: index };
-                }
-            }
-
-            const wordEnd = findWordEnd(search, index);
-            const word = search.slice(index, wordEnd);
-            if (!isDateBodyToken(word)) {
-                let end = index;
-                while (end > bodyStart && /\s/.test(search[end - 1]))
-                    end--;
-                return { end, nextPos: index };
-            }
-
-            index = wordEnd;
-        }
-
-        return { end: search.length, nextPos: search.length };
-    }
+    if (hasAspectPrefix)
+        return findConstrainedBodyBoundary(search, bodyStart, isAspectBodyToken);
 
     for (let index = bodyStart; index < search.length; index++) {
         if (isExplicitAndDelimiter(search, index))
@@ -295,6 +309,7 @@ export function tokenizeSearchClauses(search: string): SearchClause[] {
 
         const clauseStart = pos;
         let hasDatePrefix = false;
+        let hasAspectPrefix = false;
         let hasImgPrefix = false;
 
         while (pos < search.length) {
@@ -308,6 +323,8 @@ export function tokenizeSearchClauses(search: string): SearchClause[] {
 
             if (upper === 'DATE' || upper === 'DT')
                 hasDatePrefix = true;
+            if (upper === 'ASPECT' || upper === 'ASP')
+                hasAspectPrefix = true;
             if (upper === 'IMG')
                 hasImgPrefix = true;
 
@@ -318,7 +335,7 @@ export function tokenizeSearchClauses(search: string): SearchClause[] {
         let end = search.length;
         let nextPos = search.length;
 
-        const boundary = findClauseBodyBoundary(search, pos, hasDatePrefix, hasImgPrefix);
+        const boundary = findClauseBodyBoundary(search, pos, hasDatePrefix, hasAspectPrefix, hasImgPrefix);
         end = boundary.end;
         nextPos = boundary.nextPos;
 
@@ -387,7 +404,7 @@ function parseThresholdSuffix(value: string): number | undefined {
     return parsed;
 }
 
-const searchKeywordPrefix = '(?:AND|NOT|ALL|NEGATIVE|NEG|FOLDER|FD|PARAMS|PR|DATE|DT|MODEL|MD|ANNOTATION|AN|TAG|ID|VIDEO|VID|SKIP|TAKE|MMR|PRUNE)';
+const searchKeywordPrefix = '(?:AND|NOT|ALL|NEGATIVE|NEG|FOLDER|FD|PARAMS|PR|DATE|DT|ASPECT|ASP|MODEL|MD|ANNOTATION|AN|TAG|ID|VIDEO|VID|SKIP|TAKE|MMR|PRUNE)';
 const similarPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*(?:SIMILAR|SM)\\s+`, 'i');
 const imgPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*IMG(?:\\s+|$)`, 'i');
 const notPrefixRegex = new RegExp(`^(?:(?:${searchKeywordPrefix})\\s+)*NOT\\s+`, 'i');

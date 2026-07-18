@@ -32,6 +32,10 @@
         "TO",
     ].map(keyword => keyword.toLowerCase()));
 
+    /** Comparison ops highlighted only inside ASP/ASPECT clauses (like TO for DATE). */
+    const aspectOperatorTokens = new Set([">=", "<=", "!=", "=", ">", "<"]);
+    const aspectKeywordAliases = new Set(["aspect", "asp"]);
+
     const tokenRegex = /(\s+|[A-Za-z]+|[^A-Za-z\s]+)/g;
     const dispatch = createEventDispatcher();
 
@@ -122,7 +126,7 @@
         const validRefRanges = refRanges.filter((range) => range.valid);
         const invalidRefRanges = refRanges.filter((range) => !range.valid);
         let offset = 0;
-        return Array.from(text.matchAll(tokenRegex), match => {
+        const segments = Array.from(text.matchAll(tokenRegex), match => {
             const token = match[0];
             const segmentStart = offset;
             const segmentEnd = offset + token.length;
@@ -139,6 +143,46 @@
                 invalidSearchRef: segmentOverlapsRange(segmentStart, segmentEnd, invalidRefRanges),
             };
         });
+
+        markAspectOperators(segments, text);
+        return segments;
+    }
+
+    function markAspectOperators(segments: Segment[], text: string) {
+        let inAspectClause = false;
+        let offset = 0;
+
+        for (const segment of segments) {
+            const segmentStart = offset;
+            offset += segment.text.length;
+
+            if (/^\s+$/.test(segment.text))
+                continue;
+
+            const lower = segment.text.toLowerCase();
+            const escaped = segmentStart > 0 && text[segmentStart - 1] === '\\';
+
+            if (!escaped && aspectKeywordAliases.has(lower)) {
+                inAspectClause = true;
+                segment.keyword = true;
+                continue;
+            }
+
+            if (!inAspectClause)
+                continue;
+
+            if (aspectOperatorTokens.has(segment.text) || /^(>=|<=|!=|=|>|<)/.test(segment.text)) {
+                segment.keyword = true;
+                continue;
+            }
+
+            // Stay in the clause for ratio/decimal values; leave on the next search keyword.
+            if (/^\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?$/.test(segment.text))
+                continue;
+
+            if (!escaped && keywordAliases.has(lower))
+                inAspectClause = false;
+        }
     }
 </script>
 

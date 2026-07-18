@@ -19,6 +19,11 @@ import {
     extractImgSearchTarget,
 } from '../src/lib/tools/searchParsing.ts';
 import {
+    matchesAspectComparisons,
+    parseAspectComparisons,
+    parseAspectRatioValue,
+} from '../src/lib/tools/aspectRatioSearch.ts';
+import {
     abbreviateImageId,
     getSearchDisplay,
     inflateSearchDisplay,
@@ -181,6 +186,9 @@ const splitCases: Array<{ search: string; parts: string[] }> = [
     { search: 'landscape FOLDER txt2img', parts: ['landscape', 'FOLDER txt2img'] },
     { search: 'red NOT FOLDER drafts', parts: ['red', 'NOT FOLDER drafts'] },
     { search: 'DT -1y TO -6m landscape', parts: ['DT -1y TO -6m', 'landscape'] },
+    { search: 'ASP >= 1:1 landscape', parts: ['ASP >= 1:1', 'landscape'] },
+    { search: 'ASP = 16:9 < 1:1 TAG fav', parts: ['ASP = 16:9 < 1:1', 'TAG fav'] },
+    { search: 'ASP >= 1:1 <= 16:9', parts: ['ASP >= 1:1 <= 16:9'] },
     { search: 'landscape IMG misty forest', parts: ['landscape', 'IMG misty forest'] },
     { search: 'IMG cat - dog + watercolor', parts: ['IMG cat - dog + watercolor'] },
     { search: 'TAG favourite MMR 10', parts: ['TAG favourite', 'MMR 10'] },
@@ -195,6 +203,107 @@ const splitCases: Array<{ search: string; parts: string[] }> = [
 for (const { search, parts } of splitCases) {
     assert.deepEqual(splitSearchParts(search), parts, `splitSearchParts handles ${search}`);
 }
+
+assert.equal(parseAspectRatioValue('16:9'), 16 / 9, 'parses 16:9 ratio');
+assert.equal(parseAspectRatioValue('1.7'), 1.7, 'parses decimal aspect');
+assert.equal(parseAspectRatioValue('1:0'), undefined, 'rejects zero-height ratio');
+
+assert.deepEqual(
+    parseAspectComparisons('>= 1:1'),
+    [{ op: '>=', value: 1 }],
+    'parses ASP >= 1:1',
+);
+assert.deepEqual(
+    parseAspectComparisons('< 1.7'),
+    [{ op: '<', value: 1.7 }],
+    'parses ASP < 1.7',
+);
+assert.deepEqual(
+    parseAspectComparisons('= 16:9 < 1:1'),
+    [
+        { op: '=', value: 16 / 9 },
+        { op: '<', value: 1 },
+    ],
+    'parses ASP = 16:9 < 1:1',
+);
+assert.deepEqual(
+    parseAspectComparisons('!= 21:9 != 9:21'),
+    [
+        { op: '!=', value: 21 / 9 },
+        { op: '!=', value: 9 / 21 },
+    ],
+    'parses ASP != 21:9 != 9:21',
+);
+assert.deepEqual(
+    parseAspectComparisons('16:9 21:9'),
+    [
+        { op: '=', value: 16 / 9 },
+        { op: '=', value: 21 / 9 },
+    ],
+    'parses bare ASP values as equals',
+);
+assert.deepEqual(
+    parseAspectComparisons('>= 1:1 <= 16:9'),
+    [
+        { op: '>=', value: 1 },
+        { op: '<=', value: 16 / 9 },
+    ],
+    'parses ASP >= 1:1 <= 16:9',
+);
+assert.equal(parseAspectComparisons(''), undefined, 'rejects empty ASP body');
+assert.equal(parseAspectComparisons('landscape'), undefined, 'rejects non-aspect ASP body');
+
+const square = parseAspectComparisons('= 1:1')!;
+assert.equal(matchesAspectComparisons(100, 100, square), true, 'exact 1:1 matches = 1:1');
+assert.equal(matchesAspectComparisons(100, 95, square), true, 'near 1:1 matches within tolerance');
+assert.equal(matchesAspectComparisons(100, 80, square), false, 'far from 1:1 misses = 1:1');
+assert.equal(matchesAspectComparisons(0, 100, square), false, 'zero width never matches');
+assert.equal(matchesAspectComparisons(100, 0, square), false, 'zero height never matches');
+assert.equal(matchesAspectComparisons(undefined, 100, square), false, 'missing width never matches');
+
+const widescreenOrPortrait = parseAspectComparisons('= 16:9 < 1:1')!;
+assert.equal(
+    matchesAspectComparisons(1920, 1080, widescreenOrPortrait),
+    true,
+    '16:9 matches = 16:9 < 1:1 via equals',
+);
+assert.equal(
+    matchesAspectComparisons(800, 1200, widescreenOrPortrait),
+    true,
+    'portrait matches = 16:9 < 1:1 via < 1:1',
+);
+assert.equal(
+    matchesAspectComparisons(1200, 1000, widescreenOrPortrait),
+    false,
+    'mild landscape misses = 16:9 < 1:1',
+);
+
+const notUltrawide = parseAspectComparisons('!= 21:9 != 9:21')!;
+assert.equal(matchesAspectComparisons(1920, 1080, notUltrawide), true, '16:9 passes != ultrawide');
+assert.equal(matchesAspectComparisons(2100, 900, notUltrawide), false, '21:9 fails != 21:9');
+
+const eitherWide = parseAspectComparisons('16:9 21:9')!;
+assert.equal(matchesAspectComparisons(1920, 1080, eitherWide), true, '16:9 matches bare equals OR');
+assert.equal(matchesAspectComparisons(2100, 900, eitherWide), true, '21:9 matches bare equals OR');
+assert.equal(matchesAspectComparisons(1000, 1000, eitherWide), false, 'square misses 16:9 OR 21:9');
+
+const landscapeBand = parseAspectComparisons('>= 1:1 <= 16:9')!;
+assert.equal(matchesAspectComparisons(1600, 900, landscapeBand), true, '16:9 in >=1:1 <=16:9 band');
+assert.equal(matchesAspectComparisons(1000, 1000, landscapeBand), true, '1:1 in >=1:1 <=16:9 band');
+assert.equal(matchesAspectComparisons(800, 1200, landscapeBand), false, 'portrait outside >=1:1 <=16:9');
+assert.equal(matchesAspectComparisons(2500, 900, landscapeBand), false, 'ultrawide outside >=1:1 <=16:9');
+
+const lessThanSquare = parseAspectComparisons('< 3:2')!;
+assert.equal(
+    matchesAspectComparisons(140, 100, lessThanSquare),
+    true,
+    'ASP < 3:2 allows slightly above 1.5 via tolerance',
+);
+assert.equal(
+    matchesAspectComparisons(170, 100, lessThanSquare),
+    false,
+    'ASP < 3:2 rejects well above 1.5 + tolerance',
+);
 
 assert.equal(unescapeSearchLiterals('\\MODEL sheet'), 'MODEL sheet', 'unescapes literal keyword tokens');
 assert.equal(unescapeSearchLiterals('red \\NOT girl'), 'red NOT girl', 'unescapes literal NOT tokens');
@@ -462,7 +571,7 @@ assert.match(imgAllClauses[0]?.text ?? '', /^IMG all /i, 'preserves IMG all mode
 
 // Both ALL and IMG regexes match `IMG all …`; matcher must prefer IMG.
 {
-    const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'PRUNE'];
+    const searchKeywords = ['AND', 'NOT', 'ALL', 'NEGATIVE|NEG', 'FOLDER|FD', 'PARAMS|PR', 'DATE|DT', 'ASPECT|ASP', 'MODEL|MD', 'ANNOTATION|AN', 'TAG', 'SIMILAR|SM', 'IMG', 'ID', 'VIDEO|VID', 'SKIP', 'TAKE', 'MMR', 'PRUNE'];
     const keywordPattern = `((${searchKeywords.join('|')}) )*`;
     const allRegex = new RegExp(`^${keywordPattern}ALL `, 'i');
     const imgRegex = new RegExp(`^${keywordPattern}IMG `, 'i');
