@@ -280,7 +280,6 @@
 
     .keyword {
         color: var(--keyword);
-        font-weight: 600;
     }
 
     .unknown-tag {

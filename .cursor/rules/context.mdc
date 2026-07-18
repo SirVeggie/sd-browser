@@ -1,0 +1,20 @@
+---
+description: Read and update CONTEXT.md for project design decisions and gotchas
+alwaysApply: true
+---
+
+# Project CONTEXT.md
+
+`CONTEXT.md` at the repo root holds durable design decisions, gotchas, and conventions for this project.
+
+## New sessions
+
+At the start of a session (or before non-trivial work), **read `CONTEXT.md`**. Treat documented decisions as current unless the user says otherwise.
+
+## Keep it current
+
+When you learn or change something a future agent should know — a design decision, a “do not regress” gotcha, an invariant, or a non-obvious convention — **update `CONTEXT.md` in the same work**.
+
+- Keep entries short and actionable; link to code instead of restating it.
+- Prefer adding or tightening a section over deleting history that still prevents mistakes.
+- Do not reintroduce behavior that `CONTEXT.md` explicitly forbids without flagging it to the user first.
