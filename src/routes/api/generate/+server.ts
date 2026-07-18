@@ -1,3 +1,4 @@
+import { invalidAuth } from '$lib/server/auth.js';
 import { backgroundTasks } from '$lib/server/background.js';
 import { generateQualityFromId } from '$lib/server/convert.js';
 import { generationDisabled } from '$lib/server/dataIndex';
@@ -26,6 +27,9 @@ function parseGenerateRequest(body: unknown): GenerateRequest | string[] {
 }
 
 export async function POST(e) {
+    const err = invalidAuth(e);
+    if (err) return err;
+
     const body = await e.request.json();
     const parsed = parseGenerateRequest(body);
 

@@ -1,8 +1,12 @@
+import { invalidAuth } from '$lib/server/auth.js';
 import { deleteImages } from '$lib/server/filemanager.js';
 import { error, success } from '$lib/server/responses.js';
 import { isActionRequest } from '$lib/types/requests';
 
 export async function POST(e) {
+    const err = invalidAuth(e);
+    if (err) return err;
+
     let action: unknown;
     try {
         action = await e.request.json();
