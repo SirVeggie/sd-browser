@@ -18,6 +18,12 @@ Overflow-thumb measurement reads the column’s `clientWidth`; measuring the fit
 
 `.chrome` uses `backdrop-filter`, which makes `position: fixed` descendants position against the chrome box (not the viewport). Sorting/Collapse `Select` panels must stay `position: absolute` under their trigger (same pattern as `FilterMultiSelect`). Do not reintroduce viewport `left`/`bottom` math for fixed panels inside chrome.
 
+### Dropdown outside clicks are swallowed
+
+**File:** `src/lib/tools/dropdownOutsideClick.ts` (same idea as `src/actions/outclick.ts` for context menus)
+
+When a dropdown is open, an outside `pointerdown` / `touchstart` / `click` must close it and be consumed (`preventDefault` + `stopPropagation`) so the gesture does not also select an image, press a button, etc. Do not revert to close-only listeners.
+
 ---
 
 ## Search input syntax highlighting
