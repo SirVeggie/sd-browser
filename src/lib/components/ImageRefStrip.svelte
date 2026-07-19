@@ -60,7 +60,8 @@
         return Math.max(1, Math.min(fit, total - 1));
     }
 
-    /** Measure the dock (parent), not the fit-content strip — otherwise collapse feeds on itself. */
+    /** Measure the dock column (parent), not the fit-content strip — otherwise
+     *  collapse feeds on itself. */
     const observeAvailableWidth: Action<HTMLDivElement> = (node) => {
         const readWidth = () => {
             const parent = node.parentElement;

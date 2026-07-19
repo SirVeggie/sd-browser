@@ -2016,9 +2016,10 @@
 <div class="anchor" bind:this={anchorElement} />
 
 <div class="dock">
-    <ImageRefStrip />
+    <div class="dock-column">
+        <ImageRefStrip />
 
-    <div class="chrome">
+        <div class="chrome">
         <div class="chrome-meta">
             <Select
                 id="sorting"
@@ -2149,6 +2150,7 @@
                 </div>
             {/if}
         </div>
+        </div>
     </div>
 </div>
 
@@ -2268,6 +2270,7 @@
     @use "$lib/items/dropdownAnimations.scss" as dropdown;
 
     .dock {
+        --search-chrome-max-width: 52rem;
         position: fixed;
         left: max(10px, calc(var(--main-padding) / 2));
         right: calc(max(10px, calc(var(--main-padding) / 2)) + var(--flyout-width));
@@ -2277,8 +2280,7 @@
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
-        align-items: flex-start;
-        gap: 6px;
+        align-items: center;
         padding-bottom: 10px;
         box-sizing: border-box;
         pointer-events: none;
@@ -2294,6 +2296,16 @@
         }
     }
 
+    .dock-column {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        width: 100%;
+        max-width: var(--search-chrome-max-width);
+        box-sizing: border-box;
+    }
+
     .chrome {
         pointer-events: auto;
         position: relative;
@@ -2302,8 +2314,6 @@
         flex-direction: column;
         gap: 0.4rem;
         width: 100%;
-        max-width: 52rem;
-        align-self: center;
         padding: 0.45rem 0.55rem;
         border-radius: 14px;
         background: var(--glass);

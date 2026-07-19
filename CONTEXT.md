@@ -6,6 +6,16 @@ Keep entries short and actionable. Prefer linking to code over restating it.
 
 ---
 
+## Search dock width
+
+**Files:** `src/routes/+page.svelte` (`.dock`, `.dock-column`, `.chrome`), `src/lib/components/ImageRefStrip.svelte`
+
+`.dock-column` is the centered, max-width (`--search-chrome-max-width`, 52rem) wrapper for search chrome + IMG reference strip. Chrome is full width of the column; the strip stays **fit-content** and **left-aligned** to the chrome’s left edge (`align-items: flex-start` on the column).
+
+Overflow-thumb measurement reads the column’s `clientWidth`; measuring the fit-content strip itself causes a collapse feedback loop.
+
+---
+
 ## Search input syntax highlighting
 
 **File:** `src/lib/items/SearchInput.svelte`
