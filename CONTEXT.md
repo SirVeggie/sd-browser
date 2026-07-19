@@ -50,6 +50,14 @@ Nav arrows are full-height hit targets (`z-index: 46`). The slideshow control mu
 
 ---
 
+## Settings header is sticky
+
+**File:** `src/routes/settings/+page.svelte` (`.top`)
+
+The Settings title + Back/Reset/Logout row stays `position: sticky; top: 0` with a solid `--bg` so actions remain visible while scrolling the long settings page.
+
+---
+
 ## Search input syntax highlighting
 
 **File:** `src/lib/items/SearchInput.svelte`

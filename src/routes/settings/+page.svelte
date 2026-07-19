@@ -1156,11 +1156,19 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     }
 
     .top {
+        position: sticky;
+        top: 0;
+        z-index: 20;
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 0.75rem;
         flex-wrap: wrap;
+        margin: calc(-1 * var(--main-padding)) calc(-1 * var(--main-padding)) 0;
+        padding: var(--main-padding);
+        padding-bottom: 0.85rem;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
 
         h3 {
             margin: 0;
