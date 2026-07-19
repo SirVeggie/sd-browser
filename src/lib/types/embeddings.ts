@@ -23,7 +23,7 @@ export const embeddingStoreDefaults: EmbeddingSettings = {
     apiKey: "",
     modelId: "",
     apiBatch: 32,
-    searchTemplate: "This is a photo of {label}",
+    searchTemplate: "This is a picture of {label}",
     imageSimilarityThreshold: 0.8,
 };
 

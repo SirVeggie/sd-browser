@@ -835,7 +835,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                     Search template
                     <Input
                         bind:value={$embeddingStore.searchTemplate}
-                        placeholder={"This is a photo of {label}"}
+                        placeholder={"This is a picture of {label}"}
                     />
                 </label>
 
