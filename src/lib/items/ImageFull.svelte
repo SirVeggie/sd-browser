@@ -30,6 +30,7 @@
     getComfyWorkflowOpenStatus,
     imageAction,
     openWorkflowInComfy,
+    rememberImageInfo,
   } from "$lib/requests/imageRequests";
   import { updateImageAnnotation } from "$lib/requests/annotationRequests";
   import { updateImageTags } from "$lib/requests/tagRequests";
@@ -101,13 +102,12 @@
     `--image-fade-ms: ${$imageFadeMs}ms`,
   ].filter(Boolean).join("; ");
 
-  $: if (!stageId) {
+  // Live / closed: no metadata. While open, only replace stageInfo when `data`
+  // matches the on-stage id — never blank the panel on promote (layout jump).
+  $: if (!enabled || live || !stageId) {
     stageInfo = undefined;
   } else if (data?.id === stageId) {
     stageInfo = data;
-  } else if (stageInfo?.id !== stageId) {
-    // Stage advanced before selection info arrived — hide stale metadata.
-    stageInfo = undefined;
   }
 
   $: if (stageInfo) imageTags = stageInfo.tags ?? [];
@@ -151,10 +151,10 @@
     stageId = event.detail.id;
     stageWidth = event.detail.width;
     stageHeight = event.detail.height;
-    if (data?.id === stageId) {
-      stageInfo = data;
-    } else if (stageInfo?.id !== stageId) {
+    if (live) {
       stageInfo = undefined;
+    } else if (data?.id === stageId) {
+      stageInfo = data;
     }
     queueMicrotask(updateOverlayScrollbar);
   }
@@ -574,7 +574,10 @@
     if (!stageId) return;
     try {
       imageTags = await updateImageTags(stageId, next);
-      if (stageInfo) stageInfo = { ...stageInfo, tags: imageTags };
+      if (stageInfo) {
+        stageInfo = { ...stageInfo, tags: imageTags };
+        rememberImageInfo(stageInfo);
+      }
       if (data?.id === stageId) data = { ...data, tags: imageTags };
     } catch (cause) {
       console.error(cause);
@@ -597,7 +600,10 @@
     annotationSaving = true;
     try {
       const annotation = await updateImageAnnotation(stageId, event.detail.text);
-      if (stageInfo) stageInfo = { ...stageInfo, annotation };
+      if (stageInfo) {
+        stageInfo = { ...stageInfo, annotation };
+        rememberImageInfo(stageInfo);
+      }
       if (data?.id === stageId) data = { ...data, annotation };
       annotationModalOpen = false;
     } catch (cause) {
@@ -678,7 +684,7 @@
   }
 
   function updateOverlayScrollbar() {
-    if (!cardEl) {
+    if (!cardEl || live) {
       overlayScrollbarVisible = false;
       return;
     }
@@ -773,7 +779,7 @@
             />
           </div>
           <!-- svelte-ignore a11y-click-events-have-key-events -->
-          {#if stageInfo}
+          {#if stageInfo && !live}
             <div class="info" on:click={prevent}>
               <div class="basic">
                 <p>{basicInfo}</p>
@@ -814,7 +820,7 @@
             </div>
           {/if}
           </div>
-          {#if overlayScrollbarVisible}
+          {#if overlayScrollbarVisible && !live}
             <div
               class="overlay-scrollbar"
               class:active={overlayScrollbarActive}
@@ -936,6 +942,10 @@
         }
       }
 
+      &.live .card {
+        overflow: hidden;
+      }
+
       .overlay-scrollbar {
         position: absolute;
         top: 0;
@@ -1048,6 +1058,7 @@
 
         &.live .card {
           justify-content: center;
+          overflow: hidden;
         }
       }
     }

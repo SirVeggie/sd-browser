@@ -275,13 +275,28 @@ function isImageBlobs(object: unknown): object is ImageBlobs {
     return testType(object, ['id']);
 }
 
+/** Client-side metadata cache so neighbor swaps can apply info immediately. */
+const imageInfoCache = new Map<string, ImageInfo>();
+const imageInfoInflight = new Map<string, Promise<ImageInfo | undefined>>();
+
+export function getCachedImageInfo(imageid: string): ImageInfo | undefined {
+    return imageInfoCache.get(imageid);
+}
+
+export function rememberImageInfo(info: ImageInfo): void {
+    if (!info?.id) return;
+    imageInfoCache.set(info.id, info);
+}
+
 export async function getImageInfo(imageid: string, fetch?: FetchType): Promise<ImageInfo | undefined> {
     let url = `/api/images/${imageid}/metadata`;
     if (!fetch)
         url = get(page).url.origin + url;
     const res = await (fetch ? doGet(url, fetch) : doServerGet(url));
-    if (isImageInfo(res))
+    if (isImageInfo(res)) {
+        rememberImageInfo(res);
         return res;
+    }
     return undefined;
 }
 
@@ -312,9 +327,17 @@ export async function loadImageInfoProgressive(
     isStale?: () => boolean,
     fetch?: FetchType,
 ): Promise<ImageInfo | undefined> {
+    const cached = getCachedImageInfo(imageid);
+    if (cached && !isStale?.()) {
+        onInfo(cached);
+        // Still refresh when blobs were deferred or cache may be short-only.
+        if (!cached.blobsDeferred)
+            return cached;
+    }
+
     const info = await getImageInfo(imageid, fetch);
     if (!info || isStale?.())
-        return undefined;
+        return cached && !isStale?.() ? cached : undefined;
     onInfo(info);
     if (!info.blobsDeferred)
         return info;
@@ -323,8 +346,24 @@ export async function loadImageInfoProgressive(
     if (!blobs || isStale?.())
         return info;
     const merged = mergeImageBlobs(info, blobs);
+    rememberImageInfo(merged);
     onInfo(merged);
     return merged;
+}
+
+/** Warm the metadata cache for a neighbor without requiring a UI binding. */
+export function preloadImageInfo(imageid: string | undefined, fetch?: FetchType): void {
+    if (!imageid) return;
+    const cached = getCachedImageInfo(imageid);
+    if (cached && !cached.blobsDeferred) return;
+    if (imageInfoInflight.has(imageid)) return;
+
+    const pending = loadImageInfoProgressive(imageid, rememberImageInfo, undefined, fetch)
+        .finally(() => {
+            if (imageInfoInflight.get(imageid) === pending)
+                imageInfoInflight.delete(imageid);
+        });
+    imageInfoInflight.set(imageid, pending);
 }
 
 export async function generateCompressedImages(

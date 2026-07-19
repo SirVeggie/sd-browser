@@ -90,3 +90,23 @@ Camera JPEGs often store pixels in sensor orientation and put the real rotation 
 - Do not “fix” orientation only in CSS/`transform` — that breaks embeddings and cached WebP.
 
 Already-generated WebP caches and already-stored dimensions are not rewritten automatically; clear compressed images (and re-index dimensions if tiles look stretched) after changing this behavior.
+
+---
+
+## Live view is image-only
+
+**File:** `src/lib/items/ImageFull.svelte`
+
+Live mode (`live` prop) shows the newest gallery image with **no metadata panel and no scrollable card chrome**. Parent leaves `data`/`info` undefined; ImageFull must also clear `stageInfo` while `live` so a previous fullscreen open of the same id cannot leak metadata into live.
+
+---
+
+## Fullscreen neighbor metadata preload
+
+**Files:** `src/lib/requests/imageRequests.ts` (`getCachedImageInfo`, `preloadImageInfo`, `rememberImageInfo`), `src/routes/+page.svelte`, `src/lib/items/ImageFull.svelte`
+
+Media neighbors preload in the stage; metadata must preload too. On arrow nav the media promote is often instant, so starting the info fetch only then leaves a frame with image and no panel (layout jump).
+
+- Cache progressive info fetches; apply cache synchronously when selecting an image.
+- Warm prev/next metadata while fullscreen is open.
+- `stageInfo` updates when `data.id === stageId`; do **not** clear it on promote just because `data` has not caught up yet (live/closed still clear).

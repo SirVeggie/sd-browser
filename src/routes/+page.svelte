@@ -11,9 +11,11 @@
     import {
         fetchImagePage,
         generateCompressedImages,
+        getCachedImageInfo,
         getImageInfo,
         imageAction,
         loadImageInfoProgressive,
+        preloadImageInfo,
         subscribeImageStream,
     } from "$lib/requests/imageRequests";
     import { expandClientImages, formatSearchDateMinute } from "$lib/tools/misc";
@@ -655,6 +657,8 @@
     }
 
     function loadFullscreenImageInfo(imageId: string) {
+        const cached = getCachedImageInfo(imageId);
+        if (cached) info = cached;
         void loadImageInfoProgressive(
             imageId,
             (res) => {
@@ -662,6 +666,13 @@
             },
             () => currentImage?.id !== imageId,
         );
+    }
+
+    // Warm neighbor metadata so swaps can bind info as soon as media promotes.
+    $: if (!live && currentImage) {
+        if (prevIndex >= 0) preloadImageInfo(galleryImages[prevIndex]?.id);
+        if (nextIndex >= 0 && nextIndex < galleryImages.length)
+            preloadImageInfo(galleryImages[nextIndex]?.id);
     }
 
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
