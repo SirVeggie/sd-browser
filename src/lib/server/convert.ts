@@ -6,8 +6,20 @@ import fs from 'fs/promises';
 import { backgroundTasks } from './background';
 import { sleep } from '$lib/tools/sleep';
 import { skipGeneration } from '$lib/tools/misc';
+import {
+    fitImageToMaxTotalPixels,
+    fitMediumPreviewSize,
+} from '$lib/tools/imageGeometry';
 import type { EmbeddingApiType } from '$lib/types/embeddings';
 import type { GeneratedQualityMode } from '$lib/types/misc';
+
+export {
+    MEDIUM_MAX_TOTAL_PIXELS,
+    WEBP_MAX_DIMENSION,
+    clampToWebpMaxDimension,
+    fitImageToMaxTotalPixels,
+    fitMediumPreviewSize,
+} from '$lib/tools/imageGeometry';
 
 /** Local library images (cameras/phones) often have minor JPEG marker issues. */
 const TRUSTED_IMAGE_INPUT: sharp.SharpOptions = { failOn: 'truncated' };
@@ -18,49 +30,26 @@ export type QualityTierSettings = {
     effort: number;
 };
 
+/**
+ * Medium/low use effort 4 (not 0): libwebp with effort 0 hits PARTITION0_OVERFLOW on
+ * large/high-entropy images. Medium is also capped at 2MP (see fitMediumPreviewSize).
+ * Smart subsampling is always disabled.
+ */
 export const QUALITY_TIER_SETTINGS: Record<GeneratedQualityMode, QualityTierSettings> = {
-    medium: { quality: 90, effort: 0 },
-    low: { width: 460, quality: 80, effort: 0 },
+    medium: { quality: 90, effort: 4 },
+    low: { width: 460, quality: 80, effort: 4 },
     minimal: { width: 230, quality: 70, effort: 6 },
 };
 
 const LLAMA_EMBEDDING_MAX_TOTAL_PIXELS = 512 * 512;
 const SV_EMBED_INPUT_SIZE = 384;
 
-export function buildWebpOptions(
-    settings: QualityTierSettings,
-    smartSubsample: boolean,
-): sharp.WebpOptions {
+export function buildWebpOptions(settings: QualityTierSettings): sharp.WebpOptions {
     return {
         quality: settings.quality,
         effort: settings.effort,
-        ...(smartSubsample ? { smartSubsample: true } : {}),
+        smartSubsample: false,
     };
-}
-
-export function fitImageToMaxTotalPixels(
-    width: number,
-    height: number,
-    maxTotalPixels: number,
-): { width: number; height: number } {
-    const totalPixels = width * height;
-    if (totalPixels <= maxTotalPixels) {
-        return { width, height };
-    }
-
-    const scale = Math.sqrt(maxTotalPixels / totalPixels);
-    let nextWidth = Math.max(1, Math.floor(width * scale));
-    let nextHeight = Math.max(1, Math.floor(height * scale));
-
-    while (nextWidth * nextHeight > maxTotalPixels) {
-        if (nextWidth / width >= nextHeight / height) {
-            nextWidth--;
-        } else {
-            nextHeight--;
-        }
-    }
-
-    return { width: nextWidth, height: nextHeight };
 }
 
 export async function encodeImageForLlm(imagepath: string): Promise<Buffer> {
@@ -114,10 +103,9 @@ export function generateQualityTask(
     imagepath: string,
     outputpath: string,
     tier: GeneratedQualityMode,
-    smartSubsample: boolean,
 ): Promise<string> {
     return backgroundTasks.addWork(
-        () => generateQualityImage(imagepath, outputpath, tier, smartSubsample),
+        () => generateQualityImage(imagepath, outputpath, tier),
         true,
     );
 }
@@ -126,22 +114,44 @@ export async function generateQualityImage(
     imagepath: string,
     outputpath: string,
     tier: GeneratedQualityMode,
-    smartSubsample: boolean,
 ): Promise<string> {
+    await writeQualityWebp(imagepath, outputpath, tier);
+    return outputpath;
+}
+
+async function writeQualityWebp(
+    imagepath: string,
+    outputpath: string,
+    tier: GeneratedQualityMode,
+): Promise<void> {
     const settings = QUALITY_TIER_SETTINGS[tier];
-    const webpOptions = buildWebpOptions(settings, smartSubsample);
+    const webpOptions = buildWebpOptions(settings);
     let pipeline = sharp(imagepath, TRUSTED_IMAGE_INPUT);
+
     if (settings.width) {
         pipeline = pipeline.resize({ width: settings.width });
+    } else {
+        const metadata = await sharp(imagepath, TRUSTED_IMAGE_INPUT).metadata();
+        const width = metadata.width;
+        const height = metadata.height;
+        if (width && height) {
+            const target = fitMediumPreviewSize(width, height);
+            if (target.width !== width || target.height !== height) {
+                pipeline = pipeline.resize({
+                    width: target.width,
+                    height: target.height,
+                    fit: 'fill',
+                });
+            }
+        }
     }
+
     await pipeline.webp(webpOptions).toFile(outputpath);
-    return outputpath;
 }
 
 export async function generateQualityFromId(
     id: string,
     tier: GeneratedQualityMode,
-    smartSubsample = true,
     file?: string,
 ) {
     const imagepath = file ?? getImage(id)?.file;
@@ -151,21 +161,21 @@ export async function generateQualityFromId(
     const stats = await fs.stat(output).catch(() => undefined);
     if (stats?.isFile()) return;
     console.log(`Generating ${tier} preview for ${id}`);
-    await generateQualityImage(imagepath, output, tier, smartSubsample).catch(async () => {
+    await generateQualityImage(imagepath, output, tier).catch(async () => {
         console.log(`Failed to generate ${tier} preview, retrying...`);
         await sleep(200);
-        await generateQualityImage(imagepath, output, tier, smartSubsample).catch(handleGenerationError(output));
+        await generateQualityImage(imagepath, output, tier).catch(handleGenerationError(output));
     });
 }
 
 /** @deprecated use generateQualityFromId with tier 'medium' */
 export async function generateCompressedFromId(id: string, file?: string) {
-    return generateQualityFromId(id, 'medium', true, file);
+    return generateQualityFromId(id, 'medium', file);
 }
 
 /** @deprecated use generateQualityFromId with tier 'low' */
 export async function generateThumbnailFromId(id: string, file?: string) {
-    return generateQualityFromId(id, 'low', true, file);
+    return generateQualityFromId(id, 'low', file);
 }
 
 function handleGenerationError(output: string) {

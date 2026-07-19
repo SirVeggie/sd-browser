@@ -24,7 +24,6 @@ export async function image(
     type?: string,
     defer?: boolean,
     preview?: boolean,
-    smartSubsample = true,
 ) {
     const img = getImage(imageid ?? '');
     if (!img) return error('Image not found', 404);
@@ -40,7 +39,7 @@ export async function image(
     let buffer;
     try {
         if (!skip && isGeneratedTier(type)) {
-            buffer = await getImageTier(imageid!, file, type, defer, smartSubsample);
+            buffer = await getImageTier(imageid!, file, type, defer);
         } else {
             buffer = await readFile(file);
         }
@@ -61,7 +60,6 @@ async function getImageTier(
     file: string,
     tier: GeneratedQualityMode,
     defer?: boolean,
-    smartSubsample = true,
 ) {
     const cachePath = path.join(qualityTierPaths[tier], `${imageid}.webp`);
     return await readFile(cachePath).then(async x => {
@@ -75,11 +73,11 @@ async function getImageTier(
         if (generationDisabled)
             return await readFile(file);
         if (defer) {
-            await generateQualityTask(file, cachePath, tier, smartSubsample);
+            await generateQualityTask(file, cachePath, tier);
             console.log(`Generated ${tier} preview for ${imageid}`);
         } else {
             console.log(`Generating ${tier} preview for ${imageid}`);
-            await generateQualityImage(file, cachePath, tier, smartSubsample);
+            await generateQualityImage(file, cachePath, tier);
         }
         return await readFile(cachePath);
     }).catch(async () => {

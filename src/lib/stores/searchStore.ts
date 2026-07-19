@@ -42,7 +42,6 @@ export const similarityAlgorithm = writable<SimilarityAlgorithm>(defaultExplorat
 export const similarityThreshold = writable(defaultExplorationSettings.similarityThreshold);
 export const matchingMode = writable<SearchMode>('regex');
 export const slideDelay = writable(4000);
-export const useSmartSubsampling = writable(true);
 
 export function buildSearchParams(searchText?: string): SearchParams {
     const filters: string[] = [];
@@ -86,5 +85,4 @@ export function syncSearchWithLocalStorage() {
     syncMemory('similarityThreshold', similarityThreshold, true);
     syncMemory('matchingMode', matchingMode);
     syncMemory('slideDelay', slideDelay);
-    syncMemory('useSmartSubsampling', useSmartSubsampling, true);
 }

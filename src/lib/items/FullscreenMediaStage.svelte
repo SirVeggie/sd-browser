@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import { compressedMode, useSmartSubsampling } from "$lib/stores/searchStore";
+  import { compressedMode } from "$lib/stores/searchStore";
   import { buildImageQueryParams } from "$lib/requests/imageRequests";
   import type { ClientImage } from "$lib/types/images";
   import FullscreenMediaPanel from "./FullscreenMediaPanel.svelte";
@@ -33,7 +33,7 @@
   let desiredId = "";
 
   $: qualityMode = showOriginal ? "original" : $compressedMode;
-  $: mediaQuery = buildImageQueryParams(qualityMode, $useSmartSubsampling);
+  $: mediaQuery = buildImageQueryParams(qualityMode);
 
   function mediaUrlFor(img: ClientImage | undefined): string {
     if (!img?.id) return "";

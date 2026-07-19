@@ -5,9 +5,8 @@ export async function GET(e) {
     const type = e.url.searchParams.get('quality') ?? undefined;
     const defer = e.url.searchParams.get('defer') === 'true';
     const preview = e.url.searchParams.get('preview') === 'true';
-    const smartSubsample = e.url.searchParams.get('smartSubsampling') !== 'false';
     const start = Date.now();
-    const res = await image(src, type, defer, preview, smartSubsample);
+    const res = await image(src, type, defer, preview);
     const duration = Date.now() - start;
     if (duration > 1000)
         console.log(`WARN: img-req ${duration} ms | t:${type ?? '--'} d:${defer} p:${preview}`)

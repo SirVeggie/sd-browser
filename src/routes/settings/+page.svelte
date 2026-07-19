@@ -22,7 +22,6 @@
         slideDelay,
         sparseFrequency,
         thumbMode,
-        useSmartSubsampling,
     } from "$lib/stores/searchStore";
     import {
         activeCustomFilterIds,
@@ -1092,12 +1091,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         <label class="checkbox">
             Animate thumbnail for videos
             <input type="checkbox" bind:checked={$animatedThumb} />
-        </label>
-
-        <label class="checkbox">
-            Use smart subsampling
-            <span class="gray">(disabling makes compression faster)</span>
-            <input type="checkbox" bind:checked={$useSmartSubsampling} />
         </label>
 
         <div class="inline-action">

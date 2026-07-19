@@ -8,7 +8,6 @@
     import {
         animatedThumb,
         thumbMode,
-        useSmartSubsampling,
     } from "$lib/stores/searchStore";
     import {
         clearImageRefs,
@@ -95,7 +94,7 @@
         const extra = defer
             ? `defer=true&${getPreviewParam("image", $animatedThumb)}`
             : getPreviewParam("image", $animatedThumb);
-        return `/api/images/${id}?${buildImageQueryParams($thumbMode, $useSmartSubsampling, extra)}`;
+        return `/api/images/${id}?${buildImageQueryParams($thumbMode, extra)}`;
     }
 
     function openPreview(ref: ImageSearchRef) {

@@ -261,12 +261,8 @@ export function getQualityParam(mode: QualityMode) {
     }
 }
 
-export function getSmartSubsamplingParam(enabled: boolean) {
-    return `smartSubsampling=${enabled}`;
-}
-
-export function buildImageQueryParams(mode: QualityMode, smartSubsampling: boolean, extra?: string) {
-    const parts = [getQualityParam(mode), getSmartSubsamplingParam(smartSubsampling)];
+export function buildImageQueryParams(mode: QualityMode, extra?: string) {
+    const parts = [getQualityParam(mode)];
     if (extra) parts.push(extra);
     return parts.join('&');
 }
@@ -334,7 +330,6 @@ export async function loadImageInfoProgressive(
 export async function generateCompressedImages(
     ids: string[],
     tier: GeneratedQualityMode = 'medium',
-    smartSubsampling = true,
     fetch?: FetchType,
 ): Promise<void> {
     if (!ids || !ids.length)
@@ -342,7 +337,7 @@ export async function generateCompressedImages(
     let url = `/api/generate`;
     if (!fetch)
         url = get(page).url.origin + url;
-    const res = await (fetch ? doPost(url, fetch, { ids, tier, smartSubsampling }) : doServerPost(url, { ids, tier, smartSubsampling }));
+    const res = await (fetch ? doPost(url, fetch, { ids, tier }) : doServerPost(url, { ids, tier }));
     if ('error' in res)
         return console.error(res.error);
     if ('message' in res)

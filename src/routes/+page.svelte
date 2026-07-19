@@ -41,7 +41,6 @@
         matchingMode,
         compressedMode,
         slideDelay,
-        useSmartSubsampling,
         buildSearchParams,
         syncSearchInput,
         similarityThreshold,
@@ -687,7 +686,6 @@
                 generateCompressedImages(
                     currentImages.map((x) => x.id).slice(startIndex, endIndex),
                     $compressedMode,
-                    $useSmartSubsampling,
                 );
             }, 1000);
         }

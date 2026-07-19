@@ -97,30 +97,23 @@ Orphaned keys can be deleted anytime; they have no readers.
 
 ### What changed
 
-`useSmartSubsampling` now syncs through global settings (MiscDB `settings` key), matching other shared image preferences such as `nsfwFilter` and quality modes.
+`useSmartSubsampling` briefly synced through global settings (MiscDB `settings` key).
+
+**Later (same month):** the Settings toggle, query param, and generate API field were removed. Encoding always uses `smartSubsample: false`. Stale `useSmartSubsampling` keys in localStorage / MiscDB are ignored and need no cleanup migration.
 
 ### Affected data
 
 | Location | Change |
 |----------|--------|
-| localStorage `useSmartSubsampling` | Unchanged; still read on startup before global pull |
-| Global settings `useSmartSubsampling` | New key; absent until a client changes the toggle or loads with an existing local value and syncs |
-
-Existing per-client localStorage values continue to work. The server default when the key is missing remains `true` (store default and image API fallback).
+| localStorage / MiscDB `useSmartSubsampling` | Orphaned; ignored by current clients |
 
 ### Migration code
 
-- [`src/lib/stores/searchStore.ts`](../src/lib/stores/searchStore.ts) — `syncMemory('useSmartSubsampling', …, true)` registers the store for global pull/push
-
-### How to verify
-
-1. Client A — disable **Use smart subsampling** in Settings; confirm `useSmartSubsampling` appears in global settings (MiscDB or `/api/settings`).
-2. Client B — reload or open Settings; the toggle matches client A.
-3. Fresh client with no localStorage — receives the synced value from global settings on load.
+None. Removed from [`src/lib/stores/searchStore.ts`](../src/lib/stores/searchStore.ts).
 
 ### Removal
 
-No dedicated migration helper is required; the setting is a boolean with a stable default.
+Keys may linger indefinitely; harmless.
 
 ## SIMILAR img removed (2026-07)
 
@@ -423,14 +416,14 @@ After all clients are on v4+, no further migration steps are required for tags.
 
 ### What changed
 
-Generated WebP cache folders were renamed to match quality tier names. A new `minimal` quality tier was added (230px width, quality 70, effort 6). Smart subsampling is now configurable when generating cached WebP files.
+Generated WebP cache folders were renamed to match quality tier names. A new `minimal` quality tier was added (230px width, quality 70, effort 6). (Smart subsampling was briefly configurable, then removed — encoding always uses `smartSubsample: false`.)
 
 ### Affected data
 
 | Legacy folder | New folder | Quality tier |
 |---------------|------------|--------------|
-| `{LOCAL_DATA}/compressed/` | `{LOCAL_DATA}/medium/` | `medium` (full-size WebP, quality 90) |
-| `{LOCAL_DATA}/thumbnails/` | `{LOCAL_DATA}/low/` | `low` (460px, quality 80) |
+| `{LOCAL_DATA}/compressed/` | `{LOCAL_DATA}/medium/` | `medium` (≤2MP WebP, quality 90, effort 4) |
+| `{LOCAL_DATA}/thumbnails/` | `{LOCAL_DATA}/low/` | `low` (460px, quality 80, effort 4) |
 | *(none)* | `{LOCAL_DATA}/minimal/` | `minimal` (230px, quality 70, effort 6) |
 
 App version bumped from `4` to `5`.
@@ -446,7 +439,7 @@ App version bumped from `4` to `5`.
 
 1. Upgrade from v4 with populated `compressed/` and `thumbnails/` folders — files appear under `medium/` and `low/` after startup; empty legacy folders are removed.
 2. Gallery thumbnails (`quality=low`) and full view (`quality=medium` or `quality=minimal`) load without errors.
-3. Settings — `minimal` appears in quality dropdowns; smart subsampling toggle persists locally and syncs globally; clear compressed images deletes only generated WebP cache files.
+3. Settings — `minimal` appears in quality dropdowns; clear compressed images deletes only generated WebP cache files.
 4. Delete or move an image — cache files are removed from the new tier folders.
 5. Fresh install — empty `medium/`, `low/`, and `minimal/` folders are created; lazy generation still works.
 6. Re-run startup — migration is a no-op (idempotent).

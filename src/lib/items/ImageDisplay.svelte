@@ -4,7 +4,7 @@
     import Clickable from "./Clickable.svelte";
     import ImageLoadingPlaceholder from "./ImageLoadingPlaceholder.svelte";
     import { cx } from "$lib/tools/cx";
-    import { animatedThumb, thumbMode, useSmartSubsampling } from "$lib/stores/searchStore";
+    import { animatedThumb, thumbMode } from "$lib/stores/searchStore";
     import {
         buildImageQueryParams,
         getPreviewParam,
@@ -118,7 +118,7 @@
         }
     }
 
-    $: src = `${img.url}?${buildImageQueryParams($thumbMode, $useSmartSubsampling, `defer=true&${getPreviewParam(img.type, $animatedThumb)}`)}`;
+    $: src = `${img.url}?${buildImageQueryParams($thumbMode, `defer=true&${getPreviewParam(img.type, $animatedThumb)}`)}`;
     $: active = !!onClick;
     $: spacingCompact = $imageSpacing === "compact";
     $: spacingMosaic = $imageSpacing === "mosaic";
