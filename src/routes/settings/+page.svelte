@@ -1218,13 +1218,26 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         flex-wrap: wrap;
         margin: calc(-1 * var(--main-padding)) calc(-1 * var(--main-padding)) 0;
         padding: var(--main-padding);
+        /* Extra top inset; bottom pad unchanged so gap to first cards stays the same. */
+        padding-top: calc(var(--main-padding) + 0.45rem);
         padding-bottom: 1.15rem;
         background: color-mix(in srgb, var(--bg) 58%, transparent);
         backdrop-filter: blur(16px) saturate(1.15);
         -webkit-backdrop-filter: blur(16px) saturate(1.15);
         border-bottom: none;
-        mask-image: linear-gradient(to bottom, #000 62%, transparent);
-        -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent);
+        /* Fade only in the bottom padding — keep title/actions fully opaque. */
+        mask-image: linear-gradient(
+            to bottom,
+            #000 0%,
+            #000 calc(100% - 1.15rem),
+            transparent 100%
+        );
+        -webkit-mask-image: linear-gradient(
+            to bottom,
+            #000 0%,
+            #000 calc(100% - 1.15rem),
+            transparent 100%
+        );
 
         h3 {
             margin: 0;
