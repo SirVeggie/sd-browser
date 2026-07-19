@@ -429,11 +429,13 @@
         );
         if (!confirmed) return;
 
+        // Dismiss edit modal immediately; backend removal can take a while.
+        closeTagModal();
+
         try {
             const removedFrom = await deleteTagFromImages(tag.name);
             tagsStore.update((state) => removeTagDefinition(state, tag.name));
             notify(`Deleted tag '${tag.name}' (removed from ${removedFrom} images)`);
-            closeTagModal();
         } catch (cause) {
             console.error(cause);
             notify(cause instanceof Error ? cause.message : "Failed to delete tag", "warn");
