@@ -26,6 +26,14 @@ When a dropdown is open, an outside `pointerdown` / `touchstart` / `click` must 
 
 ---
 
+## Toasts stay above everything
+
+**File:** `src/lib/components/Notifier.svelte`
+
+Toasts portal to `document.body` and use `z-index: 10000` so they are never covered by modals (`Modal` is 210 and also body-portaled), pickers, or the operation banner. Do not lower toast stacking below other overlays.
+
+---
+
 ## Search input syntax highlighting
 
 **File:** `src/lib/items/SearchInput.svelte`

@@ -59,9 +59,21 @@
 <script lang="ts">
 	import { flip } from 'svelte/animate';
 	import { fly } from 'svelte/transition';
+	import { onMount } from 'svelte';
+
+	let rootEl: HTMLDivElement | undefined;
+
+	onMount(() => {
+		if (!rootEl) return;
+		// Portal to body so toasts are not trapped under body-appended modals.
+		document.body.appendChild(rootEl);
+		return () => {
+			rootEl?.remove();
+		};
+	});
 </script>
 
-<div class="notifications">
+<div class="notifications" bind:this={rootEl}>
 	{#each $noteStore as n (n.id)}
 		<div class="notification" animate:flip={{ duration: 400 }}>
 			<!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -76,7 +88,8 @@
 <style lang="scss">
 	.notifications {
 		position: fixed;
-		z-index: 100;
+		/* Above modals (210), pickers (221), and operation banner (1000). */
+		z-index: 10000;
 		top: 20px;
 		right: 30px;
 		left: 30px;
