@@ -195,7 +195,7 @@ export const searchKeywordHelpSections = [
                 keyword: 'SIMILAR|SM',
                 summary: 'Finds images with similar prompts.',
                 details:
-                    'Pass an image reference (#n or [n]) or image id to compare prompt text. A trailing number overrides the similarity threshold. This is prompt-only; use IMG for embedding similarity.',
+                    'Pass an image reference (#n, [n], or [refs] for all slots) or image id to compare prompt text. A trailing number overrides the similarity threshold. This is prompt-only; use IMG for embedding similarity.',
                 example: 'SM #1 0.6',
             },
         ],
@@ -207,15 +207,15 @@ export const searchKeywordHelpSections = [
                 keyword: 'IMG',
                 summary: 'Searches with image embeddings.',
                 details:
-                    'Bare IMG matches images that have embeddings. Text runs an embedding search. A 64-character hex id uses that image\'s embedding. Use #n or [n] for reference-strip slots (e.g. IMG #1 0.8). Mix ids and text with spaced + and - for positive and negative weights; a leading spaced - is negative-only. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count (either order). Use -1 as k to return all embedded matches sorted by score without threshold filtering. Named multi-image modes are listed below.',
+                    'Bare IMG matches images that have embeddings. Text runs an embedding search. A 64-character hex id uses that image\'s embedding. Use #n or [n] for reference-strip slots (e.g. IMG #1 0.8), or [refs] to expand every current reference as space-separated ids. Mix ids and text with spaced + and - for positive and negative weights; a leading spaced - is negative-only. Prefix text with ~ to skip the search template. Trailing decimals set the similarity threshold; trailing integers limit result count (either order). Use -1 as k to return all embedded matches sorted by score without threshold filtering. Named multi-image modes are listed below.',
                 example: 'IMG cat + #1 - beach 0.8',
             },
             {
                 keyword: 'IMG avg',
                 summary: 'Blends reference embeddings into a centroid.',
                 details:
-                    'Averages the reference image embeddings, renormalizes, then runs nearest-neighbor search. Soft blend of shared traits. Default for multi-select Similar images. Needs one or more hex ids (or #n refs). Space-separated ids, no +.',
-                example: 'IMG avg #1 #2 #3 0.8',
+                    'Averages the reference image embeddings, renormalizes, then runs nearest-neighbor search. Soft blend of shared traits. Default for multi-select Similar images. Needs one or more hex ids (or #n / [refs]). Space-separated ids, no +.',
+                example: 'IMG avg [refs] 0.8',
             },
             {
                 keyword: 'IMG all',

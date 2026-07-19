@@ -39,7 +39,7 @@ N/A (this is the removal of the optimized-query path). Drop leftover `useOptimiz
 
 ### What changed
 
-IMG search can reference client-side image slots with `#n` or `[n]` syntax (e.g. `IMG #1 0.8`). Slots are stored in localStorage until cleared manually; they are not synced through global settings.
+IMG search can reference client-side image slots with `#n` or `[n]` syntax (e.g. `IMG #1 0.8`), or `[refs]` to expand every current reference as space-separated ids in slot order. Slots are stored in localStorage until cleared manually; they are not synced through global settings.
 
 ### Affected data
 
@@ -58,8 +58,9 @@ No server-side migration. Search expansion happens in the client before API requ
 
 1. Add image refs via the reference strip (context menu **Add reference**, drag-and-drop, or `addImageRefs()` in devtools); confirm `imageSearchRefs` in localStorage.
 2. Search `IMG #1` with slot 1 populated — results use that image's embedding.
-3. Search `IMG #99` with no slot 99 — search returns zero results.
-4. Reload — refs persist from localStorage.
+3. Search `IMG avg [refs]` with multiple slots — expands to all ref ids.
+4. Search `IMG #99` with no slot 99 — search returns zero results.
+5. Reload — refs persist from localStorage.
 
 ### Removal
 

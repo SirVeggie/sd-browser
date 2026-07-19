@@ -58,6 +58,14 @@ The Settings title + Back/Reset/Logout row stays `position: sticky; top: 0` with
 
 ---
 
+## Search `[refs]` token
+
+**File:** `src/lib/tools/searchReferences.ts`
+
+`[refs]` (case-insensitive) expands to every current image-reference id, space-separated, in slot order — same client-side expansion path as `#n` / `[n]`. Empty refs → invalid (zero-result search), like a missing slot.
+
+---
+
 ## Search input syntax highlighting
 
 **File:** `src/lib/items/SearchInput.svelte`

@@ -99,6 +99,25 @@ assert.equal(
     'expands refs in more mode',
 );
 
+assert.equal(
+    expandSearchReferences(`IMG avg [refs] 0.8`, refMap),
+    `IMG avg ${id1} ${id2} 0.8`,
+    'expands [refs] to all ids in slot order',
+);
+
+assert.equal(
+    expandSearchReferences(`IMG [REFS]`, refMap),
+    `IMG ${id1} ${id2}`,
+    '[refs] match is case-insensitive',
+);
+
+const sparseMap = new Map([[3, id3], [1, id1]]);
+assert.equal(
+    expandSearchReferences('IMG avg [refs]', sparseMap),
+    `IMG avg ${id1} ${id3}`,
+    '[refs] sorts by slot even when map insertion order differs',
+);
+
 const untouched = `IMG ${id1} 0.8`;
 assert.equal(
     expandSearchReferences(untouched, refMap),
@@ -110,6 +129,8 @@ assert.equal(hasInvalidSearchReferences('IMG #1', refMap), false, 'valid ref is 
 assert.equal(hasInvalidSearchReferences('IMG #3', refMap), true, 'missing slot is invalid');
 assert.equal(hasInvalidSearchReferences('IMG [99]', refMap), true, 'missing bracket ref is invalid');
 assert.equal(hasInvalidSearchReferences(`IMG ${id1}`, refMap), false, 'hex id alone is not a ref token');
+assert.equal(hasInvalidSearchReferences('IMG [refs]', refMap), false, '[refs] with refs present is valid');
+assert.equal(hasInvalidSearchReferences('IMG [refs]', new Map()), true, '[refs] with no refs is invalid');
 
 const ranges = getSearchReferenceRanges('IMG #1 + cat - [2] AND #9', refMap);
 assert.deepEqual(
@@ -120,6 +141,18 @@ assert.deepEqual(
         { start: 23, end: 25, slot: 9, valid: false },
     ],
     'collects valid and invalid ref ranges',
+);
+
+assert.deepEqual(
+    getSearchReferenceRanges('IMG avg [refs]', refMap),
+    [{ start: 8, end: 14, slot: null, valid: true }],
+    'collects [refs] highlight range when refs exist',
+);
+
+assert.deepEqual(
+    getSearchReferenceRanges('SM [refs]', new Map()),
+    [{ start: 3, end: 9, slot: null, valid: false }],
+    'marks empty [refs] as invalid for highlighting',
 );
 
 const typedSearch = 'IMG #1 0.8';

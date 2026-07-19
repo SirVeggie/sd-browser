@@ -184,7 +184,7 @@ Example: `ID abc123… def456…` or `ID #2 #3`
 `VIDEO`: Keeps only video files  
 Example: `VID`
 
-`SIMILAR`: Finds images with similar **prompt text** to a reference image (`#n`, `[n]`, or hex id). Optional trailing number sets the similarity threshold. Calculates a fuzzy text similarity score against each candidate from the positive prompt.  
+`SIMILAR`: Finds images with similar **prompt text** to a reference image (`#n`, `[n]`, `[refs]` for all slots, or hex id). Optional trailing number sets the similarity threshold. Calculates a fuzzy text similarity score against each candidate from the positive prompt.  
 Example: `SM #1 0.6`
 
 `SKIP`: Skips the first N results after sorting. Useful to see later images without scrolling.  
