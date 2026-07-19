@@ -76,3 +76,17 @@ Videos embed from their preview PNG. If `preview` is empty, skip the video (do n
 libwebp with **effort 0** fails on large/high-entropy images (`webpsave: unable to encode` — PARTITION0_OVERFLOW). Do not set medium/low `effort` back to 0. The 2MP cap also keeps wallpaper encodes fast and within encoder limits.
 
 Existing cache files are not auto-regenerated after tier setting changes — clear compressed images (or delete those `.webp` files) to rebuild.
+
+---
+
+## EXIF photo orientation
+
+**Files:** `src/lib/server/convert.ts`, `src/lib/server/imageDimensions.ts`, `src/lib/tools/imageGeometry.ts` (`orientedDisplaySize`)
+
+Camera JPEGs often store pixels in sensor orientation and put the real rotation in EXIF Orientation (1–8). Sharp does **not** apply that unless you call `.rotate()` with no angle.
+
+- All sharp encode paths (WebP tiers, embedding, LLM) must `.rotate()` before resize/encode so pixels match display orientation and the Orientation tag is stripped from outputs.
+- Indexed `width`/`height` must use `orientedDisplaySize` (swap sides for tags 5–8) so gallery aspect-ratio / masonry match what the browser shows for `quality=original`.
+- Do not “fix” orientation only in CSS/`transform` — that breaks embeddings and cached WebP.
+
+Already-generated WebP caches and already-stored dimensions are not rewritten automatically; clear compressed images (and re-index dimensions if tiles look stretched) after changing this behavior.

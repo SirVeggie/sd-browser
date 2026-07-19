@@ -4,6 +4,7 @@ import {
     WEBP_MAX_DIMENSION,
     clampToWebpMaxDimension,
     fitMediumPreviewSize,
+    orientedDisplaySize,
 } from '../src/lib/tools/imageGeometry.ts';
 
 assert.equal(MEDIUM_MAX_TOTAL_PIXELS, 2_000_000);
@@ -22,5 +23,11 @@ assert.equal(Math.abs(fourK.width / fourK.height - 3840 / 2160) < 0.01, true);
 
 const wallpaper = fitMediumPreviewSize(7680, 4320);
 assert.ok(wallpaper.width * wallpaper.height <= MEDIUM_MAX_TOTAL_PIXELS);
+
+assert.deepEqual(orientedDisplaySize(4032, 3024), { width: 4032, height: 3024 });
+assert.deepEqual(orientedDisplaySize(4032, 3024, 1), { width: 4032, height: 3024 });
+assert.deepEqual(orientedDisplaySize(4032, 3024, 3), { width: 4032, height: 3024 });
+assert.deepEqual(orientedDisplaySize(4032, 3024, 6), { width: 3024, height: 4032 });
+assert.deepEqual(orientedDisplaySize(4032, 3024, 8), { width: 3024, height: 4032 });
 
 console.log('convert.test.ts: all tests passed');

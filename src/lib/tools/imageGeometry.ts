@@ -4,6 +4,22 @@ export const WEBP_MAX_DIMENSION = 16383;
 /** Medium quality tier: downscale so width×height ≤ this (≈1414×1414 square, ~1889×1059 16:9). */
 export const MEDIUM_MAX_TOTAL_PIXELS = 2_000_000;
 
+/**
+ * Map stored pixel size + EXIF Orientation (1–8) to display width/height.
+ * Tags 5–8 rotate by 90°/270°, so sides swap. Used for gallery layout and
+ * resize math; pair with sharp `.rotate()` (no args) when encoding.
+ */
+export function orientedDisplaySize(
+    width: number,
+    height: number,
+    orientation?: number,
+): { width: number; height: number } {
+    if (orientation !== undefined && orientation >= 5 && orientation <= 8) {
+        return { width: height, height: width };
+    }
+    return { width, height };
+}
+
 /** Clamp a size so neither side exceeds the WebP max dimension. */
 export function clampToWebpMaxDimension(
     width: number,

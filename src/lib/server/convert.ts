@@ -9,6 +9,7 @@ import { skipGeneration } from '$lib/tools/misc';
 import {
     fitImageToMaxTotalPixels,
     fitMediumPreviewSize,
+    orientedDisplaySize,
 } from '$lib/tools/imageGeometry';
 import type { EmbeddingApiType } from '$lib/types/embeddings';
 import type { GeneratedQualityMode } from '$lib/types/misc';
@@ -19,6 +20,7 @@ export {
     clampToWebpMaxDimension,
     fitImageToMaxTotalPixels,
     fitMediumPreviewSize,
+    orientedDisplaySize,
 } from '$lib/tools/imageGeometry';
 
 /** Local library images (cameras/phones) often have minor JPEG marker issues. */
@@ -53,7 +55,8 @@ export function buildWebpOptions(settings: QualityTierSettings): sharp.WebpOptio
 }
 
 export async function encodeImageForLlm(imagepath: string): Promise<Buffer> {
-    return sharp(imagepath, TRUSTED_IMAGE_INPUT).jpeg({ quality: 80 }).toBuffer();
+    // `.rotate()` with no angle applies EXIF Orientation and strips the tag.
+    return sharp(imagepath, TRUSTED_IMAGE_INPUT).rotate().jpeg({ quality: 80 }).toBuffer();
 }
 
 /** Encode an image for the configured embedding API. */
@@ -61,14 +64,17 @@ export async function encodeImageForEmbedding(
     imagepath: string,
     apiType: EmbeddingApiType = 'llama-cpp',
 ): Promise<Buffer> {
-    const image = sharp(imagepath, TRUSTED_IMAGE_INPUT);
-
-    const metadata = await image.metadata();
-    const width = metadata.width;
-    const height = metadata.height;
-    if (!width || !height) {
+    const metadata = await sharp(imagepath, TRUSTED_IMAGE_INPUT).metadata();
+    if (!metadata.width || !metadata.height) {
         throw new Error('Cannot read image dimensions');
     }
+    const { width, height } = orientedDisplaySize(
+        metadata.width,
+        metadata.height,
+        metadata.orientation,
+    );
+
+    const image = sharp(imagepath, TRUSTED_IMAGE_INPUT).rotate();
 
     switch (apiType) {
         case 'sv-embed':
@@ -126,15 +132,19 @@ async function writeQualityWebp(
 ): Promise<void> {
     const settings = QUALITY_TIER_SETTINGS[tier];
     const webpOptions = buildWebpOptions(settings);
-    let pipeline = sharp(imagepath, TRUSTED_IMAGE_INPUT);
+    // Auto-orient from EXIF so cached WebP matches display orientation.
+    let pipeline = sharp(imagepath, TRUSTED_IMAGE_INPUT).rotate();
 
     if (settings.width) {
         pipeline = pipeline.resize({ width: settings.width });
     } else {
         const metadata = await sharp(imagepath, TRUSTED_IMAGE_INPUT).metadata();
-        const width = metadata.width;
-        const height = metadata.height;
-        if (width && height) {
+        if (metadata.width && metadata.height) {
+            const { width, height } = orientedDisplaySize(
+                metadata.width,
+                metadata.height,
+                metadata.orientation,
+            );
             const target = fitMediumPreviewSize(width, height);
             if (target.width !== width || target.height !== height) {
                 pipeline = pipeline.resize({

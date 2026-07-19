@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import fs from 'fs/promises';
+import { orientedDisplaySize } from '$lib/tools/imageGeometry';
 import { isVideo } from '$lib/tools/misc';
 import { fileExistsSync } from './filetools';
 
@@ -12,7 +13,7 @@ export async function readImageDimensions(filepath: string): Promise<MediaDimens
     try {
         const meta = await sharp(filepath, { failOn: 'truncated' }).metadata();
         if (meta.width && meta.height) {
-            return { width: meta.width, height: meta.height };
+            return orientedDisplaySize(meta.width, meta.height, meta.orientation);
         }
     } catch {
         // sharp could not read the file
