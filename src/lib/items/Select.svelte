@@ -24,8 +24,6 @@
     let rootEl: HTMLDivElement;
     let valueEl: HTMLSpanElement;
     let panelLeft = 0;
-    let panelTop = 0;
-    let panelBottom = 0;
     let panelMinWidth = 0;
     let panelMaxHeight = 0;
     let removePositionListeners: (() => void) | undefined;
@@ -58,22 +56,15 @@
         if (!rootEl || !valueEl) return;
         const rootRect = rootEl.getBoundingClientRect();
         const fontSize = parseFloat(getComputedStyle(rootEl).fontSize);
-        const gap = fontSize * 0.35;
-        panelLeft = rootRect.left + alignDropdownPanel(rootEl, valueEl);
-        if (dropUp) {
-            panelTop = 0;
-            panelBottom = window.innerHeight - rootRect.top + gap;
-        } else {
-            panelTop = rootRect.bottom + gap;
-            panelBottom = 0;
-        }
+        // Absolute to `.select` — chrome backdrop-filter breaks fixed/viewport coords.
+        panelLeft = alignDropdownPanel(rootEl, valueEl);
         panelMinWidth = Math.max(
             valueEl.getBoundingClientRect().width + fontSize * 2.2,
             fontSize * 6,
         );
         panelMaxHeight = dropUp
             ? Math.max(120, rootRect.top - 8)
-            : Math.max(120, window.innerHeight - panelTop - 8);
+            : Math.max(120, window.innerHeight - rootRect.bottom - 8);
     }
 
     function startPositionListeners() {
@@ -175,7 +166,7 @@
             class:drop-up={dropUp}
             role="listbox"
             aria-labelledby={id}
-            style="left: {panelLeft}px;{dropUp ? ` bottom: ${panelBottom}px;` : ` top: ${panelTop}px;`} min-width: {panelMinWidth}px; max-height: {panelMaxHeight}px;"
+            style="left: {panelLeft}px; min-width: {panelMinWidth}px; max-height: {panelMaxHeight}px;"
         >
             {#each normalized as option, index (option.value)}
                 <button
@@ -290,12 +281,13 @@
     }
 
     .panel {
-        position: fixed;
+        position: absolute;
         z-index: 220;
         display: flex;
         flex-direction: column;
         gap: 0.15em;
         overflow-y: auto;
+        top: calc(100% + 0.35em);
         background: var(--bg-elev);
         border: none;
         border-radius: 0.35em;
@@ -304,6 +296,8 @@
         @include dropdown.reduced-motion;
 
         &.drop-up {
+            top: auto;
+            bottom: calc(100% + 0.35em);
             flex-direction: column-reverse;
             @include dropdown.panel-animation-up;
 

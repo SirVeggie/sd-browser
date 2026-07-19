@@ -14,6 +14,10 @@ Keep entries short and actionable. Prefer linking to code over restating it.
 
 Overflow-thumb measurement reads the column’s `clientWidth`; measuring the fit-content strip itself causes a collapse feedback loop.
 
+### Chrome dropdowns: no viewport-fixed panels
+
+`.chrome` uses `backdrop-filter`, which makes `position: fixed` descendants position against the chrome box (not the viewport). Sorting/Collapse `Select` panels must stay `position: absolute` under their trigger (same pattern as `FilterMultiSelect`). Do not reintroduce viewport `left`/`bottom` math for fixed panels inside chrome.
+
 ---
 
 ## Search input syntax highlighting
