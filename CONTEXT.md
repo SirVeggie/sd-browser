@@ -52,9 +52,9 @@ Nav arrows are full-height hit targets (`z-index: 46`). The slideshow control mu
 
 ## Settings header is sticky
 
-**File:** `src/routes/settings/+page.svelte` (`.top`)
+**File:** `src/routes/settings/+page.svelte` (`.top`, `.settings::before`)
 
-The Settings title + Back/Reset/Logout row stays `position: sticky; top: 0` with a solid `--bg` so actions remain visible while scrolling the long settings page.
+The Settings title + Back/Reset/Logout row stays sticky with a frosted, mask-faded bar (no hard border) so the page glow shows through. The accent radial lives on a **viewport-fixed** `::before`, not on the scrolling `.settings` background — do not put the gradient back on `.settings` or use an opaque sticky header that covers it.
 
 ---
 

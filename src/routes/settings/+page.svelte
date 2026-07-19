@@ -1176,6 +1176,8 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
 
 <style lang="scss">
     .settings {
+        position: relative;
+        isolation: isolate;
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
@@ -1184,10 +1186,25 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         flex-direction: column;
         align-items: stretch;
         gap: 1rem;
-        background:
-            radial-gradient(ellipse 70% 40% at 50% 0%, rgba(196, 165, 116, 0.07), transparent 55%),
-            var(--bg);
+        background: var(--bg);
         min-height: 100%;
+
+        /* Viewport-fixed glow so scroll doesn't carry the accent away. */
+        &::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: min(42vh, 28rem);
+            pointer-events: none;
+            z-index: -1;
+            background: radial-gradient(
+                ellipse 70% 45% at 50% 0%,
+                rgba(196, 165, 116, 0.09),
+                transparent 62%
+            );
+        }
     }
 
     .top {
@@ -1201,9 +1218,13 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         flex-wrap: wrap;
         margin: calc(-1 * var(--main-padding)) calc(-1 * var(--main-padding)) 0;
         padding: var(--main-padding);
-        padding-bottom: 0.85rem;
-        background: var(--bg);
-        border-bottom: 1px solid var(--line);
+        padding-bottom: 1.15rem;
+        background: color-mix(in srgb, var(--bg) 58%, transparent);
+        backdrop-filter: blur(16px) saturate(1.15);
+        -webkit-backdrop-filter: blur(16px) saturate(1.15);
+        border-bottom: none;
+        mask-image: linear-gradient(to bottom, #000 62%, transparent);
+        -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent);
 
         h3 {
             margin: 0;
