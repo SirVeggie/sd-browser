@@ -34,6 +34,14 @@ Toasts portal to `document.body` and use `z-index: 10000` so they are never cove
 
 ---
 
+## Modal form fields: match Input, don’t use vw min-width
+
+**Files:** `src/lib/components/CustomFilterModal.svelte`, `src/lib/items/Input.svelte`
+
+Modal textareas should match `Input` (inset fill, no border, `border-radius: 9px`). Prefer a form wrapper with `width: 500px; max-width: 100%` over `min-width: min(500px, 80vw)` — the vw min-width overflows the padded modal on mobile.
+
+---
+
 ## Search input syntax highlighting
 
 **File:** `src/lib/items/SearchInput.svelte`

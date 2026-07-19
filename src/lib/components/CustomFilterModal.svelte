@@ -30,26 +30,34 @@
 </script>
 
 <Modal {close}>
-    <h1>{title}</h1>
+    <div class="form">
+        <h1>{title}</h1>
 
-    <!-- svelte-ignore a11y-label-has-associated-control -->
-    <label>
-        Name
-        <Input bind:value={name} />
-    </label>
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label>
+            Name
+            <Input bind:value={name} />
+        </label>
 
-    <label>
-        Filter
-        <textarea bind:value={filter} rows="4" />
-    </label>
+        <label>
+            Filter
+            <textarea bind:value={filter} rows="4" />
+        </label>
 
-    <div class="buttons">
-        <Button on:click={save}>Save</Button>
-        <Button on:click={close}>Cancel</Button>
+        <div class="buttons">
+            <Button on:click={save}>Save</Button>
+            <Button on:click={close}>Cancel</Button>
+        </div>
     </div>
 </Modal>
 
 <style lang="scss">
+    .form {
+        width: 500px;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
     h1 {
         margin: 0 0 0.75em;
         font-size: 1.25em;
@@ -66,18 +74,22 @@
 
     textarea {
         width: 100%;
-        min-width: min(500px, 80vw);
-        background-color: #333;
-        color: #ddd;
-        border-radius: 0.5em;
-        border: 1px solid #1118;
+        min-width: 0;
+        max-width: 100%;
+        background-color: rgba(0, 0, 0, 0.22);
+        color: var(--ink);
+        border-radius: 9px;
+        border: none;
         padding: 0.5em;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
         box-sizing: border-box;
         resize: vertical;
+        font-family: inherit;
+        font-size: inherit;
 
         &:focus {
             outline: none;
-            border-color: #aaad;
+            box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.55);
         }
     }
 
