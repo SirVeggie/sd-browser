@@ -26,8 +26,8 @@ No on-disk embedding rewrite.
 
 ### How to verify
 
-1. Run `IMG turtle` — first query after idle shows `[img-timing] EmbeddingDB.vectorCache.load` (~seconds); subsequent warm queries score without reloading.
-2. Warm `IMG turtle` completes faster than cold; no `path=knn` / `knn-filtered` timing lines.
+1. Run `IMG turtle` — first query after idle is slower (cold cache load); subsequent warm queries score without reloading.
+2. Warm `IMG turtle` completes faster than cold.
 3. Settings → Embedding settings has no “Use optimized embedding query” checkbox.
 4. After 1 hour without embedding reads, the next IMG query reloads the cache.
 

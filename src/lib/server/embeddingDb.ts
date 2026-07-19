@@ -3,7 +3,6 @@ import path from 'path';
 import { cosineSimilarity, bufferToFloat32Array } from '$lib/tools/vectorMath';
 import { datapath } from './paths';
 import { openDatabase } from './sqlite';
-import { logSearchTiming, startSearchTiming } from './searchTiming';
 
 const META_TABLE = 'embedding_meta';
 const VEC_TABLE = 'image_embeddings';
@@ -231,10 +230,8 @@ export class EmbeddingDB {
                 EmbeddingDB.scheduleVectorCacheIdleEviction();
                 return;
             }
-            const count = EmbeddingDB.vectorCache.size;
             EmbeddingDB.vectorCache = null;
             EmbeddingDB.vectorCacheLastUsedAt = 0;
-            console.log(`[img-timing] EmbeddingDB.vectorCache.evict: idle (${count} vectors)`);
         }, VECTOR_CACHE_IDLE_MS);
         // Allow Node to exit without waiting for the idle timer.
         EmbeddingDB.vectorCacheIdleTimer.unref?.();
@@ -255,11 +252,9 @@ export class EmbeddingDB {
             return EmbeddingDB.vectorCache;
         }
 
-        const startedAt = startSearchTiming();
         if (!EmbeddingDB.stmtSelectAllEmbeddings) {
             EmbeddingDB.vectorCache = new Map();
             EmbeddingDB.touchVectorCache();
-            logSearchTiming('EmbeddingDB.vectorCache.load', startedAt, { count: 0 });
             return EmbeddingDB.vectorCache;
         }
 
@@ -270,7 +265,6 @@ export class EmbeddingDB {
 
         EmbeddingDB.vectorCache = cache;
         EmbeddingDB.touchVectorCache();
-        logSearchTiming('EmbeddingDB.vectorCache.load', startedAt, { count: cache.size });
         return cache;
     }
 
@@ -341,26 +335,15 @@ export class EmbeddingDB {
      * When cold, use a light DB id select (does not load vectors — for presence-only paths).
      */
     static getAllImageIds(): Set<string> {
-        const startedAt = startSearchTiming();
         EmbeddingDB.setup();
         if (EmbeddingDB.vectorCache) {
             EmbeddingDB.touchVectorCache();
-            const ids = new Set(EmbeddingDB.vectorCache.keys());
-            logSearchTiming('EmbeddingDB.getAllImageIds', startedAt, {
-                count: ids.size,
-                source: 'cache',
-            });
-            return ids;
+            return new Set(EmbeddingDB.vectorCache.keys());
         }
         if (!EmbeddingDB.stmtSelectAllIds)
             return new Set();
         const rows = EmbeddingDB.stmtSelectAllIds.all() as { id: string }[];
-        const ids = new Set(rows.map((row) => row.id));
-        logSearchTiming('EmbeddingDB.getAllImageIds', startedAt, {
-            count: ids.size,
-            source: 'db',
-        });
-        return ids;
+        return new Set(rows.map((row) => row.id));
     }
 
     static setImageEmbedding(id: string, embedding: Float32Array) {
@@ -492,7 +475,6 @@ export class EmbeddingDB {
         k?: number,
         candidateIds?: Set<string>,
     ): Map<string, number> {
-        const startedAt = startSearchTiming();
         EmbeddingDB.setup();
         if (!EmbeddingDB.stmtSelectAllEmbeddings && !EmbeddingDB.vectorCache)
             return new Map();
@@ -511,15 +493,12 @@ export class EmbeddingDB {
                 effectiveCandidates = undefined;
         }
 
-        const scoreStartedAt = startSearchTiming();
         const scores: { id: string; similarity: number }[] = [];
         const iterateIds = effectiveCandidates ?? cache.keys();
-        let scored = 0;
         for (const id of iterateIds) {
             const embedding = cache.get(id);
             if (!embedding)
                 continue;
-            scored++;
             const similarity = cosineSimilarity(query, embedding);
             if (similarity >= minSimilarity)
                 scores.push({ id, similarity });
@@ -527,21 +506,9 @@ export class EmbeddingDB {
 
         scores.sort((a, b) => b.similarity - a.similarity);
         const limit = k === undefined ? undefined : Math.max(1, k);
-        const result = new Map(
+        return new Map(
             (limit === undefined ? scores : scores.slice(0, limit))
                 .map((row) => [row.id, row.similarity]),
         );
-        logSearchTiming('EmbeddingDB.findSimilarImage.score', scoreStartedAt, {
-            scored,
-            matches: result.size,
-        });
-        logSearchTiming('EmbeddingDB.findSimilarImage', startedAt, {
-            path: 'js-cache',
-            candidates: effectiveCandidates?.size ?? cache.size,
-            matches: result.size,
-            k: k ?? 'all',
-            minSimilarity,
-        });
-        return result;
     }
 }
