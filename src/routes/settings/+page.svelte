@@ -1,7 +1,8 @@
 <script lang="ts">
     import Input from "$lib/items/Input.svelte";
     import Select from "$lib/items/Select.svelte";
-    import { onDestroy } from "svelte";
+    import { onDestroy, onMount } from "svelte";
+    import { goto } from "$app/navigation";
     import Link from "../../lib/items/Link.svelte";
     import {
         flyoutButton,
@@ -562,6 +563,24 @@
             clearingCompressedImages = false;
         }
     }
+
+    // If search-history push/replace wiped SvelteKit's history index, browser back can
+    // change location to `/` while the settings page stays mounted. Re-sync the router.
+    onMount(() => {
+        function syncRouteAfterPopState() {
+            const { pathname, search, hash } = window.location;
+            if (pathname === "/settings" || pathname.startsWith("/settings/"))
+                return;
+            void goto(`${pathname}${search}${hash}`, {
+                replaceState: true,
+                noscroll: true,
+                keepFocus: true,
+            });
+        }
+
+        window.addEventListener("popstate", syncRouteAfterPopState);
+        return () => window.removeEventListener("popstate", syncRouteAfterPopState);
+    });
 </script>
 
 <div class="settings">

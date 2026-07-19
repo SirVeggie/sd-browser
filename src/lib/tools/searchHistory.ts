@@ -40,6 +40,26 @@ export function isSearchHistoryState(value: unknown): value is SearchHistoryStat
     }
 }
 
+/**
+ * Write search/overlay history without clobbering SvelteKit's `sveltekit:index`
+ * (and any other router keys) on `history.state`. Native replace/push that drop
+ * those keys break browser back from other routes like `/settings`.
+ */
+export function writeSearchHistoryState(
+    state: SearchHistoryState,
+    mode: "push" | "replace",
+): void {
+    const current =
+        history.state && typeof history.state === "object"
+            ? (history.state as Record<string, unknown>)
+            : {};
+    const next = { ...current, ...state };
+    if (mode === "push")
+        history.pushState(next, "");
+    else
+        history.replaceState(next, "");
+}
+
 export function isSearchHistorySnapshot(value: unknown): value is SearchHistorySnapshot {
     if (!value || typeof value !== "object") return false;
     return (

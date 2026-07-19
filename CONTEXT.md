@@ -74,6 +74,14 @@ Renaming a tag updates the MiscDB registry and rewrites `extradata.tags` on ever
 
 ---
 
+## Search history must preserve SvelteKit history state
+
+**Files:** `src/lib/tools/searchHistory.ts` (`writeSearchHistoryState`), `src/routes/+page.svelte`, `src/routes/settings/+page.svelte`
+
+Gallery search/overlay history uses the History API. Always merge into the existing `history.state` so SvelteKit’s `sveltekit:index` is kept — bare `pushState`/`replaceState` that replace the whole state break browser back from `/settings` (URL changes, settings UI stays). Settings also re-`goto`s if popstate leaves `/settings` while the page is still mounted.
+
+---
+
 ## Search input syntax highlighting
 
 **File:** `src/lib/items/SearchInput.svelte`

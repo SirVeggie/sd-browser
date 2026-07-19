@@ -88,6 +88,7 @@
     import {
         isSearchHistoryState,
         maxSearchHistoryEntries,
+        writeSearchHistoryState,
         type OverlayKind,
         type SearchHistorySnapshot,
         type SearchHistoryState,
@@ -577,9 +578,9 @@
             quickTagSelectedTagsLoaded = true;
         }
         if (!isSearchHistoryState(history.state)) {
-            history.replaceState(
+            writeSearchHistoryState(
                 { kind: "baseline", searchHistory: true } satisfies SearchHistoryState,
-                "",
+                "replace",
             );
         }
         scrollToTop();
@@ -820,9 +821,9 @@
         const snapshot = createSearchSnapshot();
         currentHistoryId = snapshot.id;
         galleryCache.set(snapshot.id, get(imageStore));
-        history.replaceState(
+        writeSearchHistoryState(
             { kind: "search", searchHistory: true, snapshot } satisfies SearchHistoryState,
-            "",
+            "replace",
         );
     }
 
@@ -835,17 +836,17 @@
         currentHistoryId = snapshot.id;
         galleryCache.set(snapshot.id, get(imageStore));
         if (searchHistoryEntries >= maxSearchHistoryEntries) {
-            history.replaceState(
+            writeSearchHistoryState(
                 { kind: "search", searchHistory: true, snapshot } satisfies SearchHistoryState,
-                "",
+                "replace",
             );
             return;
         }
 
         searchHistoryEntries++;
-        history.pushState(
+        writeSearchHistoryState(
             { kind: "search", searchHistory: true, snapshot } satisfies SearchHistoryState,
-            "",
+            "push",
         );
     }
 
@@ -886,9 +887,9 @@
     function openOverlay(overlay: OverlayKind) {
         if (activeOverlay === overlay) return;
         activeOverlay = overlay;
-        history.pushState(
+        writeSearchHistoryState(
             { kind: "overlay", searchHistory: true, overlay } satisfies SearchHistoryState,
-            "",
+            "push",
         );
         setOverlayOpen(overlay, true);
     }
@@ -1896,9 +1897,9 @@
         quickTagInFlight.clear();
         quickTagSetupOpen = false;
         activeOverlay = "quick-tag";
-        history.replaceState(
+        writeSearchHistoryState(
             { kind: "overlay", searchHistory: true, overlay: "quick-tag" } satisfies SearchHistoryState,
-            "",
+            "replace",
         );
         quickTagActive = true;
         closeImage();
