@@ -207,7 +207,7 @@ Semantic image search uses embeddings stored in sqlite-vec. Configure an embeddi
 - Bare `IMG` matches images that already have embeddings.
 - Text runs a text-to-image embedding search (optional search template in Settings).
 - A 64-character hex id uses that image's embedding.
-- Reference strip slots: `#1`, `[1]`, etc. (managed from the gallery UI).
+- Reference strip slots: `#1`, `[1]`, etc., or `[refs]` for every current reference as space-separated ids.
 - Weighted clauses: `IMG cat + #1 - beach` (spaced `+` / `-`; leading spaced `-` is negative-only).
 - `IMG ~text` skips the search template for that text clause.
 - Trailing decimal sets similarity threshold; trailing integer limits result count (either order). -1 k means "return all images, but sorted by score"
