@@ -2723,7 +2723,8 @@
         position: fixed;
         right: calc(1rem + var(--flyout-width));
         bottom: 1rem;
-        z-index: 45;
+        /* Above NavArrows (46) — right arrow is full-height and would steal clicks. */
+        z-index: 47;
 
         :global(.flanimate) & {
             transition: right 0.2s ease;

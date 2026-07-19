@@ -42,6 +42,14 @@ Modal textareas should match `Input` (inset fill, no border, `border-radius: 9px
 
 ---
 
+## Slideshow above nav arrows
+
+**Files:** `src/routes/+page.svelte` (`.slideshow`), `src/lib/components/NavArrows.svelte`
+
+Nav arrows are full-height hit targets (`z-index: 46`). The slideshow control must stay above them (`.slideshow` is `47`) or bottom-right clicks navigate instead of starting the slideshow.
+
+---
+
 ## Search input syntax highlighting
 
 **File:** `src/lib/items/SearchInput.svelte`
