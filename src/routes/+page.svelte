@@ -2302,6 +2302,8 @@
         flex-direction: column;
         gap: 0.4rem;
         width: 100%;
+        max-width: 52rem;
+        align-self: center;
         padding: 0.45rem 0.55rem;
         border-radius: 14px;
         background: var(--glass);
