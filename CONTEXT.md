@@ -66,6 +66,14 @@ The Settings title + Back/Reset/Logout row stays `position: sticky; top: 0` with
 
 ---
 
+## Tag rename
+
+**Files:** `src/lib/server/tags.ts` (`renameTagOnAllImages`), `PATCH /api/settings/tags`, Settings tag modal
+
+Renaming a tag updates the MiscDB registry and rewrites `extradata.tags` on every image that had the old name (dedupe if both names were present). Color-only edits stay client/settings sync; name changes must go through the API.
+
+---
+
 ## Search input syntax highlighting
 
 **File:** `src/lib/items/SearchInput.svelte`

@@ -25,6 +25,20 @@ export function upsertTagDefinition(registry: TagsRegistryState, definition: Tag
     return { tags: [...registry.tags, definition] };
 }
 
+export function renameTagDefinition(
+    registry: TagsRegistryState,
+    oldName: string,
+    definition: TagDefinition,
+): TagsRegistryState {
+    const index = registry.tags.findIndex((tag) => tag.name === oldName);
+    if (index < 0)
+        return upsertTagDefinition(registry, definition);
+
+    const tags = [...registry.tags];
+    tags[index] = definition;
+    return { tags };
+}
+
 export function removeTagDefinition(registry: TagsRegistryState, name: string): TagsRegistryState {
     return { tags: registry.tags.filter((tag) => tag.name !== name) };
 }

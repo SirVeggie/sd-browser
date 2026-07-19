@@ -399,11 +399,12 @@ Missing, null, or invalid `extradata.tags` values are treated as `[]`.
 During manual extradata recalculation, `tags` are preserved the same way as annotations (`set`, `setAll`, `setAllStaging`, `swapStagingToLive`).
 
 Deleting a tag in Settings removes it from the registry and strips it from all images via `POST /api/settings/tags`.
+Renaming a tag updates the registry and rewrites the name on every image that had it via `PATCH /api/settings/tags` (`{ oldName, newName }`). If an image already had both names, they are merged (deduped).
 
 ### How to verify
 
 1. Upgrade from v3 — `extradata` gains a `tags` column; existing rows behave as untagged.
-2. Settings — add, edit color, delete tags inline between Search keywords and Custom Filters; registry syncs globally. Fresh installs get default tags `favourite` and `nsfw` on first server startup when the registry is missing (not from client defaults).
+2. Settings — add, edit name/color, delete tags; registry syncs globally. Fresh installs get default tags `favourite` and `nsfw` on first server startup when the registry is missing (not from client defaults). Renaming updates all image assignments.
 3. Full image view — add/remove tags from registry; changes persist after reload.
 4. Search — `TAG name`, `NOT TAG name`, and regex `TAG pattern` match assigned tags; unknown exact tag names highlight red in the search box.
 5. Bulk → Tag — add/remove/replace on matching images; gallery refreshes after completion.

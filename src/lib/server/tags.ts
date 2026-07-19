@@ -50,6 +50,29 @@ function removeTagFromRegistry(tagName: string): void {
     MiscDB.set(settingsKey, JSON.stringify(settings));
 }
 
+function renameTagInRegistry(oldName: string, newName: string): void {
+    const settings = readSettings();
+    if (!isTagsRegistryState(settings.tags))
+        throw new Error(`Tag '${oldName}' not found`);
+
+    const tags = settings.tags.tags;
+    const oldIndex = tags.findIndex((tag) => tag.name === oldName);
+    if (oldIndex < 0)
+        throw new Error(`Tag '${oldName}' not found`);
+
+    if (tags.some((tag, index) => index !== oldIndex && tag.name === newName))
+        throw new Error(`Tag name '${newName}' already exists`);
+
+    const existing = tags[oldIndex];
+    if (!existing)
+        throw new Error(`Tag '${oldName}' not found`);
+
+    const next = [...tags];
+    next[oldIndex] = { ...existing, name: newName };
+    settings.tags = { tags: next };
+    MiscDB.set(settingsKey, JSON.stringify(settings));
+}
+
 export function setImageTags(id: string, tags: string[]): void {
     MetaCalcDB.setTags(id, tags);
     const image = getImage(id);
@@ -62,6 +85,18 @@ export function removeTagFromAllImages(tagName: string): number {
     removeTagFromRegistry(tagName);
     const updated = MetaCalcDB.removeTagFromAll(tagName);
     refreshExtradataInMemory();
+    return updated;
+}
+
+export function renameTagOnAllImages(oldName: string, newName: string): number {
+    if (oldName === newName)
+        return 0;
+
+    renameTagInRegistry(oldName, newName);
+    const { updated, ids } = MetaCalcDB.renameTagOnAll(oldName, newName);
+    refreshExtradataInMemory();
+    if (ids.length > 0)
+        notifyMetadataChange(ids);
     return updated;
 }
 

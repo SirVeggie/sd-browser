@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { page } from '$app/stores';
-import { doGet, doPost, doServerGet, doServerPost, type FetchType } from '$lib/tools/requests';
+import { doGet, doPatch, doPost, doServerGet, doServerPatch, doServerPost, type FetchType } from '$lib/tools/requests';
 
 export async function deleteTagFromImages(name: string, fetch?: FetchType): Promise<number> {
     let url = '/api/settings/tags';
@@ -12,6 +12,24 @@ export async function deleteTagFromImages(name: string, fetch?: FetchType): Prom
         throw new Error(res.error);
 
     return typeof res.removedFrom === 'number' ? res.removedFrom : 0;
+}
+
+export async function renameTagOnImages(
+    oldName: string,
+    newName: string,
+    fetch?: FetchType,
+): Promise<number> {
+    let url = '/api/settings/tags';
+    if (!fetch)
+        url = get(page).url.origin + url;
+
+    const res = await (fetch
+        ? doPatch(url, fetch, { oldName, newName })
+        : doServerPatch(url, { oldName, newName }));
+    if ('error' in res)
+        throw new Error(res.error);
+
+    return typeof res.renamedFrom === 'number' ? res.renamedFrom : 0;
 }
 
 export async function fetchImageTags(imageId: string, fetch?: FetchType): Promise<string[]> {

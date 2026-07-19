@@ -50,6 +50,18 @@ export async function doPost(url: string, fetch: FetchType, body: any) {
     return await parseJsonResponse(response);
 }
 
+export async function doPatch(url: string, fetch: FetchType, body: any) {
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            Authorization: 'Bearer ' + auth,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    });
+    return await parseJsonResponse(response);
+}
+
 export async function doServerGet(url: string) {
     const response = await fetch(url, {
         headers: {
@@ -62,6 +74,18 @@ export async function doServerGet(url: string) {
 export async function doServerPost(url: string, body: any) {
     const response = await fetch(url, {
         method: 'POST',
+        headers: {
+            Authorization: 'Bearer ' + auth,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    });
+    return await parseJsonResponse(response);
+}
+
+export async function doServerPatch(url: string, body: any) {
+    const response = await fetch(url, {
+        method: 'PATCH',
         headers: {
             Authorization: 'Bearer ' + auth,
             'Content-Type': 'application/json',

@@ -62,9 +62,10 @@
     import { pullGlobalSettings, recalculateSimilarCache, clearCompressedImages, buildUniquenessIndex } from "$lib/requests/settingRequests";
     import { startExtradataRecalc, watchOperation } from "$lib/requests/operationRequests";
     import { hasRunningOperation, operationStore } from "$lib/stores/operationStore";
-    import { deleteTagFromImages } from "$lib/requests/tagRequests";
+    import { deleteTagFromImages, renameTagOnImages } from "$lib/requests/tagRequests";
     import {
         removeTagDefinition,
+        renameTagDefinition,
         reorderTagDefinitionsByNames,
         tagsStore,
         upsertTagDefinition,
@@ -402,7 +403,7 @@
         editingTag = null;
     }
 
-    function saveTag(event: CustomEvent<{ name: string; color: string }>) {
+    async function saveTag(event: CustomEvent<{ name: string; color: string }>) {
         const { name, color } = event.detail;
         const duplicate = $tagsStore.tags.some(
             (item) => item.name.toLowerCase() === name.toLowerCase() && item.name !== editingTag?.name,
@@ -412,13 +413,28 @@
             return;
         }
 
-        if (editingTag && editingTag.name !== name) {
-            notify("Rename tags from settings by deleting and re-adding", "warn");
+        const previous = editingTag;
+        if (previous && previous.name !== name) {
+            closeTagModal();
+            try {
+                const renamedFrom = await renameTagOnImages(previous.name, name);
+                tagsStore.update((state) =>
+                    renameTagDefinition(state, previous.name, { name, color }),
+                );
+                notify(
+                    renamedFrom > 0
+                        ? `Renamed tag to '${name}' (updated ${renamedFrom} images)`
+                        : `Renamed tag to '${name}'`,
+                );
+            } catch (cause) {
+                console.error(cause);
+                notify(cause instanceof Error ? cause.message : "Failed to rename tag", "warn");
+            }
             return;
         }
 
         tagsStore.update((state) => upsertTagDefinition(state, { name, color }));
-        notify(editingTag ? `Updated tag '${name}'` : `Added tag '${name}'`);
+        notify(previous ? `Updated tag '${name}'` : `Added tag '${name}'`);
         closeTagModal();
     }
 

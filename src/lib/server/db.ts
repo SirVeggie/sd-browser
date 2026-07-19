@@ -609,6 +609,30 @@ export class MetaCalcDB {
         return updated;
     }
 
+    /** Renames a tag on every image that has it. Merges if the new name is already present. */
+    static renameTagOnAll(oldName: string, newName: string): { updated: number; ids: string[] } {
+        MetaCalcDB.setup();
+        if (oldName === newName)
+            return { updated: 0, ids: [] };
+
+        const rows = MetaCalcDB.getAll();
+        let updated = 0;
+        const ids: string[] = [];
+        const stmt = MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET tags = ? WHERE id = ?`);
+        MetaCalcDB.db.transaction((items: ImageExtraData[]) => {
+            for (const item of items) {
+                const currentTags = item.tags ?? [];
+                if (!currentTags.includes(oldName))
+                    continue;
+                const tags = [...new Set(currentTags.map((tag) => (tag === oldName ? newName : tag)))];
+                stmt.run(tags.join(','), item.id);
+                updated++;
+                ids.push(item.id);
+            }
+        }).immediate(rows);
+        return { updated, ids };
+    }
+
     static bulkUpdateTags(ids: string[], mode: BulkTagMode, tagNames: string[]) {
         MetaCalcDB.setup();
         const stmt = MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET tags = ? WHERE id = ?`);
