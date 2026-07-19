@@ -1218,10 +1218,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         gap: 0.75rem;
         flex-wrap: wrap;
         margin: 0 calc(-1 * var(--main-padding));
-        padding: var(--main-padding);
-        /* Extra top inset; bottom pad unchanged so gap to first cards stays the same. */
-        padding-top: calc(var(--main-padding) + 0.75rem);
-        padding-bottom: 1.15rem;
+        padding: 0.85rem var(--main-padding) 1.15rem;
         background: color-mix(in srgb, var(--bg) 58%, transparent);
         backdrop-filter: blur(16px) saturate(1.15);
         -webkit-backdrop-filter: blur(16px) saturate(1.15);
