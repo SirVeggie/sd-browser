@@ -242,10 +242,14 @@
   $: loadNextEffective =
     loadNext && !(waiting && desiredId === prevSlot?.id && desiredId !== nextSlot?.id);
 
+  // Build mediaUrl here (not via a template helper) so Svelte tracks mediaQuery /
+  // showOriginal. A template-only mediaUrlFor(entry.image) call does not invalidate
+  // when quality flips, so "Show original" would leave the compressed URL in place.
   $: panelEntries = [
     {
       key: stageImage?.id ? `id:${stageImage.id}` : "stage-empty",
       image: stageImage,
+      mediaUrl: mediaUrlFor(stageImage),
       role: "stage" as const,
       loadEnabled: !!stageImage,
       showWaitingLoader: waiting && stageReady,
@@ -255,6 +259,7 @@
     {
       key: prevSlot?.id ? `id:${prevSlot.id}` : "prev-empty",
       image: prevSlot,
+      mediaUrl: mediaUrlFor(prevSlot),
       role: "hidden" as const,
       loadEnabled: loadPrevEffective,
       showWaitingLoader: false,
@@ -264,6 +269,7 @@
     {
       key: nextSlot?.id ? `id:${nextSlot.id}` : "next-empty",
       image: nextSlot,
+      mediaUrl: mediaUrlFor(nextSlot),
       role: "hidden" as const,
       loadEnabled: loadNextEffective,
       showWaitingLoader: false,
@@ -277,7 +283,7 @@
   {#each panelEntries as entry (entry.key)}
     <FullscreenMediaPanel
       image={entry.image}
-      mediaUrl={mediaUrlFor(entry.image)}
+      mediaUrl={entry.mediaUrl}
       loadEnabled={entry.loadEnabled}
       role={entry.role}
       showWaitingLoader={entry.showWaitingLoader}

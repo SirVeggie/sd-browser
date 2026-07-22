@@ -216,3 +216,12 @@ Media neighbors preload in the stage; metadata must preload too. On arrow nav th
 - Cache progressive info fetches; apply cache synchronously when selecting an image.
 - Warm prev/next metadata while fullscreen is open.
 - `stageInfo` updates when `data.id === stageId`; do **not** clear it on promote just because `data` has not caught up yet (live/closed still clear).
+
+---
+
+## Fullscreen "Show original" URL reactivity
+
+**File:** `src/lib/items/FullscreenMediaStage.svelte`
+
+Panel `mediaUrl` must be computed inside the `$: panelEntries = …` statement (reading `mediaQuery` / `showOriginal` there). Do not pass `mediaUrlFor(entry.image)` only from the `{#each}` template — Svelte 4 does not track store/prop reads inside that helper for the binding, so flipping "Show original" leaves the compressed URL mounted.
+
