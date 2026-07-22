@@ -187,6 +187,18 @@ Already-generated WebP caches and already-stored dimensions are not rewritten au
 
 ---
 
+## Image source roots and indexing
+
+**Files:** `src/lib/server/paths.ts`, `src/lib/server/filetools.ts`, `src/lib/server/filemanager.ts`, `src/lib/server/workers/indexingWorkerPool.ts`
+
+- Configure one folder with `IMG_FOLDER`, or several with `IMG_FOLDERS` (semicolon-separated absolute paths). Nested roots are ignored.
+- **Single root:** `hashPath` / `folder` stay relative-only (existing DB ids and WebP caches remain valid).
+- **Multi root:** `hashPath` includes `rootKey\0relative`; `folder` is `rootKey/...`. Move/copy cannot cross roots.
+- Bulk indexing runs metadata+dimensions on a worker-thread pool; SQLite writes stay on the main thread via coalesced flushes (`MetaCalcDB.setAllNew` for new rows). Each flush calls `notifyMetadataChange` so the gallery SSE updates during first-run index.
+- Do not `mkdir` missing source roots (external SD output dirs). Do not open `better-sqlite3` from worker threads.
+
+---
+
 ## Live view is image-only
 
 **File:** `src/lib/items/ImageFull.svelte`

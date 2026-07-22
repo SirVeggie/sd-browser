@@ -1,12 +1,11 @@
 import { invalidAuth } from '$lib/server/auth.js';
-import { imgFolder } from '$lib/server/paths';
+import { getImageRoots, isMultiRoot } from '$lib/server/paths';
 import { success } from '$lib/server/responses';
 import { stringSortSingle } from '$lib/tools/misc';
 import type { FoldersResponse } from '$lib/types/requests.js';
 import fs from 'fs/promises';
 import path from 'path';
 
-const root = imgFolder;
 const folderRegex = /^\.?[^.]+$/;
 
 export async function GET(e) {
@@ -19,11 +18,16 @@ export async function GET(e) {
 }
 
 function formatFolderPath(parent: string, name: string): string {
-    return `${parent}/${name}`.replace(/^\//, '').replace(/\\/, '/');
+    return `${parent}/${name}`.replace(/^\//, '').replace(/\\/g, '/');
 }
 
 async function listSubdirs(dirPath: string): Promise<string[]> {
-    const files = await fs.readdir(dirPath);
+    let files: string[];
+    try {
+        files = await fs.readdir(dirPath);
+    } catch {
+        return [];
+    }
     const subdirs: string[] = [];
 
     await Promise.all(
@@ -41,11 +45,11 @@ async function listSubdirs(dirPath: string): Promise<string[]> {
     return subdirs.sort(stringSortSingle);
 }
 
-async function walkFolder(name: string, parent: string): Promise<string[]> {
+async function walkFolder(fsRoot: string, name: string, parent: string): Promise<string[]> {
     const paths = [formatFolderPath(parent, name)];
-    const subdirs = await listSubdirs(path.join(root, parent, name));
+    const subdirs = await listSubdirs(path.join(fsRoot, parent, name));
     const childPaths = await Promise.all(
-        subdirs.map((file) => walkFolder(file, path.join(parent, name))),
+        subdirs.map((file) => walkFolder(fsRoot, file, path.join(parent, name))),
     );
 
     for (const child of childPaths) {
@@ -56,13 +60,30 @@ async function walkFolder(name: string, parent: string): Promise<string[]> {
 }
 
 async function collectFolderPaths(): Promise<string[]> {
-    const paths: string[] = ['/'];
-    const topDirs = await listSubdirs(root);
-    const childPaths = await Promise.all(topDirs.map((file) => walkFolder(file, '')));
+    const roots = getImageRoots();
+    if (!roots.length)
+        return ['/'];
 
-    for (const child of childPaths) {
-        paths.push(...child);
+    if (!isMultiRoot()) {
+        const root = roots[0].path;
+        const paths: string[] = ['/'];
+        const topDirs = await listSubdirs(root);
+        const childPaths = await Promise.all(topDirs.map((file) => walkFolder(root, file, '')));
+        for (const child of childPaths)
+            paths.push(...child);
+        return paths;
     }
 
+    // Multi-root: namespace with root key (no global "/").
+    const paths: string[] = [];
+    for (const root of roots) {
+        paths.push(root.key);
+        const topDirs = await listSubdirs(root.path);
+        const childPaths = await Promise.all(
+            topDirs.map((file) => walkFolder(root.path, file, root.key)),
+        );
+        for (const child of childPaths)
+            paths.push(...child);
+    }
     return paths;
 }

@@ -9,9 +9,7 @@ const srcLib = path.join(projectRoot, 'src/lib');
 const outDir = path.join(projectRoot, 'build', 'workers');
 mkdirSync(outDir, { recursive: true });
 
-await build({
-    entryPoints: [path.join(projectRoot, 'src/lib/server/workers/extradataCompute.worker.ts')],
-    outfile: path.join(outDir, 'extradataCompute.js'),
+const shared = {
     platform: 'node',
     format: 'esm',
     bundle: true,
@@ -19,6 +17,18 @@ await build({
     alias: {
         '$lib': srcLib,
     },
-});
+};
 
+await build({
+    ...shared,
+    entryPoints: [path.join(projectRoot, 'src/lib/server/workers/extradataCompute.worker.ts')],
+    outfile: path.join(outDir, 'extradataCompute.js'),
+});
 console.log('Built extradata worker to build/workers/extradataCompute.js');
+
+await build({
+    ...shared,
+    entryPoints: [path.join(projectRoot, 'src/lib/server/workers/indexing.worker.ts')],
+    outfile: path.join(outDir, 'indexing.js'),
+});
+console.log('Built indexing worker to build/workers/indexing.js');

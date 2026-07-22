@@ -17,7 +17,7 @@ A very optimized standalone image browser (not a webui extension) made with Node
 1) Install latest version of Node.js  
 2) Clone or download the project.  
 3) Copy the `.env.example` file and rename it to `.env`  
-4) Set `IMG_FOLDER` to the output folder of stable diffusion (or any other folder containing images)  
+4) Set `IMG_FOLDER` to the output folder of stable diffusion (or any other folder containing images). For multiple separate source trees, set `IMG_FOLDERS` instead to a semicolon-separated list of absolute paths (e.g. `C:\sd-webui\outputs;D:\comfy\output`).  
 5) Run command `npm run setup` using command line in the project root folder  
 6) Run command `npm start` to start the application  
 7) Open `localhost:[PORT]` in your browser (default `PORT` is `4200`)
@@ -44,7 +44,7 @@ The browser will remember the password, but it can be cleared by pressing `logou
 
 ## Notes
 
-Subfolders under `IMG_FOLDER` are scanned automatically, but setting multiple separate source folders is currently not supported.
+Subfolders under each configured source folder are scanned automatically. Multiple separate source folders are supported via `IMG_FOLDERS` (semicolon-separated). With a single `IMG_FOLDER`, image ids and folder paths behave as before. With two or more roots, folder paths are prefixed with the root folder name (e.g. `outputs/txt2img`), and move/copy stays within one root.
 
 Symlinks work, but currently do not support file watching, so the images only update during startup. However switching the direction of the symlink so that the original folder is inside the main image browser, and the link is outside does work.
 

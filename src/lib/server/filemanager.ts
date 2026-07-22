@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import { ensurePathsExist, imgFolder, qualityTierPaths } from './paths';
+import { ensurePathsExist, getImageRoots, qualityTierPaths } from './paths';
 import path from 'path';
 import os from 'os';
 import cp from 'child_process';
@@ -7,20 +7,17 @@ import fs from 'fs/promises';
 import Watcher from 'watcher';
 import type { WatcherOptions } from 'watcher/dist/types';
 import { calcTimeSpent, isImage, isMedia, isTxt, isVideo, limitedParallelMap, print, removeExtension, updateLine, videoFiletypes, lazy, calcProgress, calcTimeRemaining } from '$lib/tools/misc';
-// import { generateCompressedFromId, generateThumbnailFromId } from './convert';
 import { sleep } from '$lib/tools/sleep';
-import { backgroundTasks } from './background';
 import { MetaCalcDB, MetaDB } from './db';
 import { EmbeddingDB } from './embeddingDb';
 import type { ImageExtraData, ImageList, ServerImage, ServerImageFull } from '$lib/types/images';
-import { deleteTempImage, fileExists, fileUniquefy, folderFromDir, folderFromFile, removeBasePath, removeFolderFromPath, splitExtension } from './filetools';
+import { deleteTempImage, fileExists, fileUniquefy, folderFromDir, folderFromFile, removeFolderFromPath, resolveImagePath, resolveTargetFolder, splitExtension } from './filetools';
 import { handleMigrationEnd, handleMigrationStart } from './migration';
 import { backfillImageDimensions } from './migration/v3';
-import { getServerImage, hashPath, populateServerImage, readMetadata, readMetadataFromExif, readMetadataFromFile, updateImageMetadata } from './imageUtils';
+import { getServerImage, hashPath, populateServerImage, readMetadata, updateImageMetadata } from './imageUtils';
 import { forEachExtradataBatch } from './extradataBatch';
-import { populateMediaDimensions } from './imageDimensions';
 import { invalidateExplorationPools, repairExplorationCaches, repairUniqueCacheAfterDeletes, repairUniqueCacheOnAdd, verifyExplorationCaches } from './exploration';
-import { notifyImageChange } from './imageChangeHub';
+import { notifyImageChange, notifyMetadataChange } from './imageChangeHub';
 import { ensureDefaultTagsRegistry } from './tags';
 import { ensureVideoPreview } from './videoPreview';
 import {
@@ -31,10 +28,12 @@ import {
     replaceImageList,
     setGenerationDisabled,
 } from './dataIndex';
+import type { IndexingJob, IndexingResult } from './indexingComputeCore';
+import { indexingWorkerPool } from './workers/indexingWorkerPool';
 
 const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
-let watcher: Watcher | undefined;
+let watchers: Watcher[] = [];
 
 //#region indexing
 export async function startFileManager() {
@@ -44,49 +43,53 @@ export async function startFileManager() {
     await indexFiles();
 }
 
+let indexingRunning = false;
+let indexingQueued = false;
+
+/** Full filesystem reconcile + metadata index. Concurrent calls coalesce into one follow-up run. */
 export async function indexFiles() {
-    console.log(`Indexing files in ${imgFolder}`);
+    if (indexingRunning) {
+        indexingQueued = true;
+        return;
+    }
+    indexingRunning = true;
+    try {
+        do {
+            indexingQueued = false;
+            await runIndexFiles();
+        } while (indexingQueued);
+    } finally {
+        indexingRunning = false;
+    }
+}
+
+async function runIndexFiles() {
+    const roots = getImageRoots();
+    if (!roots.length) {
+        console.warn('No IMG_FOLDER / IMG_FOLDERS configured — skipping indexing');
+        setupWatcher();
+        return;
+    }
+
+    console.log(`Indexing files in ${roots.map((r) => r.path).join('; ')}`);
     const startTimestamp = Date.now();
 
     if (MetaDB.countMissingDimensions()) {
         await backfillImageDimensions();
     }
 
-    // read cached data
     // eslint-disable-next-line prefer-const
     let [templist, txtmap, videomap] = await indexCachedFiles();
 
-    // start watcher early
     setupWatcher();
 
     // Generate video companion PNGs before reading dimensions so width/height
     // come from the oriented preview (and dates still come from the mp4).
     if (templist.length !== 0) {
         await ensureVideoPreviews(templist, videomap);
-        templist = await indexBasicFileData(templist);
+        await indexNewImages(templist, txtmap, videomap);
     }
 
-    if (templist.length !== 0) {
-        // sort
-        print('Sorting remaining images by modified date...');
-        templist.sort((a, b) => b.modifiedDate - a.modifiedDate);
-        setGenerationDisabled(true);
-
-        // read metadata from txt files
-        templist = await indexTxtFiles(templist, txtmap);
-    }
-
-    // read metadata from exif
-    if (templist.length !== 0) {
-        const originalLimit = backgroundTasks.limit;
-        backgroundTasks.limit = 5;
-        await indexExifFiles(templist, videomap);
-        backgroundTasks.limit = originalLimit;
-    }
-
-    setGenerationDisabled(false);
-
-    // finish up
     const imageList = getImageList();
     console.log(`Indexed ${imageList.size} images in ${calcTimeSpent(startTimestamp)}`);
     handleMigrationEnd();
@@ -99,7 +102,8 @@ export async function indexFiles() {
 async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, string>, Map<string, string>]> {
     const templist: ServerImageFull[] = [];
     const images: ImageList = new Map();
-    const dirs: string[] = [imgFolder];
+    const roots = getImageRoots();
+    const dirs: string[] = roots.map((r) => r.path);
     const set = new Set<string>();
     const videomap: Map<string, string> = new Map();
     const txtmap: Map<string, string> = new Map();
@@ -112,7 +116,6 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
     if (!getImageList().size)
         replaceImageList(images);
     if (dbCount) {
-        // const batchSize = 1000;
         print('Loading cache from DB...');
         for (const image of MetaDB.getAllShort()) {
             images.set(image.id, image);
@@ -153,8 +156,6 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
         MetaCalcDB.clearAll();
     }
 
-    await sleep(100);
-
     if (!images.size) {
         console.log('No cache file, or failed to read it');
         console.log('Building index from scratch');
@@ -166,7 +167,12 @@ async function indexCachedFiles(): Promise<[ServerImageFull[], Map<string, strin
         const dir = dirs.pop();
         if (!dir) continue;
         const dirShort = folderFromDir(dir);
-        const files = await fs.readdir(dir);
+        let files: string[];
+        try {
+            files = await fs.readdir(dir);
+        } catch {
+            continue;
+        }
 
         for (const file of files.filter(x => isVideo(x))) {
             found++;
@@ -291,120 +297,178 @@ function deleteMissingImages(set: Set<string>) {
     EmbeddingDB.deleteAll(deletions);
 }
 
-async function indexBasicFileData(templist: ServerImageFull[]): Promise<ServerImageFull[]> {
-    const log = `Reading dates for ${templist.length} images...`;
-    print(log);
-    let progress = 0;
-    let count = 0;
-    const startTimestamp = Date.now();
-    const parallelBasicReads = 10;
+const INDEX_FLUSH_SIZE = 500;
+const INDEX_FLUSH_MS = 150;
 
-    templist = await limitedParallelMap(templist, async x => {
+/**
+ * Stat for sort order, then process metadata+dimensions on the worker pool.
+ * Flushes to SQLite / memory / SSE in coalesced batches (newest-first feed order).
+ */
+async function indexNewImages(
+    templist: ServerImageFull[],
+    txtmap: Map<string, string>,
+    videomap: Map<string, string>,
+): Promise<void> {
+    const logDates = `Reading dates for ${templist.length} images...`;
+    print(logDates);
+    let dateProgress = 0;
+    const dateStart = Date.now();
+
+    await limitedParallelMap(templist, async (image) => {
         try {
-            const stats = await fs.stat(x.file);
-            x.modifiedDate = stats.mtimeMs;
-            x.createdDate = stats.birthtimeMs;
-            await populateMediaDimensions(x);
-            if (x.modifiedDate > 0) count++;
-            return x;
+            const stats = await fs.stat(image.file);
+            image.modifiedDate = stats.mtimeMs;
+            image.createdDate = stats.birthtimeMs;
         } catch {
-            return x;
+            // leave dates at 0
         } finally {
-            progress++;
-            if (progress % 1000 === 0) updateLine(log + ` ${(progress / templist.length * 100).toFixed(1)}%`);
+            dateProgress++;
+            if (dateProgress % 1000 === 0)
+                updateLine(logDates + ` ${(dateProgress / templist.length * 100).toFixed(1)}%`);
         }
-    }, parallelBasicReads);
+        return image;
+    }, 20);
 
-    updateLine(`Found dates for ${count} images in ${calcTimeSpent(startTimestamp)}\n`);
-    return templist;
-}
+    updateLine(`Found dates for ${templist.length} images in ${calcTimeSpent(dateStart)}\n`);
 
-async function indexTxtFiles(templist: ServerImageFull[], txtmap: Map<string, string>): Promise<ServerImageFull[]> {
-    const log = `Indexing ${txtmap.size} images from txt files`;
+    print('Sorting remaining images by modified date...');
+    templist.sort((a, b) => b.modifiedDate - a.modifiedDate);
+    setGenerationDisabled(true);
+
+    const jobs: IndexingJob[] = templist.map((image) => {
+        const partial = removeExtension(image.file);
+        const txtPath = txtmap.get(partial);
+        const exifSource = videomap.get(partial) || undefined;
+        return {
+            id: image.id,
+            file: image.file,
+            folder: image.folder,
+            preview: image.preview || '',
+            txtPath,
+            exifSource: exifSource || undefined,
+            preferTxt: Boolean(txtPath),
+            width: image.width,
+            height: image.height,
+        };
+    });
+
+    const log = `Indexing ${jobs.length} images`;
     updateLine(`${log}...`);
-
     const tStart = Date.now();
-    const total = templist.length;
-    const newlist: ServerImageFull[] = [];
+    const total = jobs.length;
     let progress = 0;
     let found = 0;
 
-    while (templist.length) {
-        const fullImages: ServerImageFull[] = [];
-        const extraData: ImageExtraData[] = [];
-        const batch = templist.splice(0, 1000);
-        progress += batch.length;
+    let buffer: IndexingResult[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | undefined;
+    let flushing = Promise.resolve();
 
-        for (const image of batch) {
-            backgroundTasks.addWork(async () => {
-                const partial = removeExtension(image.file);
-                if (!txtmap.has(partial)) {
-                    newlist.push(image);
-                    return;
-                }
+    const flushBuffer = () => {
+        flushing = flushing.then(async () => {
+            const batch = buffer.splice(0, buffer.length);
+            if (!batch.length)
+                return;
 
-                const res = await readMetadataFromFile(image, txtmap.get(partial)!).catch(() => image);
+            // Keep newest-first within each flush when workers finish out of order.
+            batch.sort((a, b) => b.modifiedDate - a.modifiedDate);
 
-                if (!res.prompt && !res.workflow) {
-                    newlist.push(res);
-                    return;
-                }
+            const fullImages: ServerImageFull[] = [];
+            const extraData: ImageExtraData[] = [];
+            const serverImages: ServerImage[] = [];
+            const ids: string[] = [];
 
-                const processed = getServerImage(res);
-                fullImages.push(res);
-                extraData.push(processed);
-                getImageList().set(res.id, processed);
-                found++;
-            });
-        }
-
-        await backgroundTasks.wait();
-        MetaDB.setAll(fullImages);
-        MetaCalcDB.setAll(extraData);
-        updateLine(log + `: ${calcProgress(progress, total)}% | estimate: ${calcTimeRemaining(tStart, progress, total)}`);
-    }
-
-    updateLine(`Found txt metadata for ${found} images in ${calcTimeSpent(tStart)}\n`);
-    return newlist;
-}
-
-async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string, string>): Promise<void> {
-    const log = `Indexing ${templist.length} images from exif`;
-    updateLine(`${log}...`);
-
-    const tStart = Date.now();
-    const total = templist.length;
-    let progress = 0;
-    let found = 0;
-
-    while (templist.length) {
-        const fullImages: ServerImageFull[] = [];
-        const extraData: ImageExtraData[] = [];
-        const batch = templist.splice(0, 1000);
-        progress += batch.length;
-
-        for (const image of batch) {
-            backgroundTasks.addWork(async () => {
-                const partial = removeExtension(image.file);
-                const source = videomap.get(partial) || undefined;
-                const res = await readMetadataFromExif(image, source).catch(() => image);
-                const processed = getServerImage(res);
-
-                fullImages.push(res);
-                extraData.push(processed);
-                getImageList().set(res.id, processed);
-                if (res.prompt || res.workflow || res.extra)
+            for (const r of batch) {
+                const full: ServerImageFull = {
+                    id: r.id,
+                    file: r.file,
+                    folder: r.folder,
+                    modifiedDate: r.modifiedDate,
+                    createdDate: r.createdDate,
+                    preview: r.preview,
+                    prompt: r.prompt,
+                    workflow: r.workflow,
+                    extra: r.extra,
+                    width: r.width,
+                    height: r.height,
+                };
+                const processed: ServerImage = {
+                    id: r.id,
+                    file: r.file,
+                    folder: r.folder,
+                    modifiedDate: r.modifiedDate,
+                    createdDate: r.createdDate,
+                    preview: r.preview,
+                    positive: r.positive,
+                    negative: r.negative,
+                    params: r.params,
+                    models: r.models,
+                    hash: r.hash,
+                    annotation: '',
+                    tags: [],
+                    width: r.width,
+                    height: r.height,
+                };
+                fullImages.push(full);
+                extraData.push({
+                    id: r.id,
+                    positive: r.positive,
+                    negative: r.negative,
+                    params: r.params,
+                    models: r.models,
+                    hash: r.hash,
+                    annotation: '',
+                    tags: [],
+                });
+                serverImages.push(processed);
+                ids.push(r.id);
+                if (r.foundMetadata)
                     found++;
-            });
-        }
+            }
 
-        await backgroundTasks.wait();
-        MetaDB.setAll(fullImages);
-        MetaCalcDB.setAll(extraData);
-        updateLine(log + `: ${calcProgress(progress, total)}% | estimate: ${calcTimeRemaining(tStart, progress, total)}`);
+            MetaDB.setAll(fullImages);
+            MetaCalcDB.setAllNew(extraData);
+            for (const img of serverImages)
+                getImageList().set(img.id, img);
+            notifyMetadataChange(ids);
+
+            progress += batch.length;
+            updateLine(log + `: ${calcProgress(progress, total)}% | estimate: ${calcTimeRemaining(tStart, progress, total)}`);
+        });
+        return flushing;
+    };
+
+    const scheduleFlush = () => {
+        if (flushTimer)
+            return;
+        flushTimer = setTimeout(() => {
+            flushTimer = undefined;
+            void flushBuffer();
+        }, INDEX_FLUSH_MS);
+    };
+
+    try {
+        await indexingWorkerPool.processAll(jobs, async (results) => {
+            buffer.push(...results);
+            if (buffer.length >= INDEX_FLUSH_SIZE) {
+                if (flushTimer) {
+                    clearTimeout(flushTimer);
+                    flushTimer = undefined;
+                }
+                await flushBuffer();
+            } else {
+                scheduleFlush();
+            }
+        });
+    } finally {
+        if (flushTimer) {
+            clearTimeout(flushTimer);
+            flushTimer = undefined;
+        }
+        await flushBuffer();
+        setGenerationDisabled(false);
     }
 
-    updateLine(`Found exif metadata for ${found} images in ${calcTimeSpent(tStart)}\n`);
+    updateLine(`Indexed ${total} images (${found} with metadata) in ${calcTimeSpent(tStart)}\n`);
 }
 
 async function ensureVideoPreviews(templist: ServerImageFull[], videomap: Map<string, string>): Promise<void> {
@@ -458,80 +522,90 @@ async function cleanTempImages() {
 //#endregion
 
 //#region file watcher
-let indexTimer: any;
+let indexTimer: ReturnType<typeof setTimeout> | undefined;
 let isWatching = false;
 
 function setupWatcher() {
     if (isWatching)
         return;
     isWatching = true;
-    
+
     const options: WatcherOptions = {
         recursive: true,
         ignoreInitial: true,
     };
 
-    if (watcher) watcher.close();
-    watcher = new Watcher(imgFolder, options);
+    for (const w of watchers)
+        w.close();
+    watchers = [];
 
-    watcher.on('add', async file => {
-        addFile(file);
-    });
+    const roots = getImageRoots();
+    if (!roots.length) {
+        console.warn('No image roots to watch');
+        return;
+    }
 
-    watcher.on('rename', async (from, to) => {
-        renameFile(from, to);
-    });
+    for (const root of roots) {
+        const watcher = new Watcher(root.path, options);
 
-    watcher.on('unlink', async file => {
-        deleteFile(file);
-    });
+        watcher.on('add', async (file) => {
+            addFile(file);
+        });
 
-    watcher.on('addDir', () => {
-        clearTimeout(indexTimer);
-        indexTimer = setTimeout(() => {
-            indexFiles();
-        }, 2000);
-    });
+        watcher.on('rename', async (from, to) => {
+            renameFile(from, to);
+        });
 
-    watcher.on('renameDir', () => {
-        clearTimeout(indexTimer);
-        indexTimer = setTimeout(() => {
-            indexFiles();
-        }, 2000);
-    });
+        watcher.on('unlink', async (file) => {
+            deleteFile(file);
+        });
 
-    watcher.on('unlinkDir', dir => {
-        const deletions: string[] = [];
-        const deletedImages: ServerImage[] = [];
-        let oldestDeleted = Number.POSITIVE_INFINITY;
-        for (const [key, value] of getImageList()) {
-            if (value.file.startsWith(dir)) {
-                oldestDeleted = Math.min(oldestDeleted, value.modifiedDate);
-                deletedImages.push(value);
-                getImageList().delete(key);
-                deleteTempImage(key);
-                deletions.push(key);
+        watcher.on('addDir', () => {
+            clearTimeout(indexTimer);
+            indexTimer = setTimeout(() => {
+                indexFiles();
+            }, 2000);
+        });
+
+        watcher.on('renameDir', () => {
+            clearTimeout(indexTimer);
+            indexTimer = setTimeout(() => {
+                indexFiles();
+            }, 2000);
+        });
+
+        watcher.on('unlinkDir', (dir) => {
+            const deletions: string[] = [];
+            const deletedImages: ServerImage[] = [];
+            let oldestDeleted = Number.POSITIVE_INFINITY;
+            for (const [key, value] of getImageList()) {
+                if (value.file.startsWith(dir)) {
+                    oldestDeleted = Math.min(oldestDeleted, value.modifiedDate);
+                    deletedImages.push(value);
+                    getImageList().delete(key);
+                    deleteTempImage(key);
+                    deletions.push(key);
+                }
             }
-        }
-        
-        if (deletions.length) {
-            repairUniqueCacheAfterDeletes([...getImageList().values()], deletedImages);
-            repairExplorationCaches([...getImageList().values()], oldestDeleted, `removed directory ${path.basename(dir)} with ${deletions.length} images`);
-        }
-        MetaDB.deleteAll(deletions);
-        MetaCalcDB.deleteAll(deletions);
-        EmbeddingDB.deleteAll(deletions);
-    });
+
+            if (deletions.length) {
+                repairUniqueCacheAfterDeletes([...getImageList().values()], deletedImages);
+                repairExplorationCaches([...getImageList().values()], oldestDeleted, `removed directory ${path.basename(dir)} with ${deletions.length} images`);
+            }
+            MetaDB.deleteAll(deletions);
+            MetaCalcDB.deleteAll(deletions);
+            EmbeddingDB.deleteAll(deletions);
+        });
+
+        watchers.push(watcher);
+    }
 
     if (pollingInterval > 0) {
         console.log(`Polling enabled with interval of ${pollingInterval / 1000} seconds`);
         pollFiles();
     }
-    console.log('Listening to file changes...');
+    console.log(`Listening to file changes in ${roots.length} root(s)...`);
 }
-
-// let genCount = 0;
-// const genLimit = 10;
 
 async function addFile(file: string, hash?: string) {
     if (!isMedia(file)) return;
@@ -590,18 +664,6 @@ async function addFile(file: string, hash?: string) {
     MetaCalcDB.set(image);
 
     notifyImageChange();
-
-    // try {
-    //     if (genCount < genLimit) {
-    //         genCount++;
-    //         await generateCompressedFromId(hash, file);
-    //         await generateThumbnailFromId(hash, file);
-    //         genCount--;
-    //     }
-    // } catch (e) {
-    //     console.log(`Failed to generate preview for ${path.basename(file)} (this shouldn't appear)`);
-    //     console.error(e);
-    // }
 }
 
 function videoExists(imagefile: string): ServerImage | undefined {
@@ -647,7 +709,7 @@ async function deleteFile(file: string) {
     removeFreshImage(hash);
     recordDeletion(hash);
     deleteTempImage(hash);
-    
+
     MetaDB.delete(hash);
     MetaCalcDB.delete(hash);
     EmbeddingDB.deleteImage(hash);
@@ -666,7 +728,7 @@ async function renameFile(from: string, to: string) {
             affectedModifiedDate = Math.min(affectedModifiedDate, oldImage.modifiedDate);
         getImageList().delete(oldhash);
         deleteTempImage(oldhash);
-        
+
         MetaDB.delete(oldhash);
         MetaCalcDB.delete(oldhash);
         EmbeddingDB.deleteImage(oldhash);
@@ -718,13 +780,18 @@ async function pollFiles() {
 }
 
 async function checkFiles() {
-    const dirs: string[] = [imgFolder];
+    const dirs: string[] = getImageRoots().map((r) => r.path);
     const images = new Set([...getImageList().keys()]);
 
     while (dirs.length > 0) {
         const dir = dirs.pop();
         if (!dir) continue;
-        const files = await fs.readdir(dir);
+        let files: string[];
+        try {
+            files = await fs.readdir(dir);
+        } catch {
+            continue;
+        }
 
         for (const file of files.filter(x => isMedia(x))) {
             const fullpath = path.join(dir, file);
@@ -758,21 +825,34 @@ async function checkFiles() {
 export async function moveImages(ids: string | string[], folder: string) {
     if (typeof ids === 'string') ids = [ids];
 
-    const targetFolder = path.join(imgFolder, folder.replace(/^\/?/, ''));
+    const target = resolveTargetFolder(folder);
+    if (!target.ok) {
+        console.log(`Failed to move images: ${target.error}`);
+        return;
+    }
 
     let failcount = 0;
+    let crossRoot = 0;
     let moved = 0;
     let oldestMoved = Number.POSITIVE_INFINITY;
     for (const id of ids) {
         const img = getImageList().get(id);
         if (!img)
             continue;
-        let newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
+
+        const imageRoot = resolveImagePath(img.file)?.root;
+        if (!imageRoot || imageRoot.key !== target.root.key) {
+            crossRoot++;
+            continue;
+        }
+
+        let newPath = path.join(target.absolute, removeFolderFromPath(img.file)!);
         if (img.file === newPath)
             continue;
         newPath = await fileUniquefy(newPath);
 
         try {
+            await fs.mkdir(target.absolute, { recursive: true });
             await fs.rename(img.file, newPath);
             oldestMoved = Math.min(oldestMoved, img.modifiedDate);
             getImageList().delete(id);
@@ -797,9 +877,10 @@ export async function moveImages(ids: string | string[], folder: string) {
         }
     }
 
-    if (failcount) {
+    if (crossRoot)
+        console.log(`Skipped moving ${crossRoot} images (cannot move across source roots)`);
+    if (failcount)
         console.log(`Failed to move ${failcount} images`);
-    }
     if (moved) {
         repairExplorationCaches([...getImageList().values()], oldestMoved, `moved ${moved} images`);
         notifyImageChange();
@@ -809,19 +890,32 @@ export async function moveImages(ids: string | string[], folder: string) {
 export async function copyImages(ids: string | string[], folder: string) {
     if (typeof ids === 'string') ids = [ids];
 
-    const targetFolder = path.join(imgFolder, folder.replace(/^\/?/, ''));
+    const target = resolveTargetFolder(folder);
+    if (!target.ok) {
+        console.log(`Failed to copy images: ${target.error}`);
+        return;
+    }
 
     let failcount = 0;
+    let crossRoot = 0;
     for (const id of ids) {
         const img = getImageList().get(id);
         if (!img)
             continue;
-        let newPath = path.join(targetFolder, removeFolderFromPath(img.file)!);
+
+        const imageRoot = resolveImagePath(img.file)?.root;
+        if (!imageRoot || imageRoot.key !== target.root.key) {
+            crossRoot++;
+            continue;
+        }
+
+        let newPath = path.join(target.absolute, removeFolderFromPath(img.file)!);
         if (img.file === newPath)
             continue;
         newPath = await fileUniquefy(newPath);
 
         try {
+            await fs.mkdir(target.absolute, { recursive: true });
             await fs.copyFile(img.file, newPath);
         } catch {
             failcount++;
@@ -838,9 +932,10 @@ export async function copyImages(ids: string | string[], folder: string) {
         }
     }
 
-    if (failcount) {
+    if (crossRoot)
+        console.log(`Skipped copying ${crossRoot} images (cannot copy across source roots)`);
+    if (failcount)
         console.log(`Failed to copy ${failcount} images`);
-    }
 }
 
 export async function deleteImages(ids: string | string[]) {

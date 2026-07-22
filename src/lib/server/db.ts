@@ -581,6 +581,24 @@ export class MetaCalcDB {
         }).immediate(data);
     }
 
+    /**
+     * Bulk insert for brand-new images during indexing.
+     * Skips per-row SELECT for annotation/tags (nothing to preserve yet).
+     */
+    static setAllNew(data: ImageExtraData[]) {
+        if (!data?.length)
+            return;
+        MetaCalcDB.setup();
+        const stmt = MetaCalcDB.db.prepare(`INSERT OR REPLACE INTO ${MetaCalcDB.table} (id, positive, negative, params, models, hash, annotation, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
+            for (const item of data) {
+                const annotation = item.annotation !== undefined ? item.annotation : null;
+                const tags = item.tags !== undefined ? item.tags?.join(',') ?? null : null;
+                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation, tags);
+            }
+        }).immediate(data);
+    }
+
     static setAnnotation(id: string, annotation: string) {
         MetaCalcDB.setup();
         MetaCalcDB.db.prepare(`UPDATE ${MetaCalcDB.table} SET annotation = ? WHERE id = ?`).run(annotation, id);

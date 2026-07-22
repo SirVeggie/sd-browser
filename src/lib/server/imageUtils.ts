@@ -1,15 +1,15 @@
 import { getMetadataVersion, getModels, getPrompts, simplifyPrompt } from "$lib/tools/metadataInterpreter";
 import type { ImageExtraData, ImageInfo, ServerImage, ServerImageFull } from "$lib/types/images";
-import { folderFromFile } from "./filetools";
+import { folderFromFile, fileExists, removeBasePath, resolveImagePath } from "./filetools";
 import { isMetadataFiletype, isVideo } from '$lib/tools/misc';
 import crypto from 'crypto';
 import exifr from 'exifr';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileExists, removeBasePath } from "./filetools";
 import { MetaCalcDB, MetaDB } from "./db";
 import { populateMediaDimensions } from "./imageDimensions";
 import { computeExtradataFromFull } from "./extradataComputeCore";
+import { getImageRoots } from "./paths";
 
 /** Defer shipping blobs when combined length exceeds this (32 KiB). */
 export const METADATA_BLOBS_DEFER_THRESHOLD = 32 * 1024;
@@ -66,7 +66,17 @@ export function populateServerImage(image: ServerImage, info: ImageExtraData): S
 
 export function hashPath(filepath: string) {
     const hash = crypto.createHash('sha256');
-    hash.update(removeBasePath(filepath));
+    const resolved = resolveImagePath(filepath);
+    if (!resolved) {
+        hash.update(removeBasePath(filepath));
+        return hash.digest('hex');
+    }
+    // Single-root: hash relative path only (preserves existing DB ids / WebP caches).
+    // Multi-root: include root key to avoid collisions across sources.
+    if (getImageRoots().length === 1)
+        hash.update(resolved.relative);
+    else
+        hash.update(`${resolved.root.key}\0${resolved.relative}`);
     return hash.digest('hex');
 }
 
