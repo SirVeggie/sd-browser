@@ -64,6 +64,10 @@
     } from "$lib/tools/scrollLoadMore";
     import { bindDropdownOutsideClick } from "$lib/tools/dropdownOutsideClick";
     import {
+        buildFolderTree,
+        folderTreeToMenuOptions,
+    } from "$lib/tools/folderMenu";
+    import {
         getVisibleTilesForGrid,
         layoutGridTiles,
         layoutMasonryTiles,
@@ -1675,11 +1679,6 @@
         return folders.filter((folder): folder is string => folder !== undefined);
     }
 
-    function formatFolderDisplay(folder: string): string {
-        if (folder === "/") return folder;
-        return folder.replace(/\//g, " > ");
-    }
-
     function tagAddedInvalidatesCurrentSearch(tag: string): boolean {
         for (const clause of tokenizeSearchClauses($searchFilter)) {
             const text = clause.text.trim();
@@ -1709,19 +1708,18 @@
         const ids = selecting ? $selection : id ? [id] : [];
         const list = await fetchFolderPaths();
 
-        let folders = list;
+        let excludedPath: string | undefined;
         if (type === "move" && ids.length > 0) {
             const imageFolders = await getImageFolderPaths(ids);
             const uniqueFolders = new Set(imageFolders);
-            if (uniqueFolders.size === 1) {
-                const currentFolder = [...uniqueFolders][0];
-                folders = list.filter((folder) => folder !== currentFolder);
-            }
+            if (uniqueFolders.size === 1)
+                excludedPath = [...uniqueFolders][0];
         }
 
-        return folders.map((folder) => ({
-            name: formatFolderDisplay(folder),
-            handler: () => {
+        return folderTreeToMenuOptions(buildFolderTree(list), {
+            type,
+            excludedPath,
+            onSelect: (folder) => {
                 const actionIds = selecting ? [...$selection] : id ? [id] : [];
                 if (!actionIds.length)
                     return;
@@ -1732,7 +1730,7 @@
                     folder,
                 });
             },
-        }));
+        });
     }
 
     async function tagActionMenu(id: string): Promise<ContextMenuOption[] | void> {

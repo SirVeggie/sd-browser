@@ -111,6 +111,16 @@ Overlay and input must share the same font family, size, line-height, padding, l
 
 ---
 
+## Move/Copy folder context menus
+
+**Files:** `src/lib/tools/folderMenu.ts`, `folderActionMenu()` in `src/routes/+page.svelte`
+
+Move/Copy destinations are nested context submenus (one level per folder), not a flat breadcrumb list. Parent folders open a submenu; the first item is **Move here** / **Copy here** so the parent itself remains selectable. Leaf folders are direct actions.
+
+When moving and every selected image shares one folder, that path is excluded as a destination but kept as a navigation-only submenu if it still has descendants.
+
+---
+
 ## Bulk vectorize failure isolation
 
 **File:** `src/lib/server/embeddings.ts` (`vectorizeImageBatch`)
