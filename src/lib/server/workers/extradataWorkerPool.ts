@@ -6,8 +6,10 @@ import { computeExtradataBatch } from '../extradataComputeCore';
 import type { ImageExtraData, ServerImageFull } from '$lib/types/images';
 import { fileExistsSync } from '../filetools';
 
-const POOL_SIZE = Math.max(1, Math.min(4, os.cpus().length - 1));
-const BATCH_SLICE = Math.ceil(1000 / POOL_SIZE);
+/** Match indexing pool sizing — saturate CPU for parse-heavy recalc. */
+const POOL_SIZE = Math.max(1, Math.min(os.cpus().length - 1, 8));
+/** Images per worker message. */
+const JOB_SLICE = 64;
 
 type WorkerJob = {
     fulls: ServerImageFull[];
@@ -48,8 +50,10 @@ class ExtradataWorkerPool {
         this.initialized = true;
 
         const workerPath = resolveWorkerPath();
-        if (!workerPath)
+        if (!workerPath) {
+            console.warn('Extradata worker bundle not found, using main thread');
             return;
+        }
 
         try {
             for (let i = 0; i < POOL_SIZE; i++) {
@@ -78,6 +82,7 @@ class ExtradataWorkerPool {
                 this.idleWorkers.push(worker);
             }
             this.useWorkers = true;
+            console.log(`Extradata worker pool ready (${POOL_SIZE} threads)`);
         } catch (error) {
             console.warn('Failed to spawn extradata worker pool, using main thread:', error);
             this.terminate();
@@ -93,13 +98,25 @@ class ExtradataWorkerPool {
         }
     }
 
-    private runWorkerBatch(fulls: ServerImageFull[]): Promise<ImageExtraData[]> {
+    private runWorkerSlice(fulls: ServerImageFull[]): Promise<ImageExtraData[]> {
         return new Promise((resolve, reject) => {
             this.queue.push({ fulls, resolve, reject });
             this.dispatch();
         });
     }
 
+    get poolSize(): number {
+        this.init();
+        return this.useWorkers ? POOL_SIZE : 1;
+    }
+
+    get jobSlice(): number {
+        return JOB_SLICE;
+    }
+
+    /**
+     * Compute extradata for a list of full images, splitting across the pool.
+     */
     async computeBatch(fulls: ServerImageFull[]): Promise<ImageExtraData[]> {
         this.init();
         if (!fulls.length)
@@ -108,11 +125,74 @@ class ExtradataWorkerPool {
             return computeOnMainThread(fulls);
 
         const chunks: ServerImageFull[][] = [];
-        for (let i = 0; i < fulls.length; i += BATCH_SLICE)
-            chunks.push(fulls.slice(i, i + BATCH_SLICE));
+        for (let i = 0; i < fulls.length; i += JOB_SLICE)
+            chunks.push(fulls.slice(i, i + JOB_SLICE));
 
-        const results = await Promise.all(chunks.map(chunk => this.runWorkerBatch(chunk)));
+        const results = await Promise.all(chunks.map(chunk => this.runWorkerSlice(chunk)));
         return results.flat();
+    }
+
+    /**
+     * Keep the pool saturated: `loadSlice` runs on the main thread (DB read),
+     * compute runs on workers, `onResults` runs on the main thread (DB write).
+     */
+    async processAll(
+        total: number,
+        loadSlice: (start: number, count: number) => ServerImageFull[],
+        onResults: (results: ImageExtraData[], done: number, total: number) => void | Promise<void>,
+        options?: { maxInFlight?: number },
+    ): Promise<void> {
+        this.init();
+        if (total <= 0)
+            return;
+
+        const slice = JOB_SLICE;
+        const maxInFlight = options?.maxInFlight ?? (this.useWorkers ? POOL_SIZE * 2 : 1);
+        let nextIndex = 0;
+        let completed = 0;
+        let inFlight = 0;
+        let failed: unknown;
+
+        const runSlice = async (start: number, count: number) => {
+            const fulls = loadSlice(start, count);
+            if (!fulls.length) {
+                completed += count;
+                return;
+            }
+            const results = this.useWorkers
+                ? await this.runWorkerSlice(fulls)
+                : computeOnMainThread(fulls);
+            completed += fulls.length;
+            await onResults(results, completed, total);
+        };
+
+        await new Promise<void>((resolve, reject) => {
+            const pump = () => {
+                if (failed) {
+                    reject(failed);
+                    return;
+                }
+                if (nextIndex >= total && inFlight === 0) {
+                    resolve();
+                    return;
+                }
+                while (inFlight < maxInFlight && nextIndex < total) {
+                    const start = nextIndex;
+                    const count = Math.min(slice, total - nextIndex);
+                    nextIndex += count;
+                    inFlight++;
+                    runSlice(start, count)
+                        .catch((error) => {
+                            failed = error;
+                        })
+                        .finally(() => {
+                            inFlight--;
+                            pump();
+                        });
+                }
+            };
+            pump();
+        });
     }
 
     terminate() {

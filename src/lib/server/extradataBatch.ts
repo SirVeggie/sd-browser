@@ -3,26 +3,35 @@ import { MetaDB } from './db';
 import { extradataWorkerPool } from './workers/extradataWorkerPool';
 import type { ImageExtraData } from '$lib/types/images';
 
+/** Progress reporting / staging write grain (not the worker job size). */
 const BATCH_SIZE = 1000;
 
 export async function computeExtradataForIds(
     ids: string[],
     onProgress?: (done: number, total: number) => void,
 ): Promise<ImageExtraData[]> {
-    const results: ImageExtraData[] = [];
+    const results: ImageExtraData[] = new Array(ids.length);
     const total = ids.length;
-    let done = 0;
+    if (!total)
+        return [];
 
-    while (done < total) {
-        const batchIds = ids.slice(done, done + BATCH_SIZE);
-        const fulls = MetaDB.getMany(batchIds);
-        const batch = await extradataWorkerPool.computeBatch(fulls);
-        results.push(...batch);
-        done += batchIds.length;
-        onProgress?.(done, total);
-    }
+    // Map id → index so out-of-order worker slices can be reassembled.
+    const indexById = new Map(ids.map((id, i) => [id, i]));
 
-    return results;
+    await extradataWorkerPool.processAll(
+        total,
+        (start, count) => MetaDB.getMany(ids.slice(start, start + count)),
+        (batch, done) => {
+            for (const item of batch) {
+                const index = indexById.get(item.id);
+                if (index !== undefined)
+                    results[index] = item;
+            }
+            onProgress?.(done, total);
+        },
+    );
+
+    return results.filter(Boolean);
 }
 
 export async function forEachExtradataBatch(
@@ -40,19 +49,38 @@ export async function forEachExtradataBatch(
 
     const start = Date.now();
     let remaining = '?';
-    let done = 0;
+    let writeBuffer: ImageExtraData[] = [];
+    let flushing = Promise.resolve();
+    let reportedDone = 0;
 
-    while (done < total) {
-        const batchIds = ids.slice(done, done + BATCH_SIZE);
-        updateLine(`${label}: ${done} / ${total} (processing) | estimate: ${remaining}`);
-        const batch = await computeExtradataForIds(batchIds);
-        done += batchIds.length;
-        await onBatch(batch, done, total);
-        remaining = calcTimeRemaining(start, done, total);
-        updateLine(`${label}: ${done} / ${total} (loading)    | estimate: ${remaining}`);
-        onProgress?.(done, total);
-    }
+    const flushWriteBuffer = () => {
+        flushing = flushing.then(async () => {
+            if (!writeBuffer.length)
+                return;
+            const batch = writeBuffer;
+            writeBuffer = [];
+            reportedDone += batch.length;
+            await onBatch(batch, reportedDone, total);
+            remaining = calcTimeRemaining(start, reportedDone, total);
+            updateLine(`${label}: ${reportedDone} / ${total} | estimate: ${remaining}`);
+            onProgress?.(reportedDone, total);
+        });
+        return flushing;
+    };
 
+    updateLine(`${label}: 0 / ${total} | estimate: ${remaining}`);
+
+    await extradataWorkerPool.processAll(
+        total,
+        (startIndex, count) => MetaDB.getMany(ids.slice(startIndex, startIndex + count)),
+        async (batch) => {
+            writeBuffer.push(...batch);
+            if (writeBuffer.length >= BATCH_SIZE)
+                await flushWriteBuffer();
+        },
+    );
+
+    await flushWriteBuffer();
     updateLine('');
 }
 

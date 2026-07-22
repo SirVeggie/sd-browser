@@ -476,6 +476,7 @@ Use when parser logic changed without a schema version bump, or to repair incons
 1. Recalculated rows are written to `extradata_staging` while live `extradata` continues serving reads/writes.
 2. On completion, staging is swapped into place in one SQLite transaction; rows for images added during recalc are merged from the old table.
 3. In-memory `imageList` is refreshed; exploration caches (sparse, similar, unique) are invalidated.
+4. CPU parsing runs on a worker-thread pool (up to `min(cpus-1, 8)`); SQLite reads/writes stay on the main thread with pipelined slices so workers stay saturated.
 
 ### Recovery after crash
 

@@ -504,7 +504,7 @@
 
         const confirmed = await askConfirmation(
             'Recalculate extra data',
-            'Rebuild derived prompt, model, and hash fields from stored metadata? Annotations are preserved. This may take a while for large libraries.',
+            'Rebuild derived prompt, model, and hash fields from stored metadata? Annotations and tags are preserved. This may take a while for large libraries.',
         );
         if (!confirmed)
             return;

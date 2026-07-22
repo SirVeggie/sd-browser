@@ -445,15 +445,26 @@ export class MetaCalcDB {
     }
 
     static setAllStaging(data: ImageExtraData[]) {
+        if (!data?.length)
+            return;
         MetaCalcDB.setup();
         MetaCalcDB.ensureStagingTable();
+        // Annotations/tags are copied from live during swapStagingToLive — skip per-row SELECT.
         const stmt = MetaCalcDB.db.prepare(
             `INSERT OR REPLACE INTO ${MetaCalcDB.stagingTable} (id, positive, negative, params, models, hash, annotation, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         );
         MetaCalcDB.db.transaction((data: ImageExtraData[]) => {
             for (const item of data) {
-                const { annotation, tags } = MetaCalcDB.resolveStored(item, MetaCalcDB.get(item.id));
-                stmt.run(item.id, item.positive, item.negative, item.params, item.models ?? '', item.hash, annotation, tags);
+                stmt.run(
+                    item.id,
+                    item.positive,
+                    item.negative,
+                    item.params,
+                    item.models ?? '',
+                    item.hash,
+                    null,
+                    null,
+                );
             }
         }).immediate(data);
     }
