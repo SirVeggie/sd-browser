@@ -255,12 +255,13 @@
             z-index: 2;
             pointer-events: none;
             user-select: none;
-            padding: 1.35em 0.55em 0.35em 1.5em;
-            background: linear-gradient(
-                to top left,
-                rgba(0, 0, 0, 0.72) 0%,
-                rgba(0, 0, 0, 0.35) 45%,
-                transparent 72%
+            padding: 1.6em 0.55em 0.35em 1.75em;
+            background: radial-gradient(
+                ellipse 120% 110% at 100% 100%,
+                rgba(0, 0, 0, 0.7) 0%,
+                rgba(0, 0, 0, 0.42) 38%,
+                rgba(0, 0, 0, 0.12) 68%,
+                transparent 100%
             );
 
             span {
