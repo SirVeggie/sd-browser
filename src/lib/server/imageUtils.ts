@@ -7,7 +7,7 @@ import exifr from 'exifr';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileExists, removeBasePath } from "./filetools";
-import { MetaDB } from "./db";
+import { MetaCalcDB, MetaDB } from "./db";
 import { populateMediaDimensions } from "./imageDimensions";
 import { computeExtradataFromFull } from "./extradataComputeCore";
 
@@ -89,6 +89,9 @@ export async function readMetadataFromFile(image: ServerImageFull, file: string)
 }
 
 export async function readMetadataFromExif(image: ServerImageFull, altSource?: string): Promise<ServerImageFull> {
+    if (altSource && isMetadataFiletype(altSource))
+        image.preview = altSource;
+
     const validSource = isMetadataFiletype(image.file) || isMetadataFiletype(altSource ?? "");
     if (!validSource)
         return image;
@@ -106,8 +109,6 @@ export async function readMetadataFromExif(image: ServerImageFull, altSource?: s
         image.prompt = JSON.stringify(metadata);
     }
 
-    if (altSource)
-        image.preview = altSource;
     return image;
 }
 
@@ -170,6 +171,8 @@ export async function updateImageMetadata(image: ServerImage, source: string) {
     image.hash = newImage.hash;
     image.width = newFull.width;
     image.height = newFull.height;
+    MetaDB.set(newFull);
+    MetaCalcDB.set(newImage);
 }
 
 export function buildImageInfo(

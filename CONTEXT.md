@@ -135,6 +135,24 @@ Do not reintroduce a catch-all that marks every id in the chunk as failed on a s
 
 ---
 
+## Video preview PNGs
+
+**Files:** `src/lib/server/videoPreview.ts`, `src/lib/server/filemanager.ts`, `src/lib/server/imageUtils.ts`, `src/lib/server/responses.ts`
+
+Videos (`.mp4`) use a same-basename companion PNG (`foo.mp4` + `foo.png`) for gallery thumbs (`preview=true`) and IMG embeddings.
+
+- If the PNG is missing, `ensureVideoPreview` extracts the first frame via `@napi-rs/webcodecs` and writes it with sharp. Do not reintroduce bundled ffmpeg.
+- Read rotation from the MP4 `tkhd` matrix via a **top-level atom walk** to load `moov` (end-of-file `moov` is common; naive end-chunk scans miss it). Matrix layout is `a b u / c d v / x y w` — `c` is at +12, not +8. Use ffmpeg’s `-atan2(c, a)`; when rotation is 90/270, swap stored tkhd size for display width/height.
+- `VideoFrame.rotation` is often 0 for phone videos; do not rely on it alone.
+- Index **preview generation before dimensions** for newly indexed videos: gallery `width`/`height` should come from the oriented PNG. Do not scan/repair all cached videos on every startup.
+- `image.preview` must be set whenever the companion PNG exists — **including when EXIF is empty** (`readMetadataFromExif`). Linking must not depend on successful metadata parse.
+- Watcher PNG attach (`updateImageMetadata`) must persist `preview` to MetaDB (and calc DB), not only memory.
+- When serving `preview=true`, use an image `Content-Type`, not `video/mp4`.
+
+Videos still without a preview after generation failure are skipped for vectorize (`canVectorizeImage`) — do not guess a missing `.png` path.
+
+---
+
 ## Videos without preview are skipped for vectorize
 
 **Files:** `src/lib/tools/misc.ts` (`canVectorizeImage`), `src/lib/server/bulk.ts`, `src/lib/server/embeddings.ts`

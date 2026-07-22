@@ -182,6 +182,11 @@
                 on:error={createMediaReadyHandler(src)}
             />
         {/if}
+        {#if img.type === "video"}
+            <div class="video-mark" aria-hidden="true">
+                <span>VIDEO</span>
+            </div>
+        {/if}
     </Clickable>
 </div>
 
@@ -241,6 +246,34 @@
             transition:
                 outline 0.4s ease,
                 box-shadow 0.4s ease;
+        }
+
+        .video-mark {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            z-index: 2;
+            pointer-events: none;
+            user-select: none;
+            padding: 1.35em 0.55em 0.35em 1.5em;
+            background: linear-gradient(
+                to top left,
+                rgba(0, 0, 0, 0.72) 0%,
+                rgba(0, 0, 0, 0.35) 45%,
+                transparent 72%
+            );
+
+            span {
+                display: block;
+                font-family: var(--font-tag);
+                font-size: 0.58rem;
+                font-weight: 600;
+                line-height: 1;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: color-mix(in srgb, var(--ink) 92%, transparent);
+                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+            }
         }
 
         &.selected {

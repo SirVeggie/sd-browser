@@ -48,7 +48,7 @@ export async function image(
         return error('Failed to read file', 500);
     }
 
-    return imageResponse(buffer, getImageType(img));
+    return imageResponse(buffer, preview && img.preview ? undefined : getImageType(img));
 }
 
 function isGeneratedTier(type: string | undefined): type is GeneratedQualityMode {

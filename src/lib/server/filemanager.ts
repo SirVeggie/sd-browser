@@ -22,6 +22,7 @@ import { populateMediaDimensions } from './imageDimensions';
 import { invalidateExplorationPools, repairExplorationCaches, repairUniqueCacheAfterDeletes, repairUniqueCacheOnAdd, verifyExplorationCaches } from './exploration';
 import { notifyImageChange } from './imageChangeHub';
 import { ensureDefaultTagsRegistry } from './tags';
+import { ensureVideoPreview } from './videoPreview';
 import {
     getImageList,
     recordDeletion,
@@ -58,8 +59,10 @@ export async function indexFiles() {
     // start watcher early
     setupWatcher();
 
-    // read modified and created dates
+    // Generate video companion PNGs before reading dimensions so width/height
+    // come from the oriented preview (and dates still come from the mp4).
     if (templist.length !== 0) {
+        await ensureVideoPreviews(templist, videomap);
         templist = await indexBasicFileData(templist);
     }
 
@@ -383,7 +386,7 @@ async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string,
         for (const image of batch) {
             backgroundTasks.addWork(async () => {
                 const partial = removeExtension(image.file);
-                const source = videomap.get(partial);
+                const source = videomap.get(partial) || undefined;
                 const res = await readMetadataFromExif(image, source).catch(() => image);
                 const processed = getServerImage(res);
 
@@ -402,6 +405,33 @@ async function indexExifFiles(templist: ServerImageFull[], videomap: Map<string,
     }
 
     updateLine(`Found exif metadata for ${found} images in ${calcTimeSpent(tStart)}\n`);
+}
+
+async function ensureVideoPreviews(templist: ServerImageFull[], videomap: Map<string, string>): Promise<void> {
+    const videos = templist.filter(x => isVideo(x.file));
+    if (!videos.length)
+        return;
+
+    const log = `Generating previews for ${videos.length} videos`;
+    updateLine(`${log}...`);
+    let done = 0;
+
+    await limitedParallelMap(videos, async (image) => {
+        const partial = removeExtension(image.file);
+        let source = videomap.get(partial);
+        if (!source) {
+            source = (await ensureVideoPreview(image.file)) ?? '';
+            if (source)
+                videomap.set(partial, source);
+        }
+        if (source)
+            image.preview = source;
+        done++;
+        if (done % 5 === 0 || done === videos.length)
+            updateLine(`${log}: ${done}/${videos.length}`);
+    }, 2);
+
+    updateLine(`${log}: ${done}/${videos.length}\n`);
 }
 
 async function cleanTempImages() {
@@ -511,7 +541,8 @@ async function addFile(file: string, hash?: string) {
     if (file.endsWith('.png')) {
         const video = videoExists(file);
         if (video) {
-            updateImageMetadata(video, file);
+            await updateImageMetadata(video, file);
+            notifyImageChange();
             return;
         }
         await sleep(100);
@@ -532,6 +563,7 @@ async function addFile(file: string, hash?: string) {
         const image = videoPreviewExists(file);
         if (image)
             deleteFile(image.file);
+        await ensureVideoPreview(file);
     }
 
     console.log(`Added ${file}`);
