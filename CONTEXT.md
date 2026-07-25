@@ -199,6 +199,14 @@ Already-generated WebP caches and already-stored dimensions are not rewritten au
 
 ---
 
+## Generation duration in basic metadata
+
+**Files:** `src/lib/tools/metadataInterpreter.ts` (`getDuration`), `src/lib/items/ImageFull.svelte` (`extractBasic`)
+
+When `extra` JSON includes a finite numeric `duration` (seconds), the fullscreen basic metadata line appends it after the date, rounded to one decimal (`… · 15.4s`). Omitted when missing or not a finite number. Requires blobs loaded (`extra` present).
+
+---
+
 ## Live view is image-only
 
 **File:** `src/lib/items/ImageFull.svelte`
@@ -224,4 +232,3 @@ Media neighbors preload in the stage; metadata must preload too. On arrow nav th
 **File:** `src/lib/items/FullscreenMediaStage.svelte`
 
 Svelte 4 tracks `$:` dependencies from the statement AST only — reads inside helpers like `mediaUrlFor()` do **not** count. `mediaQuery` (and thus `showOriginal`) must appear lexically in the `$: panelEntries = …` expression (inline `` `/api/images/${id}?${mediaQuery}` ``). Putting the helper call in the `$:` block or only in the `{#each}` template is not enough; "Show original" will keep serving the compressed URL. Panel keys should include `mediaQuery` so quality flips remount panels.
-

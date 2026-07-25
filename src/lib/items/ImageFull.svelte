@@ -14,6 +14,7 @@
   import { notify } from "$lib/components/Notifier.svelte";
   import {
     getComfyMetadataSections,
+    getDuration,
     getMetadataVersion,
     getModelCandidates,
     getPrimaryModel,
@@ -202,6 +203,9 @@
     if (d.fileSize != null)
       parts.push(formatFileSize(d.fileSize));
     parts.push(formatMetaDate(d.modifiedDate));
+    const duration = getDuration(d.extra);
+    if (duration != null)
+      parts.push(`${duration.toFixed(1)}s`);
 
     const lines = [parts.join(" · ")];
     if (d.folder)

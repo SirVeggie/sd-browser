@@ -444,6 +444,15 @@ export function getModelSearchText(models: string | undefined): string {
     return (models ?? '').replace(/\\/g, '/');
 }
 
+/** Generation time in seconds from `extra` JSON `duration`, when present and finite. */
+export function getDuration(extra: string | undefined): number | undefined {
+    const data = parseExtraJson(extra);
+    const duration = data?.duration;
+    if (typeof duration !== 'number' || !Number.isFinite(duration))
+        return undefined;
+    return duration;
+}
+
 export function getSeed(prompt: string | undefined, workflow: string | undefined, extra: string | undefined) {
     if (extra) {
         try {
