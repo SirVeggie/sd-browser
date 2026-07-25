@@ -34,6 +34,7 @@ import {
     scoreImgAffinityMode,
     scoreImgAnyMode,
     scoreImgFringeMode,
+    scoreImgSharedMode,
     sharedSubspaceEmbedding,
 } from "$lib/tools/vectorMath";
 import {
@@ -455,8 +456,9 @@ function weightedImgClausesHaveMissingImage(clauses: ParsedWeightedImgQueryClaus
     return clauses.some((clause) => clause.kind === 'image' && !getImageList().has(clause.imageId));
 }
 
-function imgModeHasMissingImage(imageIds: string[]): boolean {
-    return imageIds.some((imageId) => !getImageList().has(imageId));
+function imgModeHasMissingImage(modeQuery: ParsedImgModeQuery): boolean {
+    return [...modeQuery.imageIds, ...modeQuery.negativeImageIds]
+        .some((imageId) => !getImageList().has(imageId));
 }
 
 function findWeightedImgMatches(
@@ -616,11 +618,32 @@ async function findImgModeMatches(
         }
         case 'shared': {
             const query = sharedSubspaceEmbedding(refEmbeddings);
-            return EmbeddingDB.findSimilarImage(
-                query,
-                minSimilarity,
-                effectiveK,
+            if (!modeQuery.negativeImageIds.length) {
+                return EmbeddingDB.findSimilarImage(
+                    query,
+                    minSimilarity,
+                    effectiveK,
+                    candidateIds,
+                );
+            }
+
+            const negativeEmbeddings = await resolveImageEmbeddings(
+                modeQuery.negativeImageIds,
+                options,
+            );
+            if (storedDimensions !== null) {
+                for (const embedding of negativeEmbeddings) {
+                    if (embedding.length !== storedDimensions)
+                        throw new EmbeddingDimensionMismatchError(storedDimensions, embedding.length);
+                }
+            }
+
+            return findScoredImgMatches(
                 candidateIds,
+                effectiveThreshold,
+                k,
+                explicitThreshold,
+                (candidate) => scoreImgSharedMode(query, negativeEmbeddings, candidate),
             );
         }
         case 'analogy': {
@@ -728,7 +751,7 @@ export async function resolveImgSearchContext(
 
         const parsedQuery = parseImgQueryBody(queryText);
         if (parsedQuery.kind === 'mode') {
-            if (imgModeHasMissingImage(parsedQuery.imageIds)) {
+            if (imgModeHasMissingImage(parsedQuery)) {
                 context.parts.set(index, { presence: false, invalid: true });
                 continue;
             }
@@ -768,9 +791,16 @@ export async function resolveImgSearchContext(
             let matchScores: Map<string, number>;
 
             if (parsedQuery.kind === 'mode') {
-                const effectiveThreshold = threshold ?? defaultImgModeThreshold(
-                    parsedQuery.mode,
-                    settings.imageSimilarityThreshold,
+                const hasSharedNegatives = parsedQuery.mode === 'shared'
+                    && parsedQuery.negativeImageIds.length > 0;
+                const effectiveThreshold = threshold ?? (
+                    hasSharedNegatives
+                        // Same 0..1 remap as weighted IMG with negatives.
+                        ? WEIGHTED_IMAGE_EMBEDDING_SIMILARITY_THRESHOLD
+                        : defaultImgModeThreshold(
+                            parsedQuery.mode,
+                            settings.imageSimilarityThreshold,
+                        )
                 );
                 matchScores = await findImgModeMatches(
                     parsedQuery,

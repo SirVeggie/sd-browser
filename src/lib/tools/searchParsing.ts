@@ -50,6 +50,8 @@ export type ParsedImgModeQuery = {
     kind: 'mode';
     mode: ImgSearchMode;
     imageIds: string[];
+    /** Shared mode: hex ids after a single spaced `-` group. Empty for other modes. */
+    negativeImageIds: string[];
 };
 
 export type ParsedImgQueryBody =
@@ -66,8 +68,47 @@ export function isImgSearchMode(token: string): token is ImgSearchMode {
     return IMG_SEARCH_MODE_SET.has(token.toLowerCase());
 }
 
+function allImageEmbeddingIds(tokens: string[]): boolean {
+    return tokens.length > 0 && tokens.every((token) => isImageEmbeddingId(token));
+}
+
+/**
+ * `IMG shared <pos…> - <neg…>`: one spaced `-` splits positives from negatives.
+ * Negatives are space-separated (threshold/k already stripped before this parse).
+ */
+function parseSharedImgModeTokens(idTokens: string[]): ParsedImgModeQuery | undefined {
+    const dashIndex = idTokens.indexOf('-');
+    if (dashIndex === -1) {
+        if (!allImageEmbeddingIds(idTokens))
+            return undefined;
+        return {
+            kind: 'mode',
+            mode: 'shared',
+            imageIds: idTokens,
+            negativeImageIds: [],
+        };
+    }
+
+    // Only one `-` group; further dashes are not mode syntax.
+    if (idTokens.indexOf('-', dashIndex + 1) !== -1)
+        return undefined;
+
+    const imageIds = idTokens.slice(0, dashIndex);
+    const negativeImageIds = idTokens.slice(dashIndex + 1);
+    if (!allImageEmbeddingIds(imageIds) || !allImageEmbeddingIds(negativeImageIds))
+        return undefined;
+
+    return {
+        kind: 'mode',
+        mode: 'shared',
+        imageIds,
+        negativeImageIds,
+    };
+}
+
 /**
  * Mode form: known mode keyword followed by one or more 64-char hex ids.
+ * Shared also accepts `shared <pos…> - <neg…>` (space-separated negatives).
  * Otherwise fall back to weighted +/- parsing (text and/or image ids).
  */
 export function parseImgQueryBody(queryText: string): ParsedImgQueryBody {
@@ -79,12 +120,17 @@ export function parseImgQueryBody(queryText: string): ParsedImgQueryBody {
     if (tokens.length >= 2) {
         const modeToken = tokens[0]?.toLowerCase() ?? '';
         if (isImgSearchMode(modeToken)) {
-            const imageIds = tokens.slice(1);
-            if (imageIds.length > 0 && imageIds.every((token) => isImageEmbeddingId(token))) {
+            const idTokens = tokens.slice(1);
+            if (modeToken === 'shared') {
+                const shared = parseSharedImgModeTokens(idTokens);
+                if (shared)
+                    return shared;
+            } else if (allImageEmbeddingIds(idTokens)) {
                 return {
                     kind: 'mode',
                     mode: modeToken,
-                    imageIds,
+                    imageIds: idTokens,
+                    negativeImageIds: [],
                 };
             }
         }

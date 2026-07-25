@@ -198,6 +198,29 @@ export function sharedSubspaceEmbedding(embeddings: Float32Array[]): Float32Arra
     return normalizeEmbedding(query);
 }
 
+/**
+ * Shared-mode score with optional negatives (same remap as weighted IMG +/-):
+ * (sim(sharedQuery, x) − max_j sim(neg_j, x) + 1) / 2.
+ * With no negatives, returns clamped cosine to the shared query.
+ */
+export function scoreImgSharedMode(
+    sharedQuery: Float32Array,
+    negativeEmbeddings: Float32Array[],
+    candidate: Float32Array,
+): number {
+    const positiveScore = clampUnitScore(cosineSimilarity(sharedQuery, candidate));
+    if (!negativeEmbeddings.length)
+        return positiveScore;
+
+    let negativeScore = 0;
+    for (const negative of negativeEmbeddings) {
+        const similarity = clampUnitScore(cosineSimilarity(negative, candidate));
+        if (similarity > negativeScore)
+            negativeScore = similarity;
+    }
+    return (positiveScore - negativeScore + 1) / 2;
+}
+
 /** Spread penalty weight for affinity: score = μ / (1 + λσ). */
 export const IMG_AFFINITY_CONSISTENCY_LAMBDA = 1;
 

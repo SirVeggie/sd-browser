@@ -158,7 +158,7 @@ No migration helper; the old `SIMILAR img` form is unsupported.
 - `more <A> <B>` — extrapolate past A away from B
 - `fringe` — related but atypical vs the selection centroid
 - `diff <A> <B>` — search along normalize(A − B)
-- `shared` — centroid with inverse-variance dim weights (ε = median within-set variance)
+- `shared` — centroid with inverse-variance dim weights (ε = median within-set variance); optional `shared <pos…> - <neg…>` uses the same positive−max(neg) score remap as weighted IMG
 - `analogy <A> <B> <C>` — A:B :: C:? via normalize(C + (B − A))
 - `affinity` — mean similarity to refs with uneven-match penalty (μ / (1 + σ))
 
@@ -183,7 +183,7 @@ None (additive).
 1. `IMG avg <id1> <id2> 0.8` returns blended neighbors.
 2. `IMG all <id1> <id2>` stays one search clause and returns embedding matches (not empty metadata `ALL` hits).
 3. `IMG more <idA> <idB>` and `IMG diff <idA> <idB>` require exactly two ids; `IMG analogy <A> <B> <C>` requires three.
-4. `IMG shared <ids…>` and `IMG affinity <ids…>` require at least two ids.
+4. `IMG shared <ids…>` and `IMG affinity <ids…>` require at least two ids. `IMG shared <pos…> - <neg…> [threshold]` accepts space-separated negatives after one `-`.
 5. Multi-select → Similar images emits `IMG avg` with all selected ids.
 
 ### Removal

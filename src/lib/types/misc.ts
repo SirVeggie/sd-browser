@@ -256,8 +256,8 @@ export const searchKeywordHelpSections = [
                 keyword: 'IMG shared',
                 summary: 'Keeps stable traits across references.',
                 details:
-                    'Inverse-variance weights the reference mean: dims that vary a lot within the set are downweighted relative to stable ones, then KNN as usual. Better than avg when refs share a subject but disagree on outfit or lighting. Needs at least two hex ids.',
-                example: 'IMG shared #1 #2 #3',
+                    'Inverse-variance weights the reference mean: dims that vary a lot within the set are downweighted relative to stable ones, then KNN as usual. Better than avg when refs share a subject but disagree on outfit or lighting. Needs at least two hex ids. Optional spaced `-` then one or more hex ids are negatives (same score remap as weighted IMG +/-): prefer the shared subspace, penalize similarity to the negatives. Trailing threshold/k still apply after the negative ids.',
+                example: 'IMG shared #1 #2 #3 - #4 #5 0.5',
             },
             {
                 keyword: 'IMG analogy',

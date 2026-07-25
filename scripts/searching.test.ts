@@ -40,6 +40,7 @@ import {
     scoreImgAllMode,
     scoreImgAnyMode,
     scoreImgFringeMode,
+    scoreImgSharedMode,
     sharedSubspaceEmbedding,
 } from '../src/lib/tools/vectorMath.ts';
 
@@ -488,7 +489,7 @@ assert.equal(
 
 assert.deepEqual(
     parseImgQueryBody(`avg ${fullImageId} ${secondImageId}`),
-    { kind: 'mode', mode: 'avg', imageIds: [fullImageId, secondImageId] },
+    { kind: 'mode', mode: 'avg', imageIds: [fullImageId, secondImageId], negativeImageIds: [] },
     'parses IMG avg mode with space-separated hex ids',
 );
 
@@ -504,25 +505,25 @@ assert.deepEqual(
             extractImgSearchTarget(`IMG all ${fullImageId} ${secondImageId} 0.8`),
         ).text,
     ),
-    { kind: 'mode', mode: 'all', imageIds: [fullImageId, secondImageId] },
+    { kind: 'mode', mode: 'all', imageIds: [fullImageId, secondImageId], negativeImageIds: [] },
     'parses IMG all mode after extractImgSearchTarget and threshold strip',
 );
 
 assert.deepEqual(
     parseImgQueryBody(`ALL ${fullImageId} ${secondImageId}`),
-    { kind: 'mode', mode: 'all', imageIds: [fullImageId, secondImageId] },
+    { kind: 'mode', mode: 'all', imageIds: [fullImageId, secondImageId], negativeImageIds: [] },
     'parses IMG all mode case-insensitively',
 );
 
 assert.deepEqual(
     parseImgQueryBody(`more ${fullImageId} ${secondImageId}`),
-    { kind: 'mode', mode: 'more', imageIds: [fullImageId, secondImageId] },
+    { kind: 'mode', mode: 'more', imageIds: [fullImageId, secondImageId], negativeImageIds: [] },
     'parses IMG more mode',
 );
 
 assert.deepEqual(
     parseImgQueryBody(`fringe ${fullImageId}`),
-    { kind: 'mode', mode: 'fringe', imageIds: [fullImageId] },
+    { kind: 'mode', mode: 'fringe', imageIds: [fullImageId], negativeImageIds: [] },
     'parses IMG fringe mode with one id',
 );
 
@@ -530,25 +531,95 @@ const thirdImageId = 'c'.repeat(64);
 
 assert.deepEqual(
     parseImgQueryBody(`diff ${fullImageId} ${secondImageId}`),
-    { kind: 'mode', mode: 'diff', imageIds: [fullImageId, secondImageId] },
+    { kind: 'mode', mode: 'diff', imageIds: [fullImageId, secondImageId], negativeImageIds: [] },
     'parses IMG diff mode',
 );
 
 assert.deepEqual(
     parseImgQueryBody(`shared ${fullImageId} ${secondImageId}`),
-    { kind: 'mode', mode: 'shared', imageIds: [fullImageId, secondImageId] },
+    { kind: 'mode', mode: 'shared', imageIds: [fullImageId, secondImageId], negativeImageIds: [] },
     'parses IMG shared mode',
+);
+
+const fourthImageId = 'd'.repeat(64);
+const fifthImageId = 'e'.repeat(64);
+
+assert.deepEqual(
+    parseImgQueryBody(
+        `shared ${fullImageId} ${secondImageId} ${thirdImageId} - ${fourthImageId} ${fifthImageId}`,
+    ),
+    {
+        kind: 'mode',
+        mode: 'shared',
+        imageIds: [fullImageId, secondImageId, thirdImageId],
+        negativeImageIds: [fourthImageId, fifthImageId],
+    },
+    'parses IMG shared mode with space-separated negatives after -',
+);
+
+assert.deepEqual(
+    parseSearchTargetWithOptionalImgLimit(
+        `shared ${fullImageId} ${secondImageId} - ${fourthImageId} ${fifthImageId} 0.5`,
+    ),
+    {
+        text: `shared ${fullImageId} ${secondImageId} - ${fourthImageId} ${fifthImageId}`,
+        threshold: 0.5,
+        k: undefined,
+    },
+    'strips trailing threshold after shared negatives',
+);
+
+assert.deepEqual(
+    parseImgQueryBody(
+        parseSearchTargetWithOptionalImgLimit(
+            `shared ${fullImageId} ${secondImageId} - ${fourthImageId} ${fifthImageId} 0.5`,
+        ).text,
+    ),
+    {
+        kind: 'mode',
+        mode: 'shared',
+        imageIds: [fullImageId, secondImageId],
+        negativeImageIds: [fourthImageId, fifthImageId],
+    },
+    'parses IMG shared positives/negatives after threshold strip',
+);
+
+assert.deepEqual(
+    getPositiveSimilarSourceIds(
+        `IMG shared ${fullImageId} ${secondImageId} - ${fourthImageId} ${fifthImageId} 0.5`,
+    ),
+    [fullImageId, secondImageId],
+    'collects only positive ids from IMG shared with negatives',
+);
+
+assert.equal(
+    parseImgQueryBody(`shared ${fullImageId} ${secondImageId} -`).kind,
+    'weighted',
+    'shared with bare trailing - is not a mode query',
+);
+
+assert.equal(
+    parseImgQueryBody(
+        `shared ${fullImageId} ${secondImageId} - ${fourthImageId} - ${fifthImageId}`,
+    ).kind,
+    'weighted',
+    'shared with multiple - tokens is not mode syntax',
 );
 
 assert.deepEqual(
     parseImgQueryBody(`analogy ${fullImageId} ${secondImageId} ${thirdImageId}`),
-    { kind: 'mode', mode: 'analogy', imageIds: [fullImageId, secondImageId, thirdImageId] },
+    {
+        kind: 'mode',
+        mode: 'analogy',
+        imageIds: [fullImageId, secondImageId, thirdImageId],
+        negativeImageIds: [],
+    },
     'parses IMG analogy mode with three ids',
 );
 
 assert.deepEqual(
     parseImgQueryBody(`affinity ${fullImageId} ${secondImageId}`),
-    { kind: 'mode', mode: 'affinity', imageIds: [fullImageId, secondImageId] },
+    { kind: 'mode', mode: 'affinity', imageIds: [fullImageId, secondImageId], negativeImageIds: [] },
     'parses IMG affinity mode',
 );
 
@@ -664,6 +735,17 @@ assert.ok(
 assert.ok(
     Math.abs(sharedInv[0]) > Math.abs(sharedInv[1]),
     'shared keeps the stable dim stronger than the polluted varying dim',
+);
+
+const sharedNearPos = scoreImgSharedMode(sharedInv, [axisY], nearX);
+const sharedNearNeg = scoreImgSharedMode(sharedInv, [axisY], axisY);
+assert.ok(
+    sharedNearPos > sharedNearNeg,
+    `shared-with-negatives ranks a positive-subspace neighbor above a negative ref (${sharedNearPos} > ${sharedNearNeg})`,
+);
+assert.ok(
+    sharedNearNeg < 0.5,
+    `shared-with-negatives scores an exact negative below neutral (${sharedNearNeg})`,
 );
 
 const affinityMid = scoreImgAffinityMode([axisX, axisY], midXY);

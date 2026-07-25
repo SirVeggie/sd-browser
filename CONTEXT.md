@@ -66,6 +66,14 @@ The Settings title + Back/Reset/Logout row stays sticky with a frosted, mask-fad
 
 ---
 
+## IMG shared negatives
+
+**Files:** `src/lib/tools/searchParsing.ts` (`parseSharedImgModeTokens`), `src/lib/tools/vectorMath.ts` (`scoreImgSharedMode`), `src/lib/server/searching.ts`
+
+`IMG shared <pos…> - <neg…> [threshold|k]` — one spaced `-`, then space-separated negative hex ids (threshold/k stripped first). Shared query is still inverse-variance over positives only; score is `(sim(shared,x) − max sim(neg,x) + 1) / 2` (same remap as weighted IMG +/-). Do not fold negatives into the variance pool. Multiple `-` tokens are not mode syntax.
+
+---
+
 ## Tag rename
 
 **Files:** `src/lib/server/tags.ts` (`renameTagOnAllImages`), `PATCH /api/settings/tags`, Settings tag modal
