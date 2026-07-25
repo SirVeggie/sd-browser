@@ -223,5 +223,5 @@ Media neighbors preload in the stage; metadata must preload too. On arrow nav th
 
 **File:** `src/lib/items/FullscreenMediaStage.svelte`
 
-Panel `mediaUrl` must be computed inside the `$: panelEntries = …` statement (reading `mediaQuery` / `showOriginal` there). Do not pass `mediaUrlFor(entry.image)` only from the `{#each}` template — Svelte 4 does not track store/prop reads inside that helper for the binding, so flipping "Show original" leaves the compressed URL mounted.
+Svelte 4 tracks `$:` dependencies from the statement AST only — reads inside helpers like `mediaUrlFor()` do **not** count. `mediaQuery` (and thus `showOriginal`) must appear lexically in the `$: panelEntries = …` expression (inline `` `/api/images/${id}?${mediaQuery}` ``). Putting the helper call in the `$:` block or only in the `{#each}` template is not enough; "Show original" will keep serving the compressed URL. Panel keys should include `mediaQuery` so quality flips remount panels.
 

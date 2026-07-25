@@ -33,12 +33,9 @@
   let desiredId = "";
 
   $: qualityMode = showOriginal ? "original" : $compressedMode;
+  // Lexically referenced by panelEntries below — do not hide behind a helper;
+  // Svelte 4 only tracks $: deps that appear in the statement AST.
   $: mediaQuery = buildImageQueryParams(qualityMode);
-
-  function mediaUrlFor(img: ClientImage | undefined): string {
-    if (!img?.id) return "";
-    return `/api/images/${img.id}?${mediaQuery}`;
-  }
 
   function publishStage(img: ClientImage | undefined) {
     stageId = img?.id ?? "";
@@ -242,14 +239,14 @@
   $: loadNextEffective =
     loadNext && !(waiting && desiredId === prevSlot?.id && desiredId !== nextSlot?.id);
 
-  // Build mediaUrl here (not via a template helper) so Svelte tracks mediaQuery /
-  // showOriginal. A template-only mediaUrlFor(entry.image) call does not invalidate
-  // when quality flips, so "Show original" would leave the compressed URL in place.
+  // mediaQuery must appear in this $: statement (not only inside a helper).
+  // Svelte 4 compile-time deps ignore reads inside mediaUrlFor()-style functions,
+  // so "Show original" would leave quality=medium mounted after 726f69f.
   $: panelEntries = [
     {
-      key: stageImage?.id ? `id:${stageImage.id}` : "stage-empty",
+      key: stageImage?.id ? `id:${stageImage.id}:${mediaQuery}` : "stage-empty",
       image: stageImage,
-      mediaUrl: mediaUrlFor(stageImage),
+      mediaUrl: stageImage?.id ? `/api/images/${stageImage.id}?${mediaQuery}` : "",
       role: "stage" as const,
       loadEnabled: !!stageImage,
       showWaitingLoader: waiting && stageReady,
@@ -257,9 +254,9 @@
       onUnready: onStageUnready,
     },
     {
-      key: prevSlot?.id ? `id:${prevSlot.id}` : "prev-empty",
+      key: prevSlot?.id ? `id:${prevSlot.id}:${mediaQuery}` : "prev-empty",
       image: prevSlot,
-      mediaUrl: mediaUrlFor(prevSlot),
+      mediaUrl: prevSlot?.id ? `/api/images/${prevSlot.id}?${mediaQuery}` : "",
       role: "hidden" as const,
       loadEnabled: loadPrevEffective,
       showWaitingLoader: false,
@@ -267,9 +264,9 @@
       onUnready: onPrevUnready,
     },
     {
-      key: nextSlot?.id ? `id:${nextSlot.id}` : "next-empty",
+      key: nextSlot?.id ? `id:${nextSlot.id}:${mediaQuery}` : "next-empty",
       image: nextSlot,
-      mediaUrl: mediaUrlFor(nextSlot),
+      mediaUrl: nextSlot?.id ? `/api/images/${nextSlot.id}?${mediaQuery}` : "",
       role: "hidden" as const,
       loadEnabled: loadNextEffective,
       showWaitingLoader: false,
