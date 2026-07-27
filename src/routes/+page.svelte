@@ -701,7 +701,10 @@
     function openImage(img: ClientImage, e?: MouseEvent | KeyboardEvent) {
         // do nothing if not left click
         if (e && e instanceof MouseEvent && e.button !== 0) return;
-        inputElement?.blur();
+        // Gallery Clickable preventDefaults mousedown, so focus would stay in the
+        // flyout (inputs / WebUI iframe) and arrow/Space hotkeys would miss.
+        const active = document.activeElement;
+        if (active instanceof HTMLElement) active.blur();
         currentImage = img;
         loadFullscreenImageInfo(img.id);
 

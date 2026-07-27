@@ -307,9 +307,10 @@ Svelte 4 tracks `$:` dependencies from the statement AST only — reads inside h
 
 ## Gallery hotkeys
 
-**Files:** `src/routes/+page.svelte` (`keylistener`), `src/lib/components/FilterMultiSelect.svelte` (`openAndFocus`)
+**Files:** `src/routes/+page.svelte` (`keylistener`, `openImage`), `src/lib/components/FilterMultiSelect.svelte` (`openAndFocus`)
 
 - `F` toggles flyout only without Ctrl/⌘/Alt (so browser find stays usable).
 - `Ctrl/⌘+S` cycles `sortingOptions` (including temporary similar/uniqueness when present).
 - `Ctrl/⌘+D` toggles Filters via `toggleOpenAndFocus()` — arrow keys follow visual direction (DOM index flips when `dropUp` / column-reverse); Space/Enter toggle (native button).
 - Plain letter/arrow/Space shortcuts skip when a text field is focused; Ctrl/⌘ chords do not.
+- Opening fullscreen from the grid (`openImage`) must `blur()` `document.activeElement` — gallery `Clickable` `preventDefault`s mousedown, so focus would otherwise stay in the flyout (Generate inputs / WebUI iframe) and arrows/Space would not reach the gallery listener.
