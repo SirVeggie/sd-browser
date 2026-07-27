@@ -1,6 +1,7 @@
 import { browser } from "$app/environment";
 import { syncAuthWithLocalStorage } from "$lib/stores/authStore";
 import { syncFlyoutWithLocalStorage } from "$lib/stores/flyoutStore";
+import { syncOpenSessionsWithLocalStorage } from "$lib/svgen/sessions";
 import { syncSvgenWithLocalStorage } from "$lib/svgen/stores";
 import { syncFullscreenWithLocalStorage } from "$lib/stores/fullscreenStore";
 import { syncSearchWithLocalStorage } from "$lib/stores/searchStore";
@@ -25,6 +26,7 @@ export async function load() {
         syncSearchWithLocalStorage();
         syncFlyoutWithLocalStorage();
         syncSvgenWithLocalStorage();
+        syncOpenSessionsWithLocalStorage();
         syncFullscreenWithLocalStorage();
         syncStyleWithLocalStorage();
         syncLlmWithLocalStorage();

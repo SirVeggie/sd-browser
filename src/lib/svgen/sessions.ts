@@ -13,7 +13,14 @@ import {
 } from './stores';
 import type { SvgenLayoutState, SvgenOpenSession, SvgenSession } from './types';
 
+const OPEN_SESSIONS_KEY = 'svgenOpenSessions';
+const OPEN_SESSIONS_SAVE_DEBOUNCE_MS = 250;
+
 let sessionSeq = 0;
+/** Skip live→bag flush while switching/hydrating (activeId may lag live stores). */
+let suspendLivePersist = false;
+let openSessionsSaveTimer: ReturnType<typeof setTimeout> | undefined;
+let openSessionsSyncStarted = false;
 
 export function createOpenSessionId(): string {
     sessionSeq += 1;
@@ -54,6 +61,76 @@ function toLegacySession(open: SvgenOpenSession): SvgenSession {
     };
 }
 
+function withSuspendedLivePersist(fn: () => void) {
+    suspendLivePersist = true;
+    try {
+        fn();
+    } finally {
+        suspendLivePersist = false;
+    }
+}
+
+function isComfyWorkflow(value: unknown): value is ComfyWorkflow {
+    return !!value
+        && typeof value === 'object'
+        && Array.isArray((value as ComfyWorkflow).nodes);
+}
+
+function isOpenSession(value: unknown): value is SvgenOpenSession {
+    if (!value || typeof value !== 'object')
+        return false;
+    const s = value as SvgenOpenSession;
+    return typeof s.id === 'string'
+        && s.id.length > 0
+        && (s.workflowId === null || typeof s.workflowId === 'string')
+        && typeof s.name === 'string'
+        && isComfyWorkflow(s.workflow)
+        && (s.prompt === null || (typeof s.prompt === 'object' && !Array.isArray(s.prompt)))
+        && (s.sourceImageId === null || typeof s.sourceImageId === 'string')
+        && !!s.layout
+        && typeof s.layout === 'object'
+        && Array.isArray(s.frozenSeeds)
+        && Array.isArray(s.lastUsedSeeds);
+}
+
+function parseOpenSessionsBag(raw: unknown): {
+    sessions: SvgenOpenSession[];
+    activeId: string | null;
+} | null {
+    if (!raw || typeof raw !== 'object')
+        return null;
+    const bag = raw as { sessions?: unknown; activeId?: unknown };
+    if (!Array.isArray(bag.sessions))
+        return null;
+    const sessions = bag.sessions.filter(isOpenSession);
+    if (!sessions.length)
+        return { sessions: [], activeId: null };
+    const activeId = typeof bag.activeId === 'string' && sessions.some((s) => s.id === bag.activeId)
+        ? bag.activeId
+        : sessions[0]!.id;
+    return { sessions, activeId };
+}
+
+function writeOpenSessionsToLocalStorage(immediate = false) {
+    const save = () => {
+        try {
+            localStorage.setItem(OPEN_SESSIONS_KEY, JSON.stringify(get(svgenOpenSessionsStore)));
+        } catch {
+            /* quota / private mode — keep in-memory state */
+        }
+    };
+    if (immediate) {
+        if (openSessionsSaveTimer)
+            clearTimeout(openSessionsSaveTimer);
+        openSessionsSaveTimer = undefined;
+        save();
+        return;
+    }
+    if (openSessionsSaveTimer)
+        clearTimeout(openSessionsSaveTimer);
+    openSessionsSaveTimer = setTimeout(save, OPEN_SESSIONS_SAVE_DEBOUNCE_MS);
+}
+
 /** Write the live active stores back into the open-sessions bag. */
 export function persistActiveOpenSession() {
     const bag = get(svgenOpenSessionsStore);
@@ -80,10 +157,81 @@ export function persistActiveOpenSession() {
     });
 }
 
+function flushLiveIntoOpenSessions() {
+    if (suspendLivePersist)
+        return;
+    persistActiveOpenSession();
+}
+
 function loadOpenSessionIntoStores(open: SvgenOpenSession) {
     svgenSessionStore.set(toLegacySession(open));
     svgenLayoutStore.set(open.layout);
     applySeeds(open.frozenSeeds, open.lastUsedSeeds);
+}
+
+/** Restore live session/layout/seed stores from the active open session (after bag load). */
+export function hydrateActiveOpenSession() {
+    const bag = get(svgenOpenSessionsStore);
+    if (!bag.activeId)
+        return;
+    const open = bag.sessions.find((s) => s.id === bag.activeId);
+    if (!open)
+        return;
+    withSuspendedLivePersist(() => {
+        loadOpenSessionIntoStores(open);
+    });
+}
+
+/**
+ * Persist open Generate sessions (workflows + layouts + seed prefs) in localStorage
+ * and keep the bag flushed from live stores so refresh restores tabs.
+ */
+export function syncOpenSessionsWithLocalStorage() {
+    if (openSessionsSyncStarted || typeof localStorage === 'undefined')
+        return;
+    openSessionsSyncStarted = true;
+
+    try {
+        const raw = localStorage.getItem(OPEN_SESSIONS_KEY);
+        if (raw) {
+            const parsed = parseOpenSessionsBag(JSON.parse(raw) as unknown);
+            if (parsed) {
+                withSuspendedLivePersist(() => {
+                    svgenOpenSessionsStore.set(parsed);
+                    if (parsed.activeId) {
+                        const open = parsed.sessions.find((s) => s.id === parsed.activeId);
+                        if (open)
+                            loadOpenSessionIntoStores(open);
+                    }
+                });
+            }
+        }
+    } catch {
+        /* corrupt — start empty */
+    }
+
+    svgenOpenSessionsStore.subscribe(() => {
+        writeOpenSessionsToLocalStorage();
+    });
+    svgenSessionStore.subscribe(() => {
+        flushLiveIntoOpenSessions();
+    });
+    svgenLayoutStore.subscribe(() => {
+        flushLiveIntoOpenSessions();
+    });
+    svgenFrozenSeedsStore.subscribe(() => {
+        flushLiveIntoOpenSessions();
+    });
+    svgenLastUsedSeedsStore.subscribe(() => {
+        flushLiveIntoOpenSessions();
+    });
+
+    const flushNow = () => {
+        flushLiveIntoOpenSessions();
+        writeOpenSessionsToLocalStorage(true);
+    };
+    window.addEventListener('pagehide', flushNow);
+    window.addEventListener('beforeunload', flushNow);
 }
 
 export function activateOpenSession(id: string) {
@@ -94,8 +242,10 @@ export function activateOpenSession(id: string) {
     if (!target)
         return;
     persistActiveOpenSession();
-    loadOpenSessionIntoStores(target);
-    svgenOpenSessionsStore.update((prev) => ({ ...prev, activeId: id }));
+    withSuspendedLivePersist(() => {
+        loadOpenSessionIntoStores(target);
+        svgenOpenSessionsStore.update((prev) => ({ ...prev, activeId: id }));
+    });
 }
 
 export function closeOpenSession(id: string) {
@@ -108,18 +258,24 @@ export function closeOpenSession(id: string) {
     const sessions = bag.sessions.filter((s) => s.id !== id);
     clearSvgenNodePreviewsForSession(id);
     if (!sessions.length) {
-        svgenOpenSessionsStore.set({ sessions: [], activeId: null });
-        svgenSessionStore.set(null);
-        svgenLayoutStore.set(emptyLayout());
-        clearSvgenSeedControlState();
-        clearSvgenNodePreviews();
+        withSuspendedLivePersist(() => {
+            svgenOpenSessionsStore.set({ sessions: [], activeId: null });
+            svgenSessionStore.set(null);
+            svgenLayoutStore.set(emptyLayout());
+            clearSvgenSeedControlState();
+            clearSvgenNodePreviews();
+        });
         return;
     }
     let activeId = bag.activeId;
     if (activeId === id) {
         const next = sessions[Math.min(idx, sessions.length - 1)]!;
         activeId = next.id;
-        loadOpenSessionIntoStores(next);
+        withSuspendedLivePersist(() => {
+            loadOpenSessionIntoStores(next);
+            svgenOpenSessionsStore.set({ sessions, activeId });
+        });
+        return;
     }
     svgenOpenSessionsStore.set({ sessions, activeId });
 }
@@ -153,10 +309,12 @@ export function addOpenSession(payload: {
         frozenSeeds: [],
         lastUsedSeeds: [],
     };
-    loadOpenSessionIntoStores(open);
-    svgenOpenSessionsStore.set({
-        sessions: [...bag.sessions, open],
-        activeId: id,
+    withSuspendedLivePersist(() => {
+        loadOpenSessionIntoStores(open);
+        svgenOpenSessionsStore.set({
+            sessions: [...bag.sessions, open],
+            activeId: id,
+        });
     });
     return id;
 }

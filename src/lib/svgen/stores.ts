@@ -46,9 +46,9 @@ export const svgenQueueOpenStore = writable(false);
 export const svgenGeneratingStore = writable(false);
 export const svgenErrorStore = writable<string | null>(null);
 
-/** Ephemeral freeze keys (`nodeId:widgetName` / with inner id) — not persisted. */
+/** Freeze keys (`nodeId:widgetName` / with inner id) — kept per open session (localStorage bag). */
 export const svgenFrozenSeedsStore = writable<Set<string>>(new Set());
-/** Last queued values for freeze restore — not persisted. */
+/** Last queued values for freeze restore — kept per open session (localStorage bag). */
 export const svgenLastUsedSeedsStore = writable<Map<string, number>>(new Map());
 /**
  * Last `executed` output images per session+node (`sessionId\0nodeId`).
