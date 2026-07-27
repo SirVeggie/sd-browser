@@ -6,6 +6,18 @@ Keep entries short and actionable. Prefer linking to code over restating it.
 
 ---
 
+## Regex search uses RE2 (ReDoS)
+
+**Files:** `src/lib/server/searchRegex.ts`, `src/lib/server/searching.ts`
+
+Gallery regex matching compiles via **RE2 only** (linear-time). JS `RegExp` can catastrophically backtrack on patterns like `conditioning(.*\n)*enable: true` or empty `[^]` as in `([^]*\n)*` against params with many newlines — one `test()` blocks the Node event loop so SSE/abort cannot run.
+
+Patterns RE2 rejects (lookaheads, backreferences, empty `[^]`, unterminated classes, …) fail at compile with `UnsupportedSearchRegexError` — **do not fall back to JS `RegExp`**. A true per-match timeout without another thread/process is not possible: once `test()` runs on the main thread, nothing else (including abort) runs until it returns.
+
+Abort checks in `searchImagesStreaming` run **every image** (and still yield every `yieldEvery`); that only helps when matching itself cannot block the loop.
+
+---
+
 ## Search dock width
 
 **Files:** `src/routes/+page.svelte` (`.dock`, `.dock-column`, `.chrome`), `src/lib/components/ImageRefStrip.svelte`

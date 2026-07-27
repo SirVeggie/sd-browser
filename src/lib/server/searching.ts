@@ -26,6 +26,7 @@ import {
     parseAspectComparisons,
     type AspectComparison,
 } from "$lib/tools/aspectRatioSearch";
+import { compileSearchRegex, type SearchRegex, UnsupportedSearchRegexError } from "./searchRegex";
 import {
     averageEmbeddings,
     analogyEmbedding,
@@ -131,7 +132,7 @@ const resultCountRegex = /^\d+$/;
 
 type SearchPart = {
     raw: string;
-    regex: RegExp;
+    regex: SearchRegex;
     not: RegExpMatchArray | null;
     type: MatchType;
     tagExact?: boolean;
@@ -185,6 +186,8 @@ export function formatImgSearchFailure(cause: unknown): string {
 }
 
 export function formatSearchFailureMessage(cause: unknown): string {
+    if (cause instanceof UnsupportedSearchRegexError)
+        return cause.message;
     const detail = cause instanceof Error ? cause.message : String(cause);
     return detail ? `Malformed search string: ${detail}` : 'Malformed search string';
 }
@@ -1474,7 +1477,7 @@ export async function searchImagesStreaming(
 
     const emitPendingChunk = async (forceAll = false) => {
         while (batch.length) {
-            if (options.isAborted?.()) {
+            if (options.isAborted?.() || options.signal?.aborted) {
                 batch = [];
                 return;
             }
@@ -1510,9 +1513,15 @@ export async function searchImagesStreaming(
     };
 
     for (const id of plan.orderedIds) {
+        // Check every image so a client abort is noticed promptly once matching
+        // yields; do not rely only on the yieldEvery cadence.
+        if (options.isAborted?.() || options.signal?.aborted)
+            break;
+
         if (++scanned % yieldEvery === 0) {
             await yieldToEventLoop();
-            if (options.isAborted?.()) break;
+            if (options.isAborted?.() || options.signal?.aborted)
+                break;
             await maybeEmitByTime();
         }
 
@@ -1725,7 +1734,11 @@ export function buildMatcher(
         const tagExact = type === 'tag' ? isExactTagTerm(searchRaw) : undefined;
         const part: SearchPart = {
             raw: searchRaw,
-            regex: type === 'tag' && tagExact ? /(?:)/ : new RegExp(searchRaw, 'is'),
+            // RE2 when possible — JS RegExp ReDoS (e.g. `(.*\n)*`) blocks the event loop
+            // so search abort cannot run and the whole app freezes.
+            regex: type === 'tag' && tagExact
+                ? compileSearchRegex('(?:)', 'is')
+                : compileSearchRegex(searchRaw, 'is'),
             not: x.match(notRegex),
             type,
             tagExact,
@@ -1876,8 +1889,7 @@ function getSearchPartRank(part: SearchPart): number {
 function tagMatches(tags: string[], part: SearchPart): boolean {
     if (part.tagExact)
         return tags.some((tag) => tag === part.raw);
-    const regex = new RegExp(part.raw, 'is');
-    return tags.some((tag) => regex.test(tag));
+    return tags.some((tag) => part.regex.test(tag));
 }
 
 function textMatches(text: string, part: SearchPart, matching: SearchMode): boolean {
@@ -1885,7 +1897,7 @@ function textMatches(text: string, part: SearchPart, matching: SearchMode): bool
         return text.toLowerCase().includes(part.raw.toLowerCase());
     } else if (matching === 'words') {
         const words = part.raw.split(' ');
-        return words.every(word => new RegExp(`\\b${word}\\b`, 'i').test(text));
+        return words.every(word => compileSearchRegex(`\\b${word}\\b`, 'i').test(text));
     } else {
         return part.regex.test(text);
     }
