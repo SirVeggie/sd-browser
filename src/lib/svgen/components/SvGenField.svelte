@@ -302,7 +302,7 @@
         justify-content: space-between;
         gap: 0.35rem;
         color: var(--muted);
-        font-size: 9px;
+        font-size: 0.68rem;
         font-weight: 600;
         line-height: 1.15;
         overflow: hidden;
@@ -330,7 +330,7 @@
     }
 
     .check-label {
-        font-size: 11px;
+        font-size: 0.78rem;
         font-weight: 600;
         color: var(--muted);
     }
@@ -343,11 +343,9 @@
         height: 13px;
         margin: 0;
         border: none;
-        border-radius: 2px;
-        background: var(--bg-elev);
-        box-shadow:
-            0 1px 3px rgba(0, 0, 0, 0.35),
-            inset 0 0 0 1px var(--line);
+        border-radius: 3px;
+        background: rgba(0, 0, 0, 0.28);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
         cursor: pointer;
         position: relative;
         flex-shrink: 0;
@@ -356,7 +354,7 @@
             content: '';
             position: absolute;
             inset: 0;
-            border-radius: 2px;
+            border-radius: 3px;
             background: var(--accent);
             transform: scale(0);
             transition: transform 0.12s ease;
@@ -373,19 +371,22 @@
         width: 100%;
         min-width: 0;
         box-sizing: border-box;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        background: var(--bg-elev);
+        border: none;
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.22);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
         overflow: visible;
 
         &:focus-within {
-            border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-            box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+            box-shadow:
+                inset 0 1px 4px rgba(0, 0, 0, 0.55),
+                0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
         }
 
         &:has(.number.dragging) {
-            border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-            box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+            box-shadow:
+                inset 0 1px 4px rgba(0, 0, 0, 0.55),
+                0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
         }
 
         > .number {
@@ -415,7 +416,7 @@
         margin: 0;
         padding: 0;
         border: none;
-        border-left: 1px solid var(--line);
+        border-left: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
         border-radius: 0;
         background: transparent;
         color: var(--muted);
@@ -443,13 +444,14 @@
     textarea {
         width: 100%;
         box-sizing: border-box;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        background: var(--bg-elev);
+        border: none;
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.22);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
         color: var(--ink);
         padding: 3px 6px;
         font: inherit;
-        font-size: 11px;
+        font-size: 0.78rem;
         line-height: 1.25;
         outline: 0;
         min-height: 24px;
@@ -471,15 +473,14 @@
 
         &.dragging {
             cursor: ew-resize;
-            border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-            box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
         }
     }
 
     input:focus,
     textarea:focus {
-        border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+        box-shadow:
+            inset 0 1px 4px rgba(0, 0, 0, 0.55),
+            0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
     }
 
     textarea {

@@ -203,7 +203,7 @@
 
 <style lang="scss">
     .card {
-        border: 1px solid var(--line);
+        border: 1px solid color-mix(in srgb, var(--line) 35%, transparent);
         border-radius: 10px;
         background: color-mix(in srgb, var(--glass) 80%, var(--bg));
         overflow: visible;
@@ -267,16 +267,22 @@
     .edit {
         appearance: none;
         border: none;
-        border-radius: 5px;
+        border-radius: 0.4em;
         background: transparent;
-        color: inherit;
+        color: var(--muted);
         font-size: 0.65rem;
         line-height: 1;
         padding: 0.2rem 0.35rem;
         cursor: pointer;
         flex-shrink: 0;
 
+        &:hover {
+            color: var(--ink);
+            background: var(--accent-soft);
+        }
+
         &.active {
+            color: var(--accent);
             background: var(--accent-soft);
         }
     }
@@ -298,11 +304,12 @@
         width: 100%;
         min-height: 120px;
         max-height: 220px;
-        border-radius: 6px;
-        border: 1px solid var(--line);
-        font-size: 10px;
+        border-radius: 7px;
+        border: none;
+        font-size: 0.68rem;
         opacity: 0.5;
-        background: var(--bg-elev);
+        background: rgba(0, 0, 0, 0.22);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
     }
 
     .field-grid {
@@ -335,9 +342,9 @@
 
         button {
             appearance: none;
-            border: 1px solid var(--line);
-            border-radius: 4px;
-            background: transparent;
+            border: none;
+            border-radius: 0.35em;
+            background: var(--accent-soft);
             color: inherit;
             font-size: 0.6rem;
             line-height: 1;

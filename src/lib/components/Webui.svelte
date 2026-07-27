@@ -156,7 +156,6 @@
         display: flex;
         gap: 0.25rem;
         padding: 0.4rem 0.5rem;
-        border-bottom: 1px solid var(--line);
         flex-shrink: 0;
         background: color-mix(in srgb, var(--bg) 90%, var(--glass));
 

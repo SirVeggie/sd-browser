@@ -39,7 +39,7 @@
         </button>
     </div>
 
-    <div class="list">
+    <div class="list compact-scrollbar">
         {#if !entries.length}
             <div class="empty">Queue is empty.</div>
         {:else}
@@ -86,12 +86,14 @@
         gap: 0.4rem;
         font-size: 0.8rem;
         font-weight: 700;
+        color: var(--accent);
     }
 
     .active {
         font-size: 0.72rem;
         font-weight: 500;
-        opacity: 0.65;
+        color: var(--muted);
+        opacity: 1;
     }
 
     .list {
@@ -111,7 +113,7 @@
         padding: 0.35rem 0.45rem;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: var(--glass);
+        background: rgba(0, 0, 0, 0.18);
     }
 
     .details {
@@ -129,8 +131,8 @@
         font-weight: 700;
 
         &.running {
-            color: #d9ecff;
-            background: color-mix(in srgb, var(--accent, #3d8bfd) 22%, transparent);
+            color: var(--accent);
+            background: var(--accent-soft);
         }
 
         &.pending {
@@ -139,13 +141,13 @@
         }
 
         &.done {
-            color: #b6f0c3;
-            background: color-mix(in srgb, #3fb950 18%, transparent);
+            color: var(--ok-tag);
+            background: color-mix(in srgb, var(--ok-tag) 18%, transparent);
         }
 
         &.error {
-            color: #ffc1c1;
-            background: color-mix(in srgb, #f85149 18%, transparent);
+            color: var(--danger);
+            background: color-mix(in srgb, var(--danger) 18%, transparent);
         }
 
         &.cancelled {
@@ -179,14 +181,19 @@
 
     button {
         appearance: none;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--glass);
+        border: none;
+        border-radius: 0.4em;
+        background: var(--accent-soft);
         color: inherit;
         padding: 0.25rem 0.5rem;
         font-size: 0.72rem;
         font-weight: 600;
         cursor: pointer;
+        transition: background-color 0.08s ease;
+
+        &:hover:not(:disabled) {
+            background: rgba(196, 165, 116, 0.24);
+        }
 
         &:disabled {
             opacity: 0.45;

@@ -755,7 +755,6 @@
         {workflows}
         currentName={session?.name ?? ''}
         dirty={!!session?.dirty}
-        on:refresh={() => refreshStatus()}
         on:toggleQueue={async () => {
             queueOpen = !queueOpen;
             if (queueOpen)
@@ -810,7 +809,7 @@
             <p>No editable fields found in this workflow.</p>
             <p>
                 {(session.workflow.nodes?.length ?? 0)} nodes loaded.
-                Connect Comfy (status above) and try Refresh, or open a different image.
+                Connect Comfy (status above), or open a different image.
             </p>
         </div>
     {:else}
@@ -864,8 +863,9 @@
         margin: 0.5rem 0.75rem;
         padding: 0.5rem 0.65rem;
         border-radius: 8px;
-        background: color-mix(in srgb, #c44 18%, transparent);
-        border: 1px solid color-mix(in srgb, #c44 40%, transparent);
+        background: color-mix(in srgb, var(--danger) 18%, transparent);
+        border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+        color: var(--danger);
         font-size: 0.85rem;
     }
 

@@ -36,8 +36,8 @@
         padding: 0;
         border: none;
         border-radius: 999px;
-        background: color-mix(in srgb, var(--bg-elev) 80%, var(--ink));
-        box-shadow: inset 0 0 0 1px var(--line);
+        background: #2a2420;
+        box-shadow: none;
         color: transparent;
         cursor: pointer;
         appearance: none;
@@ -45,12 +45,12 @@
         transition: background 0.14s ease, box-shadow 0.14s ease;
 
         &:hover {
-            background: color-mix(in srgb, var(--bg-elev) 60%, var(--ink));
+            background: color-mix(in srgb, #2a2420 80%, var(--ink));
         }
 
         &.is-on {
             background: var(--accent);
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent);
+            box-shadow: none;
 
             &:hover {
                 background: color-mix(in srgb, var(--accent) 85%, var(--ink));
@@ -78,9 +78,7 @@
 
         &:focus-visible {
             outline: none;
-            box-shadow:
-                inset 0 0 0 1px var(--line),
-                0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
         }
     }
 
@@ -91,7 +89,7 @@
         width: 14px;
         height: 14px;
         border-radius: 50%;
-        background: var(--ink);
+        background: #f0e6d8;
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
         transform: translateY(-50%);
         transition: left 0.14s ease;

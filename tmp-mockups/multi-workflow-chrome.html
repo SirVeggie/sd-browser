@@ -3,145 +3,134 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multi-workflow chrome mockups</title>
+  <title>Multi-workflow A1 — session dropdown</title>
   <style>
     :root {
-      --bg: #1a1714;
-      --bg-elev: #24201c;
-      --glass: #2c2722;
-      --line: #3d3730;
-      --ink: #e8e2d9;
-      --ink-dim: #a89f93;
-      --accent: #3d8bfd;
-      --ok: #3a9a78;
-      --danger: #c66;
-      --dirty: #d4a017;
-      --radius: 8px;
-      --font: "Segoe UI", system-ui, sans-serif;
+      --bg: #161310;
+      --bg-elev: #1c1814;
+      --ink: #ebe4d8;
+      --muted: #9a8f82;
+      --accent: #c4a574;
+      --accent-soft: rgba(196, 165, 116, 0.16);
+      --glass: rgba(40, 35, 30, 0.84);
+      --line: rgba(235, 228, 216, 0.1);
+      --danger: #c47a6a;
+      --ok-tag: #8fb89a;
+      --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
     }
 
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: var(--font);
+      font-family: var(--font-body);
       background: #0f0d0b;
       color: var(--ink);
-      line-height: 1.35;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
     }
 
     .page {
-      max-width: 1180px;
+      max-width: 980px;
       margin: 0 auto;
       padding: 1.5rem 1.25rem 3rem;
     }
 
     h1 {
-      font-size: 1.35rem;
+      font-size: 1.25rem;
       font-weight: 600;
-      margin: 0 0 0.35rem;
+      margin: 0 0 0.3rem;
       letter-spacing: -0.02em;
     }
     .lede {
-      color: var(--ink-dim);
-      font-size: 0.92rem;
-      max-width: 52rem;
-      margin: 0 0 1.25rem;
+      color: var(--muted);
+      font-size: 0.88rem;
+      max-width: 46rem;
+      margin: 0 0 1rem;
     }
+
+    .rules {
+      margin: 0 0 1.25rem;
+      padding: 0.75rem 0.9rem;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .rules strong { color: var(--ink); font-weight: 600; }
+    .rules ul { margin: 0.35rem 0 0; padding-left: 1.1rem; }
+    .rules li { margin-bottom: 0.28rem; }
 
     .toolbar {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: 0.6rem 1rem;
       align-items: center;
-      margin-bottom: 1.5rem;
-      padding: 0.65rem 0.75rem;
+      margin-bottom: 1.25rem;
+      padding: 0.55rem 0.7rem;
       background: var(--bg-elev);
       border: 1px solid var(--line);
       border-radius: 10px;
+      font-size: 0.8rem;
+      color: var(--muted);
     }
     .toolbar label {
-      font-size: 0.8rem;
-      color: var(--ink-dim);
       display: inline-flex;
       align-items: center;
       gap: 0.4rem;
     }
-    .toolbar select {
-      background: var(--glass);
+    .toolbar select, .toolbar button.demo {
+      appearance: none;
+      background: var(--accent-soft);
       color: var(--ink);
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 0.25rem 0.4rem;
+      border: none;
+      border-radius: 0.4em;
+      padding: 0.28rem 0.55rem;
       font: inherit;
       font-size: 0.8rem;
+      cursor: pointer;
     }
-    .nav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.35rem;
-      margin-left: auto;
-    }
-    .nav a {
-      color: var(--ink-dim);
-      text-decoration: none;
-      font-size: 0.75rem;
-      padding: 0.25rem 0.5rem;
-      border-radius: 999px;
-      border: 1px solid transparent;
-    }
-    .nav a:hover {
-      color: var(--ink);
-      border-color: var(--line);
-      background: var(--glass);
+    .toolbar button.demo:hover {
+      background: rgba(196, 165, 116, 0.24);
     }
 
-    .option {
-      margin-bottom: 2.25rem;
-      scroll-margin-top: 1rem;
+    .toast-demo {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      pointer-events: none;
     }
-    .option-head {
-      margin-bottom: 0.75rem;
+    .toast {
+      min-width: 12rem;
+      max-width: 20rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 9px;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 28px #0008;
+      font-size: 0.8rem;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.18s ease, transform 0.18s ease;
     }
-    .option-head h2 {
-      font-size: 1.05rem;
-      font-weight: 600;
-      margin: 0 0 0.25rem;
-    }
-    .option-head p {
-      margin: 0;
-      font-size: 0.85rem;
-      color: var(--ink-dim);
-      max-width: 48rem;
-    }
-    .tag {
-      display: inline-block;
-      font-size: 0.68rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 0.12rem 0.4rem;
-      border-radius: 4px;
-      margin-right: 0.35rem;
-      vertical-align: 0.1em;
-    }
-    .tag.rec { background: color-mix(in srgb, var(--ok) 28%, transparent); color: #7dceb0; }
-    .tag.tight { background: color-mix(in srgb, var(--accent) 25%, transparent); color: #8eb6ff; }
-    .tag.wide { background: color-mix(in srgb, #a67c52 30%, transparent); color: #d4b896; }
+    .toast.show { opacity: 1; transform: none; }
+    .toast.warn { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+    .toast.error { color: #f0c4ba; border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); }
 
     .stage {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 1rem;
       align-items: start;
     }
-    .stage.single {
-      grid-template-columns: minmax(280px, 420px);
-    }
-
     .frame-label {
-      font-size: 0.72rem;
-      color: var(--ink-dim);
-      margin-bottom: 0.35rem;
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
       display: flex;
       justify-content: space-between;
     }
@@ -152,56 +141,199 @@
       border-radius: 10px;
       overflow: hidden;
       box-shadow: 0 8px 28px #0006;
+      display: flex;
+      flex-direction: column;
+      min-height: 320px;
     }
     .panel.narrow { width: 340px; max-width: 100%; }
-    .panel.wide { width: 620px; max-width: 100%; }
+    .panel.wide { width: 560px; max-width: 100%; }
 
-    /* Shared chrome bits matching SvGenQueueBar */
+    /* Match SvGenQueueBar */
     .bar {
       display: flex;
       flex-direction: column;
-      gap: 0.35rem;
-      padding: 0.55rem 0.65rem 0.35rem;
+      gap: 0.4rem;
+      padding: 0.55rem 0.75rem 0.35rem;
+      background: color-mix(in srgb, var(--bg) 90%, var(--glass));
+      flex-shrink: 0;
     }
     .row {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 0.35rem;
+      gap: 0.4rem;
     }
-    .btn, .fake-select, .name-field {
+    .btn {
       appearance: none;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: var(--glass);
+      border: none;
+      border-radius: 0.4em;
+      background: var(--accent-soft);
       color: inherit;
-      padding: 0.28rem 0.5rem;
-      font-size: 0.78rem;
+      padding: 0.3rem 0.55rem;
+      font-size: 0.8rem;
       cursor: pointer;
+      transition: background-color 0.08s ease;
       white-space: nowrap;
     }
-    .btn:hover, .fake-select:hover { background: #352f29; }
-    .btn.active {
-      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-      background: color-mix(in srgb, var(--accent) 16%, var(--glass));
+    .btn:hover:not(:disabled) {
+      background: rgba(196, 165, 116, 0.24);
     }
-    .btn.ghost {
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .queue-btn {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.3rem;
+    }
+    .queue-btn.active {
+      background: rgba(196, 165, 116, 0.28);
+      color: var(--accent);
+    }
+    .queue-btn .count {
+      font-size: 0.72rem;
+      opacity: 0.7;
+      font-weight: 500;
+    }
+
+    .session-dd {
+      flex: 1 1 8rem;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      border: none;
+      border-radius: 7px;
+      background: rgba(0, 0, 0, 0.22);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+      color: inherit;
+      padding: 0.28rem 0.45rem 0.28rem 0.55rem;
+      cursor: pointer;
+      position: relative;
+      font-size: 0.8rem;
+    }
+    .session-dd:focus,
+    .session-dd.open {
+      outline: none;
+      box-shadow:
+        inset 0 1px 4px rgba(0, 0, 0, 0.55),
+        0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    .session-dd.placeholder { color: var(--muted); }
+    .session-dd .label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: left;
+    }
+    .session-dd .n {
+      font-size: 0.65rem;
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.28);
+      border-radius: 4px;
+      padding: 0.05rem 0.3rem;
+      flex-shrink: 0;
+    }
+    .session-dd .chev {
+      opacity: 0.55;
+      font-size: 0.7rem;
+      flex-shrink: 0;
+    }
+
+    .menu {
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 0;
+      width: max(100%, 16rem);
+      max-height: 18rem;
+      overflow: auto;
+      background: color-mix(in srgb, var(--bg-elev) 92%, #000);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 0.3rem;
+      z-index: 12;
+      box-shadow: 0 12px 32px #000a;
+      display: none;
+      scrollbar-width: thin;
+      scrollbar-color: #ffffff28 transparent;
+    }
+    .menu::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+      background-color: transparent;
+    }
+    .menu::-webkit-scrollbar-track {
+      background-color: transparent;
+    }
+    .menu::-webkit-scrollbar-thumb {
+      background-color: #ffffff28;
+      border-radius: 999px;
+    }
+    .menu::-webkit-scrollbar-thumb:hover {
+      background-color: #ffffff40;
+    }
+    .menu::-webkit-scrollbar-corner {
       background: transparent;
-      border-color: transparent;
-      color: var(--ink-dim);
-      padding-inline: 0.35rem;
     }
-    .btn.icon {
-      padding: 0.28rem 0.4rem;
-      min-width: 1.7rem;
+    .session-dd.open .menu { display: block; }
+    .menu-section {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      padding: 0.35rem 0.45rem 0.2rem;
+    }
+    .menu .item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.4rem 0.45rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      text-align: left;
+    }
+    .menu .item:hover,
+    .menu .item.on {
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+    }
+    .menu .item .name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .menu .item .x {
+      opacity: 0.35;
+      font-size: 0.75rem;
+      padding: 0.1rem 0.28rem;
+      border-radius: 4px;
+      line-height: 1;
+    }
+    .menu .item .x:hover {
+      opacity: 1;
+      background: #fff1;
+    }
+    .menu .sep {
+      height: 1px;
+      background: var(--line);
+      margin: 0.3rem 0.2rem;
+    }
+    .menu .muted-row {
+      padding: 0.45rem;
+      font-size: 0.75rem;
+      color: var(--muted);
       text-align: center;
     }
-    .status {
-      margin-left: auto;
-      font-size: 0.72rem;
-      color: var(--ok);
-      white-space: nowrap;
-    }
+
     .progress {
       height: 3px;
       border-radius: 2px;
@@ -210,17 +342,23 @@
     }
     .progress .fill {
       height: 100%;
-      width: 38%;
+      width: 0;
       background: var(--accent);
+      transition: width 0.15s linear;
     }
+    .progress.busy .fill { width: 38%; }
 
     .body {
-      padding: 0.45rem 0.65rem 0.75rem;
+      flex: 1;
+      padding: 0.45rem 0.75rem 0.75rem;
       display: grid;
       gap: 0.45rem;
+      align-content: start;
+      min-height: 0;
     }
+    .body.cols2 { grid-template-columns: 1fr 1fr; }
     .card {
-      background: var(--bg-elev);
+      background: color-mix(in srgb, var(--glass) 55%, var(--bg));
       border: 1px solid var(--line);
       border-radius: 9px;
       padding: 0.4rem 0.5rem 0.5rem;
@@ -230,14 +368,10 @@
       align-items: center;
       gap: 0.4rem;
       font-size: 0.72rem;
-      color: var(--ink-dim);
+      color: var(--muted);
       margin-bottom: 0.35rem;
     }
-    .grip {
-      opacity: 0.45;
-      letter-spacing: -0.08em;
-      font-size: 0.65rem;
-    }
+    .grip { opacity: 0.4; letter-spacing: -0.08em; font-size: 0.65rem; }
     .card-title { flex: 1; font-weight: 600; color: var(--ink); font-size: 0.78rem; }
     .pill {
       width: 1.55rem;
@@ -255,23 +389,19 @@
       border-radius: 50%;
       background: #6a645c;
     }
-    .fields {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.35rem;
-    }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
     .field {
       display: flex;
       flex-direction: column;
       gap: 0.15rem;
       font-size: 0.68rem;
-      color: var(--ink-dim);
+      color: var(--muted);
     }
-    .field span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .field .ctl {
-      background: var(--glass);
-      border: 1px solid var(--line);
-      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.22);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+      border: none;
+      border-radius: 7px;
       padding: 0.28rem 0.4rem;
       color: var(--ink);
       font-size: 0.75rem;
@@ -279,305 +409,102 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .body.cols2 {
-      grid-template-columns: 1fr 1fr;
+
+    .empty {
+      flex: 1;
+      display: grid;
+      place-content: center;
+      gap: 0.45rem;
+      padding: 1.5rem 1rem;
+      text-align: center;
+      min-height: 160px;
     }
-    .body.cols2 .card:first-child { grid-column: 1; }
+    .empty p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .empty .hint {
+      font-size: 0.75rem;
+      max-width: 17rem;
+      margin-inline: auto;
+      opacity: 0.9;
+    }
+
     .footer {
-      margin-top: 0.15rem;
       display: flex;
-      gap: 0.35rem;
+      flex-wrap: wrap;
       align-items: center;
-      padding: 0.45rem 0.65rem 0.65rem;
-      border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+      gap: 0.5rem;
+      padding: 0.55rem 0.75rem;
+      background: color-mix(in srgb, var(--bg) 90%, var(--glass));
+      flex-shrink: 0;
     }
     .gen {
-      flex: 1;
-      background: color-mix(in srgb, var(--accent) 35%, var(--glass));
-      border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line));
-      color: var(--ink);
-      border-radius: var(--radius);
-      padding: 0.4rem;
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    /* —— Option A: session dropdown —— */
-    .session-dd {
-      flex: 1 1 7rem;
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: var(--glass);
-      padding: 0.2rem 0.35rem 0.2rem 0.45rem;
-      cursor: pointer;
-      position: relative;
-    }
-    .session-dd .label {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 0.78rem;
-    }
-    .session-dd .dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--dirty);
-      flex-shrink: 0;
-    }
-    .session-dd .chev { opacity: 0.55; font-size: 0.7rem; }
-    .session-dd .n {
-      font-size: 0.65rem;
-      color: var(--ink-dim);
-      background: #0004;
-      border-radius: 4px;
-      padding: 0.05rem 0.3rem;
-      flex-shrink: 0;
-    }
-    .menu {
-      position: absolute;
-      top: calc(100% + 4px);
-      left: 0;
-      right: 0;
-      min-width: 14rem;
-      background: #2a251f;
-      border: 1px solid var(--line);
-      border-radius: 9px;
-      padding: 0.3rem;
-      z-index: 5;
-      box-shadow: 0 10px 30px #0008;
-      display: none;
-    }
-    .session-dd.open .menu { display: block; }
-    .menu .item {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.4rem 0.45rem;
-      border-radius: 6px;
-      font-size: 0.78rem;
-    }
-    .menu .item:hover, .menu .item.on {
-      background: color-mix(in srgb, var(--accent) 18%, transparent);
-    }
-    .menu .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .menu .item .badge {
-      font-size: 0.65rem;
-      color: var(--ink-dim);
-    }
-    .menu .sep {
-      height: 1px;
-      background: var(--line);
-      margin: 0.25rem 0.2rem;
-    }
-    .menu .action {
-      color: var(--accent);
-      font-size: 0.75rem;
-    }
-
-    /* —— Option B: tabs —— */
-    .tabs {
-      display: flex;
-      align-items: stretch;
-      gap: 0;
-      border-bottom: 1px solid var(--line);
-      padding: 0 0.35rem;
-      overflow-x: auto;
-      scrollbar-width: thin;
-    }
-    .tab {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
-      max-width: 8.5rem;
-      padding: 0.45rem 0.55rem;
-      font-size: 0.74rem;
-      color: var(--ink-dim);
-      border-bottom: 2px solid transparent;
-      cursor: pointer;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    .tab .t {
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .tab .x {
-      opacity: 0.4;
-      font-size: 0.7rem;
-      line-height: 1;
-      padding: 0.1rem;
-      border-radius: 3px;
-    }
-    .tab .x:hover { opacity: 1; background: #fff1; }
-    .tab.on {
-      color: var(--ink);
-      border-bottom-color: var(--accent);
-    }
-    .tab .dot {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      background: var(--dirty);
-      flex-shrink: 0;
-    }
-    .tab-add {
-      color: var(--ink-dim);
-      padding: 0.35rem 0.5rem;
-      font-size: 0.9rem;
-      cursor: pointer;
-      align-self: center;
-    }
-
-    /* —— Option C: chip strip —— */
-    .chips {
-      display: flex;
-      gap: 0.3rem;
-      overflow-x: auto;
-      padding: 0 0.65rem 0.15rem;
-      scrollbar-width: none;
-    }
-    .chips::-webkit-scrollbar { display: none; }
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
-      max-width: 7.5rem;
-      padding: 0.2rem 0.45rem;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      background: var(--bg-elev);
-      font-size: 0.7rem;
-      color: var(--ink-dim);
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-    .chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .chip.on {
-      color: var(--ink);
-      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-      background: color-mix(in srgb, var(--accent) 16%, var(--glass));
-    }
-    .chip .dot {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      background: var(--dirty);
-    }
-    .chip.add {
-      border-style: dashed;
-      opacity: 0.8;
-    }
-
-    /* —— Option D: split list —— */
-    .split {
-      display: grid;
-      grid-template-columns: 7.5rem 1fr;
-      min-height: 220px;
-    }
-    .split.narrow-mode {
-      grid-template-columns: 1fr;
-    }
-    .slist {
-      border-right: 1px solid var(--line);
-      background: #151310;
-      padding: 0.35rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.2rem;
-    }
-    .slist.collapsed {
-      display: none;
-    }
-    .sitem {
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-      padding: 0.4rem 0.4rem;
-      border-radius: 6px;
-      font-size: 0.72rem;
-      color: var(--ink-dim);
-      cursor: pointer;
-    }
-    .sitem.on {
-      background: color-mix(in srgb, var(--accent) 18%, transparent);
-      color: var(--ink);
-    }
-    .sitem .t {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .sitem .dot {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      background: var(--dirty);
-      flex-shrink: 0;
-    }
-    .split-main { min-width: 0; display: flex; flex-direction: column; }
-
-    /* —— Option E: windows button —— */
-    .win-btn {
-      position: relative;
-    }
-    .win-btn .menu {
-      right: 0;
-      left: auto;
-      width: 15rem;
-    }
-    .win-btn.open .menu { display: block; }
-    .title-inline {
-      flex: 1 1 5rem;
-      min-width: 0;
-      font-size: 0.78rem;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      padding: 0.2rem 0.15rem;
-      color: var(--ink-dim);
-    }
-    .title-inline strong { color: var(--ink); font-weight: 600; }
-
-    /* —— Option F: stacked recent / recents row —— */
-    .recent-bar {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0 0.65rem 0.25rem;
-      font-size: 0.7rem;
-      color: var(--ink-dim);
-    }
-    .recent-bar .cur {
-      color: var(--ink);
-      font-weight: 600;
-      max-width: 40%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .recent-bar .sep { opacity: 0.35; }
-    .recent-bar button {
       appearance: none;
       border: none;
-      background: transparent;
-      color: var(--ink-dim);
-      font: inherit;
+      border-radius: 0.4em;
+      padding: 0.45rem 0.95rem;
+      font-weight: 600;
+      font-size: 0.85rem;
       cursor: pointer;
-      padding: 0;
-      max-width: 28%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      background: var(--accent-soft);
+      color: var(--ink);
     }
-    .recent-bar button:hover { color: var(--ink); text-decoration: underline; }
+    .gen:hover:not(:disabled) {
+      background: rgba(196, 165, 116, 0.24);
+    }
+    .gen:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .stop {
+      appearance: none;
+      display: grid;
+      place-items: center;
+      width: 1.85rem;
+      height: 1.85rem;
+      border: none;
+      border-radius: 0.4em;
+      background: var(--accent-soft);
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .stop:disabled { opacity: 0.4; cursor: not-allowed; }
+    .stop-icon {
+      width: 0.55rem;
+      height: 0.55rem;
+      background: currentColor;
+      border-radius: 1px;
+    }
+    .control {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .control input[type="number"] {
+      width: 2.4rem;
+      border: none;
+      border-radius: 7px;
+      background: rgba(0, 0, 0, 0.22);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+      color: var(--ink);
+      padding: 0.25rem 0.35rem;
+      font: inherit;
+      font-size: 0.8rem;
+    }
 
-    /* Dialog */
+    .notes {
+      margin: 1.25rem 0 0;
+      padding-left: 1.1rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .notes li { margin-bottom: 0.25rem; }
+
+    /* Save dialog — recessed field like Input */
     .dialog-backdrop {
       position: fixed;
       inset: 0;
@@ -590,7 +517,7 @@
     }
     .dialog-backdrop.show { display: flex; }
     .dialog {
-      width: min(360px, 100%);
+      width: min(420px, 100%);
       background: var(--bg-elev);
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -598,358 +525,293 @@
       box-shadow: 0 16px 40px #000a;
     }
     .dialog h3 {
-      margin: 0 0 0.35rem;
+      margin: 0 0 0.3rem;
       font-size: 0.95rem;
     }
-    .dialog p {
+    .dialog .sub {
       margin: 0 0 0.75rem;
       font-size: 0.8rem;
-      color: var(--ink-dim);
+      color: var(--muted);
+    }
+    .dialog label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
     }
     .dialog input {
       width: 100%;
-      border: 1px solid var(--line);
+      border: none;
       border-radius: 9px;
-      background: var(--bg);
+      background: rgba(0, 0, 0, 0.22);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
       color: var(--ink);
       padding: 0.55rem 0.65rem;
       font: inherit;
       font-size: 0.9rem;
-      margin-bottom: 0.85rem;
     }
+    .dialog input:focus {
+      outline: none;
+      box-shadow:
+        inset 0 1px 4px rgba(0, 0, 0, 0.55),
+        0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    .overwrite {
+      margin: 0.45rem 0 0;
+      font-size: 0.78rem;
+      color: var(--danger);
+      min-height: 1.15em;
+    }
+    .overwrite:empty { display: none; }
     .dialog-actions {
       display: flex;
       justify-content: flex-end;
       gap: 0.4rem;
+      margin-top: 0.9rem;
     }
-
-    .notes {
-      margin-top: 0.65rem;
-      font-size: 0.78rem;
-      color: var(--ink-dim);
-      padding-left: 1rem;
-    }
-    .notes li { margin-bottom: 0.2rem; }
-
-    .compare {
-      margin-top: 2rem;
-      padding: 1rem;
-      border: 1px dashed var(--line);
-      border-radius: 10px;
-      font-size: 0.85rem;
-      color: var(--ink-dim);
-    }
-    .compare h2 {
-      margin: 0 0 0.5rem;
-      font-size: 1rem;
-      color: var(--ink);
-    }
-    .compare table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.8rem;
-    }
-    .compare th, .compare td {
-      text-align: left;
-      padding: 0.4rem 0.5rem;
-      border-bottom: 1px solid var(--line);
-      vertical-align: top;
-    }
-    .compare th { color: var(--ink-dim); font-weight: 500; }
-    .compare td:first-child { color: var(--ink); font-weight: 600; white-space: nowrap; }
   </style>
 </head>
 <body>
   <div class="page">
-    <h1>Multi-workflow chrome</h1>
+    <h1>A1 — Session dropdown</h1>
     <p class="lede">
-      Mockups for keeping several workflows open in the Generate panel.
-      Most of the time the panel is narrow (~340px); a wider ~620px view is shown where it changes the story.
-      Today’s name field eats the first row — several options reclaim that space.
+      Chosen multi-workflow chrome. Open sessions switch in the dropdown;
+      saved workflows list below a separator and open as independent copies
+      (not linked to the library row). No Comfy status in the bar — connection /
+      convert problems use app notifications.
     </p>
+
+    <div class="rules">
+      <strong>Behavior</strong>
+      <ul>
+        <li>Open from image / Comfy adds a new open session from outside.</li>
+        <li>Picking a saved workflow opens a <em>copy</em> with that name. It is not linked to the saved id. Save always goes through the name dialog.</li>
+        <li>If that name is already used by an open session, the new one becomes <code>Name (2)</code>, <code>Name (3)</code>, …</li>
+        <li>Save dialog pre-fills the session name. If it matches an existing saved workflow, show an overwrite warning under the field.</li>
+        <li>No dirty indicators (dots / Save*). Seeds and other controls change constantly; a dirty flag would almost always be on.</li>
+        <li>Saved rows can be deleted from the menu (×). Deleting a saved workflow does not close open sessions that were copied from it.</li>
+        <li>0 open sessions: placeholder trigger, empty body, Save/JSON/Generate disabled. Saved list still available in the menu.</li>
+      </ul>
+    </div>
 
     <div class="toolbar">
       <label>
-        Demo open sessions
-        <select id="sessionCount" onchange="rerender()">
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="5">5</option>
+        Start with
+        <select id="preset" onchange="applyPreset()">
+          <option value="0">0 open</option>
+          <option value="1">1 open</option>
+          <option value="3" selected>3 open</option>
         </select>
       </label>
-      <label>
-        <input type="checkbox" id="showDialogDemo" />
-        Preview Save dialog (option A)
-      </label>
-      <nav class="nav">
-        <a href="#a">A Dropdown</a>
-        <a href="#b">B Tabs</a>
-        <a href="#c">C Chips</a>
-        <a href="#d">D Side list</a>
-        <a href="#e">E Windows</a>
-        <a href="#f">F Recents</a>
-      </nav>
+      <button type="button" class="demo" onclick="demoToast('Comfy connection lost', 'error')">Demo: Comfy offline toast</button>
+      <button type="button" class="demo" onclick="demoToast('Workflow convert failed', 'warn')">Demo: convert fail toast</button>
     </div>
 
-    <!-- A -->
-    <section class="option" id="a">
-      <div class="option-head">
-        <h2><span class="tag rec">Fits narrow</span>A. Session dropdown (replaces name field)</h2>
-        <p>
-          Current workflow is chosen from a dropdown that lists open sessions.
-          No inline name field — Save opens a dialog for the real name (first save or Save As).
-          Load… still pulls from saved library into a new/replaced session.
-        </p>
+    <div class="stage">
+      <div>
+        <div class="frame-label"><span>Narrow ~340px</span><span id="label-narrow"></span></div>
+        <div class="panel narrow" id="panel-narrow"></div>
       </div>
-      <div class="stage">
-        <div>
-          <div class="frame-label"><span>Narrow ~340px</span><span>name field gone</span></div>
-          <div class="panel narrow" data-opt="a" data-w="narrow"></div>
-        </div>
-        <div>
-          <div class="frame-label"><span>Wider ~620px</span><span>same chrome, more body</span></div>
-          <div class="panel wide" data-opt="a" data-w="wide"></div>
-        </div>
+      <div>
+        <div class="frame-label"><span>Wider ~560px</span><span id="label-wide"></span></div>
+        <div class="panel wide" id="panel-wide"></div>
       </div>
-      <ul class="notes">
-        <li>Best density: one control does “what’s open” + switch.</li>
-        <li>Dirty indicator as a small dot; count badge (3) shows how many are open.</li>
-        <li>Menu actions: switch, close, New, Open from library…</li>
-        <li>Tradeoff: switching costs a click; names truncated in the trigger.</li>
-      </ul>
-    </section>
-
-    <!-- B -->
-    <section class="option" id="b">
-      <div class="option-head">
-        <h2><span class="tag tight">Familiar</span>B. Compact tabs</h2>
-        <p>
-          Browser-style tabs under (or instead of) part of the toolbar.
-          Horizontal scroll when many tabs; close on the tab; + to open another.
-          Name field dropped — title lives on the tab; Save still uses a dialog when untitled.
-        </p>
-      </div>
-      <div class="stage">
-        <div>
-          <div class="frame-label"><span>Narrow</span><span>tabs scroll</span></div>
-          <div class="panel narrow" data-opt="b" data-w="narrow"></div>
-        </div>
-        <div>
-          <div class="frame-label"><span>Wider</span><span>more tab labels visible</span></div>
-          <div class="panel wide" data-opt="b" data-w="wide"></div>
-        </div>
-      </div>
-      <ul class="notes">
-        <li>Instant visual of what’s open; one-click switch.</li>
-        <li>On 340px, 3+ tabs get cramped — scroll or overflow menu needed.</li>
-        <li>Steals a full row of vertical space (~32px).</li>
-      </ul>
-    </section>
-
-    <!-- C -->
-    <section class="option" id="c">
-      <div class="option-head">
-        <h2><span class="tag tight">Compact</span>C. Pill / chip strip</h2>
-        <p>
-          Same idea as tabs, but lighter: a single thin row of pills under the action buttons.
-          Scrolls horizontally; active chip is accented. Less “browser chrome,” slightly shorter than tabs.
-        </p>
-      </div>
-      <div class="stage">
-        <div>
-          <div class="frame-label"><span>Narrow</span></div>
-          <div class="panel narrow" data-opt="c" data-w="narrow"></div>
-        </div>
-        <div>
-          <div class="frame-label"><span>Wider</span></div>
-          <div class="panel wide" data-opt="c" data-w="wide"></div>
-        </div>
-      </div>
-      <ul class="notes">
-        <li>Cheaper vertically than full tabs; still scannable.</li>
-        <li>Close affordance is weaker (long-press / × in menu) unless each chip has an ×.</li>
-      </ul>
-    </section>
-
-    <!-- D -->
-    <section class="option" id="d">
-      <div class="option-head">
-        <h2><span class="tag wide">Needs width</span>D. Side session list</h2>
-        <p>
-          Narrow: collapses to a “Sessions” toggle that overlays or expands.
-          Wide: fixed left rail (~120px) listing open workflows. Body keeps full toolbar without the name field.
-        </p>
-      </div>
-      <div class="stage">
-        <div>
-          <div class="frame-label"><span>Narrow — list hidden, toggle in bar</span></div>
-          <div class="panel narrow" data-opt="d" data-w="narrow"></div>
-        </div>
-        <div>
-          <div class="frame-label"><span>Wider — persistent list</span></div>
-          <div class="panel wide" data-opt="d" data-w="wide"></div>
-        </div>
-      </div>
-      <ul class="notes">
-        <li>Great when the panel is often wide; awkward as the default narrow case.</li>
-        <li>Long names fare better than tabs/chips.</li>
-      </ul>
-    </section>
-
-    <!-- E -->
-    <section class="option" id="e">
-      <div class="option-head">
-        <h2><span class="tag rec">Minimal chrome</span>E. “Windows” button + inline title</h2>
-        <p>
-          Keep a one-line title (read-only, truncated) and a Windows/Sessions button that opens the full list.
-          Closest to today’s single-row density; multi-open is “hidden” until you need it.
-        </p>
-      </div>
-      <div class="stage">
-        <div>
-          <div class="frame-label"><span>Narrow</span></div>
-          <div class="panel narrow" data-opt="e" data-w="narrow"></div>
-        </div>
-        <div>
-          <div class="frame-label"><span>Wider</span></div>
-          <div class="panel wide" data-opt="e" data-w="wide"></div>
-        </div>
-      </div>
-      <ul class="notes">
-        <li>Almost zero new permanent UI vs today.</li>
-        <li>Discoverability is weaker — people may not realize multiple can stay open.</li>
-      </ul>
-    </section>
-
-    <!-- F -->
-    <section class="option" id="f">
-      <div class="option-head">
-        <h2>F. Current + recents jump row</h2>
-        <p>
-          No full session manager in the chrome. Show current name plus 1–2 recently used open sessions as text links.
-          Overflow goes into a small menu. Hybrid between single-session habits and multi-open.
-        </p>
-      </div>
-      <div class="stage">
-        <div>
-          <div class="frame-label"><span>Narrow</span></div>
-          <div class="panel narrow" data-opt="f" data-w="narrow"></div>
-        </div>
-        <div>
-          <div class="frame-label"><span>Wider</span></div>
-          <div class="panel wide" data-opt="f" data-w="wide"></div>
-        </div>
-      </div>
-      <ul class="notes">
-        <li>Lightest visual change; doesn’t scale past ~3–4 sessions well.</li>
-        <li>Ambiguous whether “recent” means open sessions or library history.</li>
-      </ul>
-    </section>
-
-    <div class="compare">
-      <h2>Quick compare</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Option</th>
-            <th>Narrow fit</th>
-            <th>Switch cost</th>
-            <th>See all open?</th>
-            <th>Vertical cost</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>A Dropdown</td>
-            <td>Excellent</td>
-            <td>1 click + pick</td>
-            <td>In menu</td>
-            <td>0 (replaces name)</td>
-          </tr>
-          <tr>
-            <td>B Tabs</td>
-            <td>OK with scroll</td>
-            <td>1 click</td>
-            <td>Yes (if visible)</td>
-            <td>~32px</td>
-          </tr>
-          <tr>
-            <td>C Chips</td>
-            <td>Good</td>
-            <td>1 click</td>
-            <td>Partial</td>
-            <td>~24px</td>
-          </tr>
-          <tr>
-            <td>D Side list</td>
-            <td>Needs toggle</td>
-            <td>1 click</td>
-            <td>Yes when open</td>
-            <td>0 / width</td>
-          </tr>
-          <tr>
-            <td>E Windows btn</td>
-            <td>Excellent</td>
-            <td>2 clicks</td>
-            <td>In menu</td>
-            <td>0</td>
-          </tr>
-          <tr>
-            <td>F Recents</td>
-            <td>Good</td>
-            <td>1 click</td>
-            <td>Only 2–3</td>
-            <td>~18px</td>
-          </tr>
-        </tbody>
-      </table>
-      <p style="margin: 0.75rem 0 0">
-        Lean recommendation for this panel: start with <strong>A</strong> (or <strong>E</strong> if you want even less chrome).
-        Add tabs/chips later only if you find yourself switching constantly and wanting the open set always visible.
-      </p>
     </div>
+
+    <ul class="notes">
+      <li>Click the session control to switch, close (×), or open a saved workflow from the lower list.</li>
+      <li>On a Saved row, × deletes that library entry (open copies stay open).</li>
+      <li>Save opens the name dialog; type a name that matches a saved workflow to see the overwrite note.</li>
+      <li>Try opening “Anima 1” from Saved while an “Anima 1” session is already open — it becomes “Anima 1 (2)”.</li>
+    </ul>
   </div>
+
+  <div class="toast-demo" id="toasts"></div>
 
   <div class="dialog-backdrop" id="saveDialog" onclick="if(event.target===this)closeDialog()">
     <div class="dialog" role="dialog" aria-labelledby="dlgTitle">
       <h3 id="dlgTitle">Save workflow</h3>
-      <p>Name is no longer edited in the toolbar. First save (or Save As) asks here.</p>
-      <input id="dlgName" type="text" value="Anima 1" />
+      <p class="sub">Sessions aren’t linked to the library. Saving writes under this name.</p>
+      <label for="dlgName">Name</label>
+      <input id="dlgName" type="text" autocomplete="off" oninput="updateOverwrite()" />
+      <p class="overwrite" id="overwriteMsg"></p>
       <div class="dialog-actions">
         <button class="btn" type="button" onclick="closeDialog()">Cancel</button>
-        <button class="btn active" type="button" onclick="closeDialog()">Save</button>
+        <button class="btn" type="button" onclick="confirmSave()">Save</button>
       </div>
     </div>
   </div>
 
   <script>
-    const ALL = [
-      { id: "1", name: "Anima 1", dirty: false },
-      { id: "2", name: "Image 74170253", dirty: true },
-      { id: "3", name: "LoRA stack test", dirty: false },
-      { id: "4", name: "Portrait refine", dirty: true },
-      { id: "5", name: "From Comfy", dirty: false },
+    /** @type {{ id: string, name: string }[]} */
+    let openSessions = [];
+    let activeId = null;
+    let nextSessionId = 100;
+
+    /** Library rows — opening one does not keep a link to this id */
+    let SAVED = [
+      { id: "s1", name: "Anima 1" },
+      { id: "s2", name: "Portrait refine" },
+      { id: "s3", name: "LoRA stack test" },
+      { id: "s4", name: "Night scene" },
     ];
 
-    function sessions() {
-      const n = Number(document.getElementById("sessionCount").value);
-      return ALL.slice(0, n);
+    const PRESETS = {
+      0: [],
+      1: [{ id: "o1", name: "Anima 1" }],
+      3: [
+        { id: "o1", name: "Anima 1" },
+        { id: "o2", name: "Image 74170253" },
+        { id: "o3", name: "LoRA stack test" },
+      ],
+    };
+
+    function uniqueOpenName(base) {
+      const used = new Set(openSessions.map((s) => s.name));
+      if (!used.has(base)) return base;
+      let n = 2;
+      while (used.has(`${base} (${n})`)) n += 1;
+      return `${base} (${n})`;
     }
 
-    function actionsRow(opts = {}) {
-      const { showRefresh = true, showStatus = true, extra = "" } = opts;
-      return `
-        ${extra}
-        <button class="btn" type="button">Load…</button>
-        <button class="btn" type="button" data-save>Save*</button>
-        <button class="btn" type="button">JSON</button>
-        <button class="btn" type="button">Queue <span style="opacity:.7;font-size:.7rem">0</span></button>
-        ${showRefresh ? `<button class="btn" type="button">Refresh</button>` : ""}
-        ${showStatus ? `<span class="status">Comfy OK · convert</span>` : ""}
-      `;
+    function active() {
+      return openSessions.find((s) => s.id === activeId) ?? null;
     }
 
-    function body(wide) {
+    function applyPreset() {
+      const key = document.getElementById("preset").value;
+      openSessions = PRESETS[key].map((s) => ({ ...s }));
+      activeId = openSessions[0]?.id ?? null;
+      nextSessionId = 100;
+      render();
+    }
+
+    function openSaved(savedName) {
+      const name = uniqueOpenName(savedName);
+      const session = {
+        id: `o${nextSessionId++}`,
+        name,
+      };
+      openSessions = [...openSessions, session];
+      activeId = session.id;
+      render();
+    }
+
+    function deleteSaved(savedId, event) {
+      event?.stopPropagation();
+      SAVED = SAVED.filter((s) => s.id !== savedId);
+      render();
+    }
+
+    function switchTo(id) {
+      activeId = id;
+      render();
+    }
+
+    function closeSession(id, event) {
+      event?.stopPropagation();
+      const idx = openSessions.findIndex((s) => s.id === id);
+      if (idx < 0) return;
+      openSessions = openSessions.filter((s) => s.id !== id);
+      if (activeId === id) {
+        const next = openSessions[Math.min(idx, openSessions.length - 1)];
+        activeId = next?.id ?? null;
+      }
+      render();
+    }
+
+    function savedNameExists(name) {
+      const trimmed = name.trim();
+      return SAVED.some((s) => s.name === trimmed);
+    }
+
+    function updateOverwrite() {
+      const name = document.getElementById("dlgName").value;
+      const el = document.getElementById("overwriteMsg");
+      if (name.trim() && savedNameExists(name)) {
+        el.textContent = `A saved workflow named “${name.trim()}” already exists. Saving will overwrite it.`;
+      } else {
+        el.textContent = "";
+      }
+    }
+
+    function openSaveDialog() {
+      const cur = active();
+      if (!cur) return;
+      document.getElementById("dlgName").value = cur.name;
+      updateOverwrite();
+      document.getElementById("saveDialog").classList.add("show");
+      const input = document.getElementById("dlgName");
+      input.focus();
+      input.select();
+    }
+
+    function closeDialog() {
+      document.getElementById("saveDialog").classList.remove("show");
+    }
+
+    function confirmSave() {
+      const cur = active();
+      if (!cur) return;
+      const name = document.getElementById("dlgName").value.trim() || "Untitled workflow";
+      cur.name = name;
+      // Mock: if overwrite, library already has it; if new name, pretend it joined library
+      if (!SAVED.some((s) => s.name === name)) {
+        SAVED.push({ id: `s${SAVED.length + 1}`, name });
+      }
+      closeDialog();
+      render();
+    }
+
+    function demoToast(message, type) {
+      const host = document.getElementById("toasts");
+      const el = document.createElement("div");
+      el.className = `toast ${type || ""}`;
+      el.textContent = message;
+      host.appendChild(el);
+      requestAnimationFrame(() => el.classList.add("show"));
+      setTimeout(() => {
+        el.classList.remove("show");
+        setTimeout(() => el.remove(), 200);
+      }, 2800);
+    }
+
+    function menuHtml(cur) {
+      const openBlock = openSessions.length
+        ? `
+          <div class="menu-section">Open</div>
+          ${openSessions.map((s) => `
+            <button type="button" class="item ${s.id === activeId ? "on" : ""}" data-switch="${s.id}">
+              <span class="name">${escapeHtml(s.name)}</span>
+              <span class="x" data-close="${s.id}" title="Close">×</span>
+            </button>`).join("")}`
+        : `<div class="muted-row">No workflows open</div>`;
+
+      const savedBlock = SAVED.length
+        ? `
+        <div class="sep"></div>
+        <div class="menu-section">Saved</div>
+        ${SAVED.map((s) => `
+          <button type="button" class="item" data-open-saved="${escapeAttr(s.name)}">
+            <span class="name">${escapeHtml(s.name)}</span>
+            <span class="x" data-delete-saved="${escapeAttr(s.id)}" title="Delete saved">×</span>
+          </button>`).join("")}`
+        : `
+        <div class="sep"></div>
+        <div class="menu-section">Saved</div>
+        <div class="muted-row">No saved workflows</div>`;
+
+      return openBlock + savedBlock;
+    }
+
+    function bodyHtml(wide, empty) {
+      if (empty) {
+        return `
+          <div class="empty">
+            <p>No workflow open</p>
+            <p class="hint">Pick a saved workflow from the menu above, or use Open in panel on an image / send from Comfy.</p>
+          </div>`;
+      }
       if (wide) {
         return `
           <div class="body cols2">
@@ -982,14 +844,14 @@
       return `
         <div class="body">
           <div class="card">
-            <div class="card-h"><span class="grip">⠿</span><span class="card-title">LORA 1:1</span><span class="pill"></span><button class="btn ghost" type="button">Edit</button></div>
+            <div class="card-h"><span class="grip">⠿</span><span class="card-title">LORA 1:1</span><span class="pill"></span></div>
             <div class="fields">
               <div class="field"><span>lora name</span><div class="ctl">rdbt_anima_ym1_v0.4…</div></div>
               <div class="field"><span>strength model</span><div class="ctl">1</div></div>
             </div>
           </div>
           <div class="card">
-            <div class="card-h"><span class="grip">⠿</span><span class="card-title">LORA 1:1</span><span class="pill"></span><button class="btn ghost" type="button">Edit</button></div>
+            <div class="card-h"><span class="grip">⠿</span><span class="card-title">LORA 1:1</span><span class="pill"></span></div>
             <div class="fields">
               <div class="field"><span>lora name</span><div class="ctl">rdbt_anima_ym1_v0.4…</div></div>
               <div class="field"><span>strength model</span><div class="ctl">0.7</div></div>
@@ -998,223 +860,110 @@
         </div>`;
     }
 
-    function footer() {
-      return `<div class="footer"><button class="gen" type="button">Generate</button><button class="btn" type="button">■</button><button class="btn" type="button">×1</button></div>`;
-    }
-
-    function menuItems(list, activeId) {
-      return list.map((s) => `
-        <div class="item ${s.id === activeId ? "on" : ""}">
-          ${s.dirty ? '<span class="dot"></span>' : '<span style="width:6px"></span>'}
-          <span class="name">${s.name}</span>
-          <span class="badge">${s.id === activeId ? "active" : ""}</span>
-        </div>`).join("") + `
-        <div class="sep"></div>
-        <div class="item action">+ New session</div>
-        <div class="item action">Open from library…</div>`;
-    }
-
-    function renderA(el, wide) {
-      const list = sessions();
-      const cur = list[0];
-      el.innerHTML = `
+    function panelHtml(wide) {
+      const cur = active();
+      const empty = !cur;
+      return `
         <div class="bar">
           <div class="row">
-            <div class="session-dd ${wide ? "" : ""}" data-toggle-dd>
-              ${cur.dirty ? '<span class="dot"></span>' : ""}
-              <span class="label">${cur.name}</span>
-              <span class="n">${list.length}</span>
+            <div class="session-dd ${empty ? "placeholder" : ""}" data-toggle-dd tabindex="0">
+              <span class="label">${empty ? "No workflow" : escapeHtml(cur.name)}</span>
+              ${!empty ? `<span class="n">${openSessions.length}</span>` : ""}
               <span class="chev">▾</span>
-              <div class="menu">${menuItems(list, cur.id)}</div>
+              <div class="menu">${menuHtml(cur)}</div>
             </div>
-            ${actionsRow({ showRefresh: wide, showStatus: wide })}
+            <button class="btn" type="button" data-save ${empty ? "disabled" : ""}>Save</button>
+            <button class="btn" type="button" ${empty ? "disabled" : ""}>JSON</button>
+            <button class="btn queue-btn" type="button">
+              <span>Queue</span><span class="count">0</span>
+            </button>
           </div>
-          ${wide ? "" : `<div class="row"><button class="btn" type="button">Refresh</button><span class="status">Comfy OK · convert</span></div>`}
-          <div class="progress"><div class="fill"></div></div>
+          <div class="progress ${empty ? "" : "busy"}"><div class="fill"></div></div>
         </div>
-        ${body(wide)}
-        ${footer()}`;
-    }
-
-    function renderB(el, wide) {
-      const list = sessions();
-      el.innerHTML = `
-        <div class="tabs">
-          ${list.map((s, i) => `
-            <div class="tab ${i === 0 ? "on" : ""}">
-              ${s.dirty ? '<span class="dot"></span>' : ""}
-              <span class="t">${s.name}</span>
-              <span class="x">×</span>
-            </div>`).join("")}
-          <span class="tab-add" title="New">+</span>
-        </div>
-        <div class="bar">
-          <div class="row">
-            ${actionsRow({ showRefresh: true, showStatus: wide })}
-          </div>
-          ${wide ? "" : `<div class="row"><span class="status">Comfy OK · convert</span></div>`}
-          <div class="progress"><div class="fill"></div></div>
-        </div>
-        ${body(wide)}
-        ${footer()}`;
-    }
-
-    function renderC(el, wide) {
-      const list = sessions();
-      el.innerHTML = `
-        <div class="bar">
-          <div class="row">
-            ${actionsRow({ showRefresh: wide, showStatus: wide })}
-          </div>
-          ${wide ? "" : `<div class="row"><button class="btn" type="button">Refresh</button><span class="status">Comfy OK · convert</span></div>`}
-        </div>
-        <div class="chips">
-          ${list.map((s, i) => `
-            <div class="chip ${i === 0 ? "on" : ""}">
-              ${s.dirty ? '<span class="dot"></span>' : ""}
-              <span class="t">${s.name}</span>
-            </div>`).join("")}
-          <div class="chip add">+</div>
-        </div>
-        <div class="bar" style="padding-top:0.2rem"><div class="progress"><div class="fill"></div></div></div>
-        ${body(wide)}
-        ${footer()}`;
-    }
-
-    function renderD(el, wide) {
-      const list = sessions();
-      const cur = list[0];
-      if (!wide) {
-        el.innerHTML = `
-          <div class="bar">
-            <div class="row">
-              <button class="btn active" type="button">Sessions ${list.length}</button>
-              <span class="title-inline"><strong>${cur.name}</strong>${cur.dirty ? " *" : ""}</span>
-              ${actionsRow({ showRefresh: false, showStatus: false, extra: "" })}
-            </div>
-            <div class="row"><button class="btn" type="button">Refresh</button><span class="status">Comfy OK · convert</span></div>
-            <div class="progress"><div class="fill"></div></div>
-          </div>
-          ${body(false)}
-          ${footer()}`;
-        return;
-      }
-      el.innerHTML = `
-        <div class="split">
-          <div class="slist">
-            ${list.map((s, i) => `
-              <div class="sitem ${i === 0 ? "on" : ""}">
-                ${s.dirty ? '<span class="dot"></span>' : ""}
-                <span class="t">${s.name}</span>
-              </div>`).join("")}
-            <div class="sitem" style="color:var(--accent)">+ New</div>
-          </div>
-          <div class="split-main">
-            <div class="bar">
-              <div class="row">
-                ${actionsRow({})}
-              </div>
-              <div class="progress"><div class="fill"></div></div>
-            </div>
-            ${body(true)}
-            ${footer()}
-          </div>
+        ${bodyHtml(wide, empty)}
+        <div class="footer">
+          <button class="gen" type="button" ${empty ? "disabled" : ""}>Generate</button>
+          <button class="stop" type="button" disabled aria-label="Stop"><span class="stop-icon"></span></button>
+          <label class="control">x <input type="number" value="1" min="1" ${empty ? "disabled" : ""} /></label>
+          <label class="control"><input type="checkbox" ${empty ? "disabled" : ""} /> Infinite</label>
+          ${wide ? `<label class="control"><input type="checkbox" ${empty ? "disabled" : ""} /> Keep one queued</label>` : ""}
         </div>`;
     }
 
-    function renderE(el, wide) {
-      const list = sessions();
-      const cur = list[0];
-      el.innerHTML = `
-        <div class="bar">
-          <div class="row">
-            <span class="title-inline"><strong>${cur.name}</strong>${cur.dirty ? " · unsaved" : ""}</span>
-            <div class="win-btn" data-toggle-dd>
-              <button class="btn" type="button">Windows ${list.length} ▾</button>
-              <div class="menu">${menuItems(list, cur.id)}</div>
-            </div>
-            ${actionsRow({ showRefresh: wide, showStatus: wide })}
-          </div>
-          ${wide ? "" : `<div class="row"><button class="btn" type="button">Refresh</button><span class="status">Comfy OK · convert</span></div>`}
-          <div class="progress"><div class="fill"></div></div>
-        </div>
-        ${body(wide)}
-        ${footer()}`;
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s);
     }
 
-    function renderF(el, wide) {
-      const list = sessions();
-      const cur = list[0];
-      const others = list.slice(1, wide ? 3 : 2);
-      el.innerHTML = `
-        <div class="bar">
-          <div class="row">
-            ${actionsRow({ showRefresh: wide, showStatus: wide })}
-          </div>
-          ${wide ? "" : `<div class="row"><button class="btn" type="button">Refresh</button><span class="status">Comfy OK · convert</span></div>`}
-        </div>
-        <div class="recent-bar">
-          <span class="cur">${cur.name}${cur.dirty ? "*" : ""}</span>
-          ${others.map((s) => `<span class="sep">·</span><button type="button">${s.name}</button>`).join("")}
-          ${list.length > others.length + 1 ? `<span class="sep">·</span><button type="button">+${list.length - others.length - 1} more</button>` : ""}
-        </div>
-        <div class="bar" style="padding-top:0.15rem"><div class="progress"><div class="fill"></div></div></div>
-        ${body(wide)}
-        ${footer()}`;
-    }
-
-    const renderers = { a: renderA, b: renderB, c: renderC, d: renderD, e: renderE, f: renderF };
-
-    function rerender() {
-      document.querySelectorAll(".panel[data-opt]").forEach((el) => {
-        const opt = el.getAttribute("data-opt");
-        const wide = el.getAttribute("data-w") === "wide";
-        renderers[opt](el, wide);
+    function wirePanel(root) {
+      root.querySelectorAll("[data-toggle-dd]").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          if (e.target.closest("[data-close], [data-switch], [data-open-saved], [data-delete-saved]")) return;
+          e.stopPropagation();
+          const wasOpen = el.classList.contains("open");
+          document.querySelectorAll(".session-dd.open").forEach((o) => o.classList.remove("open"));
+          if (!wasOpen) el.classList.add("open");
+        });
       });
-      wire();
-    }
-
-    function wire() {
-      document.querySelectorAll("[data-toggle-dd]").forEach((el) => {
+      root.querySelectorAll("[data-switch]").forEach((el) => {
         el.addEventListener("click", (e) => {
           e.stopPropagation();
-          document.querySelectorAll("[data-toggle-dd].open, .win-btn.open, .session-dd.open").forEach((o) => {
-            if (o !== el) o.classList.remove("open");
-          });
-          el.classList.toggle("open");
+          if (e.target.closest("[data-close]")) return;
+          switchTo(el.getAttribute("data-switch"));
         });
       });
-      document.querySelectorAll("[data-save]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          if (document.getElementById("showDialogDemo").checked || btn.closest("[data-opt='a']")) {
-            openDialog();
-          }
+      root.querySelectorAll("[data-close]").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeSession(el.getAttribute("data-close"), e);
         });
+      });
+      root.querySelectorAll("[data-open-saved]").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (e.target.closest("[data-delete-saved]")) return;
+          openSaved(el.getAttribute("data-open-saved"));
+        });
+      });
+      root.querySelectorAll("[data-delete-saved]").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteSaved(el.getAttribute("data-delete-saved"), e);
+        });
+      });
+      root.querySelectorAll("[data-save]").forEach((el) => {
+        el.addEventListener("click", openSaveDialog);
       });
     }
 
-    function openDialog() {
-      document.getElementById("saveDialog").classList.add("show");
-      const input = document.getElementById("dlgName");
-      input.focus();
-      input.select();
-    }
-    function closeDialog() {
-      document.getElementById("saveDialog").classList.remove("show");
+    function render() {
+      const cur = active();
+      const label = cur ? `${openSessions.length} open · ${cur.name}` : "empty";
+      document.getElementById("label-narrow").textContent = label;
+      document.getElementById("label-wide").textContent = label;
+
+      const narrow = document.getElementById("panel-narrow");
+      const wide = document.getElementById("panel-wide");
+      narrow.innerHTML = panelHtml(false);
+      wide.innerHTML = panelHtml(true);
+      wirePanel(narrow);
+      wirePanel(wide);
     }
 
     document.addEventListener("click", () => {
-      document.querySelectorAll(".open").forEach((o) => o.classList.remove("open"));
-    });
-    document.getElementById("showDialogDemo").addEventListener("change", (e) => {
-      if (e.target.checked) openDialog();
-      else closeDialog();
+      document.querySelectorAll(".session-dd.open").forEach((o) => o.classList.remove("open"));
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closeDialog();
     });
 
-    rerender();
+    applyPreset();
   </script>
 </body>
 </html>

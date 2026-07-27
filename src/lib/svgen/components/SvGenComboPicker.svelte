@@ -247,24 +247,25 @@
         padding: 3px 6px;
         text-align: left;
         appearance: none;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        background: var(--bg-elev);
+        border: none;
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.22);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
         color: var(--ink);
         font: inherit;
-        font-size: 11px;
+        font-size: 0.78rem;
         line-height: 1.25;
         cursor: pointer;
 
         &:hover {
-            border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-            background: color-mix(in srgb, var(--bg-elev) 85%, var(--bg));
+            background: rgba(0, 0, 0, 0.28);
         }
     }
 
     .picker.open .trigger {
-        border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-        background: var(--bg);
+        box-shadow:
+            inset 0 1px 4px rgba(0, 0, 0, 0.55),
+            0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
     }
 
     .label {
@@ -289,10 +290,10 @@
         box-sizing: border-box;
         overflow: hidden;
         padding: 4px;
-        border: 1px solid var(--line);
-        border-radius: 10px;
+        border: none;
+        border-radius: 0.35em;
         background: var(--bg-elev);
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
     }
 
     .search-row {
@@ -303,17 +304,20 @@
     .search {
         width: 100%;
         box-sizing: border-box;
-        border: 1px solid var(--line);
-        border-radius: 8px;
+        border: none;
+        border-radius: 7px;
         padding: 5px 7px;
-        background: var(--bg);
+        background: rgba(0, 0, 0, 0.22);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
         color: var(--ink);
         font: inherit;
-        font-size: 11px;
+        font-size: 0.78rem;
         outline: 0;
 
         &:focus {
-            border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+            box-shadow:
+                inset 0 1px 4px rgba(0, 0, 0, 0.55),
+                0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
         }
     }
 
@@ -331,22 +335,22 @@
     .back {
         appearance: none;
         border: none;
-        border-radius: 6px;
+        border-radius: 0.2em;
         background: transparent;
         color: var(--ink);
         text-align: left;
         padding: 6px 8px;
         font: inherit;
-        font-size: 11px;
+        font-size: 0.78rem;
         cursor: pointer;
 
         &:hover {
-            background: var(--accent-soft);
+            background: rgba(255, 255, 255, 0.06);
         }
     }
 
     .option.selected {
-        background: var(--accent-soft);
+        background: rgba(255, 255, 255, 0.06);
         color: var(--accent);
     }
 
@@ -373,7 +377,7 @@
 
     .empty {
         padding: 8px;
-        font-size: 11px;
+        font-size: 0.78rem;
         color: var(--muted);
     }
 </style>

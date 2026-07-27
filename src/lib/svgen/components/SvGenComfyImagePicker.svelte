@@ -281,9 +281,10 @@
         min-height: 120px;
         max-height: 220px;
         overflow: hidden;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background-color: var(--bg-elev);
+        border: none;
+        border-radius: 8px;
+        background-color: rgba(0, 0, 0, 0.22);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
         background-image:
             linear-gradient(45deg, color-mix(in srgb, var(--ink) 4%, transparent) 25%, transparent 25%),
             linear-gradient(-45deg, color-mix(in srgb, var(--ink) 4%, transparent) 25%, transparent 25%),
@@ -294,8 +295,9 @@
         cursor: pointer;
 
         &.drop {
-            border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+            box-shadow:
+                inset 0 1px 3px rgba(0, 0, 0, 0.45),
+                0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
         }
 
         img {
@@ -308,7 +310,7 @@
         .empty {
             padding: 16px 16px 36px;
             color: var(--muted);
-            font-size: 11px;
+            font-size: 0.78rem;
             font-style: italic;
             text-align: center;
         }
@@ -325,7 +327,7 @@
         white-space: nowrap;
         background: color-mix(in srgb, var(--bg) 78%, transparent);
         color: var(--ink);
-        font-size: 11px;
+        font-size: 0.78rem;
         font-weight: 600;
         pointer-events: none;
     }

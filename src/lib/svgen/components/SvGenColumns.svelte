@@ -447,7 +447,8 @@
         grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
         gap: 0.35rem;
         padding: 0.4rem 0.45rem;
-        overflow: hidden;
+        /* Allow overlay thumbs shifted into the gap / outer padding. */
+        overflow: visible;
 
         &.is-dragging {
             user-select: none;
@@ -456,11 +457,17 @@
     }
 
     .column-shell {
+        position: relative;
         min-height: 0;
         display: flex;
         flex-direction: column;
         border-radius: 8px;
         background: color-mix(in srgb, var(--bg) 92%, var(--line));
+
+        /* Park the thumb in the column gap / outer edge, not over cards. */
+        :global(.overlay-scrollbar-track) {
+            right: -0.4rem;
+        }
     }
 
     .column {

@@ -175,7 +175,7 @@
         margin: 0;
         padding: 0;
         border: none;
-        border-left: 1px solid var(--line);
+        border-left: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
         border-radius: 0;
         background: transparent;
         color: var(--muted);
@@ -200,10 +200,10 @@
         overflow-x: hidden;
         overflow-y: auto;
         padding: 4px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
+        border: none;
+        border-radius: 0.35em;
         background: var(--bg-elev);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
         display: flex;
         flex-direction: column;
         gap: 2px;
@@ -218,11 +218,11 @@
         justify-content: flex-start;
         padding: 6px 8px;
         border: none;
-        border-radius: 6px;
+        border-radius: 0.2em;
         background: transparent;
         color: var(--ink);
         font: inherit;
-        font-size: 11px;
+        font-size: 0.78rem;
         font-weight: 600;
         text-align: left;
         cursor: pointer;
@@ -235,9 +235,12 @@
             color: var(--muted);
         }
 
-        &:hover,
+        &:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
         &.selected {
-            background: var(--accent-soft);
+            background: rgba(255, 255, 255, 0.06);
         }
 
         &.selected svg {

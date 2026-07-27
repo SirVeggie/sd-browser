@@ -21,7 +21,6 @@
     const LOAD_LABEL = 'Load…';
 
     const dispatch = createEventDispatcher<{
-        refresh: void;
         save: void;
         download: void;
         load: string;
@@ -79,7 +78,6 @@
             <span>Queue</span>
             <span class="count">{queueActive}</span>
         </button>
-        <button type="button" on:click={() => dispatch('refresh')}>Refresh</button>
         <span class="status" class:ok={status?.available} class:bad={status && !status.available}>
             {#if !status}
                 …
@@ -104,6 +102,7 @@
         flex-direction: column;
         gap: 0.4rem;
         padding: 0.55rem 0.75rem 0.35rem;
+        background: color-mix(in srgb, var(--bg) 90%, var(--glass));
         flex-shrink: 0;
     }
 
@@ -117,11 +116,19 @@
     .name {
         flex: 1 1 8rem;
         min-width: 0;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--glass);
+        border: none;
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.22);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
         color: inherit;
         padding: 0.35rem 0.5rem;
+
+        &:focus {
+            outline: none;
+            box-shadow:
+                inset 0 1px 4px rgba(0, 0, 0, 0.55),
+                0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+        }
     }
 
     .load {
@@ -130,18 +137,19 @@
         :global(.trigger) {
             max-width: 9rem;
             box-sizing: border-box;
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            background: var(--glass);
+            border: none;
+            border-radius: 0.4em;
+            background: var(--accent-soft);
             color: inherit;
             padding: 0.3rem 0.55rem;
             font-size: 0.8rem;
             gap: 0.35rem;
         }
 
+        :global(.trigger:hover),
         :global(.trigger:focus-visible) {
-            border-radius: 8px;
-            background: color-mix(in srgb, var(--glass) 70%, #fff);
+            border-radius: 0.4em;
+            background: rgba(196, 165, 116, 0.24);
         }
 
         :global(.value) {
@@ -162,13 +170,18 @@
 
     button {
         appearance: none;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--glass);
+        border: none;
+        border-radius: 0.4em;
+        background: var(--accent-soft);
         color: inherit;
         padding: 0.3rem 0.55rem;
         font-size: 0.8rem;
         cursor: pointer;
+        transition: background-color 0.08s ease;
+
+        &:hover:not(:disabled) {
+            background: rgba(196, 165, 116, 0.24);
+        }
 
         &:disabled {
             opacity: 0.45;
@@ -182,8 +195,8 @@
         gap: 0.3rem;
 
         &.active {
-            border-color: color-mix(in srgb, var(--accent, #3d8bfd) 55%, var(--line));
-            background: color-mix(in srgb, var(--accent, #3d8bfd) 16%, var(--glass));
+            background: rgba(196, 165, 116, 0.28);
+            color: var(--accent);
         }
 
         .count {
@@ -199,11 +212,11 @@
         opacity: 0.75;
 
         &.ok {
-            color: #3a9;
+            color: var(--ok-tag);
         }
 
         &.bad {
-            color: #c66;
+            color: var(--danger);
         }
     }
 
@@ -216,7 +229,7 @@
 
     .fill {
         height: 100%;
-        background: var(--accent, #3d8bfd);
+        background: var(--accent);
         transition: width 0.15s linear;
     }
 </style>

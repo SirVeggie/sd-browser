@@ -71,24 +71,29 @@
         align-items: center;
         gap: 0.5rem;
         padding: 0.55rem 0.75rem;
-        background: color-mix(in srgb, var(--bg) 88%, var(--glass));
+        background: color-mix(in srgb, var(--bg) 90%, var(--glass));
         flex-shrink: 0;
     }
 
     .generate {
         appearance: none;
-        border: 1px solid color-mix(in srgb, var(--accent, #3d8bfd) 45%, var(--line));
-        border-radius: 8px;
+        border: none;
+        border-radius: 0.4em;
         padding: 0.45rem 0.95rem;
         font-weight: 600;
         font-size: 0.85rem;
         cursor: pointer;
-        background: color-mix(in srgb, var(--accent, #3d8bfd) 22%, var(--glass));
-        color: inherit;
+        background: var(--accent-soft);
+        color: var(--ink);
+        transition: background-color 0.08s ease;
+
+        &:hover:not(:disabled) {
+            background: rgba(196, 165, 116, 0.24);
+        }
 
         &.active {
-            border-color: color-mix(in srgb, var(--accent, #3d8bfd) 70%, var(--line));
-            background: color-mix(in srgb, var(--accent, #3d8bfd) 35%, var(--glass));
+            background: rgba(196, 165, 116, 0.32);
+            color: var(--accent);
         }
 
         &:disabled {
@@ -104,10 +109,11 @@
         width: 1.85rem;
         height: 1.85rem;
         padding: 0;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--glass);
+        border: none;
+        border-radius: 0.4em;
+        background: var(--accent-soft);
         cursor: pointer;
+        transition: background-color 0.08s ease;
 
         &:disabled {
             opacity: 0.4;
@@ -116,8 +122,7 @@
         }
 
         &:not(:disabled):hover {
-            border-color: color-mix(in srgb, #e08880 45%, var(--line));
-            background: color-mix(in srgb, #e08880 12%, var(--glass));
+            background: color-mix(in srgb, var(--danger) 22%, transparent);
         }
     }
 
@@ -126,7 +131,7 @@
         width: 0.72rem;
         height: 0.72rem;
         border-radius: 1px;
-        background: #e08880;
+        background: var(--danger);
     }
 
     .control {
@@ -141,11 +146,19 @@
 
         input[type='number'] {
             width: 2.75rem;
-            border: 1px solid var(--line);
-            border-radius: 6px;
-            background: var(--bg-elev, var(--glass));
+            border: none;
+            border-radius: 7px;
+            background: rgba(0, 0, 0, 0.22);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
             color: inherit;
             padding: 0.2rem 0.3rem;
+
+            &:focus {
+                outline: none;
+                box-shadow:
+                    inset 0 1px 4px rgba(0, 0, 0, 0.55),
+                    0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+            }
         }
     }
 
@@ -157,11 +170,9 @@
         height: 13px;
         margin: 0;
         border: none;
-        border-radius: 2px;
-        background: var(--bg-elev, var(--glass));
-        box-shadow:
-            0 1px 3px rgba(0, 0, 0, 0.35),
-            inset 0 0 0 1px var(--line);
+        border-radius: 3px;
+        background: rgba(0, 0, 0, 0.28);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
         cursor: pointer;
         position: relative;
         flex-shrink: 0;
@@ -170,7 +181,7 @@
             content: '';
             position: absolute;
             inset: 0;
-            border-radius: 2px;
+            border-radius: 3px;
             background: var(--accent);
             transform: scale(0);
             transition: transform 0.12s ease;
