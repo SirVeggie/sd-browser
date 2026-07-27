@@ -168,6 +168,11 @@ export type StreamReadyResponse = {
     mmrSearchError?: string;
 };
 
+export type StreamErrorResponse = {
+    type: 'error';
+    message: string;
+};
+
 export type StreamUpdateResponse = UpdateResponse & {
     type: 'update';
 };
@@ -176,6 +181,7 @@ export type StreamEvent =
     | StreamInitResponse
     | StreamChunkResponse
     | StreamReadyResponse
+    | StreamErrorResponse
     | StreamUpdateResponse;
 
 export type SettingsRequest = {

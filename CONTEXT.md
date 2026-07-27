@@ -16,6 +16,8 @@ Patterns RE2 rejects (lookaheads, backreferences, empty `[^]`, unterminated clas
 
 Abort checks in `searchImagesStreaming` run **every image** (and still yield every `yieldEvery`); that only helps when matching itself cannot block the loop.
 
+Invalid/unsupported regex failures are sent on the image stream as `{ type: 'error', message }` (`stream/+server.ts`). The gallery debounces that toast (`REGEX_ERROR_TOAST_DEBOUNCE_MS` in `+page.svelte`) so typing through incomplete patterns does not spam notifications.
+
 ---
 
 ## Search dock width

@@ -199,6 +199,9 @@
                             );
                         }
                     },
+                    onError: (error) => {
+                        setStatus(error.message, true);
+                    },
                     onUpdate: () => {
                         /* ignore live gallery updates while picking */
                     },

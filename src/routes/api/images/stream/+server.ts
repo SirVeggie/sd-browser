@@ -2,7 +2,12 @@ import { invalidAuth } from '$lib/server/auth.js';
 import { subscribeImageChanges } from '$lib/server/imageChangeHub';
 import { computeImageUpdate, hasUpdateChanges } from '$lib/server/imageUpdates';
 import { error } from '$lib/server/responses';
-import { explorationFromRequest, SearchStreamAborted, searchImagesStreaming } from '$lib/server/searching';
+import {
+    explorationFromRequest,
+    formatSearchFailureMessage,
+    SearchStreamAborted,
+    searchImagesStreaming,
+} from '$lib/server/searching';
 import {
     appendSessionChunk,
     attachSessionStream,
@@ -307,6 +312,12 @@ export async function POST(e) {
                         console.log(err.message);
                     } else {
                         console.error(err);
+                    }
+                    if (!isAborted()) {
+                        safeEnqueue(controller, {
+                            type: 'error',
+                            message: formatSearchFailureMessage(err),
+                        });
                     }
                     finish();
                 }

@@ -1,6 +1,6 @@
 <script lang="ts">
     import NavArrows from "$lib/components/NavArrows.svelte";
-    import { notify } from "$lib/components/Notifier.svelte";
+    import { close, notify } from "$lib/components/Notifier.svelte";
     import Button from "$lib/items/Button.svelte";
     import ImageDisplay from "$lib/items/ImageDisplay.svelte";
     import ImageFull from "$lib/items/ImageFull.svelte";
@@ -161,6 +161,9 @@
     let lastImgSearchNotifyKey = "";
     let lastMmrSearchNotifyKey = "";
     let lastPruneSearchNotifyKey = "";
+    let regexErrorToastTimer: ReturnType<typeof setTimeout> | undefined;
+    let lastRegexErrorToastKey = "";
+    const REGEX_ERROR_TOAST_DEBOUNCE_MS = 2_000;
     let live = false;
     let sorting: SortingMethod = "date";
     let temporarySortState: TemporarySortState = {
@@ -638,6 +641,7 @@
             clearTimeout(inputSearchTimer);
             clearTimeout(streamRecoveryTimer);
             clearTimeout(searchHistoryTimer);
+            clearTimeout(regexErrorToastTimer);
             if (resizeDebounceTimer !== undefined) {
                 clearTimeout(resizeDebounceTimer);
             }
@@ -1234,6 +1238,40 @@
         notify(error, "warn");
     }
 
+    function isInvalidRegexSearchError(message: string): boolean {
+        return /invalid regex|unsupported regex/i.test(message);
+    }
+
+    function clearInvalidRegexToast() {
+        clearTimeout(regexErrorToastTimer);
+        regexErrorToastTimer = undefined;
+        lastRegexErrorToastKey = "";
+        close("invalid-search-regex");
+    }
+
+    function scheduleInvalidRegexToast(search: string, message: string) {
+        clearTimeout(regexErrorToastTimer);
+        const key = `${search}\0${message}`;
+        if (key === lastRegexErrorToastKey)
+            return;
+        regexErrorToastTimer = setTimeout(() => {
+            regexErrorToastTimer = undefined;
+            if (key === lastRegexErrorToastKey)
+                return;
+            lastRegexErrorToastKey = key;
+            notify(message, "warn", "invalid-search-regex");
+        }, REGEX_ERROR_TOAST_DEBOUNCE_MS);
+    }
+
+    function handleSearchStreamError(message: string, search: string) {
+        if (isInvalidRegexSearchError(message)) {
+            scheduleInvalidRegexToast(search, message);
+            return;
+        }
+        clearInvalidRegexToast();
+        notify(message, "warn");
+    }
+
     function hideQuickTagImage(id: string) {
         quickTagHiddenIds = new Set([...quickTagHiddenIds, id]);
     }
@@ -1309,6 +1347,7 @@
                 },
                 onReady: (ready) => {
                     if (expectedSessionId !== updateSessionId) return;
+                    clearInvalidRegexToast();
                     imageAmountStore.set(ready.amount);
                     searchCountComplete = true;
                     maybeNotifyImgSearchError(ready.imgSearchError, search.search);
@@ -1318,6 +1357,11 @@
                         applySearchViewReset();
                         imageStore.set([]);
                     }
+                },
+                onError: (error) => {
+                    if (expectedSessionId !== updateSessionId) return;
+                    searchCountComplete = true;
+                    handleSearchStreamError(error.message, search.search);
                 },
                 onUpdate: (res) => applyUpdate(res, expectedSessionId),
             },

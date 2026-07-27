@@ -188,6 +188,8 @@ export function formatImgSearchFailure(cause: unknown): string {
 export function formatSearchFailureMessage(cause: unknown): string {
     if (cause instanceof UnsupportedSearchRegexError)
         return cause.message;
+    if (cause instanceof Error && cause.message === 'Invalid regex')
+        return 'Invalid regex';
     const detail = cause instanceof Error ? cause.message : String(cause);
     return detail ? `Malformed search string: ${detail}` : 'Malformed search string';
 }

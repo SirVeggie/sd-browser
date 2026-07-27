@@ -10,6 +10,7 @@ import type {
     MultiActionRequest,
     SessionExclusionRequest,
     StreamChunkResponse,
+    StreamErrorResponse,
     StreamEvent,
     StreamInitResponse,
     StreamReadyResponse,
@@ -25,6 +26,8 @@ export type StreamHandlers = {
     onChunk: (chunk: StreamChunkResponse) => void;
     onReady: (ready: StreamReadyResponse) => void;
     onUpdate: (update: UpdateResponse) => void;
+    /** Fatal search/stream failure (e.g. invalid regex). Stream ends after this. */
+    onError?: (error: StreamErrorResponse) => void;
 };
 
 export type ComfyWorkflowOpenStatus = {
@@ -186,6 +189,8 @@ export async function subscribeImageStream(
         }
     }, staleCheckIntervalMs);
 
+    let endedWithError = false;
+
     try {
         while (true) {
             if (signal.aborted) return;
@@ -220,10 +225,17 @@ export async function subscribeImageStream(
                     else if (json.type === 'chunk') handlers.onChunk(json);
                     else if (json.type === 'ready') handlers.onReady(json);
                     else if (json.type === 'update') handlers.onUpdate(json);
+                    else if (json.type === 'error') {
+                        endedWithError = true;
+                        handlers.onError?.(json);
+                    } else {
+                        const _exhaustive: never = json;
+                        void _exhaustive;
+                    }
                 }
             }
         }
-        if (!signal.aborted) {
+        if (!signal.aborted && !endedWithError) {
             throw new Error('Image stream closed unexpectedly');
         }
     } finally {
