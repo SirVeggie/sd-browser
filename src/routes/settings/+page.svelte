@@ -607,6 +607,8 @@
                 <span>Arrows: Browse images</span>
                 <span>Space: toggle slideshow</span>
                 <span>F: toggle flyout</span>
+                <span>Ctrl/⌘+S: cycle sorting</span>
+                <span>Ctrl/⌘+D: toggle filters</span>
             </div>
         </div>
 
@@ -1338,15 +1340,19 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         border: 1px solid var(--line);
         border-radius: 14px;
         padding: 0.85rem 1.1rem;
-        display: inline-flex;
+        /* flex (not inline-flex): inline-level boxes in CSS columns can paint into the
+           neighboring column when a collapsible inside the card expands. */
+        display: flex;
         flex-direction: column;
         gap: var(--gap);
         width: 100%;
+        max-width: 100%;
         min-width: 0;
         box-sizing: border-box;
         break-inside: avoid;
         margin: 0 0 0.75rem;
-        overflow: visible;
+        /* Clip to the card/column box. Select panels are viewport-fixed, so menus still escape. */
+        overflow: hidden;
 
         h4 {
             margin: 0 0 0.35rem;
@@ -1507,13 +1513,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             display: flex;
             flex-direction: column;
             gap: var(--gap);
-        }
-
-        .hint-inline {
-            margin: 0;
-            font-size: 0.85em;
-            color: var(--muted);
-            line-height: 1.4;
         }
 
         .embedding-warning {
@@ -1690,7 +1689,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         margin-top: calc(0px - var(--gap));
 
         &.isOpen {
-            position: relative;
             grid-template-rows: 1fr;
             margin-top: 0px;
         }
@@ -1699,9 +1697,10 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             display: flex;
             flex-direction: column;
             gap: var(--gap);
-            /* Clip while collapsing; reveal after open so Select panels can escape. */
+            /* Always clip: in CSS columns, overflow:visible after open lets expanded
+               content paint over the neighboring column (e.g. Custom Filters over PWA).
+               Select panels are viewport-fixed and do not need to escape. */
             overflow: hidden;
-            transition: overflow 0s linear 0s;
             padding: 0;
             margin: 0;
             min-height: 0;
@@ -1712,9 +1711,10 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             }
         }
 
+        /* In multi-column, 1fr alone can fail to claim content height; min-content
+           forces the open card to grow so neighbors reflow instead of overlapping. */
         &.isOpen .inner {
-            overflow: visible;
-            transition: overflow 0s linear 0.5s;
+            min-height: min-content;
         }
 
         /* Preceding row already has a bottom rule — don't double it. */

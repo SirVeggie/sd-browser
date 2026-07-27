@@ -2,6 +2,8 @@ import { get } from 'svelte/store';
 import type { ComfyPrompt, ComfyWorkflow } from '$lib/types/images';
 import { emptyLayout } from './layout';
 import {
+    clearSvgenNodePreviews,
+    clearSvgenNodePreviewsForSession,
     clearSvgenSeedControlState,
     svgenFrozenSeedsStore,
     svgenLastUsedSeedsStore,
@@ -104,11 +106,13 @@ export function closeOpenSession(id: string) {
     if (bag.activeId === id)
         persistActiveOpenSession();
     const sessions = bag.sessions.filter((s) => s.id !== id);
+    clearSvgenNodePreviewsForSession(id);
     if (!sessions.length) {
         svgenOpenSessionsStore.set({ sessions: [], activeId: null });
         svgenSessionStore.set(null);
         svgenLayoutStore.set(emptyLayout());
         clearSvgenSeedControlState();
+        clearSvgenNodePreviews();
         return;
     }
     let activeId = bag.activeId;

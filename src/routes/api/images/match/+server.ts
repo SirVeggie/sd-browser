@@ -22,6 +22,7 @@ export async function POST(e) {
             query.search,
             query.matching,
             explorationFromRequest(query),
+            { tempEmbeddings: query.tempEmbeddings },
         );
         return success({
             total: images.length,

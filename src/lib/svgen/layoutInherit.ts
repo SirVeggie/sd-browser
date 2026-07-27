@@ -21,23 +21,8 @@ function normalizeKey(value: string): string {
     return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function identityKeys(card: MatchableCard): string[] {
-    const type = normalizeKey(card.nodeType);
-    const title = normalizeKey(card.title);
-    const keys: string[] = [];
-    if (type && title)
-        keys.push(`tt:${type}\u0000${title}`);
-    if (type)
-        keys.push(`t:${type}`);
-    if (title)
-        keys.push(`n:${title}`);
-    // Loose title: drop trailing numbers / copy suffixes
-    const looseTitle = title.replace(/\s+\d+$/, '').replace(/\s*\(\d+\)$/, '').trim();
-    if (type && looseTitle && looseTitle !== title)
-        keys.push(`tt:${type}\u0000${looseTitle}`);
-    if (looseTitle && looseTitle !== title)
-        keys.push(`n:${looseTitle}`);
-    return keys;
+function looseTitle(title: string): string {
+    return title.replace(/\s+\d+$/, '').replace(/\s*\(\d+\)$/, '').trim();
 }
 
 export function matchableFromCards(cards: readonly SvgenCard[]): MatchableCard[] {
@@ -51,7 +36,15 @@ export function matchableFromCards(cards: readonly SvgenCard[]): MatchableCard[]
 
 /**
  * Match next cards onto saved cards without using field schemas/values.
- * Greedy multi-pass: exact type+title → type+loose title → unique type → unique title.
+ *
+ * Priority: run the strictest pass first, then incrementally looser passes over
+ * whatever remains unmatched. Each pass indexes only by that pass's key so a
+ * looser identity cannot steal a pair that a stricter pass should own.
+ *
+ * 1. Exact type + title
+ * 2. Type + loose title (strip trailing ` 2` / ` (2)` copy suffixes)
+ * 3. Unique type only (skip if multiple candidates)
+ * 4. Unique title only (skip if multiple candidates)
  */
 export function matchCardsByIdentity(
     nextCards: readonly MatchableCard[],
@@ -61,22 +54,22 @@ export function matchCardsByIdentity(
     const usedNext = new Set<string>();
     const usedSaved = new Set<string>();
 
-    const indexByKey = (cards: readonly MatchableCard[], taken: Set<string>) => {
-        const map = new Map<string, MatchableCard[]>();
-        for (const card of cards) {
-            if (taken.has(card.nodeId))
+    const tryPass = (
+        keyPicker: (card: MatchableCard) => string | null,
+        requireUnique: boolean,
+    ) => {
+        const savedIndex = new Map<string, MatchableCard[]>();
+        for (const card of savedCards) {
+            if (usedSaved.has(card.nodeId))
                 continue;
-            for (const key of identityKeys(card)) {
-                const list = map.get(key) ?? [];
-                list.push(card);
-                map.set(key, list);
-            }
+            const key = keyPicker(card);
+            if (!key)
+                continue;
+            const list = savedIndex.get(key) ?? [];
+            list.push(card);
+            savedIndex.set(key, list);
         }
-        return map;
-    };
 
-    const tryPass = (keyPicker: (card: MatchableCard) => string | null, requireUnique: boolean) => {
-        const savedIndex = indexByKey(savedCards, usedSaved);
         for (const next of nextCards) {
             if (usedNext.has(next.nodeId))
                 continue;
@@ -95,23 +88,27 @@ export function matchCardsByIdentity(
         }
     };
 
+    // 1. Strict: type + exact title
     tryPass((card) => {
         const type = normalizeKey(card.nodeType);
         const title = normalizeKey(card.title);
         return type && title ? `tt:${type}\u0000${title}` : null;
     }, false);
 
+    // 2. Looser: type + title without copy/number suffix
     tryPass((card) => {
         const type = normalizeKey(card.nodeType);
-        const title = normalizeKey(card.title).replace(/\s+\d+$/, '').replace(/\s*\(\d+\)$/, '').trim();
+        const title = looseTitle(normalizeKey(card.title));
         return type && title ? `tt:${type}\u0000${title}` : null;
     }, false);
 
+    // 3. Unique type only
     tryPass((card) => {
         const type = normalizeKey(card.nodeType);
         return type ? `t:${type}` : null;
     }, true);
 
+    // 4. Unique title only
     tryPass((card) => {
         const title = normalizeKey(card.title);
         return title ? `n:${title}` : null;
@@ -120,7 +117,8 @@ export function matchCardsByIdentity(
     return { savedToNext, matched: savedToNext.size };
 }
 
-function remapFieldName(savedName: string, nextNames: readonly string[]): string | null {
+/** Map a widget name onto another card's names (exact → normalized → suffix/proxy). */
+export function remapFieldName(savedName: string, nextNames: readonly string[]): string | null {
     if (nextNames.includes(savedName))
         return savedName;
     const normalized = normalizeKey(savedName);

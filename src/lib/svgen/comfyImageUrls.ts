@@ -56,6 +56,30 @@ export function parseImageWidgetValue(
     return { filename, subfolder, type };
 }
 
+/** Relative URL for proxied Comfy `/view` from structured output refs (executed event images). */
+export function buildComfyViewPathFromRef(
+    image: { filename: string; subfolder?: string; type?: ComfyFolderType | string },
+    opts: { cacheBust?: boolean } = {},
+): string {
+    const filename = String(image.filename || '').trim();
+    if (!filename)
+        return '';
+    const typeRaw = String(image.type || 'temp').toLowerCase();
+    const type: ComfyFolderType =
+        typeRaw === 'input' || typeRaw === 'output' || typeRaw === 'temp' ? typeRaw : 'temp';
+    const params = new URLSearchParams({
+        filename,
+        type,
+        preview: 'webp;70',
+    });
+    const subfolder = String(image.subfolder || '').trim();
+    if (subfolder)
+        params.set('subfolder', subfolder);
+    if (opts.cacheBust)
+        params.set('rand', String(Date.now()));
+    return `/api/svgen/comfy/view?${params.toString()}`;
+}
+
 /** Relative URL for proxied Comfy `/view` (needs Authorization fetch or img with cookie — use fetch→blob for auth). */
 export function buildComfyViewPath(
     rawValue: unknown,
@@ -64,17 +88,7 @@ export function buildComfyViewPath(
     const parsed = parseImageWidgetValue(rawValue, opts.folderType ?? 'input');
     if (!parsed)
         return '';
-
-    const params = new URLSearchParams({
-        filename: parsed.filename,
-        type: parsed.type,
-        preview: 'webp;70',
-    });
-    if (parsed.subfolder)
-        params.set('subfolder', parsed.subfolder);
-    if (opts.cacheBust)
-        params.set('rand', String(Date.now()));
-    return `/api/svgen/comfy/view?${params.toString()}`;
+    return buildComfyViewPathFromRef(parsed, opts);
 }
 
 export function sdBrowserImageUrl(

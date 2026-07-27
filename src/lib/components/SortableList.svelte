@@ -13,6 +13,11 @@
     export let disabled = false;
     /** Root element role — use "list" for filter cards. */
     export let role: "list" | "group" | undefined = undefined;
+    /**
+     * Skip flex layout styles so a parent can host CSS grid (or other).
+     * `axis` still drives pointer hit-testing.
+     */
+    export let asGrid = false;
 
     const dispatch = createEventDispatcher<{
         reorder: { from: number; to: number; ids: string[] };
@@ -214,8 +219,9 @@
 
 <div
     class="sortable-list"
-    class:axis-y={axis === "y"}
-    class:axis-xy={axis === "xy"}
+    class:axis-y={axis === "y" && !asGrid}
+    class:axis-xy={axis === "xy" && !asGrid}
+    class:as-grid={asGrid}
     class:is-dragging={dragging}
     {role}
 >
@@ -274,6 +280,14 @@
             .sortable-item-body {
                 display: flex;
                 align-items: center;
+            }
+        }
+
+        /* Parent owns display/grid-template; keep items measurable. */
+        &.as-grid {
+            .sortable-item,
+            .sortable-item-body {
+                min-width: 0;
             }
         }
 

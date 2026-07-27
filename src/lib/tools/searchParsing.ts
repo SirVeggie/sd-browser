@@ -60,8 +60,22 @@ export type ParsedImgQueryBody =
 
 const IMG_SEARCH_MODE_SET = new Set<string>(IMG_SEARCH_MODES);
 
+/** Gallery content-hash ids. */
+export const GALLERY_IMAGE_EMBEDDING_ID_PATTERN = /^[0-9a-f]{64}$/i;
+/** Custom clipboard/file refs: `temp:` + UUID (client-held vectors). */
+export const TEMP_IMAGE_EMBEDDING_ID_PATTERN =
+    /^temp:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isGalleryImageEmbeddingId(token: string): boolean {
+    return GALLERY_IMAGE_EMBEDDING_ID_PATTERN.test(token);
+}
+
+export function isTempImageEmbeddingId(token: string): boolean {
+    return TEMP_IMAGE_EMBEDDING_ID_PATTERN.test(token);
+}
+
 export function isImageEmbeddingId(token: string): boolean {
-    return /^[0-9a-f]{64}$/i.test(token);
+    return isGalleryImageEmbeddingId(token) || isTempImageEmbeddingId(token);
 }
 
 export function isImgSearchMode(token: string): token is ImgSearchMode {

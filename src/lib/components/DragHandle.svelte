@@ -8,6 +8,7 @@
     class="drag-handle"
     aria-label={label}
     {disabled}
+    tabindex="-1"
     style="touch-action: none"
     on:pointerdown
     on:click|stopPropagation|preventDefault

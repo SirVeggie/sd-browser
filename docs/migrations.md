@@ -41,26 +41,33 @@ N/A (this is the removal of the optimized-query path). Drop leftover `useOptimiz
 
 IMG search can reference client-side image slots with `#n` or `[n]` syntax (e.g. `IMG #1 0.8`), or `[refs]` to expand every current reference as space-separated ids in slot order. Slots are stored in localStorage until cleared manually; they are not synced through global settings.
 
+Custom clipboard/file refs use `temp:<uuid>` ids. The server embeds once via `POST /api/images/temp-embed` and returns the vector; the client persists `{ slot, id, embedding, preview? }` and sends `tempEmbeddings` with each search. `preview` is a compact JPEG data-URL (max edge 256px) for strip/modal thumbs across reloads.
+
 ### Affected data
 
 | Location | Change |
 |----------|--------|
-| localStorage `imageSearchRefs` | New key: array of `{ slot: number, id: string }` (slot 1–20, 64-char hex id) |
+| localStorage `imageSearchRefs` | Array of `{ slot: number, id: string, embedding?: number[], preview?: string }` (slot 1–20; gallery = 64-char hex; custom = `temp:…` + embedding + optional preview data-URL) |
+| Search stream/match/bulk body | Optional `tempEmbeddings?: Record<string, number[]>` |
 
-No server-side migration. Search expansion happens in the client before API requests.
+No server-side embedding storage for temps. Search expansion still happens client-side before API requests.
 
 ### Migration code
 
 - [`src/lib/stores/imageRefStore.ts`](../src/lib/stores/imageRefStore.ts) — store, validation, `syncImageRefsWithLocalStorage()`
+- [`src/lib/tools/imageRefActions.ts`](../src/lib/tools/imageRefActions.ts) — `createImageRefPreviewDataUrl`, paste/drop custom refs
 - [`src/lib/tools/searchReferences.ts`](../src/lib/tools/searchReferences.ts) — expansion, invalid-ref detection, highlight ranges
+- [`src/lib/tools/searchParsing.ts`](../src/lib/tools/searchParsing.ts) — `temp:…` as image embedding ids
+- [`src/routes/api/images/temp-embed/+server.ts`](../src/routes/api/images/temp-embed/+server.ts) — one-shot embed
+- [`src/lib/server/searching.ts`](../src/lib/server/searching.ts) — resolve temps from request sidecar
 
 ### How to verify
 
-1. Add image refs via the reference strip (context menu **Add reference**, drag-and-drop, or `addImageRefs()` in devtools); confirm `imageSearchRefs` in localStorage.
-2. Search `IMG #1` with slot 1 populated — results use that image's embedding.
-3. Search `IMG avg [refs]` with multiple slots — expands to all ref ids.
+1. Add image refs via the reference strip (context menu **Add reference**, drag-and-drop gallery images, paste/drop image files, or `addImageRefs()` / `addCustomImageRef()` in devtools); confirm `imageSearchRefs` in localStorage.
+2. Search `IMG #1` with slot 1 populated — results use that image's embedding (gallery or custom).
+3. Search `IMG avg [refs]` with multiple slots — expands to all ref ids; custom refs include `tempEmbeddings` on the request.
 4. Search `IMG #99` with no slot 99 — search returns zero results.
-5. Reload — refs persist from localStorage.
+5. Reload — refs (including custom embeddings **and** preview thumbs) persist from localStorage.
 
 ### Removal
 

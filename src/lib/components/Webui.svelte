@@ -9,6 +9,7 @@
         flyoutTabStore,
         svgenOpenImageRequest,
         svgenUiStore,
+        svgenUseParamsRequest,
     } from '$lib/svgen/stores';
     import { sdBrowserPickerStore } from '$lib/svgen/sdBrowserPickerStore';
     import SvGenPanel from '$lib/svgen/components/SvGenPanel.svelte';
@@ -30,6 +31,14 @@
         flyoutState.set(true);
         flyoutTabStore.set('generate');
         void genPanel.openImage(imageId);
+    }
+
+    $: if ($svgenUseParamsRequest && genPanel) {
+        const imageId = $svgenUseParamsRequest;
+        svgenUseParamsRequest.set(null);
+        flyoutState.set(true);
+        flyoutTabStore.set('generate');
+        void genPanel.useParamsFromImage(imageId);
     }
 
     // Keep active tab valid when one mode disappears.

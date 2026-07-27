@@ -62,7 +62,7 @@ async function resolveBulkImageIds(request: BulkRequest): Promise<string[]> {
         request.search,
         request.matching,
         explorationFromRequest(request),
-        { sorting: request.sorting },
+        { sorting: request.sorting, tempEmbeddings: request.tempEmbeddings },
     );
     return images.images.map((image) => image.id);
 }

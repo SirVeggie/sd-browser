@@ -16,6 +16,7 @@
 
     let open = false;
     let rootEl: HTMLDivElement;
+    let triggerEl: HTMLButtonElement;
     let valueEl: HTMLSpanElement;
     let panelLeft = 0;
 
@@ -39,6 +40,44 @@
         panelLeft = alignDropdownPanel(rootEl, valueEl, 1);
     }
 
+    function optionButtons(): HTMLButtonElement[] {
+        if (!rootEl) return [];
+        return [...rootEl.querySelectorAll<HTMLButtonElement>("button.option")];
+    }
+
+    function focusOption(index: number) {
+        const options = optionButtons();
+        if (!options.length) {
+            triggerEl?.focus();
+            return;
+        }
+        const clamped = Math.max(0, Math.min(index, options.length - 1));
+        options[clamped]?.focus();
+    }
+
+    /** DOM delta for a visual arrow step. dropUp uses column-reverse, so axes flip. */
+    function visualIndexDelta(direction: "up" | "down"): number {
+        if (dropUp) return direction === "down" ? -1 : 1;
+        return direction === "down" ? 1 : -1;
+    }
+
+    function closeAndFocusTrigger() {
+        open = false;
+        triggerEl?.focus();
+    }
+
+    /** Toggle the panel; when opening, focus the option nearest the trigger. */
+    export async function toggleOpenAndFocus() {
+        if (open) {
+            closeAndFocusTrigger();
+            return;
+        }
+        open = true;
+        await tick();
+        updatePanelAlign();
+        focusOption(0);
+    }
+
     function toggle(id: string) {
         activeCustomFilterIds.update((ids) => {
             if (ids.includes(id)) return ids.filter((x) => x !== id);
@@ -46,6 +85,47 @@
         });
         onChange?.();
         dispatch("change");
+    }
+
+    function handleTriggerKeydown(event: KeyboardEvent) {
+        if (event.key === "Escape") {
+            open = false;
+            return;
+        }
+        if (!open) {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                void toggleOpenAndFocus();
+            }
+            return;
+        }
+        // Enter the list toward the panel (below for drop-down, above for drop-up).
+        if ((!dropUp && event.key === "ArrowDown") || (dropUp && event.key === "ArrowUp")) {
+            event.preventDefault();
+            focusOption(0);
+        }
+    }
+
+    function handleOptionKeydown(event: KeyboardEvent, index: number) {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            const direction = event.key === "ArrowDown" ? "down" : "up";
+            const next = index + visualIndexDelta(direction);
+            const count = optionButtons().length;
+            if (next < 0 || next >= count) {
+                // Past the edge nearest the trigger → return focus to it.
+                const towardTrigger = dropUp ? direction === "down" : direction === "up";
+                if (towardTrigger) closeAndFocusTrigger();
+                return;
+            }
+            focusOption(next);
+            return;
+        }
+        if (event.key === "Escape") {
+            event.preventDefault();
+            closeAndFocusTrigger();
+        }
+        // Space / Enter: native button activation toggles via click.
     }
 
     onMount(() => {
@@ -62,9 +142,11 @@
         type="button"
         class="trigger"
         class:chrome
+        bind:this={triggerEl}
         aria-expanded={open}
         aria-haspopup="listbox"
         on:click|stopPropagation={() => (open = !open)}
+        on:keydown={handleTriggerKeydown}
     >
         <span class="prefix">Filters{chrome ? "" : ":"}</span>
         <span class="value" bind:this={valueEl}>{label}</span>
@@ -91,6 +173,7 @@
                         aria-pressed={selected}
                         style="--stagger-i: {index}"
                         on:click={() => toggle(item.id)}
+                        on:keydown={(e) => handleOptionKeydown(e, index)}
                     >
                         {#if selected}
                             <span class="dot" aria-hidden="true" />

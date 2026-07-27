@@ -59,12 +59,12 @@ export async function encodeImageForLlm(imagepath: string): Promise<Buffer> {
     return sharp(imagepath, TRUSTED_IMAGE_INPUT).rotate().jpeg({ quality: 80 }).toBuffer();
 }
 
-/** Encode an image for the configured embedding API. */
+/** Encode an image (file path or bytes) for the configured embedding API. */
 export async function encodeImageForEmbedding(
-    imagepath: string,
+    source: string | Buffer,
     apiType: EmbeddingApiType = 'llama-cpp',
 ): Promise<Buffer> {
-    const metadata = await sharp(imagepath, TRUSTED_IMAGE_INPUT).metadata();
+    const metadata = await sharp(source, TRUSTED_IMAGE_INPUT).metadata();
     if (!metadata.width || !metadata.height) {
         throw new Error('Cannot read image dimensions');
     }
@@ -74,7 +74,7 @@ export async function encodeImageForEmbedding(
         metadata.orientation,
     );
 
-    const image = sharp(imagepath, TRUSTED_IMAGE_INPUT).rotate();
+    const image = sharp(source, TRUSTED_IMAGE_INPUT).rotate();
 
     switch (apiType) {
         case 'sv-embed':

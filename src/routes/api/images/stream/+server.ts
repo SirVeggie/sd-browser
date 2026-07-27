@@ -233,6 +233,7 @@ export async function POST(e) {
                         maxChunkImages: streamMaxChunkImages,
                         isAborted,
                         signal: e.request.signal,
+                        tempEmbeddings: query.tempEmbeddings,
                     };
                     let streamedToClient = 0;
 

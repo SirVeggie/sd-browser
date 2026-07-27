@@ -115,6 +115,7 @@
         type="button"
         class="trigger"
         bind:this={triggerEl}
+        tabindex="-1"
         title="Control after generate: {modeLabel}"
         aria-label="Control after generate: {modeLabel}"
         aria-haspopup="listbox"

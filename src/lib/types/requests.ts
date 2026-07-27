@@ -66,6 +66,18 @@ export function isImageResponse(object: any): object is ImageResponse {
     return testType(object, ['imageIds', 'amount']);
 }
 
+import {
+    isTempEmbeddingsMap,
+    type TempEmbeddingsMap,
+} from "../tools/tempEmbeddings";
+
+export type { TempEmbeddingsMap };
+export { isTempEmbeddingsMap };
+
+function optionalTempEmbeddingsCheck(object: { tempEmbeddings?: unknown }): boolean {
+    return object.tempEmbeddings === undefined || isTempEmbeddingsMap(object.tempEmbeddings);
+}
+
 export type UpdateRequest = {
     search: string;
     matching: SearchMode;
@@ -104,6 +116,8 @@ export function isUpdateResponse(object: any): object is UpdateResponse {
 export type StreamRequest = Omit<UpdateRequest, 'timestamp' | 'currentIds'> & {
     /** Completed server session to reattach after a transient stream disconnect. */
     sessionId?: string;
+    /** Custom `temp:…` ref vectors held client-side. */
+    tempEmbeddings?: TempEmbeddingsMap;
 };
 export function isStreamRequest(object: any): object is StreamRequest {
     return testType(object, [
@@ -115,6 +129,7 @@ export function isStreamRequest(object: any): object is StreamRequest {
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
         (o) => o.sessionId === undefined || typeof o.sessionId === 'string',
+        (o) => optionalTempEmbeddingsCheck(o),
     ]);
 }
 
@@ -295,6 +310,7 @@ export type MatchRequest = {
     sparseFrequency: number;
     similarityAlgorithm: SimilarityAlgorithm;
     similarityThreshold: number;
+    tempEmbeddings?: TempEmbeddingsMap;
 };
 export function isMatchRequest(object: any): object is MatchRequest {
     return testType(object, [
@@ -304,6 +320,7 @@ export function isMatchRequest(object: any): object is MatchRequest {
         (o) => typeof o.sparseFrequency === 'number',
         (o) => isSimilarityAlgorithm(o.similarityAlgorithm),
         (o) => typeof o.similarityThreshold === 'number',
+        (o) => optionalTempEmbeddingsCheck(o),
     ]);
 }
 
@@ -326,6 +343,7 @@ export type BulkRequest = {
     action: BulkAction;
     llm?: BulkLlmConfig;
     embedding?: BulkEmbeddingConfig;
+    tempEmbeddings?: TempEmbeddingsMap;
 };
 
 export function isBulkRequest(object: any): object is BulkRequest {
@@ -339,6 +357,7 @@ export function isBulkRequest(object: any): object is BulkRequest {
         (o) => typeof o.similarityThreshold === 'number',
         (o) => o.sessionId === undefined || typeof o.sessionId === 'string',
         (o) => typeof o.action?.type === 'string',
+        (o) => optionalTempEmbeddingsCheck(o),
     ]);
 }
 

@@ -13,6 +13,12 @@
         openSdBrowserPicker,
         type SdBrowserPickerImageWrite,
     } from '$lib/svgen/sdBrowserPickerStore';
+    import {
+        nodePreviewStoreKey,
+        svgenNodePreviewsStore,
+        svgenOpenSessionsStore,
+    } from '$lib/svgen/stores';
+    import type { NodePreviewEntry } from '$lib/svgen/nodePreviews';
     import type { SvgenCompanionWrite } from '$lib/svgen/types';
 
     export let value: string;
@@ -30,7 +36,28 @@
     let emptyText = 'No image selected';
     let dropActive = false;
 
-    $: void refreshPreview(value, randomEnabled, searchValue);
+    $: activeSessionId = $svgenOpenSessionsStore.activeId;
+    $: lastExecutedPreview = (() => {
+        if (!randomEnabled || !activeSessionId)
+            return null;
+        const byOuter = $svgenNodePreviewsStore.get(
+            nodePreviewStoreKey(activeSessionId, imageWrite.nodeId),
+        );
+        if (byOuter)
+            return byOuter;
+        // Converter-expanded subgraphs execute as `outerId:innerId`.
+        if (imageWrite.innerNodeId) {
+            return $svgenNodePreviewsStore.get(
+                nodePreviewStoreKey(
+                    activeSessionId,
+                    `${imageWrite.nodeId}:${imageWrite.innerNodeId}`,
+                ),
+            ) ?? null;
+        }
+        return null;
+    })();
+
+    $: void refreshPreview(value, randomEnabled, searchValue, lastExecutedPreview);
 
     function shortLabel(imageId: string, folder?: string) {
         if (folder)
@@ -40,10 +67,43 @@
         return `${imageId.slice(0, 8)}…${imageId.slice(-6)}`;
     }
 
-    async function refreshPreview(raw: string, random: boolean, search: string) {
+    async function refreshPreview(
+        raw: string,
+        random: boolean,
+        search: string,
+        executed: NodePreviewEntry | null,
+    ) {
         const token = ++previewToken;
 
         if (random) {
+            const path = executed?.path ?? '';
+            if (path) {
+                caption = search.trim() || 'Random pick';
+                captionTitle = search.trim()
+                    ? `Random from: ${search}`
+                    : 'Random mode — last executed pick';
+                emptyText = '';
+
+                if (path === previewPath && previewBlobUrl)
+                    return;
+                previewPath = path;
+
+                const peeked = peekAuthorizedBlobUrl(path);
+                if (peeked)
+                    previewBlobUrl = peeked;
+
+                const next = await fetchAuthorizedBlobUrl(path);
+                if (token !== previewToken || previewPath !== path)
+                    return;
+                if (next) {
+                    previewBlobUrl = next;
+                    emptyText = '';
+                } else if (!previewBlobUrl) {
+                    emptyText = 'Preview unavailable';
+                }
+                return;
+            }
+
             previewPath = '';
             previewBlobUrl = null;
             emptyText = search.trim() ? 'Random from search' : 'Random (all images)';

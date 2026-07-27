@@ -39,6 +39,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 type SlotBuild = {
     widgetName: string;
+    /**
+     * object_info / inner widget name when `widgetName` is a disambiguated outer
+     * alias (`value_1` → schema key still `value`).
+     */
+    schemaWidgetName?: string;
     label: string;
     value: string | number | boolean | null;
     /** Where to write: outer node widgets_values index, or inner node path */
@@ -370,23 +375,181 @@ function alignSlotNames(
  * Never use the inner node title — that single-widget/Primitive title rule must
  * not apply to subgraph proxies (LORA `PrimitiveBoolean` titled "Enable LORA"
  * would steal the label from widget rename `enabled` / name `value`).
+ *
+ * When several proxies share an inner widget name (`value`), Comfy promotes them
+ * on the outer node as `value`, `value_1`, `value_2` with distinct labels — resolve
+ * the outer name via {@link resolveOuterProxyWidgetNames}, then look up that socket.
  */
 function resolveProxyLabel(
     outer: ComfyWorkflowNode,
     inner: ComfyWorkflowNode | undefined,
-    widgetName: string,
+    outerWidgetName: string,
+    innerWidgetName: string,
 ): string {
-    const fromOuter = labelFor(outer, widgetName);
-    if (fromOuter !== widgetName)
+    const fromOuter = labelFor(outer, outerWidgetName);
+    if (fromOuter !== outerWidgetName)
         return fromOuter;
 
     if (inner) {
-        const fromInner = labelFor(inner, widgetName);
-        if (fromInner !== widgetName)
+        const fromInner = labelFor(inner, innerWidgetName);
+        if (fromInner !== innerWidgetName)
             return fromInner;
     }
 
-    return humanizeWidgetName(widgetName);
+    return humanizeWidgetName(innerWidgetName);
+}
+
+function normalizeLabelKey(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function outerInputWidgetName(input: ComfyWorkflowNodeInput): string | undefined {
+    const name = input.widget?.name || input.name;
+    return name || undefined;
+}
+
+function outerInputLabelKey(input: ComfyWorkflowNodeInput): string | null {
+    const label = input.label?.trim() || '';
+    if (label)
+        return normalizeLabelKey(label);
+    const localized = input.localized_name?.trim() || '';
+    if (localized && localized !== input.name)
+        return normalizeLabelKey(localized);
+    return null;
+}
+
+/**
+ * Labels used to match a proxy onto an outer socket. Title is allowed here for
+ * matching only (Sampler Steps/Start/Seed) — never as the displayed field label.
+ */
+function innerProxyLabelKeys(
+    inner: ComfyWorkflowNode | undefined,
+    innerWidgetName: string,
+): string[] {
+    if (!inner)
+        return [];
+    const keys: string[] = [];
+    const seen = new Set<string>();
+    const add = (raw: string | undefined) => {
+        if (!raw?.trim())
+            return;
+        const key = normalizeLabelKey(raw);
+        if (!key || seen.has(key))
+            return;
+        seen.add(key);
+        keys.push(key);
+    };
+    const input = findInput(inner, innerWidgetName);
+    add(input?.label);
+    if (input?.localized_name && input.localized_name !== input.name)
+        add(input.localized_name);
+    add(inner.title);
+    return keys;
+}
+
+function isDisambiguatedWidgetName(base: string, name: string): boolean {
+    if (name === base)
+        return true;
+    if (!name.startsWith(`${base}_`))
+        return false;
+    return /^\d+$/.test(name.slice(base.length + 1));
+}
+
+function occurrenceOuterName(proxies: ComfyProxyWidget[], index: number): string {
+    const widgetName = proxies[index]?.[1] ?? '';
+    let seen = 0;
+    for (let i = 0; i < index; i++) {
+        if (proxies[i][1] === widgetName)
+            seen++;
+    }
+    return seen === 0 ? widgetName : `${widgetName}_${seen}`;
+}
+
+/**
+ * Resolve each proxy to Comfy's outer widget/input name.
+ *
+ * Duplicate inner names become `value` / `value_1` / `value_2` in *outer input
+ * socket order*, which can differ from `proxyWidgets` order (Sampler lists Steps
+ * before Seed, but Seed owns the wired `value` socket and Steps is `value_1`).
+ * Matching by list occurrence alone hid Steps and shifted Start/Switch labels.
+ */
+function resolveOuterProxyWidgetNames(
+    outer: ComfyWorkflowNode,
+    subgraph: ComfySubgraphDefinition,
+    proxies: ComfyProxyWidget[],
+): string[] {
+    const used = new Set<string>();
+    const result: string[] = new Array(proxies.length);
+
+    const claim = (name: string): string => {
+        used.add(name);
+        return name;
+    };
+
+    // Pass 1: inner label/title → outer input with the same label
+    for (let i = 0; i < proxies.length; i++) {
+        const [innerId, innerWidgetName] = proxies[i];
+        const labelKeys = innerProxyLabelKeys(findInnerNode(subgraph, innerId), innerWidgetName);
+        if (!labelKeys.length)
+            continue;
+        const match = (outer.inputs ?? []).find((input) => {
+            const name = outerInputWidgetName(input);
+            if (!name || used.has(name))
+                return false;
+            const outerKey = outerInputLabelKey(input);
+            return !!outerKey && labelKeys.includes(outerKey);
+        });
+        const name = match ? outerInputWidgetName(match) : undefined;
+        if (name)
+            result[i] = claim(name);
+    }
+
+    // Pass 2: exact / disambiguated outer name still free (float → float_2, etc.).
+    // Never take a labeled socket unless this proxy's labels agree — otherwise
+    // Hires `enable` steals wired `value_4` (seed) and disappears.
+    for (let i = 0; i < proxies.length; i++) {
+        if (result[i])
+            continue;
+        const [innerId, innerWidgetName] = proxies[i];
+        const labelKeys = innerProxyLabelKeys(findInnerNode(subgraph, innerId), innerWidgetName);
+        const candidates = (outer.inputs ?? [])
+            .filter((input) => {
+                const name = outerInputWidgetName(input);
+                if (!name || used.has(name))
+                    return false;
+                if (!isDisambiguatedWidgetName(innerWidgetName, name))
+                    return false;
+                const outerKey = outerInputLabelKey(input);
+                if (outerKey && (!labelKeys.length || !labelKeys.includes(outerKey)))
+                    return false;
+                return true;
+            })
+            .map(outerInputWidgetName)
+            .filter((name): name is string => !!name);
+        const pick = candidates.find((name) => name === innerWidgetName) ?? candidates[0];
+        if (pick)
+            result[i] = claim(pick);
+    }
+
+    // Pass 3: no outer socket (Hires `enable`) — stable name from label, else occurrence
+    for (let i = 0; i < proxies.length; i++) {
+        if (result[i])
+            continue;
+        const [innerId, innerWidgetName] = proxies[i];
+        const labelKeys = innerProxyLabelKeys(findInnerNode(subgraph, innerId), innerWidgetName);
+        let candidate = (labelKeys[0] ?? '').replace(/\s+/g, '_') || occurrenceOuterName(proxies, i);
+        if (!candidate)
+            candidate = innerWidgetName || `proxy_${i}`;
+        if (used.has(candidate)) {
+            let n = 1;
+            while (used.has(`${candidate}_${n}`))
+                n += 1;
+            candidate = `${candidate}_${n}`;
+        }
+        result[i] = claim(candidate);
+    }
+
+    return result;
 }
 
 /** Legacy `[[a,b], opts]` or modern `["COMBO", { options: [a,b] }]`. */
@@ -673,15 +836,16 @@ function zipValuesToNames(
  *
  * Only treat a proxy as omitted when the *outer* subgraph socket is linked.
  * Inner links to the subgraph inputNode (-10) are normal for promoted widgets.
+ * Wiring checks use resolved outer names (`value_1`), not the bare inner name
+ * (`value`) — otherwise one linked `value` marks every value-proxy as wired.
  */
 function alignOuterProxyValues(
     node: ComfyWorkflowNode,
-    _subgraph: ComfySubgraphDefinition,
     proxies: ComfyProxyWidget[],
+    outerNames: string[],
     outerFiltered: (string | number | boolean | null)[],
     outerOrig: number[],
     outerHadControl: boolean[],
-    _objectInfo: ObjectInfoMap | null | undefined,
 ): Map<string, {
     value: string | number | boolean | null;
     valueIndex: number;
@@ -696,20 +860,24 @@ function alignOuterProxyValues(
         return out;
 
     const keyOf = (p: ComfyProxyWidget) => `${p[0]}:${p[1]}`;
-    const unwired = proxies.filter((p) => !isWired(node, p[1]));
-    const source = (
+    const allIdx = proxies.map((_, i) => i);
+    const unwiredIdx = allIdx.filter((i) => !isWired(node, outerNames[i] ?? proxies[i][1]));
+    const sourceIdx = (
         proxies.length === outerFiltered.length
-            ? proxies
-            : unwired.length === outerFiltered.length && unwired.length
-                ? unwired
+            ? allIdx
+            : unwiredIdx.length === outerFiltered.length && unwiredIdx.length
+                ? unwiredIdx
                 : (Math.abs(proxies.length - outerFiltered.length)
-                    <= Math.abs(unwired.length - outerFiltered.length)
-                    ? proxies
-                    : (unwired.length ? unwired : proxies))
+                    <= Math.abs(unwiredIdx.length - outerFiltered.length)
+                    ? allIdx
+                    : (unwiredIdx.length ? unwiredIdx : allIdx))
     );
 
-    for (let i = 0; i < source.length && i < outerFiltered.length; i++) {
-        out.set(keyOf(source[i]), {
+    for (let i = 0; i < sourceIdx.length && i < outerFiltered.length; i++) {
+        const proxy = proxies[sourceIdx[i]];
+        if (!proxy)
+            continue;
+        out.set(keyOf(proxy), {
             value: outerFiltered[i],
             valueIndex: outerOrig[i] ?? i,
             hadControlCompanion: outerHadControl[i] ?? false,
@@ -778,28 +946,30 @@ function buildSlotsForProxyNode(
         uniqueProxies.push(proxy);
     }
 
+    const outerNames = resolveOuterProxyWidgetNames(node, subgraph, uniqueProxies);
     const outerByProxy = alignOuterProxyValues(
         node,
-        subgraph,
         uniqueProxies,
+        outerNames,
         outerFiltered,
         outerOrig,
         outerHadControl,
-        objectInfo,
     );
 
     const slots: SlotBuild[] = [];
-    for (const [innerId, widgetName] of uniqueProxies) {
-        const proxyKey = `${innerId}:${widgetName}`;
+    for (let proxyIndex = 0; proxyIndex < uniqueProxies.length; proxyIndex++) {
+        const [innerId, innerWidgetName] = uniqueProxies[proxyIndex];
+        const outerWidgetName = outerNames[proxyIndex] ?? innerWidgetName;
+        const proxyKey = `${innerId}:${innerWidgetName}`;
         const inner = findInnerNode(subgraph, innerId);
         const schemaType = inner ? resolveNodeClassType(inner) : resolveNodeClassType(node);
-        const label = resolveProxyLabel(node, inner, widgetName);
-        const schema = lookupSchema(objectInfo, schemaType, widgetName);
+        const label = resolveProxyLabel(node, inner, outerWidgetName, innerWidgetName);
+        const schema = lookupSchema(objectInfo, schemaType, innerWidgetName);
         // Outer instance values win when present; else inner definition values
         // (positional). Linked force_inputs may be omitted from inner wv.
-        const innerWired = !!(inner && isWired(inner, widgetName));
+        const innerWired = !!(inner && isWired(inner, innerWidgetName));
         const fromInner = inner
-            ? valueForInnerWidget(inner, widgetName, objectInfo)
+            ? valueForInnerWidget(inner, innerWidgetName, objectInfo)
             : undefined;
         const fromOuter = outerByProxy.get(proxyKey);
 
@@ -817,9 +987,12 @@ function buildSlotsForProxyNode(
 
         // Instance values live on the outer node for promoted proxies; convert still
         // needs inner updates when the definition holds a writable slot.
+        // Field identity uses the disambiguated outer name so hide/order/labels
+        // stay unique when several proxies share an inner widget name.
         if (fromOuter && (innerWired || !fromInner)) {
             slots.push({
-                widgetName,
+                widgetName: outerWidgetName,
+                schemaWidgetName: innerWidgetName,
                 label,
                 value,
                 write: {
@@ -834,7 +1007,8 @@ function buildSlotsForProxyNode(
             });
         } else if (fromInner) {
             slots.push({
-                widgetName,
+                widgetName: outerWidgetName,
+                schemaWidgetName: innerWidgetName,
                 label,
                 value,
                 write: {
@@ -849,7 +1023,8 @@ function buildSlotsForProxyNode(
             });
         } else if (fromOuter) {
             slots.push({
-                widgetName,
+                widgetName: outerWidgetName,
+                schemaWidgetName: innerWidgetName,
                 label,
                 value,
                 write: { mode: 'outer', valueIndex: fromOuter.valueIndex },
@@ -859,7 +1034,8 @@ function buildSlotsForProxyNode(
         } else {
             // No stored value index — still surface the promoted widget (schema default).
             slots.push({
-                widgetName,
+                widgetName: outerWidgetName,
+                schemaWidgetName: innerWidgetName,
                 label,
                 value,
                 write: {
@@ -891,11 +1067,12 @@ function slotsToFields(
         if (wireNode !== node && isWired(node, slot.widgetName))
             continue;
 
-        const schema = lookupSchema(objectInfo, slot.schemaType, slot.widgetName);
-        const kind = detectKind(slot.schemaType, slot.widgetName, slot.value, schema);
+        const schemaName = slot.schemaWidgetName ?? slot.widgetName;
+        const schema = lookupSchema(objectInfo, slot.schemaType, schemaName);
+        const kind = detectKind(slot.schemaType, schemaName, slot.value, schema);
         let options = schemaOptions(schema);
         if (kind === 'string') {
-            const lower = slot.widgetName.toLowerCase();
+            const lower = schemaName.toLowerCase();
             if (
                 !options?.multiline
                 && (lower.includes('prompt') || lower === 'text' || lower === 'string' || lower === 'input')
@@ -914,7 +1091,7 @@ function slotsToFields(
             value: slot.value,
             options,
             valueIndex: slot.write.valueIndex,
-            tall: isTallField(kind, options, slot.value, slot.widgetName),
+            tall: isTallField(kind, options, slot.value, schemaName),
             writeMode: slot.write.mode,
             innerNodeId: slot.write.innerNodeId,
             outerValueIndex: slot.write.outerValueIndex,
@@ -956,11 +1133,12 @@ export function discoverCards(
             for (const slot of slots) {
                 if (!shouldIncludeSlot(node, slot.widgetName, slot.label))
                     continue;
-                const schema = lookupSchema(objectInfo, slot.schemaType, slot.widgetName);
-                const kind = detectKind(slot.schemaType, slot.widgetName, slot.value, schema);
+                const schemaName = slot.schemaWidgetName ?? slot.widgetName;
+                const schema = lookupSchema(objectInfo, slot.schemaType, schemaName);
+                const kind = detectKind(slot.schemaType, schemaName, slot.value, schema);
                 let options = schemaOptions(schema);
                 if (kind === 'string') {
-                    const lower = slot.widgetName.toLowerCase();
+                    const lower = schemaName.toLowerCase();
                     if (
                         !options?.multiline
                         && (lower.includes('prompt') || lower === 'text' || lower === 'string' || lower === 'input')
@@ -978,7 +1156,7 @@ export function discoverCards(
                     value: slot.value,
                     options,
                     valueIndex: slot.write.valueIndex,
-                    tall: isTallField(kind, options, slot.value, slot.widgetName),
+                    tall: isTallField(kind, options, slot.value, schemaName),
                     writeMode: slot.write.mode,
                     innerNodeId: slot.write.innerNodeId,
                     outerValueIndex: slot.write.outerValueIndex,

@@ -107,7 +107,12 @@
     import { tagsStore } from "$lib/stores/tagsStore";
     import { isExactTagTerm, tagsAddableToSelection } from "$lib/types/tags";
     import { flyoutState } from "$lib/stores/flyoutStore";
-    import { requestOpenInPanel, svgenUiStore } from "$lib/svgen/stores";
+    import {
+        requestOpenInPanel,
+        requestUseParamsFromImage,
+        svgenSessionStore,
+        svgenUiStore,
+    } from "$lib/svgen/stores";
     import BulkModal from "$lib/components/BulkModal.svelte";
     import { embeddingStore, isEmbeddingConfigured } from "$lib/stores/embeddingStore";
     import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
@@ -123,7 +128,11 @@
         type QuickTagHistoryEntry,
     } from "$lib/tools/quickTag";
     import {
+        addCustomImageRefs,
         addReferencesWithFeedback,
+        collectClipboardImageFiles,
+        collectImageFiles,
+        dataTransferHasImageFiles,
         IMAGE_DRAG_MIME,
         parseImageDragIds,
     } from "$lib/tools/imageRefActions";
@@ -136,6 +145,7 @@
     const increment = GALLERY_PAGE_SIZE;
     let currentAmount = initialAmount;
     let currentImage: ClientImage | undefined = undefined;
+    let filterMultiSelect: FilterMultiSelect;
     let inputElement: HTMLInputElement;
     let inputSearchTimer: ReturnType<typeof setTimeout> | undefined;
     let searchHistoryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1480,7 +1490,32 @@
         }
     }
 
+    function cycleSorting() {
+        if (!sortingOptions.length) return;
+        const index = sortingOptions.indexOf(sorting);
+        const nextIndex = index < 0 ? 0 : (index + 1) % sortingOptions.length;
+        const next = sortingOptions[nextIndex];
+        if (!next || next === sorting) return;
+        sorting = next;
+        selectChange();
+    }
+
     function keylistener(e: KeyboardEvent) {
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod && !e.altKey && !e.shiftKey) {
+            const key = e.key.toLowerCase();
+            if (key === "s") {
+                e.preventDefault();
+                cycleSorting();
+                return;
+            }
+            if (key === "d") {
+                e.preventDefault();
+                void filterMultiSelect?.toggleOpenAndFocus();
+                return;
+            }
+        }
+
         if (isTextInputActive()) return;
 
         if (e.key === "ArrowLeft") {
@@ -1495,7 +1530,7 @@
             } else {
                 startSlideshow();
             }
-        } else if (e.key === "f") {
+        } else if (e.key === "f" && !mod && !e.altKey) {
             flyoutState.set(!$flyoutState);
         }
     }
@@ -1534,20 +1569,36 @@
     }
 
     function handleWindowDragOver(e: DragEvent) {
-        if (!e.dataTransfer?.types.includes(IMAGE_DRAG_MIME)) {
-            return;
+        if (e.dataTransfer?.types.includes(IMAGE_DRAG_MIME) || dataTransferHasImageFiles(e.dataTransfer)) {
+            e.preventDefault();
+            if (e.dataTransfer)
+                e.dataTransfer.dropEffect = "copy";
         }
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
     }
 
     function handleWindowDrop(e: DragEvent) {
         const ids = parseImageDragIds(e.dataTransfer);
-        if (ids.length === 0) {
+        if (ids.length > 0) {
+            e.preventDefault();
+            void addReferencesWithFeedback(ids);
+            return;
+        }
+
+        const files = collectImageFiles(e.dataTransfer?.files);
+        if (files.length === 0) {
             return;
         }
         e.preventDefault();
-        void addReferencesWithFeedback(ids);
+        void addCustomImageRefs(files);
+    }
+
+    function handleWindowPaste(e: ClipboardEvent) {
+        const files = collectClipboardImageFiles(e.clipboardData);
+        if (files.length === 0) {
+            return;
+        }
+        e.preventDefault();
+        void addCustomImageRefs(files);
     }
 
     function handleImgContext(id: string) {
@@ -1600,6 +1651,28 @@
                         }
                         requestOpenInPanel(id);
                         notify("Opened workflow in Generate panel");
+                    },
+                },
+                {
+                    name: "Use params",
+                    visible: !selecting
+                        && $svgenUiStore.enabled
+                        && $flyoutState
+                        && !!$svgenSessionStore,
+                    async handler() {
+                        let info = getCachedImageInfo(id) ?? await getImageInfo(id);
+                        if (info && !info.workflow && info.blobsDeferred) {
+                            const blobs = await getImageBlobs(id);
+                            if (blobs) {
+                                info = mergeImageBlobs(info, blobs);
+                                rememberImageInfo(info);
+                            }
+                        }
+                        if (!info?.workflow) {
+                            notify("No workflow on this image", "warn");
+                            return;
+                        }
+                        requestUseParamsFromImage(id);
                     },
                 },
                 {
@@ -2046,6 +2119,7 @@
     on:keydown={handleEsc}
     on:dragover={handleWindowDragOver}
     on:drop={handleWindowDrop}
+    on:paste={handleWindowPaste}
 />
 
 <div class="anchor" bind:this={anchorElement} />
@@ -2076,7 +2150,12 @@
                 on:change={selectChange}
             />
 
-            <FilterMultiSelect chrome dropUp onChange={selectChange} />
+            <FilterMultiSelect
+                bind:this={filterMultiSelect}
+                chrome
+                dropUp
+                onChange={selectChange}
+            />
 
             {#if $showNsfwFilter}
                 <label class="nsfw" for="nsfw">

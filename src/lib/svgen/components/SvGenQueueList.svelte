@@ -97,10 +97,17 @@
     }
 
     .list {
+        --queue-visible-rows: 4;
+        --queue-row-gap: 0.25rem;
+        /* .row pad 0.35*2 + cancel btn (0.72rem line + 0.25*2 pad) + 1px borders */
+        --queue-row-height: calc(0.7rem + 0.72rem * 1.2 + 0.5rem + 2px);
         display: flex;
         flex-direction: column;
-        gap: 0.25rem;
-        max-height: 220px;
+        gap: var(--queue-row-gap);
+        max-height: calc(
+            var(--queue-visible-rows) * var(--queue-row-height)
+            + (var(--queue-visible-rows) - 1) * var(--queue-row-gap)
+        );
         overflow: auto;
     }
 

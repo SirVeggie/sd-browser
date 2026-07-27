@@ -466,6 +466,55 @@ export async function ensureImageEmbeddings(
     return Promise.all(ids.map((id) => ensureImageEmbedding(id, embedding, fetch)));
 }
 
+export type TempImageEmbedResult = {
+    id: string;
+    embedding: number[];
+};
+
+function isTempImageEmbedResult(value: unknown): value is TempImageEmbedResult {
+    return !!value
+        && typeof value === 'object'
+        && 'id' in value
+        && typeof value.id === 'string'
+        && 'embedding' in value
+        && Array.isArray(value.embedding)
+        && value.embedding.length > 0
+        && value.embedding.every((entry: unknown) => typeof entry === 'number' && Number.isFinite(entry));
+}
+
+/** Upload image bytes for a one-shot embed; server returns `temp:…` id + vector and keeps nothing. */
+export async function createTempImageEmbedding(
+    file: Blob,
+    options: { filename?: string } = {},
+): Promise<TempImageEmbedResult> {
+    let url = '/api/images/temp-embed';
+    url = get(page).url.origin + url;
+
+    const form = new FormData();
+    form.append('image', file, options.filename ?? 'image.png');
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            Authorization: 'Bearer ' + get(authStore).password,
+        },
+        body: form,
+    });
+
+    const res = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        if (response.status === 413) {
+            throw new Error('Image too large for upload (try a smaller file)');
+        }
+        const message = typeof res?.error === 'string' ? res.error : `Temp embed failed (${response.status})`;
+        throw new Error(message);
+    }
+    if (!isTempImageEmbedResult(res)) {
+        throw new Error('Unexpected temp embed response');
+    }
+    return res;
+}
+
 export async function getComfyWorkflowOpenStatus(comfyToken?: string, fetch?: FetchType): Promise<ComfyWorkflowOpenStatus> {
     let url = '/api/comfy/status';
     if (!fetch)

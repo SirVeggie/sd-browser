@@ -49,7 +49,11 @@
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
     <div class="frame" on:click={handleImageClick} role="img" aria-label={`Reference #${ref.slot}`}>
-        <img src={imageUrl} alt={`Reference #${ref.slot}`} draggable="false" />
+        {#if imageUrl}
+            <img src={imageUrl} alt={`Reference #${ref.slot}`} draggable="false" />
+        {:else}
+            <div class="placeholder" aria-hidden="true"></div>
+        {/if}
         <div class="bar">
             <span class="label">Reference #{ref.slot}</span>
             <button type="button" class="remove-btn" on:click={handleRemove}>
@@ -94,6 +98,20 @@
             height: auto;
             object-fit: contain;
             pointer-events: none;
+        }
+
+        .placeholder {
+            width: min(280px, 70vw);
+            height: min(280px, 50vh);
+            background:
+                linear-gradient(135deg, rgba(196, 165, 116, 0.18), transparent 55%),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.04),
+                    rgba(255, 255, 255, 0.04) 6px,
+                    transparent 6px,
+                    transparent 12px
+                );
         }
     }
 

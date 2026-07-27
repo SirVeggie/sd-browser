@@ -461,49 +461,66 @@
 
     .actions {
         display: flex;
-        gap: 0.35rem;
+        gap: 0.45rem;
         align-items: center;
 
         button {
             appearance: none;
+            box-sizing: border-box;
             border: 1px solid var(--line);
             border-radius: 8px;
             background: var(--bg);
             color: var(--ink);
             font: inherit;
             font-size: 11px;
+            line-height: 1.2;
             padding: 0.3rem 0.55rem;
             cursor: pointer;
         }
     }
 
     .sort {
-        :global(.trigger) {
+        display: inline-flex;
+        align-items: center;
+
+        /* Beat Select’s scoped .trigger { border: none; padding: 0; font-size: 1em } */
+        :global(.select) {
+            font-size: 11px;
+            line-height: 1.2;
+        }
+
+        :global(.select .trigger) {
             box-sizing: border-box;
             border: 1px solid var(--line);
             border-radius: 8px;
             background: var(--bg);
             color: var(--ink);
-            font-size: 11px;
+            font-size: inherit;
+            line-height: inherit;
             padding: 0.3rem 0.55rem;
-            gap: 0.3rem;
+            gap: 0.3em;
         }
 
-        :global(.trigger:focus-visible) {
+        :global(.select .trigger:focus-visible) {
             border-radius: 8px;
             background: color-mix(in srgb, var(--bg) 70%, #fff);
         }
 
-        :global(.prefix) {
+        :global(.select .prefix) {
             color: var(--muted);
             font-style: normal;
         }
 
-        :global(.chevron) {
-            margin-left: 0.25em;
+        :global(.select .chevron) {
+            margin-left: 0.2em;
+            margin-top: -0.12em;
         }
 
-        :global(.panel) {
+        :global(.select .chevron.open) {
+            margin-top: 0.08em;
+        }
+
+        :global(.select .panel) {
             z-index: 10060;
             font-size: 12px;
         }

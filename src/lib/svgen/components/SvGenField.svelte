@@ -172,7 +172,12 @@
                 <label for={fieldDomId}>{field.label}</label>
             {/if}
             {#if editMode}
-                <button type="button" class="hide" on:click={() => dispatch('hide')}>Hide</button>
+                <button
+                    type="button"
+                    class="hide"
+                    tabindex="-1"
+                    on:click={() => dispatch('hide')}
+                >Hide</button>
             {/if}
         </div>
     {/if}
@@ -230,6 +235,7 @@
                     type="button"
                     class="seed-freeze"
                     class:is-frozen={frozen}
+                    tabindex="-1"
                     title={frozen
                         ? 'Unfreeze (randomize, keep last value remembered)'
                         : 'Freeze (restore last used value and keep fixed)'}
@@ -465,13 +471,21 @@
         overflow: hidden;
         text-overflow: ellipsis;
         user-select: none;
+        appearance: textfield;
+        -moz-appearance: textfield;
+
+        &::-webkit-outer-spin-button,
+        &::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
 
         &:focus {
             cursor: text;
             user-select: text;
         }
 
-        &.dragging {
+        &:global(.dragging) {
             cursor: ew-resize;
         }
     }

@@ -152,6 +152,14 @@
             box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
             color: inherit;
             padding: 0.2rem 0.3rem;
+            appearance: textfield;
+            -moz-appearance: textfield;
+
+            &::-webkit-outer-spin-button,
+            &::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
 
             &:focus {
                 outline: none;

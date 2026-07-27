@@ -1,9 +1,11 @@
 <script lang="ts">
     import { onDestroy, onMount } from 'svelte';
+    import { askConfirmation } from '$lib/components/Confirm.svelte';
     import { notify } from '$lib/components/Notifier.svelte';
     import { flyoutState } from '$lib/stores/flyoutStore';
     import {
         flyoutTabStore,
+        setSvgenNodePreviews,
         svgenErrorStore,
         svgenFrozenSeedsStore,
         svgenGeneratingStore,
@@ -16,9 +18,14 @@
         svgenStatusStore,
     } from '$lib/svgen/stores';
     import {
+        executedPreviewNodeIds,
+        parseExecutedOutputImages,
+    } from '$lib/svgen/nodePreviews';
+    import {
         activateOpenSession,
         addOpenSession,
         closeOpenSession,
+        patchActiveOpenSession,
         persistActiveOpenSession,
     } from '$lib/svgen/sessions';
     import {
@@ -47,6 +54,7 @@
         applyIntControlsAfterQueue,
         captureLastUsedSeeds,
     } from '$lib/svgen/intControl';
+    import { applyParamsFromWorkflow } from '$lib/svgen/paramsInherit';
     import {
         effectiveColumnCount,
         emptyLayout,
@@ -106,6 +114,8 @@
     let promptEndTimes = new Map<string, number>();
     let promptTerminalEvents = new Map<string, string>();
     let panelPromptIds = new Set<string>();
+    /** prompt_id → open session id (so executed previews land on the right session). */
+    let promptSessionById = new Map<string, string>();
     let toppingUp = false;
     let workflows: SvgenWorkflowSummary[] = [];
     let resizeObserver: ResizeObserver | undefined;
@@ -250,8 +260,10 @@
                 ...queuePendingItems.map((entry) => entry.id),
             ]);
             for (const id of [...panelPromptIds]) {
-                if (!activeIds.has(id))
+                if (!activeIds.has(id)) {
                     panelPromptIds.delete(id);
+                    promptSessionById.delete(id);
+                }
             }
             const synced = syncKnownQueueItems(
                 knownQueueItems,
@@ -290,6 +302,9 @@
                 const promptId = await queueOnePrompt();
                 if (promptId) {
                     panelPromptIds.add(promptId);
+                    const sessionId = get(svgenOpenSessionsStore).activeId;
+                    if (sessionId)
+                        promptSessionById.set(promptId, sessionId);
                     if ((!infinite || !infiniteActive) && keepOneQueued) {
                         await deleteQueued([promptId], getStoredComfyToken());
                         break;
@@ -347,6 +362,23 @@
                 },
                 onExecutionStart: (promptId, timestamp) => {
                     recordPromptExecutionStart(promptId, timestamp);
+                },
+                onExecuted: (data) => {
+                    const images = parseExecutedOutputImages(data);
+                    if (!images.length)
+                        return;
+                    const nodeIds = executedPreviewNodeIds(data);
+                    if (!nodeIds.length)
+                        return;
+                    const promptId = data && typeof data === 'object' && 'prompt_id' in data
+                        ? String((data as { prompt_id: unknown }).prompt_id ?? '')
+                        : '';
+                    const sessionId = promptId
+                        ? (promptSessionById.get(promptId) ?? null)
+                        : get(svgenOpenSessionsStore).activeId;
+                    if (!sessionId)
+                        return;
+                    setSvgenNodePreviews(sessionId, nodeIds, images);
                 },
                 onExecutionEnd: (promptId, terminal, timestamp) => {
                     recordPromptExecutionEnd(promptId, terminal, timestamp);
@@ -534,8 +566,12 @@
                 if (!get(svgenSessionStore))
                     break;
                 const promptId = await queueOnePrompt();
-                if (promptId)
+                if (promptId) {
                     panelPromptIds.add(promptId);
+                    const sessionId = get(svgenOpenSessionsStore).activeId;
+                    if (sessionId)
+                        promptSessionById.set(promptId, sessionId);
+                }
             }
             await refreshQueueStatus({ skipTopUp: true });
         } finally {
@@ -675,6 +711,14 @@
     }
 
     async function deleteSavedWorkflow(id: string) {
+        const name = workflows.find((wf) => wf.id === id)?.name ?? 'this workflow';
+        const confirmed = await askConfirmation(
+            'Delete workflow',
+            `Delete saved workflow '${name}'?`,
+        );
+        if (!confirmed)
+            return;
+
         try {
             await deleteWorkflow(id);
             await refreshWorkflowList();
@@ -839,6 +883,42 @@
             });
         } catch (cause) {
             const message = cause instanceof Error ? cause.message : 'Open failed';
+            svgenErrorStore.set(message);
+            notify(message, 'error');
+        }
+    }
+
+    /** Copy exposed params from an image onto the active session workflow. */
+    export async function useParamsFromImage(imageId: string) {
+        flyoutTabStore.set('generate');
+        const active = get(svgenSessionStore);
+        if (!active) {
+            notify('No workflow open in Generate panel', 'warn');
+            return;
+        }
+        try {
+            await refreshStatus();
+            const data = await openFromImage(imageId);
+            const { workflow, matchedCards, changedFields, setFields, totalFields } =
+                applyParamsFromWorkflow({
+                sourceWorkflow: data.workflow,
+                targetWorkflow: active.workflow,
+                objectInfo: get(svgenObjectInfoStore),
+            });
+            if (workflow !== active.workflow) {
+                patchActiveOpenSession({ workflow, prompt: null });
+            }
+            if (!matchedCards) {
+                notify('No matching nodes to apply params from', 'warn');
+            } else {
+                const valueWord = changedFields === 1 ? 'value' : 'values';
+                const nodeWord = matchedCards === 1 ? 'node' : 'nodes';
+                notify(
+                    `Changed ${changedFields} ${valueWord} in ${matchedCards} ${nodeWord} (${setFields}/${totalFields})`,
+                );
+            }
+        } catch (cause) {
+            const message = cause instanceof Error ? cause.message : 'Use params failed';
             svgenErrorStore.set(message);
             notify(message, 'error');
         }

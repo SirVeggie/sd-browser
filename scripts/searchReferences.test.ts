@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import {
+    addCustomImageRef,
     addImageRefs,
     clearImageRefs,
     getNextAvailableSlot,
+    getTempEmbeddingsMap,
     imageRefs,
+    isTempImageRefId,
     MAX_IMAGE_SEARCH_REFS,
     normalizeImageSearchRefs,
     removeImageRef,
 } from '../src/lib/stores/imageRefStore.ts';
+import { encodeFloat32Embedding } from '../src/lib/tools/tempEmbeddings.ts';
 import { get } from 'svelte/store';
 import {
     expandSearchReferences,
@@ -184,6 +188,81 @@ const invalidQuery = hasInvalidSearchReferences('IMG #9', refMap)
     ? INVALID_REF_SEARCH
     : expandSearchReferences('IMG #9', refMap);
 assert.equal(invalidQuery, INVALID_REF_SEARCH, 'invalid refs use impossible ID search');
+
+resetRefs();
+
+const tempId = 'temp:11111111-1111-1111-1111-111111111111';
+const tempEmbedding = [0.1, 0.2, 0.3, 0.4];
+
+assert.equal(isTempImageRefId(tempId), true, 'recognizes temp ref id');
+assert.equal(isTempImageRefId(id1), false, 'gallery hex is not a temp id');
+
+const custom = addCustomImageRef({ id: tempId, embedding: tempEmbedding });
+assert.equal(custom.added?.slot, 1, 'custom ref takes slot 1');
+assert.equal(custom.added?.id, tempId, 'stores lowercase temp id');
+assert.deepEqual(custom.added?.embedding, tempEmbedding, 'stores embedding with custom ref');
+
+assert.equal(
+    expandSearchReferences('IMG #1', get(imageRefs)),
+    `IMG ${tempId}`,
+    'expands slot token to temp id',
+);
+
+assert.deepEqual(
+    getTempEmbeddingsMap(),
+    { [tempId]: encodeFloat32Embedding(tempEmbedding) },
+    'exposes temp embeddings sidecar map',
+);
+
+assert.equal(
+    getTempEmbeddingsMap('cat'),
+    undefined,
+    'omits temp embeddings when search does not reference them',
+);
+
+assert.deepEqual(
+    getTempEmbeddingsMap(`IMG ${tempId}`),
+    { [tempId]: encodeFloat32Embedding(tempEmbedding) },
+    'includes only temps referenced by the search',
+);
+
+assert.deepEqual(
+    normalizeImageSearchRefs([
+        { slot: 1, id: tempId, embedding: tempEmbedding },
+        { slot: 2, id: 'temp:22222222-2222-2222-2222-222222222222' },
+        { slot: 3, id: id1 },
+    ]),
+    [
+        { slot: 1, id: tempId, embedding: tempEmbedding },
+        { slot: 3, id: id1 },
+    ],
+    'keeps temp refs with embeddings; drops temp without embedding',
+);
+
+const previewDataUrl = 'data:image/jpeg;base64,/9j/4AAQ';
+assert.deepEqual(
+    normalizeImageSearchRefs([
+        { slot: 1, id: tempId, embedding: tempEmbedding, preview: previewDataUrl },
+        {
+            slot: 2,
+            id: 'temp:22222222-2222-2222-2222-222222222222',
+            embedding: tempEmbedding,
+            preview: 'not-a-data-url',
+        },
+    ]),
+    [
+        { slot: 1, id: tempId, embedding: tempEmbedding, preview: previewDataUrl },
+        { slot: 2, id: 'temp:22222222-2222-2222-2222-222222222222', embedding: tempEmbedding },
+    ],
+    'persists valid preview data-URLs; drops invalid preview',
+);
+
+const withPreview = addCustomImageRef({
+    id: 'temp:33333333-3333-3333-3333-333333333333',
+    embedding: tempEmbedding,
+    preview: previewDataUrl,
+});
+assert.equal(withPreview.added?.preview, previewDataUrl, 'addCustomImageRef stores preview');
 
 resetRefs();
 

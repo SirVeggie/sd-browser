@@ -17,7 +17,17 @@ import {
     resolveImgSimilaritySearchLimits,
     parseImgQueryBody,
     extractImgSearchTarget,
+    isImageEmbeddingId,
+    isTempImageEmbeddingId,
 } from '../src/lib/tools/searchParsing.ts';
+import {
+    isStreamRequest,
+    isTempEmbeddingsMap,
+} from '../src/lib/types/requests.ts';
+import {
+    encodeFloat32Embedding,
+    decodeFloat32Embedding,
+} from '../src/lib/tools/tempEmbeddings.ts';
 import {
     matchesAspectComparisons,
     parseAspectComparisons,
@@ -774,6 +784,66 @@ const affinityEven = scoreImgAffinityMode([axisX, axisY], evenLowerMean);
 assert.ok(
     affinityEven > affinityUneven,
     `affinity prefers even membership over higher uneven mean (${affinityEven} > ${affinityUneven})`,
+);
+
+const tempId = 'temp:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+assert.equal(isTempImageEmbeddingId(tempId), true, 'temp UUID ids are recognized');
+assert.equal(isImageEmbeddingId(tempId), true, 'temp ids count as image embedding ids');
+assert.equal(isImageEmbeddingId(fullImageId), true, 'gallery hex ids still count');
+assert.equal(isTempImageEmbeddingId(fullImageId), false, 'gallery hex is not temp');
+
+assert.deepEqual(
+    parseImgQueryBody(`avg ${tempId} ${fullImageId}`),
+    { kind: 'mode', mode: 'avg', imageIds: [tempId, fullImageId], negativeImageIds: [] },
+    'parses IMG avg mode with temp + gallery ids',
+);
+
+assert.deepEqual(
+    parseWeightedImgQueryClauses(`${tempId} + cat`),
+    [
+        { kind: 'image', imageId: tempId, weight: 1 },
+        { kind: 'text', text: 'cat', weight: 1 },
+    ],
+    'parses weighted IMG clause with temp image id',
+);
+
+const sourceEmbedding = Float32Array.from([0.1, 0.2, 0.3]);
+const encodedTemp = encodeFloat32Embedding(sourceEmbedding);
+assert.deepEqual(
+    [...decodeFloat32Embedding(encodedTemp)],
+    [...sourceEmbedding],
+    'round-trips float32 embedding via base64',
+);
+
+assert.equal(
+    isTempEmbeddingsMap({ [tempId]: encodedTemp }),
+    true,
+    'accepts valid tempEmbeddings map',
+);
+assert.equal(
+    isTempEmbeddingsMap({ [fullImageId]: encodedTemp }),
+    false,
+    'rejects non-temp keys in tempEmbeddings',
+);
+assert.equal(
+    isTempEmbeddingsMap({ [tempId]: '' }),
+    false,
+    'rejects empty embedding payloads',
+);
+
+assert.equal(
+    isStreamRequest({
+        search: `IMG ${tempId}`,
+        matching: 'regex',
+        sorting: 'date',
+        explorationMode: 'none',
+        sparseFrequency: 25,
+        similarityAlgorithm: 'token-jaccard',
+        similarityThreshold: 0.5,
+        tempEmbeddings: { [tempId]: encodedTemp },
+    }),
+    true,
+    'stream request accepts optional tempEmbeddings',
 );
 
 console.log('searching.test.ts: all tests passed');

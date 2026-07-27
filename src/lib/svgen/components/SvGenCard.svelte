@@ -1,7 +1,14 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
     import DragHandle from '$lib/components/DragHandle.svelte';
+    import SortableList from '$lib/components/SortableList.svelte';
     import type { SvgenCard, SvgenField } from '$lib/svgen/types';
+    import {
+        nodePreviewStoreKey,
+        svgenNodePreviewsStore,
+        svgenOpenSessionsStore,
+    } from '$lib/svgen/stores';
+    import SvGenAuthImg from './SvGenAuthImg.svelte';
     import SvGenEnablePill from './SvGenEnablePill.svelte';
     import SvGenField from './SvGenField.svelte';
 
@@ -45,6 +52,8 @@
     $: bodyFields = enableField
         ? card.fields.filter((f) => f !== enableField)
         : card.fields;
+    $: bodyFieldIds = bodyFields.map((f) => fieldId(f));
+    $: bodyFieldById = new Map(bodyFields.map((f) => [fieldId(f), f]));
     // Match original panel: output-image cards never collapse into the title row.
     $: prefersInline = bodyFields.length === 1
         && !bodyFields[0]?.tall
@@ -55,11 +64,21 @@
         editMode = false;
     $: useInline = prefersInline && !collapsed && !editMode;
 
-    function fieldKey(field: SvgenField, index: number): string {
+    $: activeSessionId = $svgenOpenSessionsStore.activeId;
+    $: outputPreview = card.imageDisplay && activeSessionId
+        ? ($svgenNodePreviewsStore.get(nodePreviewStoreKey(activeSessionId, card.nodeId)) ?? null)
+        : null;
+    $: outputPreviewPath = outputPreview?.path ?? '';
+    $: outputPreviewCaption = outputPreview && outputPreview.images.length > 1
+        ? `1 / ${outputPreview.images.length}`
+        : '';
+
+    /** Stable across reorder — never key SortableList by widgetName alone (proxies collide). */
+    function fieldId(field: SvgenField): string {
         return [
             field.innerNodeId ?? 'outer',
             field.widgetName,
-            String(field.valueIndex ?? index),
+            String(field.valueIndex),
         ].join('\0');
     }
 
@@ -87,12 +106,16 @@
         });
     }
 
-    function moveField(from: number, to: number) {
-        if (from === to)
-            return;
-        const order = card.fields.map((f) => f.widgetName);
-        const [item] = order.splice(from, 1);
-        order.splice(to, 0, item);
+    /** Apply body-widget drag order while keeping the enable pill's slot in `card.fields`. */
+    function onBodyReorder(ids: string[]) {
+        const bodyQueue = ids.map((id) => bodyFieldById.get(id)?.widgetName)
+            .filter((name): name is string => !!name);
+        let i = 0;
+        const order = card.fields.map((f) => {
+            if (enableField && f === enableField)
+                return f.widgetName;
+            return bodyQueue[i++] ?? f.widgetName;
+        });
         dispatch('fieldOrder', { nodeId: card.nodeId, order });
     }
 </script>
@@ -130,6 +153,7 @@
             <button
                 type="button"
                 class="title-btn"
+                tabindex="-1"
                 on:click={() => dispatch('toggleCollapse', card.nodeId)}
             >
                 {card.title}
@@ -146,6 +170,7 @@
                     type="button"
                     class="edit"
                     class:active={editMode}
+                    tabindex="-1"
                     on:click={() => (editMode = !editMode)}
                     title="Edit fields"
                 >Edit</button>
@@ -153,49 +178,85 @@
         </header>
 
         {#if !collapsed}
-            <div class="field-grid">
+            <div class="fields">
                 {#if card.imageDisplay}
                     <div class="field-wrap tall">
-                        <div class="preview-placeholder">No preview yet</div>
+                        <div class="output-preview">
+                            {#if outputPreviewPath}
+                                <SvGenAuthImg path={outputPreviewPath} loading="eager">
+                                    <svelte:fragment slot="fallback">
+                                        <span class="empty">Preview unavailable</span>
+                                    </svelte:fragment>
+                                </SvGenAuthImg>
+                            {:else}
+                                <span class="empty">No preview yet</span>
+                            {/if}
+                            {#if outputPreviewCaption}
+                                <div class="caption" title={outputPreviewCaption}>
+                                    {outputPreviewCaption}
+                                </div>
+                            {/if}
+                        </div>
                     </div>
                 {/if}
-                {#each bodyFields as field, index (fieldKey(field, index))}
-                    <div class="field-wrap" class:tall={field.tall}>
-                        {#if editMode}
-                            <div class="reorder">
-                                <button
-                                    type="button"
-                                    disabled={index === 0}
-                                    on:click={() => moveField(
-                                        card.fields.indexOf(field),
-                                        Math.max(0, card.fields.indexOf(field) - 1),
-                                    )}
-                                >↑</button>
-                                <button
-                                    type="button"
-                                    disabled={index >= bodyFields.length - 1}
-                                    on:click={() => moveField(
-                                        card.fields.indexOf(field),
-                                        Math.min(card.fields.length - 1, card.fields.indexOf(field) + 1),
-                                    )}
-                                >↓</button>
-                            </div>
-                        {/if}
-                        <SvGenField
-                            {field}
-                            {editMode}
-                            hideLabel={bodyFields.length <= 1 && !editMode && !card.imageDisplay}
-                            on:change={(e) => emitFieldChange(field, e.detail)}
-                            on:companion={(e) => emitCompanion(e.detail)}
-                            on:persistLayout={() => dispatch('persistLayout')}
-                            on:hide={() =>
-                                dispatch('hideField', {
-                                    nodeId: card.nodeId,
-                                    widgetName: field.widgetName,
-                                })}
-                        />
+                {#if canEditFields}
+                    <div class="fields-sortable">
+                        <SortableList
+                            ids={bodyFieldIds}
+                            axis="xy"
+                            asGrid
+                            disabled={!editMode}
+                            on:reorder={(e) => onBodyReorder(e.detail.ids)}
+                            let:id
+                            let:startDrag
+                        >
+                            {@const field = bodyFieldById.get(id)}
+                            {#if field}
+                                <div class="field-wrap" class:tall={field.tall} class:editing={editMode}>
+                                    {#if editMode}
+                                        <DragHandle
+                                            label="Drag to reorder {field.label}"
+                                            on:pointerdown={startDrag}
+                                        />
+                                    {/if}
+                                    <SvGenField
+                                        {field}
+                                        {editMode}
+                                        hideLabel={false}
+                                        on:change={(e) => emitFieldChange(field, e.detail)}
+                                        on:companion={(e) => emitCompanion(e.detail)}
+                                        on:persistLayout={() => dispatch('persistLayout')}
+                                        on:hide={() =>
+                                            dispatch('hideField', {
+                                                nodeId: card.nodeId,
+                                                widgetName: field.widgetName,
+                                            })}
+                                    />
+                                </div>
+                            {/if}
+                        </SortableList>
                     </div>
-                {/each}
+                {:else}
+                    <div class="field-grid">
+                        {#each bodyFields as field (fieldId(field))}
+                            <div class="field-wrap" class:tall={field.tall}>
+                                <SvGenField
+                                    {field}
+                                    {editMode}
+                                    hideLabel={bodyFields.length <= 1 && !editMode && !card.imageDisplay}
+                                    on:change={(e) => emitFieldChange(field, e.detail)}
+                                    on:companion={(e) => emitCompanion(e.detail)}
+                                    on:persistLayout={() => dispatch('persistLayout')}
+                                    on:hide={() =>
+                                        dispatch('hideField', {
+                                            nodeId: card.nodeId,
+                                            widgetName: field.widgetName,
+                                        })}
+                                />
+                            </div>
+                        {/each}
+                    </div>
+                {/if}
             </div>
         {/if}
     {/if}
@@ -297,25 +358,102 @@
         height: 13px;
     }
 
-    .preview-placeholder {
-        display: grid;
-        place-items: center;
+    .output-preview {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         box-sizing: border-box;
         width: 100%;
         min-height: 120px;
         max-height: 220px;
+        overflow: hidden;
         border-radius: 7px;
         border: none;
-        font-size: 0.68rem;
-        opacity: 0.5;
-        background: rgba(0, 0, 0, 0.22);
+        background-color: rgba(0, 0, 0, 0.22);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+        background-image:
+            linear-gradient(45deg, color-mix(in srgb, var(--ink) 4%, transparent) 25%, transparent 25%),
+            linear-gradient(-45deg, color-mix(in srgb, var(--ink) 4%, transparent) 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--ink) 4%, transparent) 75%),
+            linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--ink) 4%, transparent) 75%);
+        background-size: 16px 16px;
+        background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+
+        :global(img) {
+            display: block;
+            max-width: 100%;
+            max-height: 220px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .empty {
+            padding: 1rem 1rem 2rem;
+            font-size: 0.68rem;
+            opacity: 0.5;
+            text-align: center;
+            font-style: italic;
+        }
+
+        .caption {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1;
+            box-sizing: border-box;
+            padding: 0.35rem 0.5rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.65rem;
+            line-height: 1.2;
+            color: color-mix(in srgb, var(--ink) 92%, transparent);
+            background: linear-gradient(
+                to top,
+                rgba(0, 0, 0, 0.72) 0%,
+                rgba(0, 0, 0, 0.35) 70%,
+                transparent 100%
+            );
+            pointer-events: none;
+        }
+    }
+
+    .fields {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
     }
 
     .field-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
         gap: 5px;
+        min-width: 0;
+    }
+
+    .fields-sortable {
+        min-width: 0;
+
+        :global(.sortable-list.as-grid) {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+            gap: 5px;
+            align-items: start;
+        }
+
+        :global(.sortable-item),
+        :global(.sortable-item-body) {
+            min-width: 0;
+            width: 100%;
+        }
+
+        :global(.sortable-item:has(.tall)) {
+            grid-column: 1 / -1;
+        }
     }
 
     .field-wrap {
@@ -323,9 +461,14 @@
         gap: 0.25rem;
         align-items: flex-start;
         min-width: 0;
+        width: 100%;
 
         &.tall {
             grid-column: 1 / -1;
+        }
+
+        &.editing :global(.drag-handle) {
+            margin-top: 0.95rem;
         }
 
         :global(.field) {
@@ -334,35 +477,20 @@
         }
     }
 
-    .reorder {
-        display: flex;
-        flex-direction: column;
-        gap: 0.1rem;
-        padding-top: 0.95rem;
-
-        button {
-            appearance: none;
-            border: none;
-            border-radius: 0.35em;
-            background: var(--accent-soft);
-            color: inherit;
-            font-size: 0.6rem;
-            line-height: 1;
-            padding: 0.08rem 0.2rem;
-            cursor: pointer;
-
-            &:disabled {
-                opacity: 0.3;
-            }
-        }
-    }
-
     @media (max-width: 420px) {
         .field-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
+        .fields-sortable :global(.sortable-list.as-grid) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
         .field-grid > .field-wrap:last-child:nth-child(odd):not(.tall) {
+            grid-column: 1 / -1;
+        }
+
+        .fields-sortable :global(.sortable-item:last-child:nth-child(odd):not(:has(.tall))) {
             grid-column: 1 / -1;
         }
     }

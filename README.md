@@ -247,7 +247,10 @@ Cycles through images in order every 4 seconds. The delay can be modified in the
 ## Hotkeys
 
 You can use the `arrow keys` to cycle through images while in fullscreen.  
-You can use `Space` to start and stop the slideshow.
+You can use `Space` to start and stop the slideshow.  
+`F` toggles the flyout (not with Ctrl/⌘).  
+`Ctrl/⌘+S` cycles sorting modes.  
+`Ctrl/⌘+D` toggles the filters dropdown.
 
 ## Mobile
 

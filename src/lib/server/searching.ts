@@ -14,10 +14,13 @@ import {
     resolveImgSimilaritySearchLimits,
     parseImgQueryBody,
     extractImgSearchTarget,
+    isTempImageEmbeddingId,
     type ParsedWeightedImgQueryClause,
     type ImgSearchMode,
     type ParsedImgModeQuery,
 } from "$lib/tools/searchParsing";
+import type { TempEmbeddingsMap } from "$lib/types/requests";
+import { decodeFloat32Embedding } from "$lib/tools/tempEmbeddings";
 import {
     matchesAspectComparisons,
     parseAspectComparisons,
@@ -295,6 +298,8 @@ export function getResultWindow(search: string): { skip: number; take: number } 
 type SearchAbortOptions = {
     isAborted?: () => boolean;
     signal?: AbortSignal;
+    /** Client-held vectors for `temp:…` IMG refs. */
+    tempEmbeddings?: TempEmbeddingsMap;
 };
 
 type WeightedImgQueryEmbedding = {
@@ -413,11 +418,43 @@ async function embedWeightedImgQueryClauses(
     return embeddings;
 }
 
+function resolveTempImageEmbedding(
+    imageId: string,
+    tempEmbeddings: TempEmbeddingsMap | undefined,
+): Float32Array {
+    const encoded = tempEmbeddings?.[imageId] ?? tempEmbeddings?.[imageId.toLowerCase()];
+    if (typeof encoded !== "string" || !encoded)
+        throw new Error(`Temp image embedding not found: ${imageId}`);
+
+    const embedding = decodeFloat32Embedding(encoded);
+    if (!embedding.length)
+        throw new Error(`Temp image embedding not found: ${imageId}`);
+
+    const storedDimensions = EmbeddingDB.getDimensions();
+    if (storedDimensions !== null && embedding.length !== storedDimensions)
+        throw new EmbeddingDimensionMismatchError(storedDimensions, embedding.length);
+    return embedding;
+}
+
+function hasResolvableImageRef(
+    imageId: string,
+    tempEmbeddings: TempEmbeddingsMap | undefined,
+): boolean {
+    if (isTempImageEmbeddingId(imageId)) {
+        const encoded = tempEmbeddings?.[imageId] ?? tempEmbeddings?.[imageId.toLowerCase()];
+        return typeof encoded === "string" && encoded.length > 0;
+    }
+    return getImageList().has(imageId);
+}
+
 /** Prefer stored embedding; fall back to embedding API for the reference image. */
 async function resolveImageEmbedding(
     imageId: string,
     options: SearchAbortOptions,
 ): Promise<Float32Array> {
+    if (isTempImageEmbeddingId(imageId))
+        return resolveTempImageEmbedding(imageId, options.tempEmbeddings);
+
     const stored = EmbeddingDB.getEmbeddingsByIds([imageId]);
     if (stored[0])
         return stored[0].embedding;
@@ -452,13 +489,20 @@ async function resolveImageEmbeddings(
     return embeddings;
 }
 
-function weightedImgClausesHaveMissingImage(clauses: ParsedWeightedImgQueryClause[]): boolean {
-    return clauses.some((clause) => clause.kind === 'image' && !getImageList().has(clause.imageId));
+function weightedImgClausesHaveMissingImage(
+    clauses: ParsedWeightedImgQueryClause[],
+    tempEmbeddings?: TempEmbeddingsMap,
+): boolean {
+    return clauses.some((clause) =>
+        clause.kind === 'image' && !hasResolvableImageRef(clause.imageId, tempEmbeddings));
 }
 
-function imgModeHasMissingImage(modeQuery: ParsedImgModeQuery): boolean {
+function imgModeHasMissingImage(
+    modeQuery: ParsedImgModeQuery,
+    tempEmbeddings?: TempEmbeddingsMap,
+): boolean {
     return [...modeQuery.imageIds, ...modeQuery.negativeImageIds]
-        .some((imageId) => !getImageList().has(imageId));
+        .some((imageId) => !hasResolvableImageRef(imageId, tempEmbeddings));
 }
 
 function findWeightedImgMatches(
@@ -751,11 +795,11 @@ export async function resolveImgSearchContext(
 
         const parsedQuery = parseImgQueryBody(queryText);
         if (parsedQuery.kind === 'mode') {
-            if (imgModeHasMissingImage(parsedQuery)) {
+            if (imgModeHasMissingImage(parsedQuery, options.tempEmbeddings)) {
                 context.parts.set(index, { presence: false, invalid: true });
                 continue;
             }
-        } else if (weightedImgClausesHaveMissingImage(parsedQuery.clauses)) {
+        } else if (weightedImgClausesHaveMissingImage(parsedQuery.clauses, options.tempEmbeddings)) {
             context.parts.set(index, { presence: false, invalid: true });
             continue;
         }
@@ -953,6 +997,7 @@ export type SearchOptions = {
     sorting?: SortingMethod;
     skipResults?: boolean;
     takeResults?: boolean;
+    tempEmbeddings?: TempEmbeddingsMap;
 };
 
 type SearchPlanBase = {
@@ -1332,7 +1377,14 @@ export async function searchImagesAsync(
     exploration: ExplorationSettings,
     options: SearchOptions = {},
 ): Promise<SearchImagesResult> {
-    const plan = await buildSearchPlan(search, matching, exploration, options.sorting ?? 'date');
+    const plan = await buildSearchPlan(
+        search,
+        matching,
+        exploration,
+        options.sorting ?? 'date',
+        undefined,
+        { tempEmbeddings: options.tempEmbeddings },
+    );
     return {
         images: collectSearchPlanImages(plan, options),
         imgSearchError: plan.imgSearchContext?.error,
@@ -1357,6 +1409,7 @@ export type SearchStreamOptions = {
     maxChunkImages?: number;
     isAborted?: () => boolean;
     signal?: AbortSignal;
+    tempEmbeddings?: TempEmbeddingsMap;
 };
 
 export class SearchStreamAborted extends Error {

@@ -33,7 +33,7 @@
     openWorkflowInComfy,
     rememberImageInfo,
   } from "$lib/requests/imageRequests";
-  import { requestOpenInPanel, svgenUiStore } from "$lib/svgen/stores";
+  import { requestOpenInPanel, requestUseParamsFromImage, svgenSessionStore, svgenUiStore } from "$lib/svgen/stores";
   import { get } from "svelte/store";
   import { flyoutState } from "$lib/stores/flyoutStore";
   import { updateImageAnnotation } from "$lib/requests/annotationRequests";
@@ -383,6 +383,9 @@
       }
       if (get(svgenUiStore).enabled) {
         actions.push({ name: "Open in panel", handler: openInPanel });
+        if (get(flyoutState) && get(svgenSessionStore)) {
+          actions.push({ name: "Use params", handler: useParamsFromImage });
+        }
       }
     } else if (stageInfo?.prompt) {
       actions.push({ name: "Copy all", handler: copyPrompt });
@@ -549,6 +552,11 @@
     flyoutState.set(true);
     requestOpenInPanel(stageId);
     notify("Opened workflow in Generate panel");
+  }
+
+  function useParamsFromImage() {
+    if (!stageId) return;
+    requestUseParamsFromImage(stageId);
   }
 
   async function openInComfy() {

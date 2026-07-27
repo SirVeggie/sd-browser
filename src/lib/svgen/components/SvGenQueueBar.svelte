@@ -32,9 +32,6 @@
     let panelTop = 0;
     let panelMinWidth = 0;
     let panelMaxHeight = 0;
-    let burgerLeft = 0;
-    let burgerTop = 0;
-    let burgerMinWidth = 0;
     let removeOutside: (() => void) | undefined;
     let removeBurgerOutside: (() => void) | undefined;
     let removePositionListeners: (() => void) | undefined;
@@ -54,23 +51,11 @@
         panelMaxHeight = Math.max(120, window.innerHeight - rect.bottom - 8);
     }
 
-    function updateBurgerPosition() {
-        if (!burgerEl)
-            return;
-        const rect = burgerEl.getBoundingClientRect();
-        const gap = 5;
-        burgerMinWidth = Math.max(rect.width, 9 * 16);
-        burgerLeft = Math.max(8, rect.right - burgerMinWidth);
-        burgerTop = rect.bottom + gap;
-    }
-
     function startPositionListeners() {
         stopPositionListeners();
         const update = () => {
             if (open)
                 updatePanelPosition();
-            if (burgerOpen)
-                updateBurgerPosition();
         };
         window.addEventListener('resize', update);
         window.addEventListener('scroll', update, true);
@@ -116,10 +101,7 @@
                 },
                 () => burgerEl,
             );
-            void tick().then(() => {
-                updateBurgerPosition();
-                startPositionListeners();
-            });
+            stopPositionListeners();
             return;
         }
 
@@ -271,34 +253,31 @@
             <span>Queue</span>
             <span class="count">{queueActive}</span>
         </button>
-        <div class="burger" bind:this={burgerEl}>
+        <div class="nav-burger-menu" bind:this={burgerEl}>
             <button
                 type="button"
-                class="burger-btn"
-                class:open={burgerOpen}
-                aria-label="More actions"
+                class="nav-menu-toggle"
+                aria-expanded={burgerOpen}
+                aria-haspopup="menu"
+                aria-label="Actions menu"
                 title="More"
                 disabled={empty}
-                on:click={toggleBurger}
+                on:click|stopPropagation={toggleBurger}
             >
-                <span class="burger-icon" aria-hidden="true">
-                    <span /><span /><span />
+                <span class="burger" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
                 </span>
             </button>
-            {#if burgerOpen}
-                <div
-                    class="menu burger-menu"
-                    style={`left: ${burgerLeft}px; top: ${burgerTop}px; min-width: ${burgerMinWidth}px;`}
-                    role="menu"
-                >
-                    <button type="button" class="menu-action" role="menuitem" on:click={onOpenInComfy}>
-                        Open in Comfy
-                    </button>
-                    <button type="button" class="menu-action" role="menuitem" on:click={onDownload}>
-                        JSON
-                    </button>
-                </div>
-            {/if}
+            <div class="nav-burger-actions" class:open={burgerOpen} role="menu">
+                <button type="button" role="menuitem" on:click={onOpenInComfy}>
+                    Open in Comfy
+                </button>
+                <button type="button" role="menuitem" on:click={onDownload}>
+                    JSON
+                </button>
+            </div>
         </div>
     </div>
 
@@ -308,6 +287,8 @@
 </div>
 
 <style lang="scss">
+    @use "$lib/items/dropdownAnimations.scss" as dropdown;
+
     .bar {
         display: flex;
         flex-direction: column;
@@ -546,32 +527,56 @@
         }
     }
 
-    .burger {
+    .nav-burger-menu {
         position: relative;
         flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        align-self: center;
     }
 
-    .burger-btn {
+    .nav-menu-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
         appearance: none;
-        display: grid;
-        place-items: center;
-        width: 1.85rem;
-        height: 1.85rem;
-        padding: 0;
+        margin: 0;
+        box-sizing: border-box;
+        min-height: calc(0.8rem * 1.2 + 1em);
+        min-width: calc(0.8rem * 1.2 + 1em);
+        padding: 0.5em;
         border: none;
         border-radius: 0.4em;
-        background: var(--accent-soft);
-        color: inherit;
+        background: transparent;
+        color: var(--ink);
         cursor: pointer;
-        transition: background-color 0.08s ease;
+        line-height: 0;
+        transition: color 0.12s ease, background-color 0.12s ease;
 
-        &:hover:not(:disabled) {
-            background: rgba(196, 165, 116, 0.24);
+        .burger {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 3px;
+            width: 14px;
+
+            span {
+                display: block;
+                height: 2px;
+                border-radius: 1px;
+                background: currentColor;
+            }
         }
 
-        &.open {
-            background: rgba(196, 165, 116, 0.28);
+        &:hover:not(:disabled),
+        &:focus-visible {
             color: var(--accent);
+            background: transparent;
+        }
+
+        &:focus {
+            outline: none;
         }
 
         &:disabled {
@@ -580,35 +585,63 @@
         }
     }
 
-    .burger-icon {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-        width: 0.85rem;
+    .nav-burger-actions {
+        display: none;
+        gap: 0.5em;
+        flex-shrink: 0;
 
-        span {
-            display: block;
-            height: 1.5px;
-            border-radius: 1px;
-            background: currentColor;
-        }
-    }
+        &.open {
+            display: flex;
+            flex-direction: column;
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            z-index: 230;
+            box-sizing: border-box;
+            gap: 0.15em;
+            width: max-content;
+            min-width: 8.75rem;
+            max-width: min(14rem, 80vw);
+            padding: 0.3em;
+            background: var(--bg-elev);
+            border: none;
+            border-radius: 0.35em;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+            @include dropdown.panel-animation;
+            @include dropdown.reduced-motion;
 
-    .menu-action {
-        appearance: none;
-        display: block;
-        width: 100%;
-        border: none;
-        border-radius: 6px;
-        background: transparent;
-        color: inherit;
-        padding: 0.45rem 0.55rem;
-        font-size: 0.8rem;
-        cursor: pointer;
-        text-align: left;
+            button {
+                box-sizing: border-box;
+                display: block;
+                width: 100%;
+                min-width: 0;
+                margin: 0;
+                padding: 0.42em 0.7em;
+                border: none;
+                border-radius: 0.25em;
+                background: transparent;
+                color: var(--ink);
+                font-size: 0.875rem;
+                line-height: 1.25;
+                text-align: left;
+                white-space: nowrap;
+                cursor: pointer;
+                transform: none;
+                transition: background-color 0.12s ease;
+                @include dropdown.option-animation;
+                @include dropdown.reduced-motion;
 
-        &:hover {
-            background: color-mix(in srgb, var(--accent) 18%, transparent);
+                &:hover,
+                &:focus-visible {
+                    background: rgba(255, 255, 255, 0.08);
+                    transform: none;
+                }
+
+                &:active {
+                    background: rgba(255, 255, 255, 0.12);
+                    transform: none;
+                }
+            }
         }
     }
 

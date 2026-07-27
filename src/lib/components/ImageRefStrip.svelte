@@ -12,6 +12,7 @@
     import {
         clearImageRefs,
         imageRefs,
+        isTempImageRefId,
         removeImageRef,
         type ImageSearchRef,
     } from "$lib/stores/imageRefStore";
@@ -98,6 +99,14 @@
         return `/api/images/${id}?${buildImageQueryParams($thumbMode, extra)}`;
     }
 
+    function resolveRefImageUrl(ref: ImageSearchRef, defer = true): string | undefined {
+        if (ref.preview)
+            return ref.preview;
+        if (isTempImageRefId(ref.id))
+            return undefined;
+        return buildRefThumbUrl(ref.id, defer);
+    }
+
     function openPreview(ref: ImageSearchRef) {
         previewRef = ref;
     }
@@ -145,7 +154,11 @@
                         contextMenu={() => removeRef(ref.slot)}
                     >
                         <div class="thumb" title={`Reference #${ref.slot}`}>
-                            <img src={buildRefThumbUrl(ref.id)} alt="" loading="lazy" draggable="false" />
+                            {#if resolveRefImageUrl(ref)}
+                                <img src={resolveRefImageUrl(ref)} alt="" loading="lazy" draggable="false" />
+                            {:else}
+                                <div class="thumb-placeholder" aria-hidden="true"></div>
+                            {/if}
                             <span class="badge">#{ref.slot}</span>
                         </div>
                     </Clickable>
@@ -176,7 +189,11 @@
                                 >
                                     <div class="overflow-item" role="menuitem">
                                         <div class="thumb">
-                                            <img src={buildRefThumbUrl(ref.id)} alt="" loading="lazy" draggable="false" />
+                                            {#if resolveRefImageUrl(ref)}
+                                                <img src={resolveRefImageUrl(ref)} alt="" loading="lazy" draggable="false" />
+                                            {:else}
+                                                <div class="thumb-placeholder" aria-hidden="true"></div>
+                                            {/if}
                                             <span class="badge">#{ref.slot}</span>
                                         </div>
                                     </div>
@@ -203,7 +220,7 @@
 {#if previewRef}
     <ImageRefPreviewModal
         ref={previewRef}
-        imageUrl={buildRefThumbUrl(previewRef.id, false)}
+        imageUrl={resolveRefImageUrl(previewRef, false) ?? ""}
         onClose={closePreview}
         onRemove={removePreviewRef}
     />
@@ -264,6 +281,20 @@
             height: 100%;
             object-fit: cover;
             display: block;
+        }
+
+        .thumb-placeholder {
+            width: 100%;
+            height: 100%;
+            background:
+                linear-gradient(135deg, rgba(196, 165, 116, 0.18), transparent 55%),
+                repeating-linear-gradient(
+                    -45deg,
+                    rgba(255, 255, 255, 0.04),
+                    rgba(255, 255, 255, 0.04) 4px,
+                    transparent 4px,
+                    transparent 8px
+                );
         }
 
         &:hover {

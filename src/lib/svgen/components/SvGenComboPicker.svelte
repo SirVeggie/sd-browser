@@ -1,3 +1,8 @@
+<script lang="ts" context="module">
+    /** Survives close/reopen and field remounts (collapse/reorder). Keyed by field DOM id. */
+    const rememberedFolderPaths = new Map<string, string[]>();
+</script>
+
 <script lang="ts">
     import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
     import { bindDropdownOutsideClick } from '$lib/tools/dropdownOutsideClick';
@@ -8,15 +13,21 @@
 
     const dispatch = createEventDispatcher<{ change: string }>();
     const SEARCH_MIN = 15;
+    // Skip autofocus on touch — opening / navigating must not pop the soft keyboard.
+    const finePointer =
+        typeof matchMedia !== 'undefined'
+        && matchMedia('(hover: hover) and (pointer: fine)').matches;
 
     type Leaf = { value: string; label: string; path: string[] };
     type Folder = { name: string; children: Map<string, Folder>; leaves: Leaf[] };
 
     let open = false;
     let path: string[] = [];
+    let pathKey: string | undefined;
     let query = '';
     let rootEl: HTMLDivElement;
     let triggerEl: HTMLButtonElement;
+    let searchEl: HTMLInputElement | undefined;
     let menuStyle = '';
     let unbindOutside: (() => void) | undefined;
 
@@ -24,9 +35,23 @@
     $: showSearch = leaves.length >= SEARCH_MIN;
     $: selectedLabel = leaves.find((l) => l.value === value)?.label ?? value;
     $: tree = buildTree(leaves);
+    // Restore last submenu for this field (or clear when id is missing).
+    $: if (id !== pathKey) {
+        pathKey = id;
+        path = id ? (rememberedFolderPaths.get(id) ?? []) : [];
+    }
+    // Drop stale segments if options no longer contain that folder.
+    $: {
+        const clamped = clampPath(tree, path);
+        if (!pathsEqual(clamped, path))
+            path = clamped;
+    }
+    $: if (id)
+        rememberedFolderPaths.set(id, path);
     $: currentFolder = folderAtPath(tree, path);
+    $: searchScope = leavesInSubtree(currentFolder);
     $: filteredLeaves = query.trim()
-        ? leaves
+        ? searchScope
             .filter((leaf) => {
                 const q = query.trim().toLowerCase();
                 return leaf.label.toLowerCase().includes(q)
@@ -71,11 +96,36 @@
         return node;
     }
 
+    function clampPath(root: Folder, parts: string[]): string[] {
+        const valid: string[] = [];
+        let node = root;
+        for (const part of parts) {
+            const next = node.children.get(part);
+            if (!next)
+                break;
+            valid.push(part);
+            node = next;
+        }
+        return valid;
+    }
+
+    function pathsEqual(a: string[], b: string[]): boolean {
+        return a.length === b.length && a.every((part, i) => part === b[i]);
+    }
+
+    /** Leaves in this folder and all nested folders (current submenu scope). */
+    function leavesInSubtree(folder: Folder): Leaf[] {
+        const out: Leaf[] = [...folder.leaves];
+        for (const child of folder.children.values())
+            out.push(...leavesInSubtree(child));
+        return out;
+    }
+
     function close() {
         if (!open)
             return;
         open = false;
-        path = [];
+        // Keep `path` so reopen lands in the same submenu; Back still works.
         query = '';
         menuStyle = '';
         window.removeEventListener('resize', reposition);
@@ -130,8 +180,27 @@
         open = true;
         await tick();
         reposition();
+        focusSearch();
         window.addEventListener('resize', reposition);
         document.addEventListener('scroll', reposition, true);
+    }
+
+    function focusSearch() {
+        if (!finePointer || !showSearch)
+            return;
+        searchEl?.focus();
+    }
+
+    async function enterFolder(folderName: string) {
+        path = [...path, folderName];
+        await tick();
+        focusSearch();
+    }
+
+    async function goBack() {
+        path = path.slice(0, -1);
+        await tick();
+        focusSearch();
     }
 
     function pick(next: string) {
@@ -173,6 +242,7 @@
                         class="search"
                         type="search"
                         placeholder="Search..."
+                        bind:this={searchEl}
                         bind:value={query}
                         on:pointerdown|stopPropagation
                     />
@@ -199,7 +269,7 @@
                         <button
                             type="button"
                             class="back"
-                            on:click={() => (path = path.slice(0, -1))}
+                            on:click={() => void goBack()}
                         >
                             Back: {path[path.length - 1]}
                         </button>
@@ -208,7 +278,7 @@
                         <button
                             type="button"
                             class="folder"
-                            on:click={() => (path = [...path, folderName])}
+                            on:click={() => void enterFolder(folderName)}
                         >
                             <span>{folderName}</span>
                             <span class="folder-chevron" aria-hidden="true" />

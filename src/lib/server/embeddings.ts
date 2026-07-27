@@ -385,7 +385,7 @@ export async function embedQuery(
     }
 }
 
-async function embedEncodedImages(
+export async function embedEncodedImages(
     config: EmbeddingRequestConfig,
     buffers: Buffer[],
     mediaMarker?: string,

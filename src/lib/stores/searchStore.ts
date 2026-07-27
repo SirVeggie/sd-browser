@@ -1,5 +1,5 @@
 import { getActiveCustomFilterStrings } from "$lib/stores/customFiltersStore";
-import { getImageRefMap } from "$lib/stores/imageRefStore";
+import { getImageRefMap, getTempEmbeddingsMap } from "$lib/stores/imageRefStore";
 import { combineSearchQuery } from "$lib/tools/searchQuery";
 import {
     expandSearchReferences,
@@ -16,6 +16,7 @@ import {
     type SearchMode,
     type SimilarityAlgorithm,
 } from "$lib/types/misc";
+import type { TempEmbeddingsMap } from "$lib/types/requests";
 import { get, writable, type Writable } from "svelte/store";
 
 export type SearchParams = {
@@ -25,6 +26,7 @@ export type SearchParams = {
     sparseFrequency: number;
     similarityAlgorithm: SimilarityAlgorithm;
     similarityThreshold: number;
+    tempEmbeddings?: TempEmbeddingsMap;
 };
 
 export const nsfwFilterDefault = 'NOT FOLDER nsfw AND NOT nude|sex|seductive|underwear|pussy|cum|fellatio|ahegao|lust|crotch|vagina|penis|blow ?job|hentai|nipple|rating_explicit|rating_questionable';
@@ -54,6 +56,7 @@ export function buildSearchParams(searchText?: string): SearchParams {
         ? INVALID_REF_SEARCH
         : expandSearchReferences(userSearch, refs);
     const search = combineSearchQuery(queryText, filters);
+    const tempEmbeddings = getTempEmbeddingsMap(search);
     return {
         search,
         matching: get(matchingMode),
@@ -61,6 +64,7 @@ export function buildSearchParams(searchText?: string): SearchParams {
         sparseFrequency: get(sparseFrequency),
         similarityAlgorithm: isSimilarityAlgorithm(algorithm) ? algorithm : defaultExplorationSettings.similarityAlgorithm,
         similarityThreshold: get(similarityThreshold),
+        ...(tempEmbeddings ? { tempEmbeddings } : {}),
     };
 }
 
