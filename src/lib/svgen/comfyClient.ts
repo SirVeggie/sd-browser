@@ -251,6 +251,25 @@ export async function openFromImage(imageId: string): Promise<{
     };
 }
 
+/** Push a workflow graph to Comfy's pending open slot. */
+export async function openWorkflowInComfy(payload: {
+    workflow: ComfyWorkflow;
+    imageId?: string | null;
+    comfyToken?: string;
+}): Promise<void> {
+    const response = await fetch(originUrl('/api/comfy/open-workflow'), {
+        method: 'POST',
+        headers: headers(payload.comfyToken),
+        body: JSON.stringify({
+            workflow: payload.workflow,
+            ...(payload.imageId ? { imageId: payload.imageId } : {}),
+            comfyToken: payload.comfyToken,
+        }),
+    });
+    const body = await parseJson(response);
+    throwIfError(response, body, 'Failed to open workflow in Comfy');
+}
+
 export async function fetchPendingPanelWorkflow(): Promise<{
     id: string;
     workflow: ComfyWorkflow;

@@ -80,12 +80,25 @@ export type SvgenLayoutState = {
 };
 
 export type SvgenSession = {
+    /** Set after save for layout persistence only — opening from library never links. */
     workflowId: string | null;
     name: string;
     workflow: ComfyWorkflow;
     prompt: ComfyPrompt | null;
     sourceImageId: string | null;
-    dirty: boolean;
+};
+
+/** One in-memory open tab/session (not necessarily saved). */
+export type SvgenOpenSession = {
+    id: string;
+    workflowId: string | null;
+    name: string;
+    workflow: ComfyWorkflow;
+    prompt: ComfyPrompt | null;
+    sourceImageId: string | null;
+    layout: SvgenLayoutState;
+    frozenSeeds: string[];
+    lastUsedSeeds: [string, number][];
 };
 
 export type SvgenWorkflowSummary = {

@@ -56,7 +56,7 @@ function patchWidget(
     );
     if (workflow === session.workflow)
         return;
-    svgenSessionStore.update((s) => (s ? { ...s, workflow, prompt: null, dirty: true } : s));
+    svgenSessionStore.update((s) => (s ? { ...s, workflow, prompt: null } : s));
 }
 
 export function writeSdBrowserPickerImage(imageId: string) {

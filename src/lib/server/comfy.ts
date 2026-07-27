@@ -14,7 +14,7 @@ export function getComfyPublicUrl(): string {
 
 export type PostWorkflowPayload = {
     workflow: unknown;
-    imageId: string;
+    imageId?: string;
     source?: string;
     token?: string;
 };
@@ -122,7 +122,7 @@ export async function postWorkflowToComfy(payload: PostWorkflowPayload): Promise
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             workflow: payload.workflow,
-            imageId: payload.imageId,
+            ...(payload.imageId ? { imageId: payload.imageId } : {}),
             source: payload.source ?? 'sd-browser',
         }),
     });

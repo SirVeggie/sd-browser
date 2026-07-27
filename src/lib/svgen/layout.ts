@@ -1,7 +1,5 @@
 import type { SvgenCard, SvgenLayoutState, ColumnPlacement } from './types';
-import { nodeSignature } from './fields';
 import { normalizeIntControlModes } from './intControl';
-import type { ComfyWorkflowNode } from '$lib/types/images';
 
 export function emptyLayout(): SvgenLayoutState {
     return {
@@ -69,13 +67,10 @@ export function ensureBaseLayouts(layout: SvgenLayoutState, nodeIds: string[]): 
     return next;
 }
 
-export function signaturesFromCards(cards: SvgenCard[], nodes: ComfyWorkflowNode[]): Record<string, string> {
-    const byId = new Map(nodes.map((n) => [String(n.id), n]));
+export function signaturesFromCards(cards: SvgenCard[], _nodes?: ComfyWorkflowNode[]): Record<string, string> {
     const out: Record<string, string> = {};
-    for (const card of cards) {
-        const node = byId.get(card.nodeId);
-        out[card.nodeId] = node ? nodeSignature(node) : `${card.nodeType}\u0000${card.title}\u0000`;
-    }
+    for (const card of cards)
+        out[card.nodeId] = `${card.nodeType}\u0000${card.title}\u0000`;
     return out;
 }
 

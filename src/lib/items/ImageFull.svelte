@@ -375,7 +375,7 @@
 
     if (stageInfo?.workflow) {
       if (comfyWorkflowOpenAvailable) {
-        actions.push({ name: "Open in ComfyUI", handler: openInComfy });
+        actions.push({ name: "Open in Comfy", handler: openInComfy });
       } else if (comfyWorkflowAuthRequired) {
         actions.push({ name: "Connect ComfyUI", handler: connectComfy });
       } else {

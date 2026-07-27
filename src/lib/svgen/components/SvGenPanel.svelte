@@ -1,23 +1,31 @@
 <script lang="ts">
     import { onDestroy, onMount } from 'svelte';
+    import { notify } from '$lib/components/Notifier.svelte';
     import { flyoutState } from '$lib/stores/flyoutStore';
     import {
         flyoutTabStore,
-        setSessionFromWorkflow,
         svgenErrorStore,
         svgenFrozenSeedsStore,
         svgenGeneratingStore,
         svgenLastUsedSeedsStore,
         svgenLayoutStore,
         svgenObjectInfoStore,
+        svgenOpenSessionsStore,
         svgenProgressStore,
         svgenSessionStore,
         svgenStatusStore,
     } from '$lib/svgen/stores';
     import {
+        activateOpenSession,
+        addOpenSession,
+        closeOpenSession,
+        persistActiveOpenSession,
+    } from '$lib/svgen/sessions';
+    import {
         clearQueued,
         convertWorkflow,
         deleteQueued,
+        deleteWorkflow,
         fetchObjectInfo,
         fetchPendingPanelWorkflow,
         fetchQueue,
@@ -27,6 +35,7 @@
         interruptPrompt,
         listWorkflows,
         openFromImage,
+        openWorkflowInComfy,
         putLayout,
         saveWorkflow,
         submitPrompt,
@@ -47,6 +56,13 @@
         placementForCount,
         signaturesFromCards,
     } from '$lib/svgen/layout';
+    import { orderedNodeIdsForAutoLayout } from '$lib/svgen/cardOrder';
+    import {
+        matchableFromCards,
+        matchableFromSignatures,
+        pickBestSavedLayout,
+        type SavedLayoutCandidate,
+    } from '$lib/svgen/layoutInherit';
     import {
         activeQueueCount,
         desiredQueueTotal,
@@ -64,6 +80,7 @@
     import SvGenGenerateBar from './SvGenGenerateBar.svelte';
     import SvGenQueueBar from './SvGenQueueBar.svelte';
     import SvGenQueueList from './SvGenQueueList.svelte';
+    import SvGenSaveModal from './SvGenSaveModal.svelte';
 
     const COMFY_TOKEN_KEY = 'comfyWorkflowOpenToken';
     const PENDING_PANEL_POLL_MS = 1500;
@@ -93,9 +110,12 @@
     let workflows: SvgenWorkflowSummary[] = [];
     let resizeObserver: ResizeObserver | undefined;
     let layoutSaveTimer: ReturnType<typeof setTimeout> | undefined;
+    let statusPrimed = false;
+    let saveModalOpen = false;
 
     $: session = $svgenSessionStore;
     $: layout = $svgenLayoutStore;
+    $: openBag = $svgenOpenSessionsStore;
     // Depend on field-order/hidden slices only — collapse/placement must not rediscover cards.
     $: fieldOrder = layout.fieldOrder;
     $: hiddenFields = layout.hiddenFields;
@@ -113,6 +133,7 @@
     $: error = $svgenErrorStore;
     $: queueActive = activeQueueCount(queueRunningItems.length, queuePendingItems.length);
     $: queueBusy = queueRunningItems.length > 0 || infiniteActive;
+    $: savedNames = workflows.map((w) => w.name);
 
     function getStoredComfyToken(): string | undefined {
         try {
@@ -131,9 +152,23 @@
     }
 
     async function refreshStatus() {
+        const prev = get(svgenStatusStore);
         try {
             const next = await fetchSvgenStatus(getStoredComfyToken());
             svgenStatusStore.set(next);
+            if (statusPrimed) {
+                if (prev?.available && !next.available) {
+                    notify(
+                        next.authRequired
+                            ? 'Comfy authentication required'
+                            : (next.reason || 'Comfy connection lost'),
+                        'error',
+                    );
+                } else if (next.available && prev?.convert && !next.convert) {
+                    notify('Comfy workflow convert unavailable', 'warn');
+                }
+            }
+            statusPrimed = true;
             if (next.available) {
                 reconnectProgressBridge();
                 try {
@@ -143,10 +178,14 @@
                 }
             }
         } catch (cause) {
+            const reason = cause instanceof Error ? cause.message : 'Status check failed';
             svgenStatusStore.set({
                 available: false,
-                reason: cause instanceof Error ? cause.message : 'Status check failed',
+                reason,
             });
+            if (statusPrimed && prev?.available)
+                notify(reason, 'error');
+            statusPrimed = true;
         }
     }
 
@@ -346,12 +385,10 @@
 
     let lastLayoutKey = '';
 
-    $: sessionLayoutEpoch = session
-        ? `${session.workflowId ?? 'unsaved'}:${session.sourceImageId ?? ''}:${session.name}`
-        : '';
+    $: sessionLayoutEpoch = openBag.activeId ?? '';
 
     function ensureLayoutForCards(nextCards: SvgenCard[], force = false) {
-        const nodeIds = nextCards.map((c) => c.nodeId);
+        const nodeIds = orderedNodeIdsForAutoLayout(nextCards);
         const key = `${sessionLayoutEpoch}:${nodeIds.join(',')}`;
         const placed = placementForCount($svgenLayoutStore, columnCount).columns.flat();
         const placementEmpty = nodeIds.length > 0 && placed.length === 0;
@@ -403,7 +440,7 @@
         );
         if (workflow === session.workflow)
             return;
-        svgenSessionStore.update((s) => (s ? { ...s, workflow, prompt: null, dirty: true } : s));
+        svgenSessionStore.update((s) => (s ? { ...s, workflow, prompt: null } : s));
     }
 
     function onToggleCollapse(nodeId: string) {
@@ -483,7 +520,6 @@
                     ...s,
                     prompt,
                     workflow: nextWorkflow,
-                    dirty: nextWorkflow !== s.workflow ? true : s.dirty,
                 }
                 : s
         ));
@@ -536,7 +572,9 @@
                     return;
                 }
             }
-            svgenErrorStore.set(cause instanceof Error ? cause.message : 'Generate failed');
+            const message = cause instanceof Error ? cause.message : 'Generate failed';
+            svgenErrorStore.set(message);
+            notify(message, 'error');
             infiniteActive = false;
             svgenGeneratingStore.set(false);
         }
@@ -568,51 +606,81 @@
             await maybeTopUpInfinite();
     }
 
-    async function saveCurrent() {
+    function openSaveModal() {
         if (!session)
             return;
-        const name = session.name?.trim() || 'Untitled workflow';
+        saveModalOpen = true;
+    }
+
+    async function saveWithName(name: string) {
+        if (!session)
+            return;
+        const existing = workflows.find((w) => w.name === name);
         try {
             const saved = await saveWorkflow({
-                id: session.workflowId ?? undefined,
+                id: existing?.id,
                 name,
                 workflow: session.workflow,
                 prompt: session.prompt,
                 sourceImageId: session.sourceImageId,
             });
             svgenSessionStore.update((s) =>
-                s ? { ...s, workflowId: saved.id, name, dirty: false } : s,
+                s ? { ...s, workflowId: saved.id, name } : s,
             );
             await putLayout(saved.id, $svgenLayoutStore);
+            persistActiveOpenSession();
             await refreshWorkflowList();
+            saveModalOpen = false;
         } catch (cause) {
-            svgenErrorStore.set(cause instanceof Error ? cause.message : 'Save failed');
+            const message = cause instanceof Error ? cause.message : 'Save failed';
+            svgenErrorStore.set(message);
+            notify(message, 'error');
         }
     }
 
-    async function loadSaved(id: string) {
+    async function openSavedCopy(id: string) {
         try {
             const row = await getWorkflow(id);
             const raw = await getLayout(row.id);
-            lastLayoutKey = '';
-            setSessionFromWorkflow({
-                workflowId: row.id,
-                name: row.name,
-                workflow: row.workflow,
-                prompt: row.prompt,
-                sourceImageId: row.sourceImageId,
-            });
             const discovered = discoverCards(row.workflow, get(svgenObjectInfoStore));
             const saved = parseLayoutJson(raw);
-            const layout = ensureBaseLayouts(saved, discovered.map((c) => c.nodeId));
+            const layout = ensureBaseLayouts(saved, orderedNodeIdsForAutoLayout(discovered));
             layout.nodeSignatures = signaturesFromCards(
                 discovered,
                 row.workflow.nodes ?? [],
             );
-            svgenLayoutStore.set(layout);
-            svgenErrorStore.set(null);
+            lastLayoutKey = '';
+            addOpenSession({
+                name: row.name,
+                workflow: row.workflow,
+                prompt: row.prompt,
+                sourceImageId: row.sourceImageId,
+                layout,
+            });
+            if (!discovered.length) {
+                const nodeCount = row.workflow.nodes?.length ?? 0;
+                svgenErrorStore.set(
+                    nodeCount
+                        ? `Loaded ${nodeCount} nodes but found no editable fields. Is Comfy connected for object_info?`
+                        : 'Workflow has no nodes.',
+                );
+            } else {
+                svgenErrorStore.set(null);
+            }
         } catch (cause) {
-            svgenErrorStore.set(cause instanceof Error ? cause.message : 'Load failed');
+            const message = cause instanceof Error ? cause.message : 'Open failed';
+            svgenErrorStore.set(message);
+            notify(message, 'error');
+        }
+    }
+
+    async function deleteSavedWorkflow(id: string) {
+        try {
+            await deleteWorkflow(id);
+            await refreshWorkflowList();
+        } catch (cause) {
+            const message = cause instanceof Error ? cause.message : 'Delete failed';
+            notify(message, 'error');
         }
     }
 
@@ -630,24 +698,121 @@
         URL.revokeObjectURL(url);
     }
 
-    function applyWorkflowSession(payload: {
-        workflowId?: string | null;
+    async function openCurrentInComfy() {
+        if (!session)
+            return;
+        try {
+            await openWorkflowInComfy({
+                workflow: session.workflow,
+                imageId: session.sourceImageId,
+                comfyToken: getStoredComfyToken(),
+            });
+            notify('Opened workflow in Comfy');
+        } catch (cause) {
+            if (cause instanceof SvgenComfyAuthError) {
+                const token = window.prompt(
+                    'Enter the ComfyUI-Login API token from the Comfy console.',
+                    getStoredComfyToken() ?? '',
+                );
+                if (token?.trim()) {
+                    setStoredComfyToken(token.trim());
+                    await openCurrentInComfy();
+                    return;
+                }
+            }
+            const message = cause instanceof Error ? cause.message : 'Failed to open in Comfy';
+            notify(message, 'error');
+        }
+    }
+
+    async function collectSavedLayoutCandidates(): Promise<SavedLayoutCandidate[]> {
+        if (!workflows.length) {
+            try {
+                workflows = await listWorkflows();
+            } catch {
+                workflows = [];
+            }
+        }
+        const objectInfo = get(svgenObjectInfoStore);
+        const results = await Promise.all(workflows.map(async (summary) => {
+            try {
+                const raw = await getLayout(summary.id);
+                const layout = parseLayoutJson(raw);
+                let cards = matchableFromSignatures(layout.nodeSignatures);
+                if (!cards.length) {
+                    const row = await getWorkflow(summary.id);
+                    cards = matchableFromCards(discoverCards(row.workflow, objectInfo));
+                } else {
+                    cards = cards.map((card) => {
+                        const names = new Set<string>([
+                            ...(layout.fieldOrder[card.nodeId] ?? []),
+                            ...(layout.hiddenFields[card.nodeId] ?? []),
+                        ]);
+                        for (const key of Object.keys(layout.intControlModes ?? {})) {
+                            if (!key.startsWith(`${card.nodeId}:`))
+                                continue;
+                            const widget = key.slice(card.nodeId.length + 1).split(':').pop();
+                            if (widget)
+                                names.add(widget);
+                        }
+                        return { ...card, fieldNames: [...names] };
+                    });
+                }
+                if (!cards.length)
+                    return null;
+                return {
+                    workflowId: summary.id,
+                    cards,
+                    layout,
+                } satisfies SavedLayoutCandidate;
+            } catch {
+                return null;
+            }
+        }));
+        return results.filter((entry): entry is SavedLayoutCandidate => !!entry);
+    }
+
+    async function layoutForUnsavedOpen(
+        discovered: SvgenCard[],
+        workflowNodes: ComfyWorkflow['nodes'],
+    ) {
+        const orderedIds = orderedNodeIdsForAutoLayout(discovered);
+        const candidates = await collectSavedLayoutCandidates();
+        const best = pickBestSavedLayout(discovered, candidates);
+        const layout = best?.layout ?? ensureBaseLayouts(emptyLayout(), orderedIds);
+        layout.nodeSignatures = signaturesFromCards(discovered, workflowNodes ?? []);
+        return layout;
+    }
+
+    async function applyWorkflowSession(payload: {
         name: string;
         workflow: ComfyWorkflow;
         prompt?: ComfyPrompt | null;
         sourceImageId?: string | null;
-        dirty?: boolean;
+        layout?: ReturnType<typeof emptyLayout>;
     }) {
         lastLayoutKey = '';
-        setSessionFromWorkflow(payload);
         const discovered = discoverCards(payload.workflow, get(svgenObjectInfoStore));
-        const nodeIds = discovered.map((c) => c.nodeId);
-        const layout = ensureBaseLayouts(emptyLayout(), nodeIds);
-        layout.nodeSignatures = signaturesFromCards(
-            discovered,
-            payload.workflow.nodes ?? [],
-        );
-        svgenLayoutStore.set(layout);
+        const layout = payload.layout
+            ? (() => {
+                const next = ensureBaseLayouts(
+                    payload.layout,
+                    orderedNodeIdsForAutoLayout(discovered),
+                );
+                next.nodeSignatures = signaturesFromCards(
+                    discovered,
+                    payload.workflow.nodes ?? [],
+                );
+                return next;
+            })()
+            : await layoutForUnsavedOpen(discovered, payload.workflow.nodes);
+        addOpenSession({
+            name: payload.name,
+            workflow: payload.workflow,
+            prompt: payload.prompt,
+            sourceImageId: payload.sourceImageId,
+            layout,
+        });
         if (!discovered.length) {
             const nodeCount = payload.workflow.nodes?.length ?? 0;
             svgenErrorStore.set(
@@ -666,15 +831,16 @@
         try {
             await refreshStatus();
             const data = await openFromImage(imageId);
-            applyWorkflowSession({
+            await applyWorkflowSession({
                 name: `Image ${imageId.slice(0, 8)}`,
                 workflow: data.workflow,
                 prompt: data.prompt,
                 sourceImageId: data.sourceImageId,
-                dirty: true,
             });
         } catch (cause) {
-            svgenErrorStore.set(cause instanceof Error ? cause.message : 'Open failed');
+            const message = cause instanceof Error ? cause.message : 'Open failed';
+            svgenErrorStore.set(message);
+            notify(message, 'error');
         }
     }
 
@@ -688,10 +854,9 @@
             lastPendingPanelId = pending.id || null;
             flyoutState.set(true);
             flyoutTabStore.set('generate');
-            applyWorkflowSession({
+            await applyWorkflowSession({
                 name: pending.name?.trim() || 'From Comfy',
                 workflow: pending.workflow,
-                dirty: true,
             });
             void refreshStatus();
         } catch {
@@ -747,25 +912,37 @@
 
 <div class="panel" bind:this={panelEl}>
     <SvGenQueueBar
-        {status}
         {progress}
         busy={queueBusy}
         {queueActive}
         {queueOpen}
         {workflows}
+        openSessions={openBag.sessions}
+        activeSessionId={openBag.activeId}
         currentName={session?.name ?? ''}
-        dirty={!!session?.dirty}
+        empty={!session}
         on:toggleQueue={async () => {
             queueOpen = !queueOpen;
             if (queueOpen)
                 await refreshQueueStatus({ skipTopUp: true });
         }}
-        on:save={saveCurrent}
+        on:save={openSaveModal}
         on:download={downloadJson}
-        on:load={(e) => loadSaved(e.detail)}
-        on:rename={(e) =>
-            svgenSessionStore.update((s) => (s ? { ...s, name: e.detail, dirty: true } : s))}
+        on:openInComfy={openCurrentInComfy}
+        on:switchSession={(e) => activateOpenSession(e.detail)}
+        on:closeSession={(e) => closeOpenSession(e.detail)}
+        on:openSaved={(e) => openSavedCopy(e.detail)}
+        on:deleteSaved={(e) => deleteSavedWorkflow(e.detail)}
     />
+
+    {#if saveModalOpen && session}
+        <SvGenSaveModal
+            initialName={session.name}
+            {savedNames}
+            on:close={() => { saveModalOpen = false; }}
+            on:save={(e) => saveWithName(e.detail)}
+        />
+    {/if}
 
     {#if queueOpen}
         <SvGenQueueList
@@ -801,8 +978,8 @@
 
     {#if !session}
         <div class="empty">
-            <p>No workflow loaded.</p>
-            <p>Use “Open in panel” on an image, or load a saved workflow.</p>
+            <p>No workflow open</p>
+            <p>Pick a saved workflow from the menu above, or use Open in panel on an image / send from Comfy.</p>
         </div>
     {:else if !cards.length}
         <div class="empty">
