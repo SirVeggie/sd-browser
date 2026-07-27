@@ -168,7 +168,7 @@ export type ComfyWorkflowNode = {
         old_label?: string;
         slot_index?: number;
     }[];
-    widgets_values: (string | number | boolean | null)[];
+    widgets_values: (string | number | boolean | null)[] | Record<string, string | number | boolean | null>;
     properties: ComfyWorkflowNodeProperties;
     shape?: number;
 };

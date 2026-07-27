@@ -826,10 +826,9 @@ function resolveProxyWidgetLabel(
     const innerNode = findInnerNode(subgraph, innerId);
     if (!innerNode)
         return widgetName;
-    if (widgetName === 'value' && innerNode.title)
-        return innerNode.title;
     const input = findWorkflowInput(innerNode, widgetName);
-    return resolveInputLabel(input, innerNode.title ?? widgetName);
+    // Widget/input rename only — never the inner node title (subgraph proxies).
+    return resolveInputLabel(input, widgetName);
 }
 
 function resolveLiteralLabel(workflowNode: ComfyWorkflowNode | undefined, key: string): string {

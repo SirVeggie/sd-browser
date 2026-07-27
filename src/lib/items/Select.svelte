@@ -24,6 +24,8 @@
     let rootEl: HTMLDivElement;
     let valueEl: HTMLSpanElement;
     let panelLeft = 0;
+    let panelTop = 0;
+    let panelBottom = 0;
     let panelMinWidth = 0;
     let panelMaxHeight = 0;
     let removePositionListeners: (() => void) | undefined;
@@ -55,17 +57,34 @@
     function updatePanelPosition() {
         if (!rootEl || !valueEl) return;
         const rootRect = rootEl.getBoundingClientRect();
+        const valueRect = valueEl.getBoundingClientRect();
         const fontSize = parseFloat(getComputedStyle(rootEl).fontSize);
-        // Absolute to `.select` — chrome backdrop-filter breaks fixed/viewport coords.
-        panelLeft = alignDropdownPanel(rootEl, valueEl);
-        panelMinWidth = Math.max(
-            valueEl.getBoundingClientRect().width + fontSize * 2.2,
-            fontSize * 6,
-        );
+        const gap = fontSize * 0.35;
+        // Chrome uses absolute coords — backdrop-filter breaks fixed/viewport positioning.
+        // Elsewhere use viewport-fixed panels so overflow/clipping ancestors (e.g. settings
+        // CSS columns) cannot truncate the menu.
+        if (chrome) {
+            panelLeft = alignDropdownPanel(rootEl, valueEl);
+            panelTop = 0;
+            panelBottom = 0;
+        } else {
+            const optionPadLeft = fontSize * 0.7;
+            const nudgeLeft = fontSize * 0.1;
+            panelLeft = valueRect.left - optionPadLeft - nudgeLeft;
+            panelTop = rootRect.bottom + gap;
+            panelBottom = window.innerHeight - rootRect.top + gap;
+        }
+        panelMinWidth = Math.max(valueRect.width + fontSize * 2.2, fontSize * 6);
         panelMaxHeight = dropUp
             ? Math.max(120, rootRect.top - 8)
             : Math.max(120, window.innerHeight - rootRect.bottom - 8);
     }
+
+    $: panelStyle = chrome
+        ? `left: ${panelLeft}px; min-width: ${panelMinWidth}px; max-height: ${panelMaxHeight}px;`
+        : dropUp
+          ? `left: ${panelLeft}px; bottom: ${panelBottom}px; min-width: ${panelMinWidth}px; max-height: ${panelMaxHeight}px;`
+          : `left: ${panelLeft}px; top: ${panelTop}px; min-width: ${panelMinWidth}px; max-height: ${panelMaxHeight}px;`;
 
     function startPositionListeners() {
         stopPositionListeners();
@@ -164,9 +183,10 @@
         <div
             class="panel"
             class:drop-up={dropUp}
+            class:viewport={!chrome}
             role="listbox"
             aria-labelledby={id}
-            style="left: {panelLeft}px; min-width: {panelMinWidth}px; max-height: {panelMaxHeight}px;"
+            style={panelStyle}
         >
             {#each normalized as option, index (option.value)}
                 <button
@@ -295,6 +315,13 @@
         @include dropdown.panel-animation;
         @include dropdown.reduced-motion;
 
+        &.viewport {
+            position: fixed;
+            /* top / bottom come from inline styles via getBoundingClientRect */
+            top: auto;
+            bottom: auto;
+        }
+
         &.drop-up {
             top: auto;
             bottom: calc(100% + 0.35em);
@@ -303,6 +330,10 @@
 
             .option {
                 @include dropdown.option-animation-up;
+            }
+
+            &.viewport {
+                bottom: auto;
             }
         }
     }

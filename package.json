@@ -40,7 +40,8 @@
 		"sqlite-vec": "^0.1.9",
 		"svelte-loading-spinners": "^0.3.4",
 		"uuid": "^9.0.1",
-		"watcher": "^2.2.2"
+		"watcher": "^2.2.2",
+		"ws": "^8.21.1"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^2.0.0",
@@ -50,6 +51,7 @@
 		"@types/lodash": "^4.14.195",
 		"@types/node": "^20.3.2",
 		"@types/uuid": "^9.0.8",
+		"@types/ws": "^8.18.1",
 		"@typescript-eslint/eslint-plugin": "^5.45.0",
 		"@typescript-eslint/parser": "^5.45.0",
 		"cross-env": "^10.1.0",

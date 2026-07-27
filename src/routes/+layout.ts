@@ -1,6 +1,7 @@
 import { browser } from "$app/environment";
 import { syncAuthWithLocalStorage } from "$lib/stores/authStore";
 import { syncFlyoutWithLocalStorage } from "$lib/stores/flyoutStore";
+import { syncSvgenWithLocalStorage } from "$lib/svgen/stores";
 import { syncFullscreenWithLocalStorage } from "$lib/stores/fullscreenStore";
 import { syncSearchWithLocalStorage } from "$lib/stores/searchStore";
 import { syncCustomFiltersWithLocalStorage } from "$lib/stores/customFiltersStore";
@@ -23,6 +24,7 @@ export async function load() {
         syncCustomFiltersWithLocalStorage();
         syncSearchWithLocalStorage();
         syncFlyoutWithLocalStorage();
+        syncSvgenWithLocalStorage();
         syncFullscreenWithLocalStorage();
         syncStyleWithLocalStorage();
         syncLlmWithLocalStorage();

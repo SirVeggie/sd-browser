@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     import Input from "$lib/items/Input.svelte";
     import Select from "$lib/items/Select.svelte";
     import { onDestroy, onMount } from "svelte";
@@ -10,6 +10,7 @@
         flyoutHistory,
         flyoutStore,
     } from "$lib/stores/flyoutStore";
+    import { svgenUiStore } from "$lib/svgen/stores";
     import Button from "$lib/items/Button.svelte";
     import { notify } from "$lib/components/Notifier.svelte";
     import {
@@ -573,7 +574,7 @@
                 return;
             void goto(`${pathname}${search}${hash}`, {
                 replaceState: true,
-                noscroll: true,
+                noScroll: true,
                 keepFocus: true,
             });
         }
@@ -585,16 +586,19 @@
 
 <div class="settings">
     <div class="top">
-        <h3>Settings</h3>
-        <div class="top-actions">
-            <Link class="ghost" to="/">← Back</Link>
-            <button type="button" class="ghost danger" on:click={reset}>Reset</button>
-            {#if $authStore.password}
-                <button type="button" class="ghost" on:click={logout}>Logout</button>
-            {/if}
+        <div class="top-inner">
+            <h3>Settings</h3>
+            <div class="top-actions">
+                <Link class="ghost" to="/">← Back</Link>
+                <button type="button" class="ghost danger" on:click={reset}>Reset</button>
+                {#if $authStore.password}
+                    <button type="button" class="ghost" on:click={logout}>Logout</button>
+                {/if}
+            </div>
         </div>
     </div>
 
+    <div class="settings-main">
     <div class="help-row">
         <div class="help-block">
             <strong>Keyboard shortcuts</strong>
@@ -623,22 +627,39 @@
     <div class="settings-card">
         <h4>Flyout</h4>
         <label class="checkbox">
-            Flyout enabled
+            WebUI flyout enabled
             <input type="checkbox" bind:checked={$flyoutStore.enabled} />
         </label>
+        <label class="checkbox">
+            Generation panel enabled
+            <input
+                type="checkbox"
+                checked={$svgenUiStore.enabled}
+                on:change={(e) =>
+                    svgenUiStore.update((s) => ({
+                        ...s,
+                        enabled: e.currentTarget.checked,
+                    }))}
+            />
+        </label>
 
-        <div class="wrapper" class:isOpen={$flyoutStore.enabled}>
+        <div
+            class="wrapper join-prev"
+            class:isOpen={$flyoutStore.enabled || $svgenUiStore.enabled}
+        >
             <div class="inner">
-                <!-- svelte-ignore a11y-label-has-associated-control -->
-                <label>
-                    Address (webui url)
-                    <Input
-                        bind:value={address}
-                        on:input={onInput}
-                        on:focus={flyoutFocus}
-                        on:blur={flyoutBlur}
-                    />
-                </label>
+                {#if $flyoutStore.enabled}
+                    <!-- svelte-ignore a11y-label-has-associated-control -->
+                    <label>
+                        Address (webui url)
+                        <Input
+                            bind:value={address}
+                            on:input={onInput}
+                            on:focus={flyoutFocus}
+                            on:blur={flyoutBlur}
+                        />
+                    </label>
+                {/if}
 
                 <div class="select-field">
                     <span>Styling</span>
@@ -916,42 +937,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     </div>
     </div>
 
-    {#if instructionModalOpen}
-        <SystemInstructionModal
-            title={editingInstruction ? "Modify instruction" : "Add instruction"}
-            bind:name={modalInstructionName}
-            bind:text={modalInstructionText}
-            on:save={saveInstruction}
-            on:close={closeInstructionModal}
-        />
-    {/if}
-
-    {#if filterModalOpen}
-        <CustomFilterModal
-            title={editingFilter ? "Modify filter" : "Add filter"}
-            bind:name={modalFilterName}
-            bind:filter={modalFilterText}
-            on:save={saveFilter}
-            on:close={closeFilterModal}
-        />
-    {/if}
-
-    {#if tagModalOpen}
-        <TagModal
-            title={editingTag ? "Modify tag" : "Add tag"}
-            bind:name={modalTagName}
-            bind:color={modalTagColor}
-            canDelete={!!editingTag}
-            on:save={saveTag}
-            on:delete={() => editingTag && deleteTag(editingTag)}
-            on:close={closeTagModal}
-        />
-    {/if}
-
-    {#if keywordHelpOpen}
-        <SearchKeywordHelpModal on:close={() => (keywordHelpOpen = false)} />
-    {/if}
-
     <div class="settings-card">
         <h4>Tags &amp; filters</h4>
     <div class="tags-inline">
@@ -1172,6 +1157,43 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     </div>
     </div>
     </div>
+    </div>
+
+    {#if instructionModalOpen}
+        <SystemInstructionModal
+            title={editingInstruction ? "Modify instruction" : "Add instruction"}
+            bind:name={modalInstructionName}
+            bind:text={modalInstructionText}
+            on:save={saveInstruction}
+            on:close={closeInstructionModal}
+        />
+    {/if}
+
+    {#if filterModalOpen}
+        <CustomFilterModal
+            title={editingFilter ? "Modify filter" : "Add filter"}
+            bind:name={modalFilterName}
+            bind:filter={modalFilterText}
+            on:save={saveFilter}
+            on:close={closeFilterModal}
+        />
+    {/if}
+
+    {#if tagModalOpen}
+        <TagModal
+            title={editingTag ? "Modify tag" : "Add tag"}
+            bind:name={modalTagName}
+            bind:color={modalTagColor}
+            canDelete={!!editingTag}
+            on:save={saveTag}
+            on:delete={() => editingTag && deleteTag(editingTag)}
+            on:close={closeTagModal}
+        />
+    {/if}
+
+    {#if keywordHelpOpen}
+        <SearchKeywordHelpModal on:close={() => (keywordHelpOpen = false)} />
+    {/if}
 </div>
 
 <style lang="scss">
@@ -1179,14 +1201,13 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         position: relative;
         isolation: isolate;
         width: 100%;
-        max-width: 100%;
+        max-width: none;
         box-sizing: border-box;
-        padding: var(--main-padding);
-        padding-top: 0;
+        padding: 0;
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        gap: 1rem;
+        gap: 0;
         background: var(--bg);
         min-height: 100%;
 
@@ -1212,13 +1233,9 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         position: sticky;
         top: 0;
         z-index: 20;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        margin: 0 calc(-1 * var(--main-padding));
-        padding: 0.85rem var(--main-padding) 1.15rem;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.85rem 0 1.15rem;
         background: color-mix(in srgb, var(--bg) 58%, transparent);
         backdrop-filter: blur(16px) saturate(1.15);
         -webkit-backdrop-filter: blur(16px) saturate(1.15);
@@ -1236,6 +1253,19 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             #000 calc(100% - 1.15rem),
             transparent 100%
         );
+    }
+
+    .top-inner {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        width: 100%;
+        max-width: 56rem;
+        margin-inline: auto;
+        padding-inline: var(--main-padding);
+        box-sizing: border-box;
 
         h3 {
             margin: 0;
@@ -1249,6 +1279,18 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
         display: flex;
         gap: 0.4rem;
         flex-wrap: wrap;
+    }
+
+    .settings-main {
+        width: 100%;
+        max-width: 56rem;
+        margin-inline: auto;
+        padding: 0 var(--main-padding) var(--main-padding);
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
     }
 
     :global(a.ghost),
@@ -1282,24 +1324,29 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     }
 
     .cards {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.75rem;
+        column-count: 2;
+        column-gap: 0.75rem;
 
         @media (width < 700px) {
-            grid-template-columns: 1fr;
+            column-count: 1;
         }
     }
 
     .settings-card {
+        --gap: 0.45rem;
         background: rgba(255, 255, 255, 0.035);
         border: 1px solid var(--line);
         border-radius: 14px;
-        padding: 0.85rem 0.95rem;
-        display: flex;
+        padding: 0.85rem 1.1rem;
+        display: inline-flex;
         flex-direction: column;
-        gap: 0.45rem;
+        gap: var(--gap);
+        width: 100%;
         min-width: 0;
+        box-sizing: border-box;
+        break-inside: avoid;
+        margin: 0 0 0.75rem;
+        overflow: visible;
 
         h4 {
             margin: 0 0 0.35rem;
@@ -1652,14 +1699,28 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             display: flex;
             flex-direction: column;
             gap: var(--gap);
+            /* Clip while collapsing; reveal after open so Select panels can escape. */
             overflow: hidden;
+            transition: overflow 0s linear 0s;
             padding: 0;
             margin: 0;
+            min-height: 0;
 
             & > :first-child {
                 border-top: 1px solid var(--line);
                 padding-top: var(--gap);
             }
+        }
+
+        &.isOpen .inner {
+            overflow: visible;
+            transition: overflow 0s linear 0.5s;
+        }
+
+        /* Preceding row already has a bottom rule — don't double it. */
+        &.join-prev .inner > :first-child {
+            border-top: none;
+            padding-top: 0;
         }
     }
 
@@ -1695,7 +1756,8 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             align-items: center;
             justify-content: space-between;
             gap: 0.75rem;
-            width: auto;
+            width: 100%;
+            min-width: 0;
         }
 
         &.inline :global(.num) {

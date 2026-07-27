@@ -33,6 +33,9 @@
     openWorkflowInComfy,
     rememberImageInfo,
   } from "$lib/requests/imageRequests";
+  import { requestOpenInPanel, svgenUiStore } from "$lib/svgen/stores";
+  import { get } from "svelte/store";
+  import { flyoutState } from "$lib/stores/flyoutStore";
   import { updateImageAnnotation } from "$lib/requests/annotationRequests";
   import { updateImageTags } from "$lib/requests/tagRequests";
   import AnnotationModal from "$lib/components/AnnotationModal.svelte";
@@ -378,6 +381,9 @@
       } else {
         actions.push({ name: "Copy workflow", handler: copyWorkflow });
       }
+      if (get(svgenUiStore).enabled) {
+        actions.push({ name: "Open in panel", handler: openInPanel });
+      }
     } else if (stageInfo?.prompt) {
       actions.push({ name: "Copy all", handler: copyPrompt });
     }
@@ -536,6 +542,13 @@
     } else {
       notify("ComfyUI token was not accepted", "warn");
     }
+  }
+
+  function openInPanel() {
+    if (!stageId) return;
+    flyoutState.set(true);
+    requestOpenInPanel(stageId);
+    notify("Opened workflow in Generate panel");
   }
 
   async function openInComfy() {

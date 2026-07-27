@@ -12,10 +12,13 @@
         fetchImagePage,
         generateCompressedImages,
         getCachedImageInfo,
+        getImageBlobs,
         getImageInfo,
         imageAction,
         loadImageInfoProgressive,
+        mergeImageBlobs,
         preloadImageInfo,
+        rememberImageInfo,
         subscribeImageStream,
     } from "$lib/requests/imageRequests";
     import { expandClientImages, formatSearchDateMinute } from "$lib/tools/misc";
@@ -104,6 +107,7 @@
     import { tagsStore } from "$lib/stores/tagsStore";
     import { isExactTagTerm, tagsAddableToSelection } from "$lib/types/tags";
     import { flyoutState } from "$lib/stores/flyoutStore";
+    import { requestOpenInPanel, svgenUiStore } from "$lib/svgen/stores";
     import BulkModal from "$lib/components/BulkModal.svelte";
     import { embeddingStore, isEmbeddingConfigured } from "$lib/stores/embeddingStore";
     import FilterMultiSelect from "$lib/components/FilterMultiSelect.svelte";
@@ -1576,6 +1580,27 @@
                     name: "Open folder",
                     visible: !selecting,
                     handler: () => openFolder(id),
+                },
+                {
+                    name: "Open in panel",
+                    visible: !selecting && $svgenUiStore.enabled && $flyoutState,
+                    async handler() {
+                        // Short metadata omits prompt/workflow (blobsDeferred); fetch blobs when needed.
+                        let info = getCachedImageInfo(id) ?? await getImageInfo(id);
+                        if (info && !info.workflow && info.blobsDeferred) {
+                            const blobs = await getImageBlobs(id);
+                            if (blobs) {
+                                info = mergeImageBlobs(info, blobs);
+                                rememberImageInfo(info);
+                            }
+                        }
+                        if (!info?.workflow) {
+                            notify("No workflow on this image", "warn");
+                            return;
+                        }
+                        requestOpenInPanel(id);
+                        notify("Opened workflow in Generate panel");
+                    },
                 },
                 {
                     name: "Similar prompts",

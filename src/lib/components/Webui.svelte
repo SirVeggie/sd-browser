@@ -4,14 +4,53 @@
         flyoutButtonTop,
         flyoutState,
         flyoutStore,
-    } from "$lib/stores/flyoutStore";
+    } from '$lib/stores/flyoutStore';
+    import {
+        flyoutTabStore,
+        svgenOpenImageRequest,
+        svgenUiStore,
+    } from '$lib/svgen/stores';
+    import { sdBrowserPickerStore } from '$lib/svgen/sdBrowserPickerStore';
+    import SvGenPanel from '$lib/svgen/components/SvGenPanel.svelte';
+    import SvGenSdBrowserImageModal from '$lib/svgen/components/SvGenSdBrowserImageModal.svelte';
 
     let iframe: HTMLIFrameElement;
-    $: disabled = !$flyoutState || !$flyoutStore.enabled;
+    let genPanel: SvGenPanel;
+
+    $: webuiAvailable = $flyoutStore.enabled && !!$flyoutStore.url?.trim();
+    $: genAvailable = $svgenUiStore.enabled;
+    $: flyoutAvailable = webuiAvailable || genAvailable;
+    $: showTabs = webuiAvailable && genAvailable;
+    $: disabled = !$flyoutState || !flyoutAvailable;
     $: isTop = $flyoutButtonTop;
 
+    $: if ($svgenOpenImageRequest && genPanel) {
+        const imageId = $svgenOpenImageRequest;
+        svgenOpenImageRequest.set(null);
+        flyoutState.set(true);
+        flyoutTabStore.set('generate');
+        void genPanel.openImage(imageId);
+    }
+
+    // Keep active tab valid when one mode disappears.
+    $: {
+        if (showTabs) {
+            /* both ok */
+        } else if (genAvailable && !webuiAvailable) {
+            flyoutTabStore.set('generate');
+        } else if (webuiAvailable && !genAvailable) {
+            flyoutTabStore.set('webui');
+        }
+    }
+
+    $: activeTab = showTabs
+        ? $flyoutTabStore
+        : genAvailable && !webuiAvailable
+            ? 'generate'
+            : 'webui';
+
     export function fullscreen() {
-        iframe.requestFullscreen();
+        iframe?.requestFullscreen();
     }
 
     function toggle() {
@@ -19,17 +58,57 @@
     }
 </script>
 
-<div class="no-scrollbar" class:disabled>
-    <iframe
-        title="sd"
-        bind:this={iframe}
-        src={$flyoutStore.url}
-        frameborder="0"
-        allow="fullscreen; clipboard-write"
-    />
+<div class="flyout no-scrollbar" class:disabled>
+    {#if showTabs}
+        <div class="tabs" role="tablist">
+            <button
+                type="button"
+                role="tab"
+                class:active={activeTab === 'webui'}
+                aria-selected={activeTab === 'webui'}
+                on:click={() => flyoutTabStore.set('webui')}
+            >
+                WebUI
+            </button>
+            <button
+                type="button"
+                role="tab"
+                class:active={activeTab === 'generate'}
+                aria-selected={activeTab === 'generate'}
+                on:click={() => flyoutTabStore.set('generate')}
+            >
+                Generate
+            </button>
+        </div>
+    {/if}
+
+    <div class="body">
+        {#if webuiAvailable}
+            <div class="pane" class:hidden={activeTab !== 'webui'}>
+                <iframe
+                    title="sd"
+                    bind:this={iframe}
+                    src={$flyoutStore.url}
+                    frameborder="0"
+                    allow="fullscreen; clipboard-write"
+                />
+            </div>
+        {/if}
+        {#if genAvailable}
+            <div class="pane gen" class:hidden={activeTab !== 'generate'}>
+                <SvGenPanel bind:this={genPanel} />
+            </div>
+        {/if}
+    </div>
 </div>
-{#if $flyoutButton}
-    <button on:click={toggle} class:isTop>
+
+{#if $sdBrowserPickerStore}
+    {@const pickerSession = $sdBrowserPickerStore}
+    <SvGenSdBrowserImageModal session={pickerSession} />
+{/if}
+
+{#if $flyoutButton && flyoutAvailable}
+    <button type="button" class="toggle" on:click={toggle} class:isTop>
         <svg
             xmlns="http://www.w3.org/2000/svg"
             width="24"
@@ -50,15 +129,17 @@
 {/if}
 
 <style lang="scss">
-    div {
+    .flyout {
         position: fixed;
         top: 0;
         right: 0;
         width: var(--flyout-width);
         bottom: 0;
         z-index: 50;
-        overflow-y: scroll;
+        display: flex;
+        flex-direction: column;
         overscroll-behavior-y: contain;
+        background: var(--bg);
 
         transition:
             opacity 0.2s ease,
@@ -71,13 +152,65 @@
         }
     }
 
+    .tabs {
+        display: flex;
+        gap: 0.25rem;
+        padding: 0.4rem 0.5rem;
+        border-bottom: 1px solid var(--line);
+        flex-shrink: 0;
+        background: color-mix(in srgb, var(--bg) 90%, var(--glass));
+
+        button {
+            flex: 1;
+            appearance: none;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            background: transparent;
+            color: inherit;
+            padding: 0.35rem 0.5rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+            opacity: 0.7;
+
+            &.active {
+                opacity: 1;
+                border-color: var(--line);
+                background: var(--glass);
+                font-weight: 600;
+            }
+        }
+    }
+
+    .body {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+    }
+
+    .pane {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+
+        &.hidden {
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        &.gen {
+            display: flex;
+            flex-direction: column;
+        }
+    }
+
     iframe {
         display: block;
         width: 100%;
         height: calc(100% + 1px);
+        border: 0;
     }
 
-    button {
+    .toggle {
         line-height: 0;
         z-index: 99;
         color: var(--ink);
@@ -93,16 +226,16 @@
         cursor: pointer;
         top: auto;
         bottom: 9.5rem;
-        
+
         &.isTop {
             top: 90px;
             bottom: auto;
         }
-        
+
         :global(.flanimate) & {
             transition: right 0.2s ease;
         }
-        
+
         svg.flip {
             transform: scaleX(-1);
         }

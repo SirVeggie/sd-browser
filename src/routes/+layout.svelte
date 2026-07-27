@@ -3,6 +3,7 @@
     import "../scroll.css";
     import Webui from "$lib/components/Webui.svelte";
     import { flyoutState, flyoutStore } from "$lib/stores/flyoutStore";
+    import { svgenUiStore } from "$lib/svgen/stores";
     import Notifier from "../lib/components/Notifier.svelte";
     import { assets } from "$app/paths";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
@@ -21,7 +22,10 @@
     $: flhalf = $flyoutStore.mode === "half";
     $: flfull = $flyoutStore.mode === "fullscreen";
 
-    $: flvisible = $flyoutState && $flyoutStore.enabled;
+    $: webuiAvailable = $flyoutStore.enabled && !!$flyoutStore.url?.trim();
+    $: genAvailable = $svgenUiStore.enabled;
+    $: flyoutAvailable = webuiAvailable || genAvailable;
+    $: flvisible = $flyoutState && flyoutAvailable;
     $: {
         $flyoutState;
         clearTimeout(fltimeout);
@@ -70,7 +74,7 @@
             <Login />
         {/if}
     </div>
-    {#if $flyoutStore.enabled}
+    {#if flyoutAvailable}
         <Webui />
     {/if}
     <Confirm />
