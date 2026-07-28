@@ -9,6 +9,7 @@
         svgenNodeTextPreviewsStore,
         svgenOpenSessionsStore,
     } from '$lib/svgen/stores';
+    import type { NodePreviewEntry } from '$lib/svgen/nodePreviews';
     import SvGenAuthImg from './SvGenAuthImg.svelte';
     import SvGenEnablePill from './SvGenEnablePill.svelte';
     import SvGenField from './SvGenField.svelte';
@@ -47,6 +48,26 @@
         outerValueIndex?: number;
     };
 
+    /**
+     * Prefer exact node id, then any converter-expanded `outerId:innerId` key
+     * (subgraph shells that promote $$canvas-image-preview).
+     */
+    function lookupNodePreview(
+        store: Map<string, NodePreviewEntry>,
+        sessionId: string,
+        nodeId: string,
+    ): NodePreviewEntry | undefined {
+        const exact = store.get(nodePreviewStoreKey(sessionId, nodeId));
+        if (exact)
+            return exact;
+        const prefix = `${nodePreviewStoreKey(sessionId, nodeId)}:`;
+        for (const [key, entry] of store) {
+            if (key.startsWith(prefix))
+                return entry;
+        }
+        return undefined;
+    }
+
     $: enableField = card.fields.find((f) => {
         const n = f.widgetName.trim().toLowerCase();
         const l = f.label.trim().toLowerCase();
@@ -77,7 +98,7 @@
 
     $: activeSessionId = $svgenOpenSessionsStore.activeId;
     $: outputPreview = card.imageDisplay && activeSessionId
-        ? ($svgenNodePreviewsStore.get(nodePreviewStoreKey(activeSessionId, card.nodeId)) ?? null)
+        ? (lookupNodePreview($svgenNodePreviewsStore, activeSessionId, card.nodeId) ?? null)
         : null;
     $: outputPreviewPath = outputPreview?.path ?? '';
     $: outputPreviewCaption = outputPreview && outputPreview.images.length > 1

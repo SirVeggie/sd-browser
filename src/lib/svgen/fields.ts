@@ -130,6 +130,17 @@ function getProxyWidgets(node: ComfyWorkflowNode): ComfyProxyWidget[] | undefine
     return valid.length ? valid : undefined;
 }
 
+/** Promoted Comfy canvas image preview (`$$canvas-image-preview`) on a subgraph shell. */
+function proxyHasCanvasImagePreview(proxies: ComfyProxyWidget[] | undefined): boolean {
+    if (!proxies?.length)
+        return false;
+    return proxies.some(([, widgetName]) => isCanvasName(widgetName));
+}
+
+function fieldIsImagePicker(field: SvgenField): boolean {
+    return field.kind === 'image' || field.kind === 'sd_browser_image';
+}
+
 function findInnerNode(
     subgraph: ComfySubgraphDefinition | undefined,
     innerId: string,
@@ -177,16 +188,30 @@ function isCanvasName(name: string): boolean {
     return name.startsWith('$$canvas');
 }
 
+/** Comfy UI canvas widgets — check outer name, inner schema name, and label. */
+function isCanvasSlot(
+    widgetName: string,
+    label: string,
+    schemaWidgetName?: string,
+): boolean {
+    if (isCanvasName(widgetName) || isCanvasName(label.trim()))
+        return true;
+    if (schemaWidgetName && isCanvasName(schemaWidgetName))
+        return true;
+    return false;
+}
+
 function shouldIncludeSlot(
     node: ComfyWorkflowNode,
     widgetName: string,
     label: string,
+    schemaWidgetName?: string,
 ): boolean {
     if (!widgetName)
         return false;
     if (shouldHideByUnderscore(widgetName, label))
         return false;
-    if (isCanvasName(widgetName))
+    if (isCanvasSlot(widgetName, label, schemaWidgetName))
         return false;
     if (isControlName(widgetName, label))
         return false;
@@ -1122,7 +1147,7 @@ function slotsToFields(
 ): SvgenField[] {
     const fields: SvgenField[] = [];
     for (const slot of slots) {
-        if (!shouldIncludeSlot(wireNode, slot.widgetName, slot.label))
+        if (!shouldIncludeSlot(wireNode, slot.widgetName, slot.label, slot.schemaWidgetName))
             continue;
         // Also hide if outer container wires the same name
         if (wireNode !== node && isWired(node, slot.widgetName))
@@ -1198,7 +1223,7 @@ export function discoverCards(
             // subgraph inputNode are normal for promoted widgets and must not hide them.
             fields = [];
             for (const slot of slots) {
-                if (!shouldIncludeSlot(node, slot.widgetName, slot.label))
+                if (!shouldIncludeSlot(node, slot.widgetName, slot.label, slot.schemaWidgetName))
                     continue;
                 const schemaName = slot.schemaWidgetName ?? slot.widgetName;
                 const schema = lookupSchema(objectInfo, slot.schemaType, schemaName);
@@ -1249,10 +1274,16 @@ export function discoverCards(
             fields = [];
         }
 
-        const isImageDisplay = IMAGE_DISPLAY_TYPES.has(resolveNodeClassType(node))
+        const isImageDisplayType = IMAGE_DISPLAY_TYPES.has(resolveNodeClassType(node))
             || IMAGE_DISPLAY_TYPES.has(String(node.type));
         const isTextDisplay = TEXT_DISPLAY_TYPES.has(resolveNodeClassType(node))
             || TEXT_DISPLAY_TYPES.has(String(node.type));
+        // Subgraph shells that promote $$canvas-image-preview show an output
+        // preview slot — unless they already have an image/SD Browser picker
+        // (those cards render the preview themselves, matching the original panel).
+        const canvasPreview = proxyHasCanvasImagePreview(proxyWidgets);
+        const hasImagePicker = fields.some(fieldIsImagePicker);
+        const isImageDisplay = isImageDisplayType || (canvasPreview && !hasImagePicker);
 
         if (!fields.length && !isImageDisplay && !isTextDisplay)
             continue;
