@@ -77,7 +77,10 @@
     $: intMode = getIntControlMode($svgenLayoutStore.intControlModes, field);
     $: frozen = $svgenFrozenSeedsStore.has(controlKey);
 
+    // Re-measure on programmatic value changes (Use params, int-control advance, session hydrate).
+    // Typing also hits autosize() in onText; this covers paths that never fire input.
     $: if (useTextarea) {
+        void field.value;
         void tick().then(autosize);
     }
 
