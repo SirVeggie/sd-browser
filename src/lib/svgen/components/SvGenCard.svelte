@@ -287,7 +287,7 @@
     .inline-row {
         display: flex;
         align-items: center;
-        gap: 0.3rem;
+        gap: 0.5rem;
         min-width: 0;
         min-height: 22px;
     }

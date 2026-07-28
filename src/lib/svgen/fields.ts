@@ -57,6 +57,11 @@ type SlotBuild = {
     schemaType: string;
     /** widgets_values had a control_after_generate companion after this slot. */
     hadControlCompanion?: boolean;
+    /**
+     * Combo option list when object_info has none (CustomCombo builds options
+     * from sibling `option*` string widgets at runtime).
+     */
+    comboValues?: string[];
 };
 
 function asWidgetValues(
@@ -569,6 +574,46 @@ function comboValuesFromSchema(schema: unknown): string[] | undefined {
     return undefined;
 }
 
+/**
+ * CustomCombo (Comfy utilities): object_info declares `choice` as COMBO with
+ * empty options; the frontend fills values from widgets named `option*`.
+ * Saved layout is `[choice, index, option1, …, ""]` — option names are not in
+ * `inputs`, so read non-empty strings after choice (+ hidden numeric index).
+ * See `onCustomComboCreated` in Comfy's CustomWidgets extension.
+ */
+function customComboChoiceOptions(
+    node: ComfyWorkflowNode | undefined,
+): string[] | undefined {
+    if (!node || resolveNodeClassType(node) !== 'CustomCombo')
+        return undefined;
+    const values = asWidgetValues(node.widgets_values);
+    if (values.length < 2)
+        return undefined;
+    let i = 1;
+    if (typeof values[i] === 'number')
+        i += 1;
+    const options: string[] = [];
+    for (; i < values.length; i++) {
+        const value = values[i];
+        if (typeof value === 'string' && value.length)
+            options.push(value);
+    }
+    return options.length ? options : undefined;
+}
+
+function withComboValues(
+    kind: SvgenFieldKind,
+    options: SvgenField['options'] | undefined,
+    comboValues: string[] | undefined,
+): { kind: SvgenFieldKind; options: SvgenField['options'] | undefined } {
+    if (!comboValues?.length)
+        return { kind, options };
+    return {
+        kind: 'combo',
+        options: { ...(options ?? {}), values: comboValues },
+    };
+}
+
 function detectKind(
     classType: string,
     widgetName: string,
@@ -778,6 +823,9 @@ function buildSlotsForConcreteNode(
             },
             schemaType: classType,
             hadControlCompanion: entry.hadControlCompanion,
+            comboValues: entry.name === 'choice'
+                ? customComboChoiceOptions(node)
+                : undefined,
         });
     }
     return slots;
@@ -985,6 +1033,10 @@ function buildSlotsForProxyNode(
             value = defaultValueForSchema(schema);
         }
 
+        const comboValues = innerWidgetName === 'choice'
+            ? customComboChoiceOptions(inner)
+            : undefined;
+
         // Instance values live on the outer node for promoted proxies; convert still
         // needs inner updates when the definition holds a writable slot.
         // Field identity uses the disambiguated outer name so hide/order/labels
@@ -1004,6 +1056,7 @@ function buildSlotsForProxyNode(
                 },
                 schemaType,
                 hadControlCompanion,
+                comboValues,
             });
         } else if (fromInner) {
             slots.push({
@@ -1020,6 +1073,7 @@ function buildSlotsForProxyNode(
                 },
                 schemaType,
                 hadControlCompanion,
+                comboValues,
             });
         } else if (fromOuter) {
             slots.push({
@@ -1030,6 +1084,7 @@ function buildSlotsForProxyNode(
                 write: { mode: 'outer', valueIndex: fromOuter.valueIndex },
                 schemaType,
                 hadControlCompanion,
+                comboValues,
             });
         } else {
             // No stored value index — still surface the promoted widget (schema default).
@@ -1046,6 +1101,7 @@ function buildSlotsForProxyNode(
                 },
                 schemaType,
                 hadControlCompanion,
+                comboValues,
             });
         }
     }
@@ -1069,8 +1125,14 @@ function slotsToFields(
 
         const schemaName = slot.schemaWidgetName ?? slot.widgetName;
         const schema = lookupSchema(objectInfo, slot.schemaType, schemaName);
-        const kind = detectKind(slot.schemaType, schemaName, slot.value, schema);
+        const detected = detectKind(slot.schemaType, schemaName, slot.value, schema);
         let options = schemaOptions(schema);
+        const { kind, options: withCombo } = withComboValues(
+            detected,
+            options,
+            slot.comboValues,
+        );
+        options = withCombo;
         if (kind === 'string') {
             const lower = schemaName.toLowerCase();
             if (
@@ -1135,8 +1197,14 @@ export function discoverCards(
                     continue;
                 const schemaName = slot.schemaWidgetName ?? slot.widgetName;
                 const schema = lookupSchema(objectInfo, slot.schemaType, schemaName);
-                const kind = detectKind(slot.schemaType, schemaName, slot.value, schema);
+                const detected = detectKind(slot.schemaType, schemaName, slot.value, schema);
                 let options = schemaOptions(schema);
+                const { kind, options: withCombo } = withComboValues(
+                    detected,
+                    options,
+                    slot.comboValues,
+                );
+                options = withCombo;
                 if (kind === 'string') {
                     const lower = schemaName.toLowerCase();
                     if (
