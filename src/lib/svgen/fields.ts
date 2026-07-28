@@ -1296,15 +1296,15 @@ export function setWidgetValue(
     return changed ? { ...nextWorkflow, nodes } : nextWorkflow;
 }
 
+/** Apply saved field order. Visibility (`hiddenFields`) is applied in the card UI —
+ *  hidden widgets stay on the card so Edit can show them dimmed with Show. */
 export function applyFieldOrderAndHidden(
     cards: SvgenCard[],
     fieldOrder: Record<string, string[]>,
-    hiddenFields: Record<string, string[]>,
 ): SvgenCard[] {
     return cards.map((card) => {
-        const hidden = new Set(hiddenFields[card.nodeId] ?? []);
         const order = fieldOrder[card.nodeId];
-        let fields = card.fields.filter((f) => !hidden.has(f.widgetName));
+        let fields = card.fields;
         if (order?.length) {
             const rank = new Map(order.map((name, i) => [name, i]));
             fields = [...fields].sort((a, b) => {

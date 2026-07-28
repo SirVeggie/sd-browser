@@ -133,7 +133,6 @@
         ? applyFieldOrderAndHidden(
             discoverCards(session.workflow, $svgenObjectInfoStore),
             fieldOrder,
-            hiddenFields,
         )
         : [];
     $: columnCount = effectiveColumnCount(panelWidth, layout);
@@ -503,15 +502,15 @@
     function onHideField(nodeId: string, widgetName: string) {
         svgenLayoutStore.update((prev) => {
             const current = prev.hiddenFields[nodeId] ?? [];
-            if (current.includes(widgetName))
-                return prev;
-            return {
-                ...prev,
-                hiddenFields: {
-                    ...prev.hiddenFields,
-                    [nodeId]: [...current, widgetName],
-                },
-            };
+            const nextForNode = current.includes(widgetName)
+                ? current.filter((name) => name !== widgetName)
+                : [...current, widgetName];
+            const hiddenFields = { ...prev.hiddenFields };
+            if (nextForNode.length)
+                hiddenFields[nodeId] = nextForNode;
+            else
+                delete hiddenFields[nodeId];
+            return { ...prev, hiddenFields };
         });
         scheduleLayoutSave();
     }
@@ -521,7 +520,6 @@
         const discovered = applyFieldOrderAndHidden(
             discoverCards(workflow, objectInfo),
             get(svgenLayoutStore).fieldOrder,
-            get(svgenLayoutStore).hiddenFields,
         );
         const lastUsed = new Map(get(svgenLastUsedSeedsStore));
         captureLastUsedSeeds(discovered, lastUsed);
@@ -1073,6 +1071,7 @@
         <SvGenColumns
             {cards}
             {placement}
+            {hiddenFields}
             collapsedNodeIds={layout.collapsedNodeIds}
             on:fieldChange={(e) =>
                 onFieldChange(

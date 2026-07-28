@@ -20,6 +20,8 @@
     export let field: SvgenField;
     export let editMode = false;
     export let hideLabel = false;
+    /** Dimmed in Edit when excluded from the normal card view. */
+    export let hidden = false;
 
     const dispatch = createEventDispatcher<{
         change: string | number | boolean | null;
@@ -165,6 +167,7 @@
 <div
     class="field"
     class:editMode
+    class:hidden
     class:tall={field.tall || useTextarea || isImage}
     class:bool={isBool}
     class:hideLabel
@@ -180,7 +183,7 @@
                     class="hide"
                     tabindex="-1"
                     on:click={() => dispatch('hide')}
-                >Hide</button>
+                >{hidden ? 'Show' : 'Hide'}</button>
             {/if}
         </div>
     {/if}
@@ -303,6 +306,15 @@
         &.tall {
             grid-column: 1 / -1;
         }
+
+        /* Dim value + label; keep Show/Hide readable. */
+        &.hidden > :not(.label-row) {
+            opacity: 0.4;
+        }
+
+        &.hidden .label-row label {
+            opacity: 0.4;
+        }
     }
 
     .label-row {
@@ -328,6 +340,11 @@
         cursor: pointer;
         font-size: 0.75rem;
         text-decoration: underline;
+        flex-shrink: 0;
+
+        &:hover {
+            opacity: 1;
+        }
     }
 
     .check-row {

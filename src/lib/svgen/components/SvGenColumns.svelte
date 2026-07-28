@@ -11,6 +11,8 @@
     export let cards: SvgenCard[] = [];
     export let placement: ColumnPlacement;
     export let collapsedNodeIds: string[] = [];
+    /** Per-node widget names hidden from the normal card view (still shown dimmed in Edit). */
+    export let hiddenFields: Record<string, string[]> = {};
 
     const dispatch = createEventDispatcher<{
         fieldChange: {
@@ -420,6 +422,7 @@
                                     {card}
                                     columnIndex={colIndex}
                                     collapsed={collapsed.has(nodeId)}
+                                    hiddenWidgetNames={hiddenFields[nodeId] ?? []}
                                     startDrag={startDragFor(nodeId)}
                                     on:fieldChange
                                     on:toggleCollapse

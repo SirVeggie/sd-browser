@@ -15,6 +15,8 @@
     export let card: SvgenCard;
     export let collapsed = false;
     export let columnIndex = 0;
+    /** Widget names hidden from the normal view; still listed (dimmed) while editing. */
+    export let hiddenWidgetNames: string[] = [];
     /** Pointer-down handler from column SortableList-style reorder. */
     export let startDrag: ((event: PointerEvent) => void) | undefined = undefined;
 
@@ -52,9 +54,16 @@
     $: bodyFields = enableField
         ? card.fields.filter((f) => f !== enableField)
         : card.fields;
-    $: bodyFieldIds = bodyFields.map((f) => fieldId(f));
-    $: bodyFieldById = new Map(bodyFields.map((f) => [fieldId(f), f]));
+    $: hiddenSet = new Set(hiddenWidgetNames);
+    // Edit lists every body widget (including hidden) so Show stays reachable.
+    $: visibleBodyFields = editMode
+        ? bodyFields
+        : bodyFields.filter((f) => !hiddenSet.has(f.widgetName));
+    $: bodyFieldIds = visibleBodyFields.map((f) => fieldId(f));
+    $: bodyFieldById = new Map(visibleBodyFields.map((f) => [fieldId(f), f]));
     // Match original panel: output-image cards never collapse into the title row.
+    // Inline only when there is a single body widget total (hidden ones still count —
+    // otherwise Edit disappears and hidden fields cannot be restored).
     $: prefersInline = bodyFields.length === 1
         && !bodyFields[0]?.tall
         && !card.imageDisplay;
@@ -222,6 +231,7 @@
                                     <SvGenField
                                         {field}
                                         {editMode}
+                                        hidden={hiddenSet.has(field.widgetName)}
                                         hideLabel={false}
                                         on:change={(e) => emitFieldChange(field, e.detail)}
                                         on:companion={(e) => emitCompanion(e.detail)}
@@ -238,7 +248,7 @@
                     </div>
                 {:else}
                     <div class="field-grid">
-                        {#each bodyFields as field (fieldId(field))}
+                        {#each visibleBodyFields as field (fieldId(field))}
                             <div class="field-wrap" class:tall={field.tall}>
                                 <SvGenField
                                     {field}
@@ -338,8 +348,7 @@
         flex-shrink: 0;
 
         &:hover {
-            color: var(--ink);
-            background: var(--accent-soft);
+            color: color-mix(in srgb, var(--ink) 92%, white);
         }
 
         &.active {
