@@ -41,8 +41,9 @@ export function categorizeCard(card: SvgenCard): AutoLayoutCategory {
 
     if (
         card.imageDisplay
+        || card.textDisplay
         || card.fields.some((field) => field.kind === 'image' || field.kind === 'sd_browser_image')
-        || /\b(load\s*image|preview\s*image|save\s*image|sd\s*browser)\b/.test(blob)
+        || /\b(load\s*image|preview\s*image|save\s*image|sd\s*browser|preview\s*text)\b/.test(blob)
     ) {
         return 'image';
     }

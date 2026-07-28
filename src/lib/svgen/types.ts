@@ -60,6 +60,8 @@ export type SvgenCard = {
     fields: SvgenField[];
     /** Shows an output-image preview slot (Danbooru / PreviewImage / etc.). */
     imageDisplay?: boolean;
+    /** Shows a read-only text preview slot (SV-PreviewText). */
+    textDisplay?: boolean;
 };
 
 export type ColumnPlacement = {

@@ -6,6 +6,7 @@
     import {
         nodePreviewStoreKey,
         svgenNodePreviewsStore,
+        svgenNodeTextPreviewsStore,
         svgenOpenSessionsStore,
     } from '$lib/svgen/stores';
     import SvGenAuthImg from './SvGenAuthImg.svelte';
@@ -66,7 +67,8 @@
     // otherwise Edit disappears and hidden fields cannot be restored).
     $: prefersInline = bodyFields.length === 1
         && !bodyFields[0]?.tall
-        && !card.imageDisplay;
+        && !card.imageDisplay
+        && !card.textDisplay;
     // Hide/reorder only matter when there are multiple body widgets.
     $: canEditFields = bodyFields.length > 1;
     $: if (!canEditFields)
@@ -81,6 +83,9 @@
     $: outputPreviewCaption = outputPreview && outputPreview.images.length > 1
         ? `1 / ${outputPreview.images.length}`
         : '';
+    $: textPreview = card.textDisplay && activeSessionId
+        ? ($svgenNodeTextPreviewsStore.get(nodePreviewStoreKey(activeSessionId, card.nodeId)) ?? null)
+        : null;
 
     /** Stable across reorder — never key SortableList by widgetName alone (proxies collide). */
     function fieldId(field: SvgenField): string {
@@ -208,6 +213,17 @@
                         </div>
                     </div>
                 {/if}
+                {#if card.textDisplay}
+                    <div class="field-wrap tall">
+                        <div class="output-text" class:empty={!textPreview}>
+                            {#if textPreview}
+                                {textPreview}
+                            {:else}
+                                No preview yet
+                            {/if}
+                        </div>
+                    </div>
+                {/if}
                 {#if canEditFields}
                     <div class="fields-sortable">
                         <SortableList
@@ -253,7 +269,7 @@
                                 <SvGenField
                                     {field}
                                     {editMode}
-                                    hideLabel={bodyFields.length <= 1 && !editMode && !card.imageDisplay}
+                                    hideLabel={bodyFields.length <= 1 && !editMode && !card.imageDisplay && !card.textDisplay}
                                     on:change={(e) => emitFieldChange(field, e.detail)}
                                     on:companion={(e) => emitCompanion(e.detail)}
                                     on:persistLayout={() => dispatch('persistLayout')}
@@ -427,6 +443,33 @@
                 transparent 100%
             );
             pointer-events: none;
+        }
+    }
+
+    .output-text {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 120px;
+        max-height: 280px;
+        overflow: auto;
+        padding: 0.45rem 0.55rem;
+        border-radius: 7px;
+        border: none;
+        background-color: rgba(0, 0, 0, 0.22);
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+        color: inherit;
+        font-size: 0.72rem;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        word-break: break-word;
+
+        &.empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.5;
+            font-style: italic;
+            text-align: center;
         }
     }
 

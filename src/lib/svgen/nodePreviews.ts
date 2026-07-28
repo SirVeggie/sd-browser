@@ -67,3 +67,21 @@ export function makeNodePreviewEntry(images: ComfyOutputImageRef[]): NodePreview
         return null;
     return { images, path };
 }
+
+/**
+ * Parse `executed` WS payload → preview text (PreviewText / SV-PreviewText).
+ * Comfy serializes `ui.PreviewText` as `{ text: [value] }` (tuple → array).
+ */
+export function parseExecutedOutputText(data: unknown): string | null {
+    if (!data || typeof data !== 'object')
+        return null;
+    const output = (data as { output?: unknown }).output;
+    if (!output || typeof output !== 'object')
+        return null;
+    const text = (output as { text?: unknown }).text;
+    if (text == null)
+        return null;
+    if (Array.isArray(text))
+        return text.map((part) => String(part ?? '')).join('\n\n');
+    return String(text);
+}

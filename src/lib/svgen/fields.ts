@@ -34,6 +34,11 @@ const IMAGE_DISPLAY_TYPES = new Set([
     'SV-DanbooruSearchImage',
 ]);
 
+/** Output nodes that only show executed text (no editable widgets in the workflow). */
+const TEXT_DISPLAY_TYPES = new Set([
+    'SV-PreviewText',
+]);
+
 const SD_BROWSER_NODE_TYPE = 'SV-SdBrowserImage';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1246,8 +1251,10 @@ export function discoverCards(
 
         const isImageDisplay = IMAGE_DISPLAY_TYPES.has(resolveNodeClassType(node))
             || IMAGE_DISPLAY_TYPES.has(String(node.type));
+        const isTextDisplay = TEXT_DISPLAY_TYPES.has(resolveNodeClassType(node))
+            || TEXT_DISPLAY_TYPES.has(String(node.type));
 
-        if (!fields.length && !isImageDisplay)
+        if (!fields.length && !isImageDisplay && !isTextDisplay)
             continue;
 
         cards.push({
@@ -1256,6 +1263,7 @@ export function discoverCards(
             title,
             fields,
             imageDisplay: isImageDisplay,
+            textDisplay: isTextDisplay,
         });
     }
 
@@ -1382,5 +1390,5 @@ export function applyFieldOrderAndHidden(
             });
         }
         return { ...card, fields };
-    }).filter((card) => card.fields.length > 0 || card.imageDisplay);
+    }).filter((card) => card.fields.length > 0 || card.imageDisplay || card.textDisplay);
 }

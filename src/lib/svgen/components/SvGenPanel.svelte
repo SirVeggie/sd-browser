@@ -6,6 +6,7 @@
     import {
         flyoutTabStore,
         setSvgenNodePreviews,
+        setSvgenNodeTextPreviews,
         svgenErrorStore,
         svgenFrozenSeedsStore,
         svgenGeneratingStore,
@@ -20,6 +21,7 @@
     import {
         executedPreviewNodeIds,
         parseExecutedOutputImages,
+        parseExecutedOutputText,
     } from '$lib/svgen/nodePreviews';
     import {
         activateOpenSession,
@@ -364,7 +366,8 @@
                 },
                 onExecuted: (data) => {
                     const images = parseExecutedOutputImages(data);
-                    if (!images.length)
+                    const text = parseExecutedOutputText(data);
+                    if (!images.length && text == null)
                         return;
                     const nodeIds = executedPreviewNodeIds(data);
                     if (!nodeIds.length)
@@ -377,7 +380,10 @@
                         : get(svgenOpenSessionsStore).activeId;
                     if (!sessionId)
                         return;
-                    setSvgenNodePreviews(sessionId, nodeIds, images);
+                    if (images.length)
+                        setSvgenNodePreviews(sessionId, nodeIds, images);
+                    if (text != null)
+                        setSvgenNodeTextPreviews(sessionId, nodeIds, text);
                 },
                 onExecutionEnd: (promptId, terminal, timestamp) => {
                     recordPromptExecutionEnd(promptId, terminal, timestamp);

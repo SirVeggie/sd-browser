@@ -55,6 +55,11 @@ export const svgenLastUsedSeedsStore = writable<Map<string, number>>(new Map());
  * Ephemeral — not persisted; cleared when the session closes.
  */
 export const svgenNodePreviewsStore = writable<Map<string, NodePreviewEntry>>(new Map());
+/**
+ * Last `executed` preview text per session+node (`sessionId\0nodeId`).
+ * Ephemeral — not persisted; cleared when the session closes.
+ */
+export const svgenNodeTextPreviewsStore = writable<Map<string, string>>(new Map());
 
 export function nodePreviewStoreKey(sessionId: string, nodeId: string): string {
     return `${sessionId}\0${nodeId}`;
@@ -72,6 +77,7 @@ export function clearSvgenSeedControlState() {
 
 export function clearSvgenNodePreviews() {
     svgenNodePreviewsStore.set(new Map());
+    svgenNodeTextPreviewsStore.set(new Map());
 }
 
 export function clearSvgenNodePreviewsForSession(sessionId: string) {
@@ -79,6 +85,17 @@ export function clearSvgenNodePreviewsForSession(sessionId: string) {
         return;
     const prefix = `${sessionId}\0`;
     svgenNodePreviewsStore.update((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const key of next.keys()) {
+            if (key.startsWith(prefix)) {
+                next.delete(key);
+                changed = true;
+            }
+        }
+        return changed ? next : prev;
+    });
+    svgenNodeTextPreviewsStore.update((prev) => {
         let changed = false;
         const next = new Map(prev);
         for (const key of next.keys()) {
@@ -107,6 +124,21 @@ export function setSvgenNodePreviews(
         const next = new Map(prev);
         for (const id of nodeIds)
             next.set(nodePreviewStoreKey(sessionId, id), entry);
+        return next;
+    });
+}
+
+export function setSvgenNodeTextPreviews(
+    sessionId: string,
+    nodeIds: string[],
+    text: string,
+) {
+    if (!sessionId || !nodeIds.length)
+        return;
+    svgenNodeTextPreviewsStore.update((prev) => {
+        const next = new Map(prev);
+        for (const id of nodeIds)
+            next.set(nodePreviewStoreKey(sessionId, id), text);
         return next;
     });
 }

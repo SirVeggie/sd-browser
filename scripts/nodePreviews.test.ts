@@ -3,6 +3,7 @@ import {
     executedPreviewNodeIds,
     makeNodePreviewEntry,
     parseExecutedOutputImages,
+    parseExecutedOutputText,
 } from '../src/lib/svgen/nodePreviews';
 
 describe('parseExecutedOutputImages', () => {
@@ -54,5 +55,19 @@ describe('makeNodePreviewEntry', () => {
         expect(entry!.path).toContain('filename=out.png');
         expect(entry!.path).toContain('type=temp');
         expect(entry!.path).toContain('rand=');
+    });
+});
+
+describe('parseExecutedOutputText', () => {
+    it('joins PreviewText tuple/array payloads', () => {
+        expect(parseExecutedOutputText({ output: { text: ['hello\nworld'] } })).toBe('hello\nworld');
+        expect(parseExecutedOutputText({ output: { text: ['a', 'b'] } })).toBe('a\n\nb');
+        expect(parseExecutedOutputText({ output: { text: 'plain' } })).toBe('plain');
+    });
+
+    it('returns null when text is missing', () => {
+        expect(parseExecutedOutputText(null)).toBeNull();
+        expect(parseExecutedOutputText({ output: {} })).toBeNull();
+        expect(parseExecutedOutputText({ output: { images: [] } })).toBeNull();
     });
 });
