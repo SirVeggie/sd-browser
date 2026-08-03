@@ -178,18 +178,36 @@ export class MetaDB {
         return MetaDB.stmtGetF.get(id) as ServerImagePartial | undefined;
     }
 
+    /** Blobs-only rows for extradata compute (no short/preview join). */
+    static getBlobsMany(ids: string[]): ServerImagePartial[] {
+        if (!ids.length)
+            return [];
+        MetaDB.setup();
+        return MetaDB.fdb.prepare(
+            `SELECT id, prompt, workflow, extra FROM ${MetaDB.tFull} WHERE id IN('${ids.join("', '")}')`,
+        ).all() as ServerImagePartial[];
+    }
+
+    /** Ids only — avoids loading the full short table just to list images. */
+    static getAllIds(): string[] {
+        MetaDB.setup();
+        return MetaDB.sdb.prepare(`SELECT id FROM ${MetaDB.tShort}`).all().map(row => (row as { id: string }).id);
+    }
+
     static getMany(ids: string[]): ServerImageFull[] {
         MetaDB.setup();
         const results = MetaDB.sdb.prepare(`SELECT * FROM ${MetaDB.tShort} WHERE id IN('${ids.join("', '")}')`).all() as ServerImageFull[];
         const data = MetaDB.fdb.prepare(`SELECT * FROM ${MetaDB.tFull} WHERE id IN('${ids.join("', '")}')`).all() as ServerImagePartial[];
+        const byId = new Map(data.map(row => [row.id, row]));
         for (let i = 0; i < results.length; i++) {
-            if (!data[i]) {
+            const blob = byId.get(results[i].id);
+            if (!blob) {
                 results[i] = undefined as any;
                 continue;
             }
-            results[i].prompt = data[i].prompt;
-            results[i].workflow = data[i].workflow;
-            results[i].extra = data[i].extra;
+            results[i].prompt = blob.prompt;
+            results[i].workflow = blob.workflow;
+            results[i].extra = blob.extra;
         }
         return results.filter(x => !!x);
     }

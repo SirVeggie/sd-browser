@@ -16,6 +16,19 @@ Server: always `try/catch` enqueue, clear interval + unsubscribe on both `abort`
 
 ---
 
+## Extradata recalc must not starve the event loop
+
+**Files:** `src/lib/server/workers/extradataWorkerPool.ts`, `src/lib/server/extradataBatch.ts`, `src/lib/server/db.ts`
+
+Workers only own CPU parse. Sync SQLite load/`postMessage` clone/staging write still run on the Node event loop — bursting many slices in one turn freezes gallery/API/SSE.
+
+- Load **blobs only** (`MetaDB.getBlobsMany` → `id/prompt/workflow/extra`), never full short rows + preview.
+- `processAll`: at most **one** load+`postMessage` per event-loop turn; `maxInFlight ≈ POOL_SIZE` (not `* 2`); `setImmediate` between fills.
+- Staging write grain is **200**; yield after each flush.
+- List ids with `MetaDB.getAllIds()`, not `getAllShort()`.
+
+---
+
 ## Regex search uses RE2 (ReDoS)
 
 **Files:** `src/lib/server/searchRegex.ts`, `src/lib/server/searching.ts`

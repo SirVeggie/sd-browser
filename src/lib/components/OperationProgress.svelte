@@ -1,10 +1,14 @@
 <script lang="ts">
+    import { page } from '$app/stores';
     import { onDestroy, onMount } from 'svelte';
     import { operationStore } from '$lib/stores/operationStore';
     import { stopAllOperationWatches, syncRunningOperations } from '$lib/stores/operationWatch';
     import type { OperationInfo } from '$lib/types/requests';
 
     const dismissed = new Set<string>();
+
+    // Gallery search chrome sits at the bottom — pin the banner to the top there.
+    $: atTop = $page.url.pathname === '/';
 
     $: visible = $operationStore.filter(op => {
         if (dismissed.has(op.id))
@@ -37,7 +41,7 @@
 </script>
 
 {#if visible.length}
-    <div class="operation-banner" aria-live="polite">
+    <div class="operation-banner" class:at-top={atTop} aria-live="polite">
         {#each visible as op (op.id)}
             <div class="operation" class:failed={op.status === 'failed'}>
                 <div class="header">
@@ -79,6 +83,15 @@
         background: #1a1a1aee;
         border-top: 1px solid #444;
         backdrop-filter: blur(4px);
+
+        &.at-top {
+            top: 0;
+            bottom: auto;
+            padding-top: max(0.75em, env(safe-area-inset-top));
+            padding-bottom: 0.75em;
+            border-top: none;
+            border-bottom: 1px solid #444;
+        }
     }
 
     .operation {

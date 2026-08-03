@@ -1,5 +1,5 @@
 import { getModels, getPrompts, simplifyPrompt } from '$lib/tools/metadataInterpreter';
-import type { ImageExtraData, ServerImage, ServerImageFull } from '$lib/types/images';
+import type { ImageExtraData, ServerImage, ServerImagePartial } from '$lib/types/images';
 import crypto from 'crypto';
 
 function hashPromptFields(fields: Pick<ServerImage, 'positive' | 'negative' | 'params'>): string {
@@ -12,7 +12,7 @@ function hashPromptFields(fields: Pick<ServerImage, 'positive' | 'negative' | 'p
 }
 
 /** Pure CPU derivation of extradata — safe for worker threads (no DB, env, or filesystem). */
-export function computeExtradataFromFull(full: ServerImageFull): ImageExtraData {
+export function computeExtradataFromFull(full: ServerImagePartial): ImageExtraData {
     const prompts = getPrompts(full.prompt, full.workflow, full.extra);
     const positive = prompts?.pos ?? '';
     const negative = prompts?.neg ?? '';
@@ -27,6 +27,6 @@ export function computeExtradataFromFull(full: ServerImageFull): ImageExtraData 
     };
 }
 
-export function computeExtradataBatch(fulls: ServerImageFull[]): ImageExtraData[] {
+export function computeExtradataBatch(fulls: ServerImagePartial[]): ImageExtraData[] {
     return fulls.map(computeExtradataFromFull);
 }

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'worker_threads';
 import { computeExtradataBatch } from '../extradataComputeCore';
-import type { ImageExtraData, ServerImageFull } from '$lib/types/images';
+import type { ImageExtraData, ServerImagePartial } from '$lib/types/images';
 import { fileExistsSync } from '../filetools';
 
 /** Match indexing pool sizing — saturate CPU for parse-heavy recalc. */
@@ -12,13 +12,17 @@ const POOL_SIZE = Math.max(1, Math.min(os.cpus().length - 1, 8));
 const JOB_SLICE = 64;
 
 type WorkerJob = {
-    fulls: ServerImageFull[];
+    fulls: ServerImagePartial[];
     resolve: (results: ImageExtraData[]) => void;
     reject: (error: unknown) => void;
 };
 
-function computeOnMainThread(fulls: ServerImageFull[]): ImageExtraData[] {
+function computeOnMainThread(fulls: ServerImagePartial[]): ImageExtraData[] {
     return computeExtradataBatch(fulls);
+}
+
+function yieldEventLoop(): Promise<void> {
+    return new Promise(resolve => setImmediate(resolve));
 }
 
 function resolveWorkerPath(): string | undefined {
@@ -98,7 +102,7 @@ class ExtradataWorkerPool {
         }
     }
 
-    private runWorkerSlice(fulls: ServerImageFull[]): Promise<ImageExtraData[]> {
+    private runWorkerSlice(fulls: ServerImagePartial[]): Promise<ImageExtraData[]> {
         return new Promise((resolve, reject) => {
             this.queue.push({ fulls, resolve, reject });
             this.dispatch();
@@ -117,14 +121,14 @@ class ExtradataWorkerPool {
     /**
      * Compute extradata for a list of full images, splitting across the pool.
      */
-    async computeBatch(fulls: ServerImageFull[]): Promise<ImageExtraData[]> {
+    async computeBatch(fulls: ServerImagePartial[]): Promise<ImageExtraData[]> {
         this.init();
         if (!fulls.length)
             return [];
         if (!this.useWorkers)
             return computeOnMainThread(fulls);
 
-        const chunks: ServerImageFull[][] = [];
+        const chunks: ServerImagePartial[][] = [];
         for (let i = 0; i < fulls.length; i += JOB_SLICE)
             chunks.push(fulls.slice(i, i + JOB_SLICE));
 
@@ -133,12 +137,13 @@ class ExtradataWorkerPool {
     }
 
     /**
-     * Keep the pool saturated: `loadSlice` runs on the main thread (DB read),
-     * compute runs on workers, `onResults` runs on the main thread (DB write).
+     * Keep the pool saturated without starving the event loop:
+     * load + postMessage at most one slice per turn, then yield.
+     * SQLite reads/writes stay on the main thread; parse runs on workers.
      */
     async processAll(
         total: number,
-        loadSlice: (start: number, count: number) => ServerImageFull[],
+        loadSlice: (start: number, count: number) => ServerImagePartial[],
         onResults: (results: ImageExtraData[], done: number, total: number) => void | Promise<void>,
         options?: { maxInFlight?: number },
     ): Promise<void> {
@@ -147,7 +152,8 @@ class ExtradataWorkerPool {
             return;
 
         const slice = JOB_SLICE;
-        const maxInFlight = options?.maxInFlight ?? (this.useWorkers ? POOL_SIZE * 2 : 1);
+        // One in-flight per worker — enough to stay busy without stacking sync clone bursts.
+        const maxInFlight = options?.maxInFlight ?? (this.useWorkers ? POOL_SIZE : 1);
         let nextIndex = 0;
         let completed = 0;
         let inFlight = 0;
@@ -176,20 +182,26 @@ class ExtradataWorkerPool {
                     resolve();
                     return;
                 }
-                while (inFlight < maxInFlight && nextIndex < total) {
-                    const start = nextIndex;
-                    const count = Math.min(slice, total - nextIndex);
-                    nextIndex += count;
-                    inFlight++;
-                    runSlice(start, count)
-                        .catch((error) => {
-                            failed = error;
-                        })
-                        .finally(() => {
-                            inFlight--;
-                            pump();
-                        });
-                }
+                if (inFlight >= maxInFlight || nextIndex >= total)
+                    return;
+
+                const start = nextIndex;
+                const count = Math.min(slice, total - nextIndex);
+                nextIndex += count;
+                inFlight++;
+                runSlice(start, count)
+                    .catch((error) => {
+                        failed = error;
+                    })
+                    .finally(() => {
+                        inFlight--;
+                        // Yield so HTTP/SSE can run between completion-driven fills.
+                        void yieldEventLoop().then(pump);
+                    });
+
+                // Fill remaining slots one per turn (each runSlice sync-loads + postMessages).
+                if (inFlight < maxInFlight && nextIndex < total)
+                    void yieldEventLoop().then(pump);
             };
             pump();
         });

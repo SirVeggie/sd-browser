@@ -27,7 +27,7 @@ async function runExtradataRecalc(operationId: string) {
         MetaCalcDB.cleanupOrphanExtradataTables();
         MetaCalcDB.clearStaging();
 
-        const ids = MetaDB.getAllShort().map(image => image.id);
+        const ids = MetaDB.getAllIds();
         const total = ids.length;
         updateProgress(operationId, 0, 'Recalculating extra data');
 

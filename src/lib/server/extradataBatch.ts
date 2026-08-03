@@ -4,7 +4,11 @@ import { extradataWorkerPool } from './workers/extradataWorkerPool';
 import type { ImageExtraData } from '$lib/types/images';
 
 /** Progress reporting / staging write grain (not the worker job size). */
-const BATCH_SIZE = 1000;
+const BATCH_SIZE = 200;
+
+function yieldEventLoop(): Promise<void> {
+    return new Promise(resolve => setImmediate(resolve));
+}
 
 export async function computeExtradataForIds(
     ids: string[],
@@ -20,7 +24,7 @@ export async function computeExtradataForIds(
 
     await extradataWorkerPool.processAll(
         total,
-        (start, count) => MetaDB.getMany(ids.slice(start, start + count)),
+        (start, count) => MetaDB.getBlobsMany(ids.slice(start, start + count)),
         (batch, done) => {
             for (const item of batch) {
                 const index = indexById.get(item.id);
@@ -64,6 +68,8 @@ export async function forEachExtradataBatch(
             remaining = calcTimeRemaining(start, reportedDone, total);
             updateLine(`${label}: ${reportedDone} / ${total} | estimate: ${remaining}`);
             onProgress?.(reportedDone, total);
+            // Let HTTP/SSE run after sync staging writes.
+            await yieldEventLoop();
         });
         return flushing;
     };
@@ -72,7 +78,7 @@ export async function forEachExtradataBatch(
 
     await extradataWorkerPool.processAll(
         total,
-        (startIndex, count) => MetaDB.getMany(ids.slice(startIndex, startIndex + count)),
+        (startIndex, count) => MetaDB.getBlobsMany(ids.slice(startIndex, startIndex + count)),
         async (batch) => {
             writeBuffer.push(...batch);
             if (writeBuffer.length >= BATCH_SIZE)
