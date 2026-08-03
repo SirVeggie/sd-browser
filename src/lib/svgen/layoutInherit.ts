@@ -274,6 +274,11 @@ export function remapLayoutToCards(
             savedToNext,
             nextById,
         ),
+        loraClipStrength: remapKeyedRecord(
+            savedLayout.loraClipStrength,
+            savedToNext,
+            (_saved, _nextId, value) => (typeof value === 'boolean' ? value : undefined),
+        ),
         nodeSignatures: {},
     };
 

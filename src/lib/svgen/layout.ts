@@ -11,6 +11,7 @@ export function emptyLayout(): SvgenLayoutState {
         hiddenFields: {},
         fieldOrder: {},
         intControlModes: {},
+        loraClipStrength: {},
         nodeSignatures: {},
     };
 }
@@ -184,6 +185,9 @@ export function parseLayoutJson(raw: string | null | undefined): SvgenLayoutStat
                 ...(parsed.columns['3'] ? { '3': parsed.columns['3'] } : {}),
             },
             intControlModes: normalizeIntControlModes(parsed.intControlModes),
+            loraClipStrength: parsed.loraClipStrength && typeof parsed.loraClipStrength === 'object'
+                ? parsed.loraClipStrength
+                : {},
         };
     } catch {
         return emptyLayout();

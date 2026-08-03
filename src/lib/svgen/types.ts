@@ -9,6 +9,7 @@ export type SvgenFieldKind =
     | 'combo'
     | 'image'
     | 'sd_browser_image'
+    | 'lora_tags'
     | 'seed'
     | 'unknown';
 
@@ -62,6 +63,13 @@ export type SvgenCard = {
     imageDisplay?: boolean;
     /** Shows a read-only text preview slot (SV-PreviewText). */
     textDisplay?: boolean;
+    /**
+     * SV-LoraTagLoader — row UI over the text widget (`lora_tags` field).
+     * When set, `clipInputWired` controls whether clip-strength columns appear.
+     */
+    loraTagLoader?: boolean;
+    /** True when the optional CLIP input socket has a link. */
+    clipInputWired?: boolean;
 };
 
 export type ColumnPlacement = {
@@ -78,6 +86,12 @@ export type SvgenLayoutState = {
     hiddenFields: Record<string, string[]>;
     fieldOrder: Record<string, string[]>;
     intControlModes: Record<string, IntControlMode>;
+    /**
+     * Per Lora Tag Loader card: when false, hide clip-strength column and
+     * serialize tags without a separate clip weight (uses model strength).
+     * Missing key → true. Ignored when CLIP socket is unwired.
+     */
+    loraClipStrength: Record<string, boolean>;
     nodeSignatures: Record<string, string>;
 };
 

@@ -40,6 +40,7 @@ const TEXT_DISPLAY_TYPES = new Set([
 ]);
 
 const SD_BROWSER_NODE_TYPE = 'SV-SdBrowserImage';
+const LORA_TAG_LOADER_TYPE = 'SV-LoraTagLoader';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type SlotBuild = {
@@ -160,6 +161,11 @@ function findInput(
 function isWired(node: ComfyWorkflowNode, widgetName: string): boolean {
     const input = findInput(node, widgetName);
     return input != null && input.link != null;
+}
+
+/** Whether an input socket/widget is linked (e.g. optional CLIP on Lora Tag Loader). */
+export function isInputWired(node: ComfyWorkflowNode, inputName: string): boolean {
+    return isWired(node, inputName);
 }
 
 function labelFor(node: ComfyWorkflowNode, widgetName: string): string {
@@ -455,7 +461,9 @@ function outerInputLabelKey(input: ComfyWorkflowNodeInput): string | null {
 
 /**
  * Labels used to match a proxy onto an outer socket. Title is allowed here for
- * matching only (Sampler Steps/Start/Seed) — never as the displayed field label.
+ * matching only on single-widget inners (Sampler Steps/Start/Seed) — never as
+ * the displayed field label, and never stamped onto every widget of a
+ * multi-widget node (that steals the wrong outer rename).
  */
 function innerProxyLabelKeys(
     inner: ComfyWorkflowNode | undefined,
@@ -478,8 +486,31 @@ function innerProxyLabelKeys(
     add(input?.label);
     if (input?.localized_name && input.localized_name !== input.name)
         add(input.localized_name);
-    add(inner.title);
+    // Title→outer-label matching is only safe when one widget owns the node.
+    if (inputWidgetNames(inner).length <= 1)
+        add(inner.title);
     return keys;
+}
+
+/**
+ * Stable synthetic outer name when no socket remains (Hires `enable`).
+ * Input rename only — never the inner node title (that invents `random_name`
+ * and hides the real outer label `magic` / `sword`).
+ */
+function innerProxySynthName(
+    inner: ComfyWorkflowNode | undefined,
+    innerWidgetName: string,
+): string {
+    if (!inner)
+        return '';
+    const input = findInput(inner, innerWidgetName);
+    const renamed = input?.label?.trim();
+    if (renamed)
+        return renamed.replace(/\s+/g, '_');
+    const localized = input?.localized_name?.trim();
+    if (localized && localized !== input?.name)
+        return localized.replace(/\s+/g, '_');
+    return '';
 }
 
 function isDisambiguatedWidgetName(base: string, name: string): boolean {
@@ -566,13 +597,15 @@ function resolveOuterProxyWidgetNames(
             result[i] = claim(pick);
     }
 
-    // Pass 3: no outer socket (Hires `enable`) — stable name from label, else occurrence
+    // Pass 3: no outer socket (Hires `enable`) — input-label name, else occurrence.
+    // Do not synthesize from the inner node title (see innerProxySynthName).
     for (let i = 0; i < proxies.length; i++) {
         if (result[i])
             continue;
         const [innerId, innerWidgetName] = proxies[i];
-        const labelKeys = innerProxyLabelKeys(findInnerNode(subgraph, innerId), innerWidgetName);
-        let candidate = (labelKeys[0] ?? '').replace(/\s+/g, '_') || occurrenceOuterName(proxies, i);
+        const inner = findInnerNode(subgraph, innerId);
+        let candidate = innerProxySynthName(inner, innerWidgetName)
+            || occurrenceOuterName(proxies, i);
         if (!candidate)
             candidate = innerWidgetName || `proxy_${i}`;
         if (used.has(candidate)) {
@@ -602,6 +635,33 @@ function comboValuesFromSchema(schema: unknown): string[] | undefined {
         return opts.options.map(String);
     }
     return undefined;
+}
+
+/** LoRA filenames from Comfy object_info (same list as LoraLoader). */
+export function loraFilenameOptions(
+    objectInfo: ObjectInfoMap | null | undefined,
+): string[] {
+    for (const classType of ['LoraLoader', 'LoraLoaderModelOnly']) {
+        const values = comboValuesFromSchema(
+            lookupSchema(objectInfo, classType, 'lora_name'),
+        );
+        if (values?.length)
+            return values;
+    }
+    return [];
+}
+
+function withLoraTagOptions(
+    kind: SvgenFieldKind,
+    options: SvgenField['options'] | undefined,
+    objectInfo: ObjectInfoMap | null | undefined,
+): SvgenField['options'] | undefined {
+    if (kind !== 'lora_tags')
+        return options;
+    const values = loraFilenameOptions(objectInfo);
+    if (!values.length)
+        return options;
+    return { ...(options ?? {}), values };
 }
 
 /**
@@ -638,6 +698,9 @@ function withComboValues(
 ): { kind: SvgenFieldKind; options: SvgenField['options'] | undefined } {
     if (!comboValues?.length)
         return { kind, options };
+    // Special field kinds own their options (e.g. lora filename list).
+    if (kind === 'lora_tags' || kind === 'image' || kind === 'sd_browser_image')
+        return { kind, options };
     return {
         kind: 'combo',
         options: { ...(options ?? {}), values: comboValues },
@@ -661,6 +724,12 @@ function detectKind(
         && (classType === 'LoadImage' || classType === 'LoadImageMask' || classType === 'LoadImageOutput')
     ) {
         return 'image';
+    }
+    if (
+        classType === LORA_TAG_LOADER_TYPE
+        && (widgetName === 'text' || widgetName === 'string')
+    ) {
+        return 'lora_tags';
     }
 
     // Trust runtime booleans over a mismatched STRING schema (misaligned zip).
@@ -788,7 +857,7 @@ function isTallField(
     value: unknown,
     widgetName: string,
 ): boolean {
-    if (kind === 'sd_browser_image' || kind === 'image')
+    if (kind === 'sd_browser_image' || kind === 'image' || kind === 'lora_tags')
         return true;
     if (kind !== 'string')
         return false;
@@ -1162,7 +1231,7 @@ function slotsToFields(
             options,
             slot.comboValues,
         );
-        options = withCombo;
+        options = withLoraTagOptions(kind, withCombo, objectInfo);
         if (kind === 'string') {
             const lower = schemaName.toLowerCase();
             if (
@@ -1234,7 +1303,7 @@ export function discoverCards(
                     options,
                     slot.comboValues,
                 );
-                options = withCombo;
+                options = withLoraTagOptions(kind, withCombo, objectInfo);
                 if (kind === 'string') {
                     const lower = schemaName.toLowerCase();
                     if (
@@ -1274,9 +1343,10 @@ export function discoverCards(
             fields = [];
         }
 
-        const isImageDisplayType = IMAGE_DISPLAY_TYPES.has(resolveNodeClassType(node))
+        const classType = resolveNodeClassType(node);
+        const isImageDisplayType = IMAGE_DISPLAY_TYPES.has(classType)
             || IMAGE_DISPLAY_TYPES.has(String(node.type));
-        const isTextDisplay = TEXT_DISPLAY_TYPES.has(resolveNodeClassType(node))
+        const isTextDisplay = TEXT_DISPLAY_TYPES.has(classType)
             || TEXT_DISPLAY_TYPES.has(String(node.type));
         // Subgraph shells that promote $$canvas-image-preview show an output
         // preview slot — unless they already have an image/SD Browser picker
@@ -1284,17 +1354,21 @@ export function discoverCards(
         const canvasPreview = proxyHasCanvasImagePreview(proxyWidgets);
         const hasImagePicker = fields.some(fieldIsImagePicker);
         const isImageDisplay = isImageDisplayType || (canvasPreview && !hasImagePicker);
+        const isLoraTagLoader = classType === LORA_TAG_LOADER_TYPE
+            || fields.some((f) => f.kind === 'lora_tags');
 
         if (!fields.length && !isImageDisplay && !isTextDisplay)
             continue;
 
         cards.push({
             nodeId: String(node.id),
-            nodeType: resolveNodeClassType(node),
+            nodeType: classType,
             title,
             fields,
             imageDisplay: isImageDisplay,
             textDisplay: isTextDisplay,
+            loraTagLoader: isLoraTagLoader || undefined,
+            clipInputWired: isLoraTagLoader ? isWired(node, 'clip') : undefined,
         });
     }
 

@@ -33,6 +33,12 @@ function kindsCompatible(source: SvgenFieldKind, target: SvgenFieldKind): boolea
     ) {
         return true;
     }
+    if (
+        (source === 'string' && target === 'lora_tags')
+        || (source === 'lora_tags' && target === 'string')
+    ) {
+        return true;
+    }
     return false;
 }
 

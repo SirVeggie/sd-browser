@@ -2,9 +2,16 @@
     import { createEventDispatcher } from 'svelte';
     import DragHandle from '$lib/components/DragHandle.svelte';
     import SortableList from '$lib/components/SortableList.svelte';
+    import {
+        allLoraRowsEnabled,
+        parseLoraTagText,
+        serializeLoraTagText,
+        withAllLoraRowsEnabled,
+    } from '$lib/svgen/loraTagText';
     import type { SvgenCard, SvgenField } from '$lib/svgen/types';
     import {
         nodePreviewStoreKey,
+        svgenLayoutStore,
         svgenNodePreviewsStore,
         svgenNodeTextPreviewsStore,
         svgenOpenSessionsStore,
@@ -13,6 +20,7 @@
     import SvGenAuthImg from './SvGenAuthImg.svelte';
     import SvGenEnablePill from './SvGenEnablePill.svelte';
     import SvGenField from './SvGenField.svelte';
+    import SvGenLoraTagLoader from './SvGenLoraTagLoader.svelte';
 
     export let card: SvgenCard;
     export let collapsed = false;
@@ -68,16 +76,28 @@
         return undefined;
     }
 
-    $: enableField = card.fields.find((f) => {
-        const n = f.widgetName.trim().toLowerCase();
-        const l = f.label.trim().toLowerCase();
-        return f.kind === 'boolean' && (n === 'enable' || n === 'enabled' || l === 'enable' || l === 'enabled');
-    });
+    $: isLoraTagLoader = !!card.loraTagLoader;
+    $: enableField = isLoraTagLoader
+        ? undefined
+        : card.fields.find((f) => {
+            const n = f.widgetName.trim().toLowerCase();
+            const l = f.label.trim().toLowerCase();
+            return f.kind === 'boolean' && (n === 'enable' || n === 'enabled' || l === 'enable' || l === 'enabled');
+        });
+    $: loraField = card.fields.find((f) => f.kind === 'lora_tags');
     $: bodyFields = enableField
         ? card.fields.filter((f) => f !== enableField)
         : card.fields;
+    /** Non–LoRA-tag fields (compact); the lora_tags field is rendered specially. */
+    $: otherBodyFields = bodyFields.filter((f) => f.kind !== 'lora_tags');
     $: hiddenSet = new Set(hiddenWidgetNames);
     // Edit lists every body widget (including hidden) so Show stays reachable.
+    // Lora Tag Loader uses its own edit chrome — other fields stay visible but not hide/reorder.
+    $: visibleOtherFields = isLoraTagLoader
+        ? otherBodyFields.filter((f) => editMode || !hiddenSet.has(f.widgetName))
+        : (editMode
+            ? otherBodyFields
+            : otherBodyFields.filter((f) => !hiddenSet.has(f.widgetName)));
     $: visibleBodyFields = editMode
         ? bodyFields
         : bodyFields.filter((f) => !hiddenSet.has(f.widgetName));
@@ -86,15 +106,20 @@
     // Match original panel: output-image cards never collapse into the title row.
     // Inline only when there is a single body widget total (hidden ones still count —
     // otherwise Edit disappears and hidden fields cannot be restored).
-    $: prefersInline = bodyFields.length === 1
+    $: prefersInline = !isLoraTagLoader
+        && bodyFields.length === 1
         && !bodyFields[0]?.tall
         && !card.imageDisplay
         && !card.textDisplay;
     // Hide/reorder only matter when there are multiple body widgets.
-    $: canEditFields = bodyFields.length > 1;
+    // Lora Tag Loader always has Edit (add/remove/reorder rows + clip toggle).
+    $: canEditFields = isLoraTagLoader || bodyFields.length > 1;
     $: if (!canEditFields)
         editMode = false;
     $: useInline = prefersInline && !collapsed && !editMode;
+    $: loraAllEnabled = loraField
+        ? allLoraRowsEnabled(parseLoraTagText(String(loraField.value ?? '')).rows)
+        : false;
 
     $: activeSessionId = $svgenOpenSessionsStore.activeId;
     $: outputPreview = card.imageDisplay && activeSessionId
@@ -127,6 +152,24 @@
             innerNodeId: field.innerNodeId,
             outerValueIndex: field.outerValueIndex,
         });
+    }
+
+    function setAllLorasEnabled(enabled: boolean) {
+        if (!loraField)
+            return;
+        const parsed = parseLoraTagText(String(loraField.value ?? ''));
+        if (!parsed.rows.length)
+            return;
+        const includeClip = !!card.clipInputWired
+            && (($svgenLayoutStore.loraClipStrength ?? {})[card.nodeId] !== false);
+        emitFieldChange(
+            loraField,
+            serializeLoraTagText(
+                withAllLoraRowsEnabled(parsed.rows, enabled),
+                parsed.rest,
+                { includeClip },
+            ),
+        );
     }
 
     function emitCompanion(detail: FieldChangeDetail) {
@@ -193,7 +236,14 @@
             >
                 {card.title}
             </button>
-            {#if enableField}
+            {#if isLoraTagLoader && loraField}
+                <SvGenEnablePill
+                    compact
+                    checked={loraAllEnabled}
+                    title={loraAllEnabled ? 'Disable all LoRAs' : 'Enable all LoRAs'}
+                    on:change={(e) => setAllLorasEnabled(e.detail)}
+                />
+            {:else if enableField}
                 <SvGenEnablePill
                     compact
                     checked={!!enableField.value}
@@ -207,13 +257,13 @@
                     class:active={editMode}
                     tabindex="-1"
                     on:click={() => (editMode = !editMode)}
-                    title="Edit fields"
+                    title={isLoraTagLoader ? 'Edit LoRAs' : 'Edit fields'}
                 >Edit</button>
             {/if}
         </header>
 
         {#if !collapsed}
-            <div class="fields">
+            <div class="fields" class:lora-card={isLoraTagLoader}>
                 {#if card.imageDisplay}
                     <div class="field-wrap tall">
                         <div class="output-preview">
@@ -245,7 +295,36 @@
                         </div>
                     </div>
                 {/if}
-                {#if canEditFields}
+                {#if isLoraTagLoader}
+                    {#if visibleOtherFields.length}
+                        <div class="field-grid compact-others">
+                            {#each visibleOtherFields as field (fieldId(field))}
+                                <div class="field-wrap" class:tall={field.tall}>
+                                    <SvGenField
+                                        {field}
+                                        editMode={false}
+                                        hideLabel={visibleOtherFields.length <= 1}
+                                        on:change={(e) => emitFieldChange(field, e.detail)}
+                                        on:companion={(e) => emitCompanion(e.detail)}
+                                        on:persistLayout={() => dispatch('persistLayout')}
+                                    />
+                                </div>
+                            {/each}
+                        </div>
+                    {/if}
+                    {#if loraField}
+                        <div class="lora-wrap">
+                            <SvGenLoraTagLoader
+                                field={loraField}
+                                {editMode}
+                                clipInputWired={!!card.clipInputWired}
+                                nodeId={card.nodeId}
+                                on:change={(e) => emitFieldChange(loraField, e.detail)}
+                                on:persistLayout={() => dispatch('persistLayout')}
+                            />
+                        </div>
+                    {/if}
+                {:else if canEditFields}
                     <div class="fields-sortable">
                         <SortableList
                             ids={bodyFieldIds}
@@ -499,6 +578,10 @@
         flex-direction: column;
         gap: 5px;
         min-width: 0;
+
+        &.lora-card {
+            flex: 1;
+        }
     }
 
     .field-grid {
@@ -506,6 +589,16 @@
         grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
         gap: 5px;
         min-width: 0;
+
+        &.compact-others {
+            grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+        }
+    }
+
+    .lora-wrap {
+        flex: 1 1 auto;
+        min-width: 0;
+        width: 100%;
     }
 
     .fields-sortable {
