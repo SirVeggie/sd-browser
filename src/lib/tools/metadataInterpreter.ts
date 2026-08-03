@@ -1294,6 +1294,54 @@ function getComfyPromptIdsByTitle(
     return ids;
 }
 
+function getComfyPromptIdsByClassType(
+    prompt: ComfyPrompt,
+    matchesTitle: (title: string) => boolean,
+): string[] {
+    const ids: string[] = [];
+    // Default Comfy display names (e.g. "Prompt + Model") are not persisted unless
+    // the node is renamed. Match class_type with the same title rules.
+    for (const id in prompt) {
+        const classType = prompt[id]?.class_type ?? '';
+        if (classType && matchesTitle(classType))
+            ids.push(id);
+    }
+    return ids;
+}
+
+function collectComfyPromptTexts(
+    prompt: ComfyPrompt,
+    ids: string[],
+    keys: readonly string[],
+): string[] {
+    return ids
+        .map(id => getComfyValue(prompt[id], [...keys], 'string'))
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
+function getComfyPromptTexts(
+    prompt: ComfyPrompt,
+    nodes: Record<string, ComfyWorkflowNode>,
+    ctx: ComfyWorkflowContext | undefined,
+    matchesTitle: (title: string) => boolean,
+    keys: readonly string[],
+): string[] {
+    const fromTitle = collectComfyPromptTexts(
+        prompt,
+        getComfyPromptIdsByTitle(prompt, nodes, ctx, matchesTitle),
+        keys,
+    );
+    if (fromTitle.length)
+        return fromTitle;
+    // Title hits with no extractable text (e.g. a seed node titled "Prompt Seed")
+    // must not block class_type fallback.
+    return collectComfyPromptTexts(
+        prompt,
+        getComfyPromptIdsByClassType(prompt, matchesTitle),
+        keys,
+    );
+}
+
 function getComfyPromptIds(prompt: ComfyPrompt, match: RegExp, ignore?: RegExp): string[] {
     const ids: string[] = [];
     for (const id in prompt) {
@@ -1352,9 +1400,13 @@ export function getComfyPositive(
     nodes: Record<string, ComfyWorkflowNode>,
     ctx?: ComfyWorkflowContext,
 ) {
-    const ids = getComfyPromptIdsByTitle(prompt, nodes, ctx, isPositivePromptTitle);
-    const prompts = ids.map(id => getComfyValue(prompt[id], ['positive', 'prompt', 'text', 'string', 'str', 'value'], 'string')).filter(x => x);
-    return !ids.length ? '' : prompts.join('\n----------\n');
+    return getComfyPromptTexts(
+        prompt,
+        nodes,
+        ctx,
+        isPositivePromptTitle,
+        ['positive', 'prompt', 'text', 'string', 'str', 'value'],
+    ).join('\n----------\n');
 }
 
 export function getComfyNegative(
@@ -1362,9 +1414,13 @@ export function getComfyNegative(
     nodes: Record<string, ComfyWorkflowNode>,
     ctx?: ComfyWorkflowContext,
 ) {
-    const ids = getComfyPromptIdsByTitle(prompt, nodes, ctx, isNegativePromptTitle);
-    const prompts = ids.map(id => getComfyValue(prompt[id], ['negative', 'prompt', 'text', 'string', 'str', 'value'], 'string')).filter(x => x);
-    return !ids.length ? '' : prompts.join('\n----------\n');
+    return getComfyPromptTexts(
+        prompt,
+        nodes,
+        ctx,
+        isNegativePromptTitle,
+        ['negative', 'prompt', 'text', 'string', 'str', 'value'],
+    ).join('\n----------\n');
 }
 
 function collectExcludedPromptValues(prompt: ComfyPrompt, ctx: ComfyWorkflowContext): Set<string> {

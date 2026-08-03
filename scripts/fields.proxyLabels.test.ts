@@ -393,4 +393,201 @@ assert.deepEqual(
     `Sampler fields should follow outer sockets (seed hidden), got ${JSON.stringify(samplerFields)}`,
 );
 
+/**
+ * Outer socket renames (magic / sword) must win even when inner nodes have
+ * custom titles that do not match those renames. Pass 3 used to synthesize
+ * `random_name` from the title and fall back to the default widget name.
+ */
+function renamedTextProxiesWorkflow(): ComfyWorkflow {
+    const subgraphId = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
+    return {
+        nodes: [
+            {
+                id: 1,
+                type: subgraphId,
+                title: 'New Subgraph',
+                pos: [0, 0],
+                size: [200, 200],
+                flags: {},
+                order: 0,
+                mode: 0,
+                inputs: [
+                    { name: 'text', label: 'magic', widget: { name: 'text' }, link: null },
+                    { name: 'text_1', label: 'sword', widget: { name: 'text_1' }, link: null },
+                ],
+                outputs: [],
+                properties: {
+                    proxyWidgets: [
+                        ['10', 'text'],
+                        ['11', 'text'],
+                    ],
+                },
+                widgets_values: ['', ''],
+            },
+        ],
+        links: [],
+        groups: [],
+        config: {},
+        extra: {},
+        version: 0.4,
+        definitions: {
+            subgraphs: [
+                {
+                    id: subgraphId,
+                    name: 'New Subgraph',
+                    nodes: [
+                        {
+                            id: 10,
+                            type: 'SV-PrimitiveString',
+                            title: 'random name',
+                            pos: [0, 0],
+                            size: [100, 100],
+                            flags: {},
+                            order: 0,
+                            mode: 0,
+                            inputs: [{ name: 'text', widget: { name: 'text' }, link: null }],
+                            outputs: [],
+                            properties: {},
+                            widgets_values: [''],
+                        },
+                        {
+                            id: 11,
+                            type: 'SV-PrimitiveString',
+                            title: 'another custom name',
+                            pos: [0, 0],
+                            size: [100, 100],
+                            flags: {},
+                            order: 0,
+                            mode: 0,
+                            inputs: [{ name: 'text', widget: { name: 'text' }, link: null }],
+                            outputs: [],
+                            properties: {},
+                            widgets_values: [''],
+                        },
+                    ],
+                    links: [],
+                    groups: [],
+                    config: {},
+                    extra: {},
+                    version: 0.4,
+                },
+            ],
+        },
+    };
+}
+
+const renamedTextCards = discoverCards(renamedTextProxiesWorkflow());
+assert.equal(renamedTextCards.length, 1, 'one renamed-text card');
+assert.deepEqual(
+    renamedTextCards[0].fields.map((f) => ({ name: f.widgetName, label: f.label })),
+    [
+        { name: 'text', label: 'magic' },
+        { name: 'text_1', label: 'sword' },
+    ],
+    `outer renames must win over mismatched inner titles, got ${JSON.stringify(
+        renamedTextCards[0].fields.map((f) => ({ name: f.widgetName, label: f.label })),
+    )}`,
+);
+
+/**
+ * Multi-widget inner titled like one of its widgets must not steal another
+ * widget's outer rename via Pass 1 title matching.
+ */
+function multiWidgetTitleTrapWorkflow(): ComfyWorkflow {
+    const subgraphId = 'c3d4e5f6-a7b8-9012-cdef-123456789012';
+    return {
+        nodes: [
+            {
+                id: 2,
+                type: subgraphId,
+                title: 'New Subgraph',
+                pos: [0, 0],
+                size: [200, 200],
+                flags: {},
+                order: 0,
+                mode: 0,
+                inputs: [
+                    { name: 'text', label: 'mega', widget: { name: 'text' }, link: null },
+                    { name: 'aspect', label: 'sword', widget: { name: 'aspect' }, link: null },
+                    { name: 'mega', label: 'aspect', widget: { name: 'mega' }, link: null },
+                ],
+                outputs: [],
+                properties: {
+                    proxyWidgets: [
+                        ['20', 'text'],
+                        ['21', 'aspect'],
+                        ['21', 'mega'],
+                    ],
+                },
+                widgets_values: ['', '1:1 (Square)', 1],
+            },
+        ],
+        links: [],
+        groups: [],
+        config: {},
+        extra: {},
+        version: 0.4,
+        definitions: {
+            subgraphs: [
+                {
+                    id: subgraphId,
+                    name: 'New Subgraph',
+                    nodes: [
+                        {
+                            id: 20,
+                            type: 'SV-PrimitiveString',
+                            title: 'another custom name',
+                            pos: [0, 0],
+                            size: [100, 100],
+                            flags: {},
+                            order: 0,
+                            mode: 0,
+                            inputs: [{ name: 'text', widget: { name: 'text' }, link: null }],
+                            outputs: [],
+                            properties: {},
+                            widgets_values: [''],
+                        },
+                        {
+                            id: 21,
+                            type: 'SV-Resolution',
+                            title: 'aspect',
+                            pos: [0, 0],
+                            size: [100, 100],
+                            flags: {},
+                            order: 0,
+                            mode: 0,
+                            inputs: [
+                                { name: 'aspect', widget: { name: 'aspect' }, link: null },
+                                { name: 'mega', widget: { name: 'mega' }, link: null },
+                            ],
+                            outputs: [],
+                            properties: {},
+                            widgets_values: ['1:1 (Square)', 1],
+                        },
+                    ],
+                    links: [],
+                    groups: [],
+                    config: {},
+                    extra: {},
+                    version: 0.4,
+                },
+            ],
+        },
+    };
+}
+
+const multiWidgetCards = discoverCards(multiWidgetTitleTrapWorkflow());
+assert.equal(multiWidgetCards.length, 1, 'one multi-widget card');
+assert.deepEqual(
+    multiWidgetCards[0].fields.map((f) => ({ name: f.widgetName, label: f.label })),
+    [
+        { name: 'text', label: 'mega' },
+        { name: 'aspect', label: 'sword' },
+        { name: 'mega', label: 'aspect' },
+    ],
+    `multi-widget title must not remap outer renames, got ${JSON.stringify(
+        multiWidgetCards[0].fields.map((f) => ({ name: f.widgetName, label: f.label })),
+    )}`,
+);
+
 console.log('fields.proxyLabels.test.ts passed');

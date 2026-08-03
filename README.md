@@ -270,6 +270,6 @@ For reliable automatic detection, consider renaming node titles:
 - Model → has to have "model" or "checkpoint" in the title
 - Seed → has to have "seed" in the title
 
-The first two are the most important; model and seed detection usually works without renaming. Alternatively you can use the metadata and custom image save nodes from my ComfyUI node pack for setting positive/negative prompt and custom params text.
+The first two are the most important; model and seed detection usually works without renaming. If no titled prompt node yields extractable text, detection falls back to `class_type` (so default titles like Comfy’s “Prompt + Model” / `SV-PromptPlusModel` still work, and a seed renamed “Prompt Seed” does not block that fallback). Alternatively you can use the metadata and custom image save nodes from my ComfyUI node pack for setting positive/negative prompt and custom params text.
 
 All nodes are still formatted and shown in metadata, so you can find anything even when auto-detection misses.

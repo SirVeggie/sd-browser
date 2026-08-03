@@ -20,14 +20,21 @@
 
     type Leaf = { value: string; label: string; path: string[] };
     type Folder = { name: string; children: Map<string, Folder>; leaves: Leaf[] };
+    type NavItem =
+        | { kind: 'back' }
+        | { kind: 'folder'; name: string }
+        | { kind: 'option'; value: string; label: string };
 
     let open = false;
     let path: string[] = [];
     let pathKey: string | undefined;
     let query = '';
+    let activeIndex = -1;
+    let lastNavKey = '';
     let rootEl: HTMLDivElement;
     let triggerEl: HTMLButtonElement;
     let searchEl: HTMLInputElement | undefined;
+    let listEl: HTMLDivElement | undefined;
     let menuStyle = '';
     let unbindOutside: (() => void) | undefined;
 
@@ -67,6 +74,31 @@
             })
             .sort((a, b) => a.label.localeCompare(b.label))
         : null;
+    $: navItems = buildNavItems(filteredLeaves, path, currentFolder);
+    $: navKey = navItems.map((item) => {
+        if (item.kind === 'back')
+            return 'back';
+        if (item.kind === 'folder')
+            return `folder:${item.name}`;
+        return `option:${item.value}`;
+    }).join('\0');
+    // Reset highlight only when the visible list identity changes (not on ↑/↓).
+    $: if (!open) {
+        lastNavKey = '';
+    } else if (navKey !== lastNavKey) {
+        lastNavKey = navKey;
+        const selectedIdx = navItems.findIndex(
+            (item) => item.kind === 'option' && item.value === value,
+        );
+        activeIndex = selectedIdx >= 0 ? selectedIdx : (navItems.length ? 0 : -1);
+    }
+    $: if (open && activeIndex >= 0) {
+        void activeIndex;
+        void tick().then(() => {
+            listEl?.querySelector(`[data-nav-index="${activeIndex}"]`)
+                ?.scrollIntoView({ block: 'nearest' });
+        });
+    }
 
     function buildLeaves(values: string[]): Leaf[] {
         return values.map((raw) => {
@@ -138,6 +170,78 @@
         for (const child of folder.children.values())
             out.push(...leavesInSubtree(child));
         return out;
+    }
+
+    function buildNavItems(
+        filtered: Leaf[] | null,
+        folderPath: string[],
+        folder: Folder,
+    ): NavItem[] {
+        if (filtered) {
+            return filtered.map((leaf) => ({
+                kind: 'option' as const,
+                value: leaf.value,
+                label: leaf.label,
+            }));
+        }
+        const items: NavItem[] = [];
+        if (folderPath.length)
+            items.push({ kind: 'back' });
+        for (const name of [...folder.children.keys()].sort())
+            items.push({ kind: 'folder', name });
+        for (const leaf of folder.leaves)
+            items.push({ kind: 'option', value: leaf.value, label: leaf.label });
+        return items;
+    }
+
+    function moveActive(delta: number) {
+        if (!navItems.length)
+            return;
+        if (activeIndex < 0) {
+            activeIndex = delta > 0 ? 0 : navItems.length - 1;
+            return;
+        }
+        activeIndex = Math.max(0, Math.min(navItems.length - 1, activeIndex + delta));
+    }
+
+    function activateActive() {
+        const item = navItems[activeIndex];
+        if (!item)
+            return;
+        if (item.kind === 'back') {
+            void goBack();
+            return;
+        }
+        if (item.kind === 'folder') {
+            void enterFolder(item.name);
+            return;
+        }
+        pick(item.value);
+    }
+
+    function onMenuKeydown(event: KeyboardEvent) {
+        if (!open)
+            return;
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            moveActive(1);
+            return;
+        }
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            moveActive(-1);
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            activateActive();
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            close();
+            triggerEl?.focus();
+        }
     }
 
     function close() {
@@ -254,7 +358,12 @@
     </button>
 
     {#if open}
-        <div class="menu" style={menuStyle} role="listbox">
+        <div
+            class="menu"
+            style={menuStyle}
+            role="listbox"
+            on:keydown={onMenuKeydown}
+        >
             {#if showSearch}
                 <div class="search-row">
                     <input
@@ -267,51 +376,47 @@
                     />
                 </div>
             {/if}
-            <div class="list">
-                {#if filteredLeaves}
-                    {#if !filteredLeaves.length}
-                        <div class="empty">No matches.</div>
-                    {:else}
-                        {#each filteredLeaves as leaf}
+            <div class="list" bind:this={listEl}>
+                {#if filteredLeaves && !filteredLeaves.length}
+                    <div class="empty">No matches.</div>
+                {:else}
+                    {#each navItems as item, index}
+                        {#if item.kind === 'back'}
+                            <button
+                                type="button"
+                                class="back"
+                                class:active={index === activeIndex}
+                                data-nav-index={index}
+                                tabindex="-1"
+                                on:click={() => void goBack()}
+                            >
+                                Back: {path[path.length - 1]}
+                            </button>
+                        {:else if item.kind === 'folder'}
+                            <button
+                                type="button"
+                                class="folder"
+                                class:active={index === activeIndex}
+                                data-nav-index={index}
+                                tabindex="-1"
+                                on:click={() => void enterFolder(item.name)}
+                            >
+                                <span>{item.name}</span>
+                                <span class="folder-chevron" aria-hidden="true" />
+                            </button>
+                        {:else}
                             <button
                                 type="button"
                                 class="option"
-                                class:selected={leaf.value === value}
-                                on:click={() => pick(leaf.value)}
+                                class:selected={item.value === value}
+                                class:active={index === activeIndex}
+                                data-nav-index={index}
+                                tabindex="-1"
+                                on:click={() => pick(item.value)}
                             >
-                                {leaf.label}
+                                {item.label}
                             </button>
-                        {/each}
-                    {/if}
-                {:else}
-                    {#if path.length}
-                        <button
-                            type="button"
-                            class="back"
-                            on:click={() => void goBack()}
-                        >
-                            Back: {path[path.length - 1]}
-                        </button>
-                    {/if}
-                    {#each [...currentFolder.children.keys()].sort() as folderName}
-                        <button
-                            type="button"
-                            class="folder"
-                            on:click={() => void enterFolder(folderName)}
-                        >
-                            <span>{folderName}</span>
-                            <span class="folder-chevron" aria-hidden="true" />
-                        </button>
-                    {/each}
-                    {#each currentFolder.leaves as leaf}
-                        <button
-                            type="button"
-                            class="option"
-                            class:selected={leaf.value === value}
-                            on:click={() => pick(leaf.value)}
-                        >
-                            {leaf.label}
-                        </button>
+                        {/if}
                     {/each}
                 {/if}
             </div>
@@ -436,11 +541,18 @@
         &:hover {
             background: rgba(255, 255, 255, 0.06);
         }
+
+        &.active {
+            background: color-mix(in srgb, var(--accent) 22%, transparent);
+        }
     }
 
     .option.selected {
-        background: rgba(255, 255, 255, 0.06);
         color: var(--accent);
+
+        &:not(.active) {
+            background: rgba(255, 255, 255, 0.06);
+        }
     }
 
     .folder {
