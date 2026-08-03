@@ -375,6 +375,11 @@ export class EmbeddingDB {
         EmbeddingDB.resetIfEmpty();
     }
 
+    static setUniquenessScore(id: string, score: number): void {
+        EmbeddingDB.setup();
+        EmbeddingDB.stmtSetUniquenessScore?.run(id, score);
+    }
+
     static deleteAll(ids: string[]) {
         if (!ids.length)
             return;

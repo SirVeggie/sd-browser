@@ -622,6 +622,10 @@ async function addFile(file: string, hash?: string) {
     if (!hash)
         hash = hashPath(file);
 
+    // Already indexed (e.g. moveImages beat the watcher) — do not clobber tags/annotation.
+    if (getImageList().has(hash))
+        return;
+
     if (file.endsWith('.png')) {
         const video = videoExists(file);
         if (video) {
@@ -729,35 +733,115 @@ async function deleteFile(file: string) {
     notifyImageChange();
 }
 
-async function renameFile(from: string, to: string) {
-    let affectedModifiedDate = Number.POSITIVE_INFINITY;
-    let oldImage: ServerImage | undefined;
-    let oldhash: string | undefined;
-    if (isMedia(from)) {
-        oldhash = hashPath(from);
-        oldImage = getImageList().get(oldhash);
-        if (oldImage)
-            affectedModifiedDate = Math.min(affectedModifiedDate, oldImage.modifiedDate);
-        getImageList().delete(oldhash);
-        deleteTempImage(oldhash);
+type PreservedImageUserData = {
+    tags: string[];
+    annotation: string;
+    embedding?: Float32Array;
+    uniqueness?: number;
+};
 
-        MetaDB.delete(oldhash);
-        MetaCalcDB.delete(oldhash);
-        EmbeddingDB.deleteImage(oldhash);
-        removeFreshImage(oldhash);
-        recordDeletion(oldhash);
-    }
+/**
+ * Path-hash ids change on move/rename. Capture tags/annotation/embeddings before any
+ * await (and before the watcher can unlink the old path and wipe DBs).
+ */
+function captureImageUserData(id: string, image?: ServerImage): PreservedImageUserData {
+    const extra = MetaCalcDB.get(id);
+    const embedding = EmbeddingDB.getEmbeddingsByIds([id])[0]?.embedding;
+    const uniqueness = EmbeddingDB.getUniquenessScores([id]).get(id);
+    return {
+        tags: image?.tags ?? extra?.tags ?? [],
+        annotation: image?.annotation ?? extra?.annotation ?? '',
+        embedding,
+        uniqueness,
+    };
+}
 
-    if (oldImage)
-        repairUniqueCacheAfterDeletes([...getImageList().values()], [oldImage]);
+function cleanupIndexedImageId(id: string): void {
+    getImageList().delete(id);
+    deleteTempImage(id);
+    MetaDB.delete(id);
+    MetaCalcDB.delete(id);
+    EmbeddingDB.deleteImage(id);
+    removeFreshImage(id);
+    recordDeletion(id);
+}
 
-    if (!isMedia(to)) {
-        notifyImageChange();
+function preservedHasUserData(preserved: PreservedImageUserData): boolean {
+    return Boolean(
+        preserved.tags.length
+        || preserved.annotation
+        || preserved.embedding
+        || preserved.uniqueness !== undefined,
+    );
+}
+
+function applyPreservedUserData(image: ServerImage, preserved: PreservedImageUserData): void {
+    image.tags = [...preserved.tags];
+    image.annotation = preserved.annotation;
+}
+
+/** Fill only missing tags/annotation so an empty late capture cannot wipe a winner. */
+function fillPreservedUserData(image: ServerImage, preserved: PreservedImageUserData): void {
+    if (preserved.tags.length && !image.tags?.length)
+        image.tags = [...preserved.tags];
+    if (preserved.annotation && !image.annotation)
+        image.annotation = preserved.annotation;
+}
+
+function persistImageExtra(
+    image: ServerImage,
+    preserved?: PreservedImageUserData,
+    mode: 'replace' | 'fill' = 'replace',
+): void {
+    MetaCalcDB.set({
+        id: image.id,
+        positive: image.positive,
+        negative: image.negative,
+        params: image.params,
+        models: image.models,
+        hash: image.hash,
+        annotation: image.annotation,
+        tags: image.tags,
+    });
+    if (!preserved)
         return;
-    }
-    console.log(`Renamed ${from} to ${to}`);
+    if (preserved.embedding && (mode === 'replace' || !EmbeddingDB.hasImageEmbedding(image.id)))
+        EmbeddingDB.setImageEmbedding(image.id, preserved.embedding);
+    if (preserved.uniqueness !== undefined && (mode === 'replace' || !EmbeddingDB.getUniquenessScores([image.id]).has(image.id)))
+        EmbeddingDB.setUniquenessScore(image.id, preserved.uniqueness);
+}
 
+async function indexImageAfterPathChange(
+    to: string,
+    options: {
+        oldId?: string;
+        priorImage?: ServerImage;
+        /** Prefer pre-captured data — required when the watcher may have already wiped the old id. */
+        preserved?: PreservedImageUserData;
+    },
+): Promise<ServerImage> {
     const newhash = hashPath(to);
+    const existing = getImageList().get(newhash);
+    if (existing && existing.file === to) {
+        // Destination already indexed (e.g. moveImages beat the watcher).
+        if (options.oldId && options.oldId !== newhash)
+            cleanupIndexedImageId(options.oldId);
+        if (options.preserved && preservedHasUserData(options.preserved)) {
+            fillPreservedUserData(existing, options.preserved);
+            persistImageExtra(existing, options.preserved, 'fill');
+        }
+        return existing;
+    }
+
+    const preserved = options.preserved
+        ?? (options.oldId ? captureImageUserData(options.oldId, options.priorImage) : undefined);
+
+    if (options.oldId && options.oldId !== newhash) {
+        cleanupIndexedImageId(options.oldId);
+        if (options.priorImage)
+            repairUniqueCacheAfterDeletes([...getImageList().values()], [options.priorImage]);
+    }
+
     const full = await readMetadata({
         id: newhash,
         folder: folderFromFile(to),
@@ -770,16 +854,65 @@ async function renameFile(from: string, to: string) {
         extra: '',
     });
 
+    // Watcher and moveImages can both await readMetadata; keep the winner's entry.
+    const raced = getImageList().get(newhash);
+    if (raced && raced.file === to) {
+        if (preserved && preservedHasUserData(preserved)) {
+            fillPreservedUserData(raced, preserved);
+            persistImageExtra(raced, preserved, 'fill');
+        }
+        return raced;
+    }
+
     const image = getServerImage(full);
+    if (preserved)
+        applyPreservedUserData(image, preserved);
+
     getImageList().set(newhash, image);
     repairUniqueCacheOnAdd([...getImageList().values()], image);
-    affectedModifiedDate = Math.min(affectedModifiedDate, image.modifiedDate);
-    repairExplorationCaches([...getImageList().values()], affectedModifiedDate, `renamed image ${path.basename(from)} to ${path.basename(to)}`);
-
     recordFreshImage(newhash);
 
     MetaDB.set(full);
-    MetaCalcDB.set(image);
+    persistImageExtra(image, preserved);
+
+    return image;
+}
+
+async function renameFile(from: string, to: string) {
+    let affectedModifiedDate = Number.POSITIVE_INFINITY;
+    let oldImage: ServerImage | undefined;
+    let oldhash: string | undefined;
+    let preserved: PreservedImageUserData | undefined;
+    if (isMedia(from)) {
+        oldhash = hashPath(from);
+        oldImage = getImageList().get(oldhash);
+        if (oldImage)
+            affectedModifiedDate = Math.min(affectedModifiedDate, oldImage.modifiedDate);
+        // Sync capture before any await — old DB rows may already be mid-delete elsewhere.
+        preserved = captureImageUserData(oldhash, oldImage);
+    }
+
+    if (!isMedia(to)) {
+        if (oldhash)
+            cleanupIndexedImageId(oldhash);
+        if (oldImage)
+            repairUniqueCacheAfterDeletes([...getImageList().values()], [oldImage]);
+        notifyImageChange();
+        return;
+    }
+    console.log(`Renamed ${from} to ${to}`);
+
+    const image = await indexImageAfterPathChange(to, {
+        oldId: oldhash,
+        priorImage: oldImage,
+        preserved,
+    });
+    affectedModifiedDate = Math.min(affectedModifiedDate, image.modifiedDate);
+    repairExplorationCaches(
+        [...getImageList().values()],
+        affectedModifiedDate,
+        `renamed image ${path.basename(from)} to ${path.basename(to)}`,
+    );
 
     notifyImageChange();
 }
@@ -865,15 +998,14 @@ export async function moveImages(ids: string | string[], folder: string) {
             continue;
         newPath = await fileUniquefy(newPath);
 
+        // Capture before rename — watcher unlink can wipe DBs as soon as rename yields.
+        const preserved = captureImageUserData(id, img);
+
         try {
             await fs.mkdir(target.absolute, { recursive: true });
             await fs.rename(img.file, newPath);
             oldestMoved = Math.min(oldestMoved, img.modifiedDate);
-            getImageList().delete(id);
-            removeFreshImage(id);
-            recordDeletion(id);
             deleteTextFiles(img.file);
-            deleteTempImage(id);
             moved++;
         } catch {
             failcount++;
@@ -883,12 +1015,14 @@ export async function moveImages(ids: string | string[], folder: string) {
         if (img.preview) {
             try {
                 const newPreview = `${splitExtension(newPath)[0]}.png`;
-                fs.rename(img.preview, newPreview);
+                await fs.rename(img.preview, newPreview);
                 deleteTempImage(hashPath(img.preview));
             } catch {
                 console.log(`Failed to move preview file ${img.preview}`);
             }
         }
+
+        await indexImageAfterPathChange(newPath, { oldId: id, priorImage: img, preserved });
     }
 
     if (crossRoot)

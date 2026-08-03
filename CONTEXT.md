@@ -159,6 +159,12 @@ Move/Copy destinations are nested context submenus (one level per folder), not a
 
 When moving and every selected image shares one folder, that path is excluded as a destination but kept as a navigation-only submenu if it still has descendants.
 
+## Move/rename keeps tags, annotations, embeddings
+
+**Files:** `src/lib/server/filemanager.ts` (`captureImageUserData`, `indexImageAfterPathChange`, `moveImages`, `renameFile`)
+
+Image ids are path hashes (`hashPath`), so move/rename changes the id. Capture tags/annotation/embedding/uniqueness **before** `fs.rename` (watcher `unlink` can wipe DBs as soon as rename yields), then write them onto the new id. `moveImages` reindexes itself. `addFile` must no-op when the id is already in the image list — otherwise a late watcher `add` can clobber in-memory tags.
+
 ---
 
 ## Bulk vectorize failure isolation
