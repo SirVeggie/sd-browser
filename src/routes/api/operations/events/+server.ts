@@ -2,6 +2,8 @@ import { invalidAuth } from '$lib/server/auth.js';
 import { getOperations, subscribeOperationUpdates } from '$lib/server/operations.js';
 import { error } from '$lib/server/responses.js';
 
+const encoder = new TextEncoder();
+
 function operationIsRunning(operations: ReturnType<typeof getOperations>, operationId: string): boolean {
     return operations.some(operation => operation.id === operationId && operation.status === 'running');
 }
@@ -18,40 +20,69 @@ export async function GET(e) {
     if (!initialOperations.some(operation => operation.id === operationId))
         return error('Operation not found', 404);
 
+    const signal = e.request.signal;
+    let unsubscribe: (() => void) | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let closed = false;
+    let closeController: (() => void) | undefined;
+
+    const cleanup = () => {
+        if (closed)
+            return;
+        closed = true;
+        signal.removeEventListener('abort', cleanup);
+        if (heartbeat) {
+            clearInterval(heartbeat);
+            heartbeat = undefined;
+        }
+        unsubscribe?.();
+        unsubscribe = undefined;
+        closeController?.();
+        closeController = undefined;
+    };
+
     const stream = new ReadableStream({
         start(controller) {
-            const encoder = new TextEncoder();
-            let closed = false;
-            let heartbeat: ReturnType<typeof setInterval> | undefined;
-            let unsubscribe = () => {};
-
-            const close = () => {
+            const safeEnqueue = (chunk: Uint8Array) => {
                 if (closed)
-                    return;
-                closed = true;
-                if (heartbeat)
-                    clearInterval(heartbeat);
-                unsubscribe();
-                e.request.signal.removeEventListener('abort', close);
-                controller.close();
+                    return false;
+                try {
+                    controller.enqueue(chunk);
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+
+            closeController = () => {
+                try {
+                    controller.close();
+                } catch {
+                    /* already closed by cancel/disconnect */
+                }
             };
 
             const sendOperations = (operations: ReturnType<typeof getOperations>) => {
-                if (closed)
+                if (!safeEnqueue(encoder.encode(`event: operations\ndata: ${JSON.stringify({ operations })}\n\n`))) {
+                    cleanup();
                     return;
-                controller.enqueue(encoder.encode(`event: operations\ndata: ${JSON.stringify({ operations })}\n\n`));
+                }
                 if (!operationIsRunning(operations, operationId))
-                    close();
+                    cleanup();
             };
 
             unsubscribe = subscribeOperationUpdates(sendOperations);
-            e.request.signal.addEventListener('abort', close);
+            signal.addEventListener('abort', cleanup);
+
             heartbeat = setInterval(() => {
-                if (!closed)
-                    controller.enqueue(encoder.encode(': heartbeat\n\n'));
+                if (!safeEnqueue(encoder.encode(': heartbeat\n\n')))
+                    cleanup();
             }, 15_000);
 
             sendOperations(getOperations());
+        },
+        cancel() {
+            cleanup();
         },
     });
 

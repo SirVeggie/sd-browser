@@ -1,5 +1,7 @@
 <script lang="ts">
+    import { onDestroy, onMount } from 'svelte';
     import { operationStore } from '$lib/stores/operationStore';
+    import { stopAllOperationWatches, syncRunningOperations } from '$lib/stores/operationWatch';
     import type { OperationInfo } from '$lib/types/requests';
 
     const dismissed = new Set<string>();
@@ -12,6 +14,14 @@
         if (op.status === 'failed')
             return true;
         return op.status === 'complete' && op.finishedAt && Date.now() - op.finishedAt < 10_000;
+    });
+
+    onMount(() => {
+        void syncRunningOperations();
+    });
+
+    onDestroy(() => {
+        stopAllOperationWatches();
     });
 
     function dismiss(id: string) {

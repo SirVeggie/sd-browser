@@ -493,6 +493,6 @@ Use when parser logic changed without a schema version bump, or to repair incons
 ### How to verify
 
 1. Settings → Data management → **Recalculate extra data** — global progress banner shows `done / total`.
-2. Browse/search during recalc — gallery remains usable; old derived data until swap completes.
+2. Browse/search during recalc (including leaving Settings) — banner keeps updating; gallery remains usable; old derived data until swap completes.
 3. After completion — search/similarity reflect new hashes; annotations and tags unchanged.
 4. `npm run build:worker` produces `build/workers/extradataCompute.js` for production worker threads.

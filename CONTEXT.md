@@ -6,6 +6,16 @@ Keep entries short and actionable. Prefer linking to code over restating it.
 
 ---
 
+## Operations progress is layout-owned
+
+**Files:** `src/lib/stores/operationWatch.ts`, `src/lib/components/OperationProgress.svelte`, `src/routes/api/operations/events/+server.ts`
+
+SSE watching for long-running ops (e.g. extradata recalc) lives with the root-layout banner via `trackOperation` / `syncRunningOperations` — **not** Settings `onDestroy`. Page-scoped abort froze the banner and used to crash the server when heartbeat enqueued after disconnect.
+
+Server: always `try/catch` enqueue, clear interval + unsubscribe on both `abort` and `cancel`, ignore double `controller.close()`. Same pattern as `api/images/stream` and `api/svgen/events`.
+
+---
+
 ## Regex search uses RE2 (ReDoS)
 
 **Files:** `src/lib/server/searchRegex.ts`, `src/lib/server/searching.ts`
@@ -266,6 +276,14 @@ When `extra` JSON includes a finite numeric `duration` (seconds), the fullscreen
 
 ---
 
+## Comfy prompt title vs class_type
+
+**File:** `src/lib/tools/metadataInterpreter.ts` (`getComfyPromptTexts`)
+
+Prompt detection matches persisted titles first (`_meta.title` / workflow `title` — “positive”/“prompt”, or “negative”), but only counts nodes that actually yield a string prompt input. Comfy’s default display names (e.g. “Prompt + Model”) are **not** written into PNG metadata unless the node is renamed. If title matching finds nothing usable (including false hits like a seed titled “Prompt Seed”), fall back to the same rules on `class_type` (so `SV-PromptPlusModel` still yields the `prompt` input + `\n---\n` split). Do not merge title hits with class_type hits — usable title text wins exclusively.
+
+---
+
 ## Live view is image-only
 
 **File:** `src/lib/items/ImageFull.svelte`
@@ -301,7 +319,7 @@ Isolated Generate feature inside the side flyout (tabbed with WebUI iframe). Kee
 - **Widget value pairing is positional** (`values[i]` ↔ widget names[i]). Do **not** skip/reorder by type or min/max — that shifted LLMArgs `max_tokens` 1000 onto `presence_penalty` (see test metadata: UI `widgets_values` `[…, false, 0, 1000, 0.8, false]` vs API `presence_penalty: 0, max_tokens: 1000`). Pick the name list by **length match**: full list; else unwired; else full minus linked `forceInput` (Danbooru omits force_input `seed`; Resolution keeps stale linked `base`=768 but omits force_input `seed`). Linked names **consume** a value and don’t assign. Control companions (`fixed`/`randomize`/…) are stripped only because they aren’t API inputs — UI show/hide of freeze controls is separate. **Do not** treat inner links to subgraph inputNode (`-10`) as hidden — that emptied Sampler cards. Hide a proxy only when the *outer* socket is linked. Writes prefer outer for promoted widgets; patch `outerValueIndex` when known.
 - **Convert + subgraphs:** `workflow_converter.py` applies outer `proxyWidgets` onto expanded inners **positionally**, then the same positional zip for API mapping (including non-proxied inners like `SV-LLMArgs`). Coerce bool→0/1 for FLOAT/INT when the saved array has a bool in a numeric slot (LLMArgs `repetition_penalty: false` → `0.0` in Save API).
 - **INT control-after-generate:** Only slots that had a `fixed|randomize|…` companion in `widgets_values` show freeze + mode controls (`SvGenIntControl`) — not every INT (Primitive “Integer” has no companion; “Int” does). Modes live in layout `intControlModes` (default `randomize`); freeze/last-used live in the open-session bag (`svgenFrozenSeedsStore` / `svgenLastUsedSeedsStore`, restored with localStorage tabs). After each queued prompt, advance values via `applyIntControlsAfterQueue` and re-convert for the next queue item — do not submit the same seed N times when mode is randomize/inc/dec.
-- **Field chrome:** match main-app recipes, not a separate kit — recessed inputs (`rgba(0,0,0,0.22)` + inset shadow, no border, ~7px radius), borderless `accent-soft` toolbar/Generate buttons, status via `--ok-tag`/`--danger` (no blue fallbacks). Cards keep the lighter glass mix + inherited title color (not the darker settings filter-card / accent-header treatment). Header **enable** is a pill only (no “enable” text); card headers use the compact pill (visible even when collapsed). Keep cards dense (tight header/title, 6–8px padding, ~24px control height). Combos use folder-tree picker (`SvGenComboPicker`); menu width up to 320px (not clamped to narrow field); folder rows have no trailing `/`. Combo search is scoped to the **current folder + descendants** (not the whole tree once you’ve drilled into a submenu). Submenu path is remembered per field across close/reopen (and remounts via a module Map keyed by field DOM id); when nothing is saved yet (refresh / first open), open in the **selected value’s folder**; Back still climbs; stale folders are clamped when options change. Search autofocuses on open and when entering/leaving a submenu, only for fine pointer (`(hover: hover) and (pointer: fine)`) so mobile doesn’t pop the keyboard. Card **Edit** (hide/reorder fields) only appears when there are 2+ body widgets — enable toggle does not count. **Hidden fields** stay on the card data (`applyFieldOrderAndHidden` only reorders); normal view omits them, Edit keeps them dimmed with a **Show** toggle (do not strip them before the card or Edit cannot restore them). **Tab order in cards:** only widgets (value inputs / combo / image pickers / enable pill). Card chrome uses `tabindex="-1"` — drag handle, collapse title, Edit, reorder/hide, seed freeze, int-control trigger (`DragHandle` is `-1` globally).
+- **Field chrome:** match main-app recipes, not a separate kit — recessed inputs (`rgba(0,0,0,0.22)` + inset shadow, no border, ~7px radius), borderless `accent-soft` toolbar/Generate buttons, status via `--ok-tag`/`--danger` (no blue fallbacks). Cards keep the lighter glass mix + inherited title color (not the darker settings filter-card / accent-header treatment). Header **enable** is a pill only (no “enable” text); card headers use the compact pill (visible even when collapsed). Keep cards dense (tight header/title, 6–8px padding, ~24px control height). Combos use folder-tree picker (`SvGenComboPicker`); menu width up to 320px (not clamped to narrow field); folder rows have no trailing `/`. Combo search is scoped to the **current folder + descendants** (not the whole tree once you’ve drilled into a submenu). Submenu path is remembered per field across close/reopen (and remounts via a module Map keyed by field DOM id); when nothing is saved yet (refresh / first open), open in the **selected value’s folder**; Back still climbs; stale folders are clamped when options change. Search autofocuses on open and when entering/leaving a submenu, only for fine pointer (`(hover: hover) and (pointer: fine)`) so mobile doesn’t pop the keyboard. **↑/↓/Enter** navigate and activate (folders, Back, options) while the search input stays focused; Escape closes. Card **Edit** (hide/reorder fields) only appears when there are 2+ body widgets — enable toggle does not count. **Hidden fields** stay on the card data (`applyFieldOrderAndHidden` only reorders); normal view omits them, Edit keeps them dimmed with a **Show** toggle (do not strip them before the card or Edit cannot restore them). **Tab order in cards:** only widgets (value inputs / combo / image pickers / enable pill). Card chrome uses `tabindex="-1"` — drag handle, collapse title, Edit, reorder/hide, seed freeze, int-control trigger (`DragHandle` is `-1` globally).
 - **Lora strength scrub:** reuse stock `numberDrag` (do not fork it). Scrub must not `dispatch` / reassign `rows` each step — parent card rediscovery + list re-render steals the gesture. Mutate the row while dragging, flush serialized `text` on pointerup. Normal view uses a plain `{#each}` (SortableList only in Edit).
 - **Textarea autosize** (`SvGenField.svelte`): reactive remasure must read `field.value` (then `tick()` → `autosize`). Depending only on `useTextarea` leaves height stale after Use params / other store-driven value writes; `on:input` alone does not cover those paths.
 
