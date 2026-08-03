@@ -35,10 +35,18 @@
     $: showSearch = leaves.length >= SEARCH_MIN;
     $: selectedLabel = leaves.find((l) => l.value === value)?.label ?? value;
     $: tree = buildTree(leaves);
-    // Restore last submenu for this field (or clear when id is missing).
+    // Restore last submenu for this field; if none saved (refresh / first open),
+    // open in the folder of the currently selected value.
     $: if (id !== pathKey) {
         pathKey = id;
-        path = id ? (rememberedFolderPaths.get(id) ?? []) : [];
+        if (!id) {
+            path = [];
+        } else {
+            const remembered = rememberedFolderPaths.get(id);
+            path = remembered !== undefined
+                ? remembered
+                : folderPathForValue(value, leaves);
+        }
     }
     // Drop stale segments if options no longer contain that folder.
     $: {
@@ -111,6 +119,17 @@
 
     function pathsEqual(a: string[], b: string[]): boolean {
         return a.length === b.length && a.every((part, i) => part === b[i]);
+    }
+
+    /** Parent folder segments for a combo value (`a/b/file.safetensors` → `['a','b']`). */
+    function folderPathForValue(raw: string, items: Leaf[]): string[] {
+        const leaf = items.find((l) => l.value === raw);
+        if (leaf)
+            return leaf.path.slice();
+        const parts = String(raw ?? '').replace(/\\/g, '/').split('/').filter(Boolean);
+        if (parts.length <= 1)
+            return [];
+        return parts.slice(0, -1);
     }
 
     /** Leaves in this folder and all nested folders (current submenu scope). */
