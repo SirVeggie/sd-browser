@@ -32,7 +32,7 @@ Overflow-thumb measurement reads the column’s `clientWidth`; measuring the fit
 
 `.chrome` uses `backdrop-filter`, which makes `position: fixed` descendants position against the chrome box (not the viewport). Sorting/Collapse `Select` panels must stay `position: absolute` under their trigger (same pattern as `FilterMultiSelect`). Do not reintroduce viewport `left`/`bottom` math for fixed panels inside chrome.
 
-Non-chrome `Select` panels use `position: fixed` + `getBoundingClientRect` so overflow/clipping ancestors (settings CSS columns, collapse wrappers) cannot truncate the menu.
+Non-chrome `Select` panels portal to `document.body` and use `position: fixed` + `getBoundingClientRect`. In-tree fixed is not enough: `Modal` `.box` also has `backdrop-filter` (+ `overflow-y: auto`), which traps fixed descendants so the menu expands the modal scroll area and never floats above it. Outside-click must treat the portaled panel as inside the dropdown (`bindDropdownOutsideClick` accepts multiple roots).
 
 ### Dropdown outside clicks are swallowed
 

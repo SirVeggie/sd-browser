@@ -23,6 +23,7 @@
     let open = false;
     let rootEl: HTMLDivElement;
     let valueEl: HTMLSpanElement;
+    let panelEl: HTMLDivElement | undefined;
     let panelLeft = 0;
     let panelTop = 0;
     let panelBottom = 0;
@@ -47,11 +48,21 @@
 
     $: if (open) {
         tick().then(() => {
+            if (!open) return;
+            portalPanel();
             updatePanelPosition();
             startPositionListeners();
         });
     } else {
         stopPositionListeners();
+    }
+
+    /** Non-chrome panels live on document.body so modal backdrop-filter cannot trap fixed. */
+    function portalPanel() {
+        if (chrome || !panelEl || !open) return;
+        if (panelEl.parentNode !== document.body) {
+            document.body.appendChild(panelEl);
+        }
     }
 
     function updatePanelPosition() {
@@ -60,9 +71,8 @@
         const valueRect = valueEl.getBoundingClientRect();
         const fontSize = parseFloat(getComputedStyle(rootEl).fontSize);
         const gap = fontSize * 0.35;
-        // Chrome uses absolute coords — backdrop-filter breaks fixed/viewport positioning.
-        // Elsewhere use viewport-fixed panels so overflow/clipping ancestors (e.g. settings
-        // CSS columns) cannot truncate the menu.
+        // Chrome stays absolute under the trigger — backdrop-filter on .chrome breaks
+        // in-tree fixed/viewport math. Non-chrome panels portal to body + fixed.
         if (chrome) {
             panelLeft = alignDropdownPanel(rootEl, valueEl);
             panelTop = 0;
@@ -120,11 +130,15 @@
         const removeOutsideClick = bindDropdownOutsideClick(
             () => open,
             () => { open = false; },
-            () => rootEl,
+            () => [rootEl, panelEl],
         );
         return () => {
             removeOutsideClick();
             stopPositionListeners();
+            // Panel may be on body; ensure it does not linger after unmount.
+            if (panelEl?.parentNode === document.body) {
+                panelEl.remove();
+            }
         };
     });
 
@@ -184,6 +198,7 @@
             class="panel"
             class:drop-up={dropUp}
             class:viewport={!chrome}
+            bind:this={panelEl}
             role="listbox"
             aria-labelledby={id}
             style={panelStyle}
