@@ -548,29 +548,39 @@ function setupWatcher() {
     for (const root of roots) {
         const watcher = new Watcher(root.path, options);
 
-        watcher.on('add', async (file) => {
-            addFile(file);
+        watcher.on('add', (file) => {
+            void addFile(file).catch((err) => {
+                console.error(`Failed to index added file ${file}`, err);
+            });
         });
 
-        watcher.on('rename', async (from, to) => {
-            renameFile(from, to);
+        watcher.on('rename', (from, to) => {
+            void renameFile(from, to).catch((err) => {
+                console.error(`Failed to handle rename ${from} -> ${to}`, err);
+            });
         });
 
-        watcher.on('unlink', async (file) => {
-            deleteFile(file);
+        watcher.on('unlink', (file) => {
+            void deleteFile(file).catch((err) => {
+                console.error(`Failed to handle unlink ${file}`, err);
+            });
         });
 
         watcher.on('addDir', () => {
             clearTimeout(indexTimer);
             indexTimer = setTimeout(() => {
-                indexFiles();
+                void indexFiles().catch((err) => {
+                    console.error('Failed to reindex after directory add', err);
+                });
             }, 2000);
         });
 
         watcher.on('renameDir', () => {
             clearTimeout(indexTimer);
             indexTimer = setTimeout(() => {
-                indexFiles();
+                void indexFiles().catch((err) => {
+                    console.error('Failed to reindex after directory rename', err);
+                });
             }, 2000);
         });
 
@@ -626,14 +636,16 @@ async function addFile(file: string, hash?: string) {
         }
     }
 
+    // Wait until the write finishes — incomplete PNGs make exifr throw "Unknown file format".
+    let size = 0;
+    let newsize = (await fs.stat(file)).size;
+    while (size != newsize) {
+        await sleep(500);
+        size = newsize;
+        newsize = (await fs.stat(file)).size;
+    }
+
     if (isVideo(file)) {
-        let size = 0;
-        let newsize = (await fs.stat(file)).size;
-        while (size != newsize) {
-            await sleep(500);
-            size = newsize;
-            newsize = (await fs.stat(file)).size;
-        }
         const image = videoPreviewExists(file);
         if (image)
             deleteFile(image.file);
@@ -801,7 +813,9 @@ async function checkFiles() {
                 continue;
             }
 
-            addFile(fullpath, hash);
+            void addFile(fullpath, hash).catch((err) => {
+                console.error(`Failed to index polled file ${fullpath}`, err);
+            });
         }
 
         for (const file of files.filter(x => !isMedia(x) && !isTxt(x))) {

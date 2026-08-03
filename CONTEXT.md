@@ -227,6 +227,19 @@ Already-generated WebP caches and already-stored dimensions are not rewritten au
 
 ---
 
+## Watcher must not crash on bad/incomplete images
+
+**Files:** `src/lib/server/imageUtils.ts` (`readMetadataFromExif`), `src/lib/server/filemanager.ts` (watcher / poll handlers)
+
+`exifr.parse` throws `"Unknown file format"` on incomplete or non-PNG bytes (common while a file is still being written). Bulk indexing already catches this in `indexingComputeCore`; the watcher path must too.
+
+- `readMetadataFromExif` must catch parse failures and return the image (preview may still be set).
+- Never `return readMetadataFromExif(...)` without `await` inside a try/catch — a rejected promise bypasses the catch.
+- Watcher/`checkFiles` must `.catch` fire-and-forget `addFile` / `renameFile` / `indexFiles` so a stray rejection cannot take down the Node process (`ERR_UNHANDLED_REJECTION`).
+- `addFile` waits for file size to stabilize (same as videos) before EXIF/metadata so mid-copy PNGs are not parsed early.
+
+---
+
 ## Image source roots and indexing
 
 **Files:** `src/lib/server/paths.ts`, `src/lib/server/filetools.ts`, `src/lib/server/filemanager.ts`, `src/lib/server/workers/indexingWorkerPool.ts`

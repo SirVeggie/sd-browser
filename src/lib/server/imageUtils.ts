@@ -105,18 +105,23 @@ export async function readMetadataFromExif(image: ServerImageFull, altSource?: s
     const validSource = isMetadataFiletype(image.file) || isMetadataFiletype(altSource ?? "");
     if (!validSource)
         return image;
-    const metadata = await exifr.parse(altSource || image.file, {
-        ifd0: false,
-        chunked: false,
-    } as any);
-    if (!metadata)
-        return image;
-    image.prompt = metadata.parameters ?? metadata.prompt ?? '';
-    image.workflow = metadata.workflow ?? '';
-    image.extra = metadata.extra ?? '';
 
-    if (!image.prompt && !image.workflow && !image.extra) {
-        image.prompt = JSON.stringify(metadata);
+    try {
+        const metadata = await exifr.parse(altSource || image.file, {
+            ifd0: false,
+            chunked: false,
+        } as any);
+        if (!metadata)
+            return image;
+        image.prompt = metadata.parameters ?? metadata.prompt ?? '';
+        image.workflow = metadata.workflow ?? '';
+        image.extra = metadata.extra ?? '';
+
+        if (!image.prompt && !image.workflow && !image.extra) {
+            image.prompt = JSON.stringify(metadata);
+        }
+    } catch {
+        // exifr throws on incomplete / non-PNG bytes (e.g. still-writing files).
     }
 
     return image;
@@ -151,7 +156,7 @@ export async function readMetadata(image: ServerImageFull, source?: string): Pro
             }
         }
 
-        return readMetadataFromExif(image);
+        return await readMetadataFromExif(image);
     } catch {
         console.log(`Failed to read metadata for ${image.file}`);
         return image;
