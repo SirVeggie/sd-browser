@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import {
-    allLoraRowsEnabled,
     createEmptyLoraRow,
+    forceDisableLoraTagsInText,
     parseLoraTagText,
     serializeLoraTagText,
-    withAllLoraRowsEnabled,
 } from '../src/lib/svgen/loraTagText.ts';
 
 function testParseBasic() {
@@ -53,15 +52,18 @@ function testRoundTrip() {
     assert.equal(noClip, '<lora:a.safetensors:1.2><#lora:b.safetensors:0.5>');
 }
 
-function testEnableAll() {
-    const rows = parseLoraTagText(
-        '<lora:a.safetensors:1><#lora:b.safetensors:1>',
-    ).rows;
-    assert.equal(allLoraRowsEnabled(rows), false);
-    const on = withAllLoraRowsEnabled(rows, true);
-    assert.equal(allLoraRowsEnabled(on), true);
-    const off = withAllLoraRowsEnabled(on, false);
-    assert.equal(off.every((r) => !r.enabled), true);
+function testForceDisablePreservesDisabled() {
+    const text = '<lora:a.safetensors:1><#lora:b.safetensors:0.5>';
+    const forced = forceDisableLoraTagsInText(text, false);
+    assert.equal(forced, '<#lora:a.safetensors:1><#lora:b.safetensors:0.5>');
+    // Original parse of source still has a enabled
+    assert.equal(parseLoraTagText(text).rows[0].enabled, true);
+    assert.equal(parseLoraTagText(forced).rows.every((r) => !r.enabled), true);
+}
+
+function testForceDisableNoopWhenAlreadyOff() {
+    const text = '<#lora:a.safetensors:1>';
+    assert.equal(forceDisableLoraTagsInText(text, false), text);
 }
 
 function testEmptyRow() {
@@ -76,6 +78,7 @@ testParseClipStrength();
 testParseDisabled();
 testParseMultipleAndRest();
 testRoundTrip();
-testEnableAll();
+testForceDisablePreservesDisabled();
+testForceDisableNoopWhenAlreadyOff();
 testEmptyRow();
 console.log('loraTagText.test.ts: ok');

@@ -128,13 +128,21 @@ export function createEmptyLoraRow(name = ''): LoraTagRow {
     };
 }
 
-export function allLoraRowsEnabled(rows: readonly LoraTagRow[]): boolean {
-    return rows.length > 0 && rows.every((row) => row.enabled);
-}
-
-export function withAllLoraRowsEnabled(
-    rows: readonly LoraTagRow[],
-    enabled: boolean,
-): LoraTagRow[] {
-    return rows.map((row) => (row.enabled === enabled ? row : { ...row, enabled }));
+/**
+ * Serialization for queue/convert when the card master switch is off.
+ * Does not change stored per-row enable state in the session — only the
+ * workflow copy used for the prompt.
+ */
+export function forceDisableLoraTagsInText(
+    text: string,
+    includeClip: boolean,
+): string {
+    const parsed = parseLoraTagText(text);
+    if (!parsed.rows.length || !parsed.rows.some((row) => row.enabled))
+        return text;
+    return serializeLoraTagText(
+        parsed.rows.map((row) => (row.enabled ? { ...row, enabled: false } : row)),
+        parsed.rest,
+        { includeClip },
+    );
 }

@@ -2,12 +2,6 @@
     import { createEventDispatcher } from 'svelte';
     import DragHandle from '$lib/components/DragHandle.svelte';
     import SortableList from '$lib/components/SortableList.svelte';
-    import {
-        allLoraRowsEnabled,
-        parseLoraTagText,
-        serializeLoraTagText,
-        withAllLoraRowsEnabled,
-    } from '$lib/svgen/loraTagText';
     import type { SvgenCard, SvgenField } from '$lib/svgen/types';
     import {
         nodePreviewStoreKey,
@@ -117,9 +111,9 @@
     $: if (!canEditFields)
         editMode = false;
     $: useInline = prefersInline && !collapsed && !editMode;
-    $: loraAllEnabled = loraField
-        ? allLoraRowsEnabled(parseLoraTagText(String(loraField.value ?? '')).rows)
-        : false;
+    /** Separate from per-row enables — layout override (missing → on). */
+    $: loraMasterEnabled =
+        ($svgenLayoutStore.loraTagMasterEnabled ?? {})[card.nodeId] !== false;
 
     $: activeSessionId = $svgenOpenSessionsStore.activeId;
     $: outputPreview = card.imageDisplay && activeSessionId
@@ -154,22 +148,19 @@
         });
     }
 
-    function setAllLorasEnabled(enabled: boolean) {
-        if (!loraField)
+    function setLoraMasterEnabled(enabled: boolean) {
+        const wasOn = ($svgenLayoutStore.loraTagMasterEnabled ?? {})[card.nodeId] !== false;
+        if (wasOn === enabled)
             return;
-        const parsed = parseLoraTagText(String(loraField.value ?? ''));
-        if (!parsed.rows.length)
-            return;
-        const includeClip = !!card.clipInputWired
-            && (($svgenLayoutStore.loraClipStrength ?? {})[card.nodeId] !== false);
-        emitFieldChange(
-            loraField,
-            serializeLoraTagText(
-                withAllLoraRowsEnabled(parsed.rows, enabled),
-                parsed.rest,
-                { includeClip },
-            ),
-        );
+        svgenLayoutStore.update((prev) => {
+            const loraTagMasterEnabled = { ...(prev.loraTagMasterEnabled ?? {}) };
+            if (enabled)
+                delete loraTagMasterEnabled[card.nodeId];
+            else
+                loraTagMasterEnabled[card.nodeId] = false;
+            return { ...prev, loraTagMasterEnabled };
+        });
+        dispatch('persistLayout');
     }
 
     function emitCompanion(detail: FieldChangeDetail) {
@@ -239,9 +230,11 @@
             {#if isLoraTagLoader && loraField}
                 <SvGenEnablePill
                     compact
-                    checked={loraAllEnabled}
-                    title={loraAllEnabled ? 'Disable all LoRAs' : 'Enable all LoRAs'}
-                    on:change={(e) => setAllLorasEnabled(e.detail)}
+                    checked={loraMasterEnabled}
+                    title={loraMasterEnabled
+                        ? 'Disable all LoRAs (override)'
+                        : 'Enable LoRAs (restore per-LoRA toggles)'}
+                    on:change={(e) => setLoraMasterEnabled(e.detail)}
                 />
             {:else if enableField}
                 <SvGenEnablePill
@@ -313,7 +306,7 @@
                         </div>
                     {/if}
                     {#if loraField}
-                        <div class="lora-wrap">
+                        <div class="lora-wrap" class:master-off={!loraMasterEnabled}>
                             <SvGenLoraTagLoader
                                 field={loraField}
                                 {editMode}
@@ -599,6 +592,10 @@
         flex: 1 1 auto;
         min-width: 0;
         width: 100%;
+
+        &.master-off {
+            opacity: 0.55;
+        }
     }
 
     .fields-sortable {

@@ -279,6 +279,11 @@ export function remapLayoutToCards(
             savedToNext,
             (_saved, _nextId, value) => (typeof value === 'boolean' ? value : undefined),
         ),
+        loraTagMasterEnabled: remapKeyedRecord(
+            savedLayout.loraTagMasterEnabled,
+            savedToNext,
+            (_saved, _nextId, value) => (typeof value === 'boolean' ? value : undefined),
+        ),
         nodeSignatures: {},
     };
 

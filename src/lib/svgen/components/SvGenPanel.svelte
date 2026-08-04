@@ -56,6 +56,7 @@
         applyIntControlsAfterQueue,
         captureLastUsedSeeds,
     } from '$lib/svgen/intControl';
+    import { applyLoraTagMasterOverrides } from '$lib/svgen/loraTagMaster';
     import { applyParamsFromWorkflow } from '$lib/svgen/paramsInherit';
     import {
         effectiveColumnCount,
@@ -542,10 +543,18 @@
         const current = get(svgenSessionStore);
         if (!current)
             return undefined;
-        const prompt = await convertWorkflow(current.workflow, getStoredComfyToken());
+        const objectInfo = get(svgenObjectInfoStore);
+        const layout = get(svgenLayoutStore);
+        // Master-off rewrite is queue-only — session text keeps per-row enables.
+        const queueWorkflow = applyLoraTagMasterOverrides(
+            current.workflow,
+            layout,
+            objectInfo,
+        );
+        const prompt = await convertWorkflow(queueWorkflow, getStoredComfyToken());
         const result = await submitPrompt({
             prompt,
-            workflow: current.workflow,
+            workflow: queueWorkflow,
             clientId,
             comfyToken: getStoredComfyToken(),
         });

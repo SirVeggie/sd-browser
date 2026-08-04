@@ -12,6 +12,7 @@ export function emptyLayout(): SvgenLayoutState {
         fieldOrder: {},
         intControlModes: {},
         loraClipStrength: {},
+        loraTagMasterEnabled: {},
         nodeSignatures: {},
     };
 }
@@ -188,6 +189,10 @@ export function parseLayoutJson(raw: string | null | undefined): SvgenLayoutStat
             loraClipStrength: parsed.loraClipStrength && typeof parsed.loraClipStrength === 'object'
                 ? parsed.loraClipStrength
                 : {},
+            loraTagMasterEnabled:
+                parsed.loraTagMasterEnabled && typeof parsed.loraTagMasterEnabled === 'object'
+                    ? parsed.loraTagMasterEnabled
+                    : {},
         };
     } catch {
         return emptyLayout();

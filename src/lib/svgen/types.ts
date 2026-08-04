@@ -92,6 +92,12 @@ export type SvgenLayoutState = {
      * Missing key → true. Ignored when CLIP socket is unwired.
      */
     loraClipStrength: Record<string, boolean>;
+    /**
+     * Per Lora Tag Loader card: master override. Missing key → true.
+     * When false, generation treats every tag as disabled without rewriting
+     * per-row enable state in the text widget.
+     */
+    loraTagMasterEnabled: Record<string, boolean>;
     nodeSignatures: Record<string, string>;
 };
 
