@@ -87,7 +87,8 @@
         top: 0;
         bottom: 0;
         z-index: 46;
-        width: max(5.5vw, 3.5rem);
+        // Size against the non-flyout content width, not the window.
+        width: max(calc((100vw - var(--flyout-width)) * 0.055), 3.5rem);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -140,8 +141,8 @@
     .icon {
         position: relative;
         z-index: 1;
-        width: clamp(1.25rem, 2.4vw, 1.75rem);
-        height: clamp(1.25rem, 2.4vw, 1.75rem);
+        width: clamp(1.25rem, calc((100vw - var(--flyout-width)) * 0.024), 1.75rem);
+        height: clamp(1.25rem, calc((100vw - var(--flyout-width)) * 0.024), 1.75rem);
         opacity: 0.82;
         filter:
             drop-shadow(0 1px 2px rgba(0, 0, 0, 0.95))

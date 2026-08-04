@@ -910,7 +910,7 @@
     // right: 0;
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.55);
-    --pad: min(5vh, 5vw);
+    --pad: min(5vh, calc((100vw - var(--flyout-width)) * 0.05));
     padding: var(--pad);
     backdrop-filter: blur(10px);
 
@@ -1041,8 +1041,13 @@
         position: fixed;
         top: 0;
         left: 0;
-        right: 0;
+        // Must match .image_overlay; right:0 sizes to the window and overlaps controls.
+        right: var(--flyout-width);
         bottom: 0;
+
+        :global(.flanimate) & {
+          transition: right 0.2s ease;
+        }
 
         & > .card-frame {
           height: 100%;
@@ -1075,7 +1080,7 @@
         .info {
           min-width: auto;
           max-width: auto;
-          width: min(calc(100% - max(10vw, 10vh)), 1200px);
+          width: min(calc(100% - max(10%, 10vh)), 1200px);
           padding-inline: 1em 0.4em;
           background-color: rgba(17, 14, 12, 0.78);
           box-shadow: 0 0 1em 1em rgba(17, 14, 12, 0.78);
