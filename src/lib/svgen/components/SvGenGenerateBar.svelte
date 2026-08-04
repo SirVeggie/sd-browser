@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
+    import { numberDrag } from '../../../actions/numberDrag';
 
     export let disabled = false;
     /** Infinite mode is actively topping up the queue. */
@@ -17,6 +18,16 @@
     }>();
 
     $: generateLabel = infinite && infiniteActive ? 'Stop' : 'Generate';
+
+    $: queueCountDrag = {
+        getValue: () => Number(queueCount) || 1,
+        getStep: () => 1,
+        getMin: () => 1,
+        getMax: () => 99,
+        onChange: (value: number) => {
+            queueCount = value;
+        },
+    };
 </script>
 
 <div class="bar">
@@ -42,7 +53,14 @@
     </button>
     <label class="control">
         x
-        <input type="number" min="1" max="99" bind:value={queueCount} />
+        <input
+            type="number"
+            min="1"
+            max="99"
+            step="1"
+            bind:value={queueCount}
+            use:numberDrag={queueCountDrag}
+        />
     </label>
     <label class="control">
         <input
@@ -154,6 +172,7 @@
             padding: 0.2rem 0.3rem;
             appearance: textfield;
             -moz-appearance: textfield;
+            cursor: ew-resize;
 
             &::-webkit-outer-spin-button,
             &::-webkit-inner-spin-button {
@@ -163,6 +182,14 @@
 
             &:focus {
                 outline: none;
+                cursor: text;
+                box-shadow:
+                    inset 0 1px 4px rgba(0, 0, 0, 0.55),
+                    0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+            }
+
+            &:global(.dragging) {
+                cursor: ew-resize;
                 box-shadow:
                     inset 0 1px 4px rgba(0, 0, 0, 0.55),
                     0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
