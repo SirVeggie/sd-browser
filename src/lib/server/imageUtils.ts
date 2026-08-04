@@ -9,6 +9,7 @@ import path from 'path';
 import { MetaCalcDB, MetaDB } from "./db";
 import { populateMediaDimensions } from "./imageDimensions";
 import { computeExtradataFromFull } from "./extradataComputeCore";
+import { readPngSdMetadata } from "./pngTextChunks";
 import { getImageRoots } from "./paths";
 
 /** Defer shipping blobs when combined length exceeds this (32 KiB). */
@@ -106,8 +107,23 @@ export async function readMetadataFromExif(image: ServerImageFull, altSource?: s
     if (!validSource)
         return image;
 
+    const source = altSource || image.file;
+
     try {
-        const metadata = await exifr.parse(altSource || image.file, {
+        // Prefer native PNG text chunks — exifr ignores non-XMP iTXt (common for long A1111 params).
+        const png = await readPngSdMetadata(source);
+        if (png.prompt || png.workflow || png.extra) {
+            image.prompt = png.prompt;
+            image.workflow = png.workflow;
+            image.extra = png.extra;
+            return image;
+        }
+    } catch {
+        // fall through to exifr
+    }
+
+    try {
+        const metadata = await exifr.parse(source, {
             ifd0: false,
             chunked: false,
         } as any);

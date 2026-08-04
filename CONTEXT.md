@@ -1,4 +1,4 @@
-# Project context for agents
+﻿# Project context for agents
 
 Living notes for agents working on this repo. Read at the start of a session. Update when you learn or change a durable design decision, gotcha, or convention that a future agent would otherwise miss.
 
@@ -10,9 +10,19 @@ Keep entries short and actionable. Prefer linking to code over restating it.
 
 **Files:** `src/lib/stores/operationWatch.ts`, `src/lib/components/OperationProgress.svelte`, `src/routes/api/operations/events/+server.ts`
 
-SSE watching for long-running ops (e.g. extradata recalc) lives with the root-layout banner via `trackOperation` / `syncRunningOperations` — **not** Settings `onDestroy`. Page-scoped abort froze the banner and used to crash the server when heartbeat enqueued after disconnect.
+SSE watching for long-running ops (e.g. extradata recalc) lives with the root-layout banner via `trackOperation` / `syncRunningOperations` ÔÇö **not** Settings `onDestroy`. Page-scoped abort froze the banner and used to crash the server when heartbeat enqueued after disconnect.
 
 Server: always `try/catch` enqueue, clear interval + unsubscribe on both `abort` and `cancel`, ignore double `controller.close()`. Same pattern as `api/images/stream` and `api/svgen/events`.
+
+---
+
+## PNG metadata: read iTXt/zTXt, not only exifr tEXt
+
+**Files:** `src/lib/server/pngTextChunks.ts`, `src/lib/server/imageUtils.ts`, `src/lib/server/indexingComputeCore.ts`
+
+A1111 (and some tools) store long `parameters` in PNG **iTXt** (or zTXt). `exifr` only applies iTXt when the keyword is XMP (`XML:com.adobe.xmp`), so those images look like they have no metadata. Always read tEXt/iTXt/zTXt via `readPngSdMetadata` first; fall back to exifr for other cases.
+
+Already-indexed empty rows stay empty until the file is re-indexed (extradata recalc does not re-read the PNG).
 
 ---
 
@@ -20,10 +30,10 @@ Server: always `try/catch` enqueue, clear interval + unsubscribe on both `abort`
 
 **Files:** `src/lib/server/workers/extradataWorkerPool.ts`, `src/lib/server/extradataBatch.ts`, `src/lib/server/db.ts`
 
-Workers only own CPU parse. Sync SQLite load/`postMessage` clone/staging write still run on the Node event loop — bursting many slices in one turn freezes gallery/API/SSE.
+Workers only own CPU parse. Sync SQLite load/`postMessage` clone/staging write still run on the Node event loop ÔÇö bursting many slices in one turn freezes gallery/API/SSE.
 
-- Load **blobs only** (`MetaDB.getBlobsMany` → `id/prompt/workflow/extra`), never full short rows + preview.
-- `processAll`: at most **one** load+`postMessage` per event-loop turn; `maxInFlight ≈ POOL_SIZE` (not `* 2`); `setImmediate` between fills.
+- Load **blobs only** (`MetaDB.getBlobsMany` ÔåÆ `id/prompt/workflow/extra`), never full short rows + preview.
+- `processAll`: at most **one** load+`postMessage` per event-loop turn; `maxInFlight Ôëê POOL_SIZE` (not `* 2`); `setImmediate` between fills.
 - Staging write grain is **200**; yield after each flush.
 - List ids with `MetaDB.getAllIds()`, not `getAllShort()`.
 
@@ -33,9 +43,9 @@ Workers only own CPU parse. Sync SQLite load/`postMessage` clone/staging write s
 
 **Files:** `src/lib/server/searchRegex.ts`, `src/lib/server/searching.ts`
 
-Gallery regex matching compiles via **RE2 only** (linear-time). JS `RegExp` can catastrophically backtrack on patterns like `conditioning(.*\n)*enable: true` or empty `[^]` as in `([^]*\n)*` against params with many newlines — one `test()` blocks the Node event loop so SSE/abort cannot run.
+Gallery regex matching compiles via **RE2 only** (linear-time). JS `RegExp` can catastrophically backtrack on patterns like `conditioning(.*\n)*enable: true` or empty `[^]` as in `([^]*\n)*` against params with many newlines ÔÇö one `test()` blocks the Node event loop so SSE/abort cannot run.
 
-Patterns RE2 rejects (lookaheads, backreferences, empty `[^]`, unterminated classes, …) fail at compile with `UnsupportedSearchRegexError` — **do not fall back to JS `RegExp`**. A true per-match timeout without another thread/process is not possible: once `test()` runs on the main thread, nothing else (including abort) runs until it returns.
+Patterns RE2 rejects (lookaheads, backreferences, empty `[^]`, unterminated classes, ÔÇª) fail at compile with `UnsupportedSearchRegexError` ÔÇö **do not fall back to JS `RegExp`**. A true per-match timeout without another thread/process is not possible: once `test()` runs on the main thread, nothing else (including abort) runs until it returns.
 
 Abort checks in `searchImagesStreaming` run **every image** (and still yield every `yieldEvery`); that only helps when matching itself cannot block the loop.
 
@@ -47,9 +57,9 @@ Invalid/unsupported regex failures are sent on the image stream as `{ type: 'err
 
 **Files:** `src/routes/+page.svelte` (`.dock`, `.dock-column`, `.chrome`), `src/lib/components/ImageRefStrip.svelte`
 
-`.dock-column` is the centered, max-width (`--search-chrome-max-width`, 52rem) wrapper for search chrome + IMG reference strip. Chrome is full width of the column; the strip stays **fit-content** and **left-aligned** to the chrome’s left edge (`align-items: flex-start` on the column).
+`.dock-column` is the centered, max-width (`--search-chrome-max-width`, 52rem) wrapper for search chrome + IMG reference strip. Chrome is full width of the column; the strip stays **fit-content** and **left-aligned** to the chromeÔÇÖs left edge (`align-items: flex-start` on the column).
 
-Overflow-thumb measurement reads the column’s `clientWidth`; measuring the fit-content strip itself causes a collapse feedback loop.
+Overflow-thumb measurement reads the columnÔÇÖs `clientWidth`; measuring the fit-content strip itself causes a collapse feedback loop.
 
 ### Chrome dropdowns: no viewport-fixed panels
 
@@ -73,11 +83,11 @@ Toasts portal to `document.body` and use `z-index: 10000` so they are never cove
 
 ---
 
-## Modal form fields: match Input, don’t use vw min-width
+## Modal form fields: match Input, donÔÇÖt use vw min-width
 
 **Files:** `src/lib/components/CustomFilterModal.svelte`, `src/lib/items/Input.svelte`
 
-Modal textareas should match `Input` (inset fill, no border, `border-radius: 9px`). Prefer a form wrapper with `width: 500px; max-width: 100%` over `min-width: min(500px, 80vw)` — the vw min-width overflows the padded modal on mobile.
+Modal textareas should match `Input` (inset fill, no border, `border-radius: 9px`). Prefer a form wrapper with `width: 500px; max-width: 100%` over `min-width: min(500px, 80vw)` ÔÇö the vw min-width overflows the padded modal on mobile.
 
 ---
 
@@ -93,17 +103,17 @@ Nav arrows are full-height hit targets (`z-index: 46`). The slideshow control mu
 
 **File:** `src/routes/settings/+page.svelte` (`.top`, `.top-inner`, `.settings::before`)
 
-The frosted sticky bar is **full viewport width** so it doesn’t cut a hard edge against the page glow. Title/actions sit in `.top-inner` (`max-width: 56rem`, centered). The accent radial lives on a **viewport-fixed** `::before`, not on the scrolling `.settings` background — do not put the gradient back on `.settings` or use an opaque sticky header that covers it.
+The frosted sticky bar is **full viewport width** so it doesnÔÇÖt cut a hard edge against the page glow. Title/actions sit in `.top-inner` (`max-width: 56rem`, centered). The accent radial lives on a **viewport-fixed** `::before`, not on the scrolling `.settings` background ÔÇö do not put the gradient back on `.settings` or use an opaque sticky header that covers it.
 
 ## Settings cards layout
 
 **File:** `src/routes/settings/+page.svelte` (`.settings-main`, `.cards`, `.wrapper`)
 
 - Body content (help + cards) is capped in `.settings-main` (`max-width: 56rem`, centered).
-- `.cards` uses CSS multi-column masonry (`column-count: 2`, `break-inside: avoid` on cards). Keep modals **outside** `.cards` so they aren’t column items.
+- `.cards` uses CSS multi-column masonry (`column-count: 2`, `break-inside: avoid` on cards). Keep modals **outside** `.cards` so they arenÔÇÖt column items.
 - Cards are `display: flex` with `overflow: hidden` (not `inline-flex` / `overflow: visible`) so expanded collapsibles cannot paint into the neighboring column.
 - Non-chrome `Select` panels are viewport-fixed (see Select note above) so card/column overflow cannot clip them.
-- Collapsible `.wrapper .inner` stays `overflow: hidden` (open and closed). Do not flip to `visible` after open — that reintroduces cross-column overlap (Custom Filters over PWA). Open state also sets `min-height: min-content` on `.inner` so the card claims height in the column layout. Flyout extras use `.join-prev` so the lead rule isn’t doubled on top of the toggle row’s border.
+- Collapsible `.wrapper .inner` stays `overflow: hidden` (open and closed). Do not flip to `visible` after open ÔÇö that reintroduces cross-column overlap (Custom Filters over PWA). Open state also sets `min-height: min-content` on `.inner` so the card claims height in the column layout. Flyout extras use `.join-prev` so the lead rule isnÔÇÖt doubled on top of the toggle rowÔÇÖs border.
 
 ---
 
@@ -111,13 +121,13 @@ The frosted sticky bar is **full viewport width** so it doesn’t cut a hard edg
 
 **File:** `src/lib/tools/searchReferences.ts`
 
-`[refs]` (case-insensitive) expands to every current image-reference id, space-separated, in slot order — same client-side expansion path as `#n` / `[n]`. Empty refs → invalid (zero-result search), like a missing slot.
+`[refs]` (case-insensitive) expands to every current image-reference id, space-separated, in slot order ÔÇö same client-side expansion path as `#n` / `[n]`. Empty refs ÔåÆ invalid (zero-result search), like a missing slot.
 
-### Custom (`temp:…`) references
+### Custom (`temp:ÔÇª`) references
 
 **Files:** `src/lib/stores/imageRefStore.ts`, `src/routes/api/images/temp-embed/+server.ts`, `src/lib/server/searching.ts`
 
-Clipboard paste / OS file drop creates custom refs: client downscales to embedding size before `POST /api/images/temp-embed` (avoids adapter-node 512KB / 413), which encodes+embeds once and returns `{ id: "temp:<uuid>", embedding }`. Server keeps nothing. Client stores the vector **and a compact JPEG data-URL `preview`** on the ref in localStorage (same lifetime as gallery refs). Search only attaches `tempEmbeddings` (base64 Float32) when the expanded query contains `temp:` ids — never on ordinary gallery loads. Do not write temp vectors into EmbeddingDB. If localStorage quota is exceeded, previews are dropped first so embeddings still persist. `BODY_SIZE_LIMIT` for adapter-node must be a plain integer (bytes); suffixes like `10M` become `10` via `parseInt` and break every POST with 413.
+Clipboard paste / OS file drop creates custom refs: client downscales to embedding size before `POST /api/images/temp-embed` (avoids adapter-node 512KB / 413), which encodes+embeds once and returns `{ id: "temp:<uuid>", embedding }`. Server keeps nothing. Client stores the vector **and a compact JPEG data-URL `preview`** on the ref in localStorage (same lifetime as gallery refs). Search only attaches `tempEmbeddings` (base64 Float32) when the expanded query contains `temp:` ids ÔÇö never on ordinary gallery loads. Do not write temp vectors into EmbeddingDB. If localStorage quota is exceeded, previews are dropped first so embeddings still persist. `BODY_SIZE_LIMIT` for adapter-node must be a plain integer (bytes); suffixes like `10M` become `10` via `parseInt` and break every POST with 413.
 
 ---
 
@@ -125,7 +135,7 @@ Clipboard paste / OS file drop creates custom refs: client downscales to embeddi
 
 **Files:** `src/lib/tools/searchParsing.ts` (`parseSharedImgModeTokens`), `src/lib/tools/vectorMath.ts` (`scoreImgSharedMode`), `src/lib/server/searching.ts`
 
-`IMG shared <pos…> - <neg…> [threshold|k]` — one spaced `-`, then space-separated negative hex ids (threshold/k stripped first). Shared query is still inverse-variance over positives only; score is `(sim(shared,x) − max sim(neg,x) + 1) / 2` (same remap as weighted IMG +/-). Do not fold negatives into the variance pool. Multiple `-` tokens are not mode syntax.
+`IMG shared <posÔÇª> - <negÔÇª> [threshold|k]` ÔÇö one spaced `-`, then space-separated negative hex ids (threshold/k stripped first). Shared query is still inverse-variance over positives only; score is `(sim(shared,x) ÔêÆ max sim(neg,x) + 1) / 2` (same remap as weighted IMG +/-). Do not fold negatives into the variance pool. Multiple `-` tokens are not mode syntax.
 
 ---
 
@@ -141,7 +151,7 @@ Renaming a tag updates the MiscDB registry and rewrites `extradata.tags` on ever
 
 **Files:** `src/lib/tools/searchHistory.ts` (`writeSearchHistoryState`), `src/routes/+page.svelte`, `src/routes/settings/+page.svelte`
 
-Gallery search/overlay history uses the History API. Always merge into the existing `history.state` so SvelteKit’s `sveltekit:index` is kept — bare `pushState`/`replaceState` that replace the whole state break browser back from `/settings` (URL changes, settings UI stays). Settings also re-`goto`s if popstate leaves `/settings` while the page is still mounted.
+Gallery search/overlay history uses the History API. Always merge into the existing `history.state` so SvelteKitÔÇÖs `sveltekit:index` is kept ÔÇö bare `pushState`/`replaceState` that replace the whole state break browser back from `/settings` (URL changes, settings UI stays). Settings also re-`goto`s if popstate leaves `/settings` while the page is still mounted.
 
 ---
 
@@ -155,15 +165,15 @@ The search bar uses a transparent `<input>` over a mirror `.highlight` overlay f
 
 Highlight segments with **color only**. Never set `font-weight` (or other metrics-changing styles) on overlay spans such as `.keyword`.
 
-Bold (or heavier weight) makes glyphs slightly wider than the transparent input text (weight 400). The caret is positioned from the input’s metrics, so it drifts relative to the visible overlay. This has been fixed more than once — do not reintroduce it.
+Bold (or heavier weight) makes glyphs slightly wider than the transparent input text (weight 400). The caret is positioned from the inputÔÇÖs metrics, so it drifts relative to the visible overlay. This has been fixed more than once ÔÇö do not reintroduce it.
 
 ```css
-/* ✅ color only */
+/* Ô£à color only */
 .keyword {
     color: var(--keyword);
 }
 
-/* ❌ causes caret drift */
+/* ÔØî causes caret drift */
 .keyword {
     color: var(--keyword);
     font-weight: 600;
@@ -186,7 +196,7 @@ When moving and every selected image shares one folder, that path is excluded as
 
 **Files:** `src/lib/server/filemanager.ts` (`captureImageUserData`, `indexImageAfterPathChange`, `moveImages`, `renameFile`)
 
-Image ids are path hashes (`hashPath`), so move/rename changes the id. Capture tags/annotation/embedding/uniqueness **before** `fs.rename` (watcher `unlink` can wipe DBs as soon as rename yields), then write them onto the new id. `moveImages` reindexes itself. `addFile` must no-op when the id is already in the image list — otherwise a late watcher `add` can clobber in-memory tags.
+Image ids are path hashes (`hashPath`), so move/rename changes the id. Capture tags/annotation/embedding/uniqueness **before** `fs.rename` (watcher `unlink` can wipe DBs as soon as rename yields), then write them onto the new id. `moveImages` reindexes itself. `addFile` must no-op when the id is already in the image list ÔÇö otherwise a late watcher `add` can clobber in-memory tags.
 
 ---
 
@@ -200,7 +210,7 @@ One bad image must not fail the rest of an API batch.
 - Send only successfully encoded images in the batch API request.
 - If the batch API still fails and the batch has more than one image, **retry each image individually** and record only the ones that fail.
 
-Do not reintroduce a catch-all that marks every id in the chunk as failed on a single encode/API error — that interacts badly with bulk’s >50% abort threshold (`shouldAbortBulkRun` in `bulk.ts`).
+Do not reintroduce a catch-all that marks every id in the chunk as failed on a single encode/API error ÔÇö that interacts badly with bulkÔÇÖs >50% abort threshold (`shouldAbortBulkRun` in `bulk.ts`).
 
 ---
 
@@ -211,14 +221,14 @@ Do not reintroduce a catch-all that marks every id in the chunk as failed on a s
 Videos (`.mp4`) use a same-basename companion PNG (`foo.mp4` + `foo.png`) for gallery thumbs (`preview=true`) and IMG embeddings.
 
 - If the PNG is missing, `ensureVideoPreview` extracts the first frame via `@napi-rs/webcodecs` and writes it with sharp. Do not reintroduce bundled ffmpeg.
-- Read rotation from the MP4 `tkhd` matrix via a **top-level atom walk** to load `moov` (end-of-file `moov` is common; naive end-chunk scans miss it). Matrix layout is `a b u / c d v / x y w` — `c` is at +12, not +8. Use ffmpeg’s `-atan2(c, a)`; when rotation is 90/270, swap stored tkhd size for display width/height.
+- Read rotation from the MP4 `tkhd` matrix via a **top-level atom walk** to load `moov` (end-of-file `moov` is common; naive end-chunk scans miss it). Matrix layout is `a b u / c d v / x y w` ÔÇö `c` is at +12, not +8. Use ffmpegÔÇÖs `-atan2(c, a)`; when rotation is 90/270, swap stored tkhd size for display width/height.
 - `VideoFrame.rotation` is often 0 for phone videos; do not rely on it alone.
 - Index **preview generation before dimensions** for newly indexed videos: gallery `width`/`height` should come from the oriented PNG. Do not scan/repair all cached videos on every startup.
-- `image.preview` must be set whenever the companion PNG exists — **including when EXIF is empty** (`readMetadataFromExif`). Linking must not depend on successful metadata parse.
+- `image.preview` must be set whenever the companion PNG exists ÔÇö **including when EXIF is empty** (`readMetadataFromExif`). Linking must not depend on successful metadata parse.
 - Watcher PNG attach (`updateImageMetadata`) must persist `preview` to MetaDB (and calc DB), not only memory.
 - When serving `preview=true`, use an image `Content-Type`, not `video/mp4`.
 
-Videos still without a preview after generation failure are skipped for vectorize (`canVectorizeImage`) — do not guess a missing `.png` path.
+Videos still without a preview after generation failure are skipped for vectorize (`canVectorizeImage`) ÔÇö do not guess a missing `.png` path.
 
 ---
 
@@ -234,11 +244,11 @@ Videos embed from their preview PNG. If `preview` is empty, skip the video (do n
 
 **Files:** `src/lib/server/convert.ts`, `src/lib/tools/imageGeometry.ts`
 
-`quality=medium` is WebP capped at **2MP** (`MEDIUM_MAX_TOTAL_PIXELS`), quality 90, effort 4. Low uses effort 4 as well; minimal stays at effort 6. Smart subsampling is always off (`smartSubsample: false`) — the Settings toggle and query/API knobs were removed. Stale `useSmartSubsampling` keys in localStorage / MiscDB are ignored.
+`quality=medium` is WebP capped at **2MP** (`MEDIUM_MAX_TOTAL_PIXELS`), quality 90, effort 4. Low uses effort 4 as well; minimal stays at effort 6. Smart subsampling is always off (`smartSubsample: false`) ÔÇö the Settings toggle and query/API knobs were removed. Stale `useSmartSubsampling` keys in localStorage / MiscDB are ignored.
 
-libwebp with **effort 0** fails on large/high-entropy images (`webpsave: unable to encode` — PARTITION0_OVERFLOW). Do not set medium/low `effort` back to 0. The 2MP cap also keeps wallpaper encodes fast and within encoder limits.
+libwebp with **effort 0** fails on large/high-entropy images (`webpsave: unable to encode` ÔÇö PARTITION0_OVERFLOW). Do not set medium/low `effort` back to 0. The 2MP cap also keeps wallpaper encodes fast and within encoder limits.
 
-Existing cache files are not auto-regenerated after tier setting changes — clear compressed images (or delete those `.webp` files) to rebuild.
+Existing cache files are not auto-regenerated after tier setting changes ÔÇö clear compressed images (or delete those `.webp` files) to rebuild.
 
 ---
 
@@ -246,11 +256,11 @@ Existing cache files are not auto-regenerated after tier setting changes — cle
 
 **Files:** `src/lib/server/convert.ts`, `src/lib/server/imageDimensions.ts`, `src/lib/tools/imageGeometry.ts` (`orientedDisplaySize`)
 
-Camera JPEGs often store pixels in sensor orientation and put the real rotation in EXIF Orientation (1–8). Sharp does **not** apply that unless you call `.rotate()` with no angle.
+Camera JPEGs often store pixels in sensor orientation and put the real rotation in EXIF Orientation (1ÔÇô8). Sharp does **not** apply that unless you call `.rotate()` with no angle.
 
 - All sharp encode paths (WebP tiers, embedding, LLM) must `.rotate()` before resize/encode so pixels match display orientation and the Orientation tag is stripped from outputs.
-- Indexed `width`/`height` must use `orientedDisplaySize` (swap sides for tags 5–8) so gallery aspect-ratio / masonry match what the browser shows for `quality=original`.
-- Do not “fix” orientation only in CSS/`transform` — that breaks embeddings and cached WebP.
+- Indexed `width`/`height` must use `orientedDisplaySize` (swap sides for tags 5ÔÇô8) so gallery aspect-ratio / masonry match what the browser shows for `quality=original`.
+- Do not ÔÇ£fixÔÇØ orientation only in CSS/`transform` ÔÇö that breaks embeddings and cached WebP.
 
 Already-generated WebP caches and already-stored dimensions are not rewritten automatically; clear compressed images (and re-index dimensions if tiles look stretched) after changing this behavior.
 
@@ -263,7 +273,7 @@ Already-generated WebP caches and already-stored dimensions are not rewritten au
 `exifr.parse` throws `"Unknown file format"` on incomplete or non-PNG bytes (common while a file is still being written). Bulk indexing already catches this in `indexingComputeCore`; the watcher path must too.
 
 - `readMetadataFromExif` must catch parse failures and return the image (preview may still be set).
-- Never `return readMetadataFromExif(...)` without `await` inside a try/catch — a rejected promise bypasses the catch.
+- Never `return readMetadataFromExif(...)` without `await` inside a try/catch ÔÇö a rejected promise bypasses the catch.
 - Watcher/`checkFiles` must `.catch` fire-and-forget `addFile` / `renameFile` / `indexFiles` so a stray rejection cannot take down the Node process (`ERR_UNHANDLED_REJECTION`).
 - `addFile` waits for file size to stabilize (same as videos) before EXIF/metadata so mid-copy PNGs are not parsed early.
 
@@ -285,7 +295,7 @@ Already-generated WebP caches and already-stored dimensions are not rewritten au
 
 **Files:** `src/lib/tools/metadataInterpreter.ts` (`getDuration`), `src/lib/items/ImageFull.svelte` (`extractBasic`)
 
-When `extra` JSON includes a finite numeric `duration` (seconds), the fullscreen basic metadata line appends it after the date, rounded to one decimal (`… · 15.4s`). Omitted when missing or not a finite number. Requires blobs loaded (`extra` present).
+When `extra` JSON includes a finite numeric `duration` (seconds), the fullscreen basic metadata line appends it after the date, rounded to one decimal (`ÔÇª ┬À 15.4s`). Omitted when missing or not a finite number. Requires blobs loaded (`extra` present).
 
 ---
 
@@ -293,7 +303,7 @@ When `extra` JSON includes a finite numeric `duration` (seconds), the fullscreen
 
 **File:** `src/lib/tools/metadataInterpreter.ts` (`getComfyPromptTexts`)
 
-Prompt detection matches persisted titles first (`_meta.title` / workflow `title` — “positive”/“prompt”, or “negative”), but only counts nodes that actually yield a string prompt input. Comfy’s default display names (e.g. “Prompt + Model”) are **not** written into PNG metadata unless the node is renamed. If title matching finds nothing usable (including false hits like a seed titled “Prompt Seed”), fall back to the same rules on `class_type` (so `SV-PromptPlusModel` still yields the `prompt` input + `\n---\n` split). Do not merge title hits with class_type hits — usable title text wins exclusively.
+Prompt detection matches persisted titles first (`_meta.title` / workflow `title` ÔÇö ÔÇ£positiveÔÇØ/ÔÇ£promptÔÇØ, or ÔÇ£negativeÔÇØ), but only counts nodes that actually yield a string prompt input. ComfyÔÇÖs default display names (e.g. ÔÇ£Prompt + ModelÔÇØ) are **not** written into PNG metadata unless the node is renamed. If title matching finds nothing usable (including false hits like a seed titled ÔÇ£Prompt SeedÔÇØ), fall back to the same rules on `class_type` (so `SV-PromptPlusModel` still yields the `prompt` input + `\n---\n` split). Do not merge title hits with class_type hits ÔÇö usable title text wins exclusively.
 
 ---
 
@@ -321,30 +331,30 @@ Media neighbors preload in the stage; metadata must preload too. On arrow nav th
 
 **Files:** `src/lib/svgen/**`, `src/lib/server/svgen/**`, `src/routes/api/svgen/**`, `src/lib/components/Webui.svelte`, comfyui-sv-nodes `workflow_convert.py`
 
-Isolated Generate feature inside the side flyout (tabbed with WebUI iframe). Keep gen logic in `svgen/` — thin hooks only in layout/settings/ImageFull.
+Isolated Generate feature inside the side flyout (tabbed with WebUI iframe). Keep gen logic in `svgen/` ÔÇö thin hooks only in layout/settings/ImageFull.
 
-- **Convert on Comfy** via `/sv_sd_browser/convert` (proxied); do not reimplement UI→API conversion in TypeScript. Converter (`workflow_converter.py`) must **length-match** when zipping `widgets_values` → names (same idea as panel `alignSlotNames`): use unwired names when counts match (Danbooru omits wired `seed`); use full mapping when counts match that (linked seed still present as a stale value — skip assigning the linked name, do not drop the slot). Always preferring unwired shifts seeds onto combos (`scale_mode`, `sampler_name`, …).
-- **Comfy ↔ panel bridge:** sd-browser → Comfy graph is `POST /sv_sd_browser/open_workflow` (Comfy polls `pending_workflow`) via `/api/comfy/open-workflow` (image id **or** raw workflow JSON — Generate panel burger **Open in Comfy**). Reverse: Comfy SV Gen panel **sd-browser** button → `POST /sv_sd_browser/open_in_panel`; sd-browser polls `/api/svgen/pending-panel-workflow` → `pending_panel_workflow` (TTL ~60s, one-shot consume) and loads into the Generate panel (opens flyout + Generate tab).
-- **Progress:** sd-browser proxies Comfy WS server-side and streams events to the panel via `/api/svgen/events` (SSE). Do **not** open a browser WebSocket to Comfy — Comfy’s host/origin check returns 403 when the UI origin differs (e.g. `localhost:8000` vs `127.0.0.1:8188`). HTTP mutate paths stay proxied too.
-- **Flyout tabs:** show WebUI | Generate only when both are available; hide tabs if only one mode is on. Active tab is localStorage (`flyoutTab`). Gen panel can be disabled in Settings (`svgenUi.enabled`). Gallery image context menu shows **Open in panel** only when svgen is enabled **and** the flyout is open (`flyoutState`); ImageFull metadata menu shows it whenever svgen is enabled (and opens the flyout). **Use params** (below Open in panel) appears when the flyout is open **and** an active Generate session exists — it copies exposed UI values from the image’s workflow onto the current session (same card identity matching as layout inherit; best match wins; does not open a new session or touch graph internals). See `paramsInherit.ts`.
-- **Layouts:** no masonry — each column is its own scroll container. Card placement is stored **per column count** (auto 1 & 2; 3-col layout only after user drops a card into col 3; remove 3-col layout when col 3 is empty). Collapse / field order / hidden fields are shared across column counts. **Initial auto order** (`cardOrder.ts`): seeds → models → prompts → negative prompts → sampler → resolution → lora → images → others (alphabetical title tie-break). **Unsaved opens** (image / Comfy) and **Use params** (`paramsInherit.ts`): identity-match cards via `layoutInherit.matchCardsByIdentity` — strictest pass first, then looser passes over remaining unmatched only (exact type+title → type+loose title → unique type → unique title). Remap layout / field prefs by those pairs; Use params copies exposed widget values the same way. Field order / hidden / int-control keys remap by widget-name fallbacks so adding widgets in Comfy does not break node matching.
-- **Field discovery** (`src/lib/svgen/fields.ts`): expand subgraph `proxyWidgets` (values from outer or inner `widgets_values`); map slots via `object_info` like SethRobinson converter; strip control companions (`fixed`/`randomize`/…) before zip; **align names to value count** — when a force_input (e.g. Danbooru `seed`) is wired it is omitted from `widgets_values`, so zip against unwired names (not full object_info) or boolean `image` lands on STRING `rating` and renders as text `"false"`; **never reuse a widget name across slots** (pad from node inputs instead — avoids duplicate labels like a second `random`); hide `_` name/label, wired inputs, `$$canvas*` (check outer name **and** inner/`schemaWidgetName` / label — remapped promoted canvas must not become a string field), control_after_generate, SD Browser `search`. Runtime `boolean` values win over a mismatched STRING schema. Image-display nodes (`SV-Danbooru*`, PreviewImage, …) always show the output preview slot and never use the single-field inline title row. Subgraph shells that promote `$$canvas-image-preview` also get `imageDisplay` unless they already have an image/SD Browser picker field. Title = custom title → subgraph name → `display_name` → type. Proxy field labels: outer/inner input rename → widget name only — **never** the inner node title (LORA `PrimitiveBoolean` titled "Enable LORA" must stay `enabled` / `value`, not the title). When several proxies share an inner name (`value`), Comfy promotes them as `value` / `value_1` / `value_2` on the outer node **in outer input socket order**, which can differ from `proxyWidgets` order (Sampler lists Steps before Seed, but Seed owns wired `value` and Steps is `value_1`). Resolve outer names via label/title→outer-socket match (`resolveOuterProxyWidgetNames`), not list occurrence — occurrence hid Steps and shifted Start/Switch onto the wrong labels; also do not let an unlabeled proxy steal a differently-labeled leftover socket (Hires `enable` vs wired `seed`). **Title→outer matching is single-widget only** (multi-widget inners titled like one socket steal another widget’s rename). **Pass 3 must not synthesize outer names from the inner title** — that invented `random_name` and hid real outer renames (`magic` / `sword`); use input label or occurrence, then `resolveProxyLabel` reads the outer rename. Schema lookup still uses the inner widget name. Combo options: legacy `[[…], opts]` **and** modern `["COMBO", { options: […] }]` (V3) — without the latter, scale_mode/distribution look like plain text. **CustomCombo** declares `choice` as COMBO with empty options in object_info; the frontend fills values from sibling `option*` string widgets. Saved layout is `[choice, index, option1, …, ""]` (`customComboChoiceOptions` in `fields.ts`) — without reading those, Instruction Select / other CustomCombo proxies render as plain text. Number `step`: prefer `step2`, else use object_info `step` as-is — do **not** `/10` (that scale is only for live Comfy canvas `widget.options.step`). Horizontal scrub: `src/actions/numberDrag.ts` (same threshold/axis-lock/step alignment as original `attachNumberDrag`).
-- **Widget value pairing is positional** (`values[i]` ↔ widget names[i]). Do **not** skip/reorder by type or min/max — that shifted LLMArgs `max_tokens` 1000 onto `presence_penalty` (see test metadata: UI `widgets_values` `[…, false, 0, 1000, 0.8, false]` vs API `presence_penalty: 0, max_tokens: 1000`). Pick the name list by **length match**: full list; else unwired; else full minus linked `forceInput` (Danbooru omits force_input `seed`; Resolution keeps stale linked `base`=768 but omits force_input `seed`). Linked names **consume** a value and don’t assign. Control companions (`fixed`/`randomize`/…) are stripped only because they aren’t API inputs — UI show/hide of freeze controls is separate. **Do not** treat inner links to subgraph inputNode (`-10`) as hidden — that emptied Sampler cards. Hide a proxy only when the *outer* socket is linked. Writes prefer outer for promoted widgets; patch `outerValueIndex` when known.
-- **Convert + subgraphs:** `workflow_converter.py` applies outer `proxyWidgets` onto expanded inners **positionally**, then the same positional zip for API mapping (including non-proxied inners like `SV-LLMArgs`). Coerce bool→0/1 for FLOAT/INT when the saved array has a bool in a numeric slot (LLMArgs `repetition_penalty: false` → `0.0` in Save API).
-- **INT control-after-generate:** Only slots that had a `fixed|randomize|…` companion in `widgets_values` show freeze + mode controls (`SvGenIntControl`) — not every INT (Primitive “Integer” has no companion; “Int” does). Modes live in layout `intControlModes` (default `randomize`); freeze/last-used live in the open-session bag (`svgenFrozenSeedsStore` / `svgenLastUsedSeedsStore`, restored with localStorage tabs). After each queued prompt, advance values via `applyIntControlsAfterQueue` and re-convert for the next queue item — do not submit the same seed N times when mode is randomize/inc/dec.
-- **Field chrome:** match main-app recipes, not a separate kit — recessed inputs (`rgba(0,0,0,0.22)` + inset shadow, no border, ~7px radius), borderless `accent-soft` toolbar/Generate buttons, status via `--ok-tag`/`--danger` (no blue fallbacks). Cards keep the lighter glass mix + inherited title color (not the darker settings filter-card / accent-header treatment). Header **enable** is a pill only (no “enable” text); card headers use the compact pill (visible even when collapsed). Keep cards dense (tight header/title, 6–8px padding, ~24px control height). Combos use folder-tree picker (`SvGenComboPicker`); menu width up to 320px (not clamped to narrow field); folder rows have no trailing `/`. Combo search is scoped to the **current folder + descendants** (not the whole tree once you’ve drilled into a submenu). Submenu path is remembered per field across close/reopen (and remounts via a module Map keyed by field DOM id); when nothing is saved yet (refresh / first open), open in the **selected value’s folder**; Back still climbs; stale folders are clamped when options change. Search autofocuses on open and when entering/leaving a submenu, only for fine pointer (`(hover: hover) and (pointer: fine)`) so mobile doesn’t pop the keyboard. **↑/↓/Enter** navigate and activate (folders, Back, options) while the search input stays focused; Escape closes. Card **Edit** (hide/reorder fields) only appears when there are 2+ body widgets — enable toggle does not count. **Hidden fields** stay on the card data (`applyFieldOrderAndHidden` only reorders); normal view omits them, Edit keeps them dimmed with a **Show** toggle (do not strip them before the card or Edit cannot restore them). **Tab order in cards:** only widgets (value inputs / combo / image pickers / enable pill). Card chrome uses `tabindex="-1"` — drag handle, collapse title, Edit, reorder/hide, seed freeze, int-control trigger (`DragHandle` is `-1` globally).
-- **Lora strength scrub:** reuse stock `numberDrag` (do not fork it). Scrub must not `dispatch` / reassign `rows` each step — parent card rediscovery + list re-render steals the gesture. Mutate the row while dragging, flush serialized `text` on pointerup. Normal view uses a plain `{#each}` (SortableList only in Edit).
-- **Textarea autosize** (`SvGenField.svelte`): reactive remasure must read `field.value` (then `tick()` → `autosize`). Depending only on `useTextarea` leaves height stale after Use params / other store-driven value writes; `on:input` alone does not cover those paths.
+- **Convert on Comfy** via `/sv_sd_browser/convert` (proxied); do not reimplement UIÔåÆAPI conversion in TypeScript. Converter (`workflow_converter.py`) must **length-match** when zipping `widgets_values` ÔåÆ names (same idea as panel `alignSlotNames`): use unwired names when counts match (Danbooru omits wired `seed`); use full mapping when counts match that (linked seed still present as a stale value ÔÇö skip assigning the linked name, do not drop the slot). Always preferring unwired shifts seeds onto combos (`scale_mode`, `sampler_name`, ÔÇª).
+- **Comfy Ôåö panel bridge:** sd-browser ÔåÆ Comfy graph is `POST /sv_sd_browser/open_workflow` (Comfy polls `pending_workflow`) via `/api/comfy/open-workflow` (image id **or** raw workflow JSON ÔÇö Generate panel burger **Open in Comfy**). Reverse: Comfy SV Gen panel **sd-browser** button ÔåÆ `POST /sv_sd_browser/open_in_panel`; sd-browser polls `/api/svgen/pending-panel-workflow` ÔåÆ `pending_panel_workflow` (TTL ~60s, one-shot consume) and loads into the Generate panel (opens flyout + Generate tab).
+- **Progress:** sd-browser proxies Comfy WS server-side and streams events to the panel via `/api/svgen/events` (SSE). Do **not** open a browser WebSocket to Comfy ÔÇö ComfyÔÇÖs host/origin check returns 403 when the UI origin differs (e.g. `localhost:8000` vs `127.0.0.1:8188`). HTTP mutate paths stay proxied too.
+- **Flyout tabs:** show WebUI | Generate only when both are available; hide tabs if only one mode is on. Active tab is localStorage (`flyoutTab`). Gen panel can be disabled in Settings (`svgenUi.enabled`). Gallery image context menu shows **Open in panel** only when svgen is enabled **and** the flyout is open (`flyoutState`); ImageFull metadata menu shows it whenever svgen is enabled (and opens the flyout). **Use params** (below Open in panel) appears when the flyout is open **and** an active Generate session exists ÔÇö it copies exposed UI values from the imageÔÇÖs workflow onto the current session (same card identity matching as layout inherit; best match wins; does not open a new session or touch graph internals). See `paramsInherit.ts`.
+- **Layouts:** no masonry ÔÇö each column is its own scroll container. Card placement is stored **per column count** (auto 1 & 2; 3-col layout only after user drops a card into col 3; remove 3-col layout when col 3 is empty). Collapse / field order / hidden fields are shared across column counts. **Initial auto order** (`cardOrder.ts`): seeds ÔåÆ models ÔåÆ prompts ÔåÆ negative prompts ÔåÆ sampler ÔåÆ resolution ÔåÆ lora ÔåÆ images ÔåÆ others (alphabetical title tie-break). **Unsaved opens** (image / Comfy) and **Use params** (`paramsInherit.ts`): identity-match cards via `layoutInherit.matchCardsByIdentity` ÔÇö strictest pass first, then looser passes over remaining unmatched only (exact type+title ÔåÆ type+loose title ÔåÆ unique type ÔåÆ unique title). Remap layout / field prefs by those pairs; Use params copies exposed widget values the same way. Field order / hidden / int-control keys remap by widget-name fallbacks so adding widgets in Comfy does not break node matching.
+- **Field discovery** (`src/lib/svgen/fields.ts`): expand subgraph `proxyWidgets` (values from outer or inner `widgets_values`); map slots via `object_info` like SethRobinson converter; strip control companions (`fixed`/`randomize`/ÔÇª) before zip; **align names to value count** ÔÇö when a force_input (e.g. Danbooru `seed`) is wired it is omitted from `widgets_values`, so zip against unwired names (not full object_info) or boolean `image` lands on STRING `rating` and renders as text `"false"`; **never reuse a widget name across slots** (pad from node inputs instead ÔÇö avoids duplicate labels like a second `random`); hide `_` name/label, wired inputs, `$$canvas*` (check outer name **and** inner/`schemaWidgetName` / label ÔÇö remapped promoted canvas must not become a string field), control_after_generate, SD Browser `search`. Runtime `boolean` values win over a mismatched STRING schema. Image-display nodes (`SV-Danbooru*`, PreviewImage, ÔÇª) always show the output preview slot and never use the single-field inline title row. Subgraph shells that promote `$$canvas-image-preview` also get `imageDisplay` unless they already have an image/SD Browser picker field. Title = custom title ÔåÆ subgraph name ÔåÆ `display_name` ÔåÆ type. Proxy field labels: outer/inner input rename ÔåÆ widget name only ÔÇö **never** the inner node title (LORA `PrimitiveBoolean` titled "Enable LORA" must stay `enabled` / `value`, not the title). When several proxies share an inner name (`value`), Comfy promotes them as `value` / `value_1` / `value_2` on the outer node **in outer input socket order**, which can differ from `proxyWidgets` order (Sampler lists Steps before Seed, but Seed owns wired `value` and Steps is `value_1`). Resolve outer names via label/titleÔåÆouter-socket match (`resolveOuterProxyWidgetNames`), not list occurrence ÔÇö occurrence hid Steps and shifted Start/Switch onto the wrong labels; also do not let an unlabeled proxy steal a differently-labeled leftover socket (Hires `enable` vs wired `seed`). **TitleÔåÆouter matching is single-widget only** (multi-widget inners titled like one socket steal another widgetÔÇÖs rename). **Pass 3 must not synthesize outer names from the inner title** ÔÇö that invented `random_name` and hid real outer renames (`magic` / `sword`); use input label or occurrence, then `resolveProxyLabel` reads the outer rename. Schema lookup still uses the inner widget name. Combo options: legacy `[[ÔÇª], opts]` **and** modern `["COMBO", { options: [ÔÇª] }]` (V3) ÔÇö without the latter, scale_mode/distribution look like plain text. **CustomCombo** declares `choice` as COMBO with empty options in object_info; the frontend fills values from sibling `option*` string widgets. Saved layout is `[choice, index, option1, ÔÇª, ""]` (`customComboChoiceOptions` in `fields.ts`) ÔÇö without reading those, Instruction Select / other CustomCombo proxies render as plain text. Number `step`: prefer `step2`, else use object_info `step` as-is ÔÇö do **not** `/10` (that scale is only for live Comfy canvas `widget.options.step`). Horizontal scrub: `src/actions/numberDrag.ts` (same threshold/axis-lock/step alignment as original `attachNumberDrag`).
+- **Widget value pairing is positional** (`values[i]` Ôåö widget names[i]). Do **not** skip/reorder by type or min/max ÔÇö that shifted LLMArgs `max_tokens` 1000 onto `presence_penalty` (see test metadata: UI `widgets_values` `[ÔÇª, false, 0, 1000, 0.8, false]` vs API `presence_penalty: 0, max_tokens: 1000`). Pick the name list by **length match**: full list; else unwired; else full minus linked `forceInput` (Danbooru omits force_input `seed`; Resolution keeps stale linked `base`=768 but omits force_input `seed`). Linked names **consume** a value and donÔÇÖt assign. Control companions (`fixed`/`randomize`/ÔÇª) are stripped only because they arenÔÇÖt API inputs ÔÇö UI show/hide of freeze controls is separate. **Do not** treat inner links to subgraph inputNode (`-10`) as hidden ÔÇö that emptied Sampler cards. Hide a proxy only when the *outer* socket is linked. Writes prefer outer for promoted widgets; patch `outerValueIndex` when known.
+- **Convert + subgraphs:** `workflow_converter.py` applies outer `proxyWidgets` onto expanded inners **positionally**, then the same positional zip for API mapping (including non-proxied inners like `SV-LLMArgs`). Coerce boolÔåÆ0/1 for FLOAT/INT when the saved array has a bool in a numeric slot (LLMArgs `repetition_penalty: false` ÔåÆ `0.0` in Save API).
+- **INT control-after-generate:** Only slots that had a `fixed|randomize|ÔÇª` companion in `widgets_values` show freeze + mode controls (`SvGenIntControl`) ÔÇö not every INT (Primitive ÔÇ£IntegerÔÇØ has no companion; ÔÇ£IntÔÇØ does). Modes live in layout `intControlModes` (default `randomize`); freeze/last-used live in the open-session bag (`svgenFrozenSeedsStore` / `svgenLastUsedSeedsStore`, restored with localStorage tabs). After each queued prompt, advance values via `applyIntControlsAfterQueue` and re-convert for the next queue item ÔÇö do not submit the same seed N times when mode is randomize/inc/dec.
+- **Field chrome:** match main-app recipes, not a separate kit ÔÇö recessed inputs (`rgba(0,0,0,0.22)` + inset shadow, no border, ~7px radius), borderless `accent-soft` toolbar/Generate buttons, status via `--ok-tag`/`--danger` (no blue fallbacks). Cards keep the lighter glass mix + inherited title color (not the darker settings filter-card / accent-header treatment). Header **enable** is a pill only (no ÔÇ£enableÔÇØ text); card headers use the compact pill (visible even when collapsed). Keep cards dense (tight header/title, 6ÔÇô8px padding, ~24px control height). Combos use folder-tree picker (`SvGenComboPicker`); menu width up to 320px (not clamped to narrow field); folder rows have no trailing `/`. Combo search is scoped to the **current folder + descendants** (not the whole tree once youÔÇÖve drilled into a submenu). Submenu path is remembered per field across close/reopen (and remounts via a module Map keyed by field DOM id); when nothing is saved yet (refresh / first open), open in the **selected valueÔÇÖs folder**; Back still climbs; stale folders are clamped when options change. Search autofocuses on open and when entering/leaving a submenu, only for fine pointer (`(hover: hover) and (pointer: fine)`) so mobile doesnÔÇÖt pop the keyboard. **Ôåæ/Ôåô/Enter** navigate and activate (folders, Back, options) while the search input stays focused; Escape closes. Card **Edit** (hide/reorder fields) only appears when there are 2+ body widgets ÔÇö enable toggle does not count. **Hidden fields** stay on the card data (`applyFieldOrderAndHidden` only reorders); normal view omits them, Edit keeps them dimmed with a **Show** toggle (do not strip them before the card or Edit cannot restore them). **Tab order in cards:** only widgets (value inputs / combo / image pickers / enable pill). Card chrome uses `tabindex="-1"` ÔÇö drag handle, collapse title, Edit, reorder/hide, seed freeze, int-control trigger (`DragHandle` is `-1` globally).
+- **Lora strength scrub:** reuse stock `numberDrag` (do not fork it). Scrub must not `dispatch` / reassign `rows` each step ÔÇö parent card rediscovery + list re-render steals the gesture. Mutate the row while dragging, flush serialized `text` on pointerup. Normal view uses a plain `{#each}` (SortableList only in Edit).
+- **Textarea autosize** (`SvGenField.svelte`): reactive remasure must read `field.value` (then `tick()` ÔåÆ `autosize`). Depending only on `useTextarea` leaves height stale after Use params / other store-driven value writes; `on:input` alone does not cover those paths.
 
-- **Image pickers:** match original panel — clickable preview + modal grid. `sd_browser_image` → `SvGenSdBrowserImagePicker` (SSE search via `/api/images/stream`, sort, upload→`local:` via Comfy). `image` (LoadImage) → `SvGenComfyImagePicker` (combo values grid + Comfy upload). Proxies: `/api/svgen/comfy/upload`, `/api/svgen/comfy/view`. Hidden `search`/`random` companions are written via field `companions` metadata. Authorized Comfy preview bytes use a shared LRU blob-URL cache (`peekAuthorizedBlobUrl` / `fetchAuthorizedBlobUrl`); do **not** revoke on unmount or clear the `<img>` before the next URL is ready — layout/collapse/reorder churn remounts pickers and used to flash every preview. Invalidate cache only after overwrite upload. SD Browser picker modal is hosted from `Webui.svelte` (outside the flyout) via `sdBrowserPickerStore` + `SvGenSdBrowserImageModal`, and appended to `document.body` on mount — in-tree `position: fixed` inside the flyout `overflow: hidden` pane clips the dialog (blur stays, content vanishes), and field remounts must not own the open state. Modal grids use max-content rows and non-shrinking `aspect-ratio: 1` thumbs; do **not** use `height: 0` + `padding-bottom: 100%` — it collapses thumbs into horizontal strips. Output preview placeholders fill the card width with a 120px minimum height; they are not square. **SD Browser random mode** shows the last `executed` pick for that node (same `svgenNodePreviewsStore` as output cards); until the first run it stays “Random from search” / “Random (all images)”.
-- **Lora Tag Loader** (`SV-LoraTagLoader`): card-level special UI (`card.loraTagLoader`, field kind `lora_tags`) — not a plain textarea. `SvGenLoraTagLoader` rows: enable pill + LoRA combo (`LoraLoader`/`LoraLoaderModelOnly` `lora_name` options) + strength + optional clip strength. Header pill is **enable/disable all** (not a node `enable` widget). Disabled tags serialize as `<#lora:name:…>` so Comfy’s `<l\w+:…>` matcher skips them while strengths are kept. Edit mode is custom: add row, × delete, drag reorder (rewrites tag order in `text`); **no Hide**. Clip-strength column + edit-mode clip toggle only when the CLIP socket is wired (`clipInputWired`); layout pref `loraClipStrength[nodeId]` (default on; `false` = omit `:clip` and use model strength). Parse/serialize: `loraTagText.ts`.
-- **Output node previews** (`PreviewImage`, `SV-Danbooru*`, …): cards with `imageDisplay` show the last Comfy `executed` output via `/api/svgen/comfy/view` (same auth blob cache as pickers). Subgraph shells that promote `$$canvas-image-preview` also set `imageDisplay` when they have no image picker field; preview lookup accepts converter ids `outerId:innerId`. `SV-PreviewText` is `textDisplay` — same keep-even-with-no-fields rule; text comes from `executed` `output.text` (tuple/array) into `svgenNodeTextPreviewsStore`. `SvGenPanel` handles `onExecuted` → preview stores keyed by `sessionId\\0nodeId` (`nodePreviews.ts`); match both `node` and `display_node`; map `prompt_id` → session at queue time so mid-run session switches stay correct. Cleared when the session closes; mid-step latent binary WS frames are still dropped by the bridge. Also feeds SD Browser random-mode picker previews.
-- **Card reorder:** pointer drag via same geometry as tags/filters (`sortableGeometry` + `DragHandle` ghost/FLIP) in `SvGenColumns` — not HTML5 DnD. While dragging, holding near the top/bottom of a column auto-scrolls that column (`AUTO_SCROLL_*` in `SvGenColumns`) so long lists stay reachable.
-- **Field reorder (Edit mode):** same pointer drag as cards/tags — `SortableList` (`axis="xy"`, `asGrid`) + `DragHandle` in `SvGenCard` (not ↑/↓ buttons). Keys are `innerNodeId\\0widgetName\\0valueIndex` — never bare `widgetName` (proxy slots collide). Drag is disabled outside Edit; enable-pill field keeps its slot while body widgets reorder.
-- **Column scrollbars:** fade-on-idle overlay via `src/actions/overlayScrollbar.ts` (same pattern as ImageFull); thumb blends toward `--bg`, not bright white native bars. Track is shifted into the column gap / outer padding (`right: -0.4rem`) so it doesn’t sit on cards — do not add card-side gutter padding for this.
-- **Generate toolbar** lives with the Generate button (bottom): Stop (■), queue count `x`, Infinite, Keep one queued. Top bar is session dropdown + Save / Queue / burger (Open in Comfy, JSON). Queue list shows running → pending → history with durations (WS `execution_*` timestamps); list scrolls after **4** visible rows (`SvGenQueueList`). Infinite tops up to 1 (or 2 with Keep one queued); turning Infinite off while Keep one queued clears panel-owned pending prompts.
-- **Toolbar / picker dropdowns:** SD Browser sort (`SvGenSdBrowserImageModal`) uses shared `Select` (viewport-fixed panel). Modal styles must target `:global(.select .trigger)` (not bare `.trigger`) so they beat Select’s scoped `border: none` / `padding: 0` / `font-size: 1em` — otherwise Sort renders oversized and unbordered next to Upload/Close. Session switcher is custom recessed dropdown in `SvGenQueueBar` (open sessions + saved list).
-- **Multi-open sessions (A1):** `svgenOpenSessionsStore` + helpers in `sessions.ts`. Session dropdown replaces name field + Load. Menu = open (switch/close) → separator → saved (open copy / × delete). Deleting a saved workflow asks via shared `askConfirmation` before `DELETE`. Opening saved creates an **unlinked** in-memory copy (`workflowId: null`) with layout cloned from the saved id; name uniquified among open sessions (`Name (2)`…). Save always opens `SvGenSaveModal` (overwrite warning by saved name); POST uses existing id when names match. After save, `workflowId` is set only so layout can auto-persist. Outside opens (image / Comfy) **add** a session. No dirty UI. No Comfy status in the bar — `notify()` on offline / convert loss / generate failures.
+- **Image pickers:** match original panel ÔÇö clickable preview + modal grid. `sd_browser_image` ÔåÆ `SvGenSdBrowserImagePicker` (SSE search via `/api/images/stream`, sort, uploadÔåÆ`local:` via Comfy). `image` (LoadImage) ÔåÆ `SvGenComfyImagePicker` (combo values grid + Comfy upload). Proxies: `/api/svgen/comfy/upload`, `/api/svgen/comfy/view`. Hidden `search`/`random` companions are written via field `companions` metadata. Authorized Comfy preview bytes use a shared LRU blob-URL cache (`peekAuthorizedBlobUrl` / `fetchAuthorizedBlobUrl`); do **not** revoke on unmount or clear the `<img>` before the next URL is ready ÔÇö layout/collapse/reorder churn remounts pickers and used to flash every preview. Invalidate cache only after overwrite upload. SD Browser picker modal is hosted from `Webui.svelte` (outside the flyout) via `sdBrowserPickerStore` + `SvGenSdBrowserImageModal`, and appended to `document.body` on mount ÔÇö in-tree `position: fixed` inside the flyout `overflow: hidden` pane clips the dialog (blur stays, content vanishes), and field remounts must not own the open state. Modal grids use max-content rows and non-shrinking `aspect-ratio: 1` thumbs; do **not** use `height: 0` + `padding-bottom: 100%` ÔÇö it collapses thumbs into horizontal strips. Output preview placeholders fill the card width with a 120px minimum height; they are not square. **SD Browser random mode** shows the last `executed` pick for that node (same `svgenNodePreviewsStore` as output cards); until the first run it stays ÔÇ£Random from searchÔÇØ / ÔÇ£Random (all images)ÔÇØ.
+- **Lora Tag Loader** (`SV-LoraTagLoader`): card-level special UI (`card.loraTagLoader`, field kind `lora_tags`) ÔÇö not a plain textarea. `SvGenLoraTagLoader` rows: enable pill + LoRA combo (`LoraLoader`/`LoraLoaderModelOnly` `lora_name` options) + strength + optional clip strength. Header pill is **enable/disable all** (not a node `enable` widget). Disabled tags serialize as `<#lora:name:ÔÇª>` so ComfyÔÇÖs `<l\w+:ÔÇª>` matcher skips them while strengths are kept. Edit mode is custom: add row, ├ù delete, drag reorder (rewrites tag order in `text`); **no Hide**. Clip-strength column + edit-mode clip toggle only when the CLIP socket is wired (`clipInputWired`); layout pref `loraClipStrength[nodeId]` (default on; `false` = omit `:clip` and use model strength). Parse/serialize: `loraTagText.ts`.
+- **Output node previews** (`PreviewImage`, `SV-Danbooru*`, ÔÇª): cards with `imageDisplay` show the last Comfy `executed` output via `/api/svgen/comfy/view` (same auth blob cache as pickers). Subgraph shells that promote `$$canvas-image-preview` also set `imageDisplay` when they have no image picker field; preview lookup accepts converter ids `outerId:innerId`. `SV-PreviewText` is `textDisplay` ÔÇö same keep-even-with-no-fields rule; text comes from `executed` `output.text` (tuple/array) into `svgenNodeTextPreviewsStore`. `SvGenPanel` handles `onExecuted` ÔåÆ preview stores keyed by `sessionId\\0nodeId` (`nodePreviews.ts`); match both `node` and `display_node`; map `prompt_id` ÔåÆ session at queue time so mid-run session switches stay correct. Cleared when the session closes; mid-step latent binary WS frames are still dropped by the bridge. Also feeds SD Browser random-mode picker previews.
+- **Card reorder:** pointer drag via same geometry as tags/filters (`sortableGeometry` + `DragHandle` ghost/FLIP) in `SvGenColumns` ÔÇö not HTML5 DnD. While dragging, holding near the top/bottom of a column auto-scrolls that column (`AUTO_SCROLL_*` in `SvGenColumns`) so long lists stay reachable.
+- **Field reorder (Edit mode):** same pointer drag as cards/tags ÔÇö `SortableList` (`axis="xy"`, `asGrid`) + `DragHandle` in `SvGenCard` (not Ôåæ/Ôåô buttons). Keys are `innerNodeId\\0widgetName\\0valueIndex` ÔÇö never bare `widgetName` (proxy slots collide). Drag is disabled outside Edit; enable-pill field keeps its slot while body widgets reorder.
+- **Column scrollbars:** fade-on-idle overlay via `src/actions/overlayScrollbar.ts` (same pattern as ImageFull); thumb blends toward `--bg`, not bright white native bars. Track is shifted into the column gap / outer padding (`right: -0.4rem`) so it doesnÔÇÖt sit on cards ÔÇö do not add card-side gutter padding for this.
+- **Generate toolbar** lives with the Generate button (bottom): Stop (Ôûá), queue count `x`, Infinite, Keep one queued. Top bar is session dropdown + Save / Queue / burger (Open in Comfy, JSON). Queue list shows running ÔåÆ pending ÔåÆ history with durations (WS `execution_*` timestamps); list scrolls after **4** visible rows (`SvGenQueueList`). Infinite tops up to 1 (or 2 with Keep one queued); turning Infinite off while Keep one queued clears panel-owned pending prompts.
+- **Toolbar / picker dropdowns:** SD Browser sort (`SvGenSdBrowserImageModal`) uses shared `Select` (viewport-fixed panel). Modal styles must target `:global(.select .trigger)` (not bare `.trigger`) so they beat SelectÔÇÖs scoped `border: none` / `padding: 0` / `font-size: 1em` ÔÇö otherwise Sort renders oversized and unbordered next to Upload/Close. Session switcher is custom recessed dropdown in `SvGenQueueBar` (open sessions + saved list).
+- **Multi-open sessions (A1):** `svgenOpenSessionsStore` + helpers in `sessions.ts`. Session dropdown replaces name field + Load. Menu = open (switch/close) ÔåÆ separator ÔåÆ saved (open copy / ├ù delete). Deleting a saved workflow asks via shared `askConfirmation` before `DELETE`. Opening saved creates an **unlinked** in-memory copy (`workflowId: null`) with layout cloned from the saved id; name uniquified among open sessions (`Name (2)`ÔÇª). Save always opens `SvGenSaveModal` (overwrite warning by saved name); POST uses existing id when names match. After save, `workflowId` is set only so layout can auto-persist. Outside opens (image / Comfy) **add** a session. No dirty UI. No Comfy status in the bar ÔÇö `notify()` on offline / convert loss / generate failures.
 - **Open-session localStorage:** `syncOpenSessionsWithLocalStorage` (`sessions.ts`, key `svgenOpenSessions`) restores the open bag + hydrates the active session into live stores. Live session/layout/seed edits flush into the bag (suspend that flush while switching/hydrating so `activeId` cannot lag). Writes are debounced; `pagehide`/`beforeunload` flush immediately. Saved library workflows stay in SQLite; this only restores unsaved open tabs across refresh.
 - **Persistence:** `LOCAL_DATA/svgen.sqlite3` (saved workflows + layouts), not MiscDB. Open tabs: localStorage as above.
 
@@ -354,7 +364,7 @@ Isolated Generate feature inside the side flyout (tabbed with WebUI iframe). Kee
 
 **File:** `src/lib/items/FullscreenMediaStage.svelte`
 
-Svelte 4 tracks `$:` dependencies from the statement AST only — reads inside helpers like `mediaUrlFor()` do **not** count. `mediaQuery` (and thus `showOriginal`) must appear lexically in the `$: panelEntries = …` expression (inline `` `/api/images/${id}?${mediaQuery}` ``). Putting the helper call in the `$:` block or only in the `{#each}` template is not enough; "Show original" will keep serving the compressed URL. Panel keys should include `mediaQuery` so quality flips remount panels.
+Svelte 4 tracks `$:` dependencies from the statement AST only ÔÇö reads inside helpers like `mediaUrlFor()` do **not** count. `mediaQuery` (and thus `showOriginal`) must appear lexically in the `$: panelEntries = ÔÇª` expression (inline `` `/api/images/${id}?${mediaQuery}` ``). Putting the helper call in the `$:` block or only in the `{#each}` template is not enough; "Show original" will keep serving the compressed URL. Panel keys should include `mediaQuery` so quality flips remount panels.
 
 ---
 
@@ -362,8 +372,8 @@ Svelte 4 tracks `$:` dependencies from the statement AST only — reads inside h
 
 **Files:** `src/routes/+page.svelte` (`keylistener`, `openImage`), `src/lib/components/FilterMultiSelect.svelte` (`openAndFocus`)
 
-- `F` toggles flyout only without Ctrl/⌘/Alt (so browser find stays usable).
-- `Ctrl/⌘+S` cycles `sortingOptions` (including temporary similar/uniqueness when present).
-- `Ctrl/⌘+D` toggles Filters via `toggleOpenAndFocus()` — arrow keys follow visual direction (DOM index flips when `dropUp` / column-reverse); Space/Enter toggle (native button).
-- Plain letter/arrow/Space shortcuts skip when a text field is focused; Ctrl/⌘ chords do not.
-- Opening fullscreen from the grid (`openImage`) must `blur()` `document.activeElement` — gallery `Clickable` `preventDefault`s mousedown, so focus would otherwise stay in the flyout (Generate inputs / WebUI iframe) and arrows/Space would not reach the gallery listener.
+- `F` toggles flyout only without Ctrl/Ôîÿ/Alt (so browser find stays usable).
+- `Ctrl/Ôîÿ+S` cycles `sortingOptions` (including temporary similar/uniqueness when present).
+- `Ctrl/Ôîÿ+D` toggles Filters via `toggleOpenAndFocus()` ÔÇö arrow keys follow visual direction (DOM index flips when `dropUp` / column-reverse); Space/Enter toggle (native button).
+- Plain letter/arrow/Space shortcuts skip when a text field is focused; Ctrl/Ôîÿ chords do not.
+- Opening fullscreen from the grid (`openImage`) must `blur()` `document.activeElement` ÔÇö gallery `Clickable` `preventDefault`s mousedown, so focus would otherwise stay in the flyout (Generate inputs / WebUI iframe) and arrows/Space would not reach the gallery listener.

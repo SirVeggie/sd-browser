@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { orientedDisplaySize } from '$lib/tools/imageGeometry';
 import type { ImageExtraData, ServerImageFull } from '$lib/types/images';
 import { computeExtradataFromFull } from './extradataComputeCore';
+import { readPngSdMetadata } from './pngTextChunks';
 
 /** Work unit sent to an indexing worker (or main-thread fallback). */
 export type IndexingJob = {
@@ -86,6 +87,21 @@ async function readExifFields(
     const validSource = isPng(imageFile) || isPng(altSource ?? '');
     if (!validSource)
         return { prompt: '', workflow: '', extra: '' };
+
+    // Prefer native PNG text chunks — exifr ignores non-XMP iTXt (common for long A1111 params).
+    try {
+        const png = await readPngSdMetadata(source);
+        if (png.prompt || png.workflow || png.extra) {
+            return {
+                prompt: png.prompt,
+                workflow: png.workflow,
+                extra: png.extra,
+                preview: altSource || undefined,
+            };
+        }
+    } catch {
+        // fall through to exifr
+    }
 
     const metadata = await exifr.parse(source, {
         ifd0: false,
