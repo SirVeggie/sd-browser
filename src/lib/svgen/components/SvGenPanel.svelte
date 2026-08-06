@@ -558,16 +558,18 @@
             clientId,
             comfyToken: getStoredComfyToken(),
         });
-        const nextWorkflow = applyControlsAfterQueuedPrompt(current.workflow);
-        svgenSessionStore.update((s) => (
-            s
-                ? {
-                    ...s,
-                    prompt,
-                    workflow: nextWorkflow,
-                }
-                : s
-        ));
+        // Int-control advances must land on the *live* workflow. Convert/submit used a
+        // snapshot from before those awaits; writing that snapshot back would wipe edits
+        // typed during convert/submit (caret jump + lost chars on infinite top-up).
+        svgenSessionStore.update((s) => {
+            if (!s)
+                return s;
+            return {
+                ...s,
+                prompt,
+                workflow: applyControlsAfterQueuedPrompt(s.workflow),
+            };
+        });
         return result.prompt_id;
     }
 
