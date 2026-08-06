@@ -41,21 +41,30 @@ function testParseMultipleAndRest() {
     assert.equal(rest, 'hello  world');
 }
 
+function testParseOnePerLine() {
+    const text = '<lora:a.safetensors:1>\n<#lora:b.safetensors:0.5>\n';
+    const { rows, rest } = parseLoraTagText(text);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].enabled, true);
+    assert.equal(rows[1].enabled, false);
+    assert.equal(rest, '');
+}
+
 function testRoundTrip() {
     const original = '<lora:a.safetensors:1.2:0.9><#lora:b.safetensors:0.5>';
     const parsed = parseLoraTagText(original);
     const again = serializeLoraTagText(parsed.rows, parsed.rest, { includeClip: true });
     // Disabled row without explicit clip in source still has clip=strength after parse
-    assert.equal(again, '<lora:a.safetensors:1.2:0.9><#lora:b.safetensors:0.5:0.5>');
+    assert.equal(again, '<lora:a.safetensors:1.2:0.9>\n<#lora:b.safetensors:0.5:0.5>');
 
     const noClip = serializeLoraTagText(parsed.rows, parsed.rest, { includeClip: false });
-    assert.equal(noClip, '<lora:a.safetensors:1.2><#lora:b.safetensors:0.5>');
+    assert.equal(noClip, '<lora:a.safetensors:1.2>\n<#lora:b.safetensors:0.5>');
 }
 
 function testForceDisablePreservesDisabled() {
     const text = '<lora:a.safetensors:1><#lora:b.safetensors:0.5>';
     const forced = forceDisableLoraTagsInText(text, false);
-    assert.equal(forced, '<#lora:a.safetensors:1><#lora:b.safetensors:0.5>');
+    assert.equal(forced, '<#lora:a.safetensors:1>\n<#lora:b.safetensors:0.5>');
     // Original parse of source still has a enabled
     assert.equal(parseLoraTagText(text).rows[0].enabled, true);
     assert.equal(parseLoraTagText(forced).rows.every((r) => !r.enabled), true);
@@ -77,6 +86,7 @@ testParseBasic();
 testParseClipStrength();
 testParseDisabled();
 testParseMultipleAndRest();
+testParseOnePerLine();
 testRoundTrip();
 testForceDisablePreservesDisabled();
 testForceDisableNoopWhenAlreadyOff();

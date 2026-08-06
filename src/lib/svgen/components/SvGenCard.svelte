@@ -593,7 +593,12 @@
         min-width: 0;
         width: 100%;
 
-        &.master-off {
+        /* Same as per-row disabled: don't opacity the wrap (fades fixed menus). */
+        &.master-off :global(.row > :not(.lora)) {
+            opacity: 0.55;
+        }
+
+        &.master-off :global(.row .lora .trigger) {
             opacity: 0.55;
         }
     }

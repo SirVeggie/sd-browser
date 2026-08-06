@@ -61,6 +61,13 @@ function parseTagBody(body: string): {
     return { name, strength, clipStrength };
 }
 
+/** Keep non-tag prompt text; drop whitespace-only gaps between tags. */
+function appendRest(rest: string, chunk: string): string {
+    if (!chunk.trim())
+        return rest;
+    return rest + chunk;
+}
+
 /** Extract LoRA/lyco tags (enabled + disabled) and leftover text. */
 export function parseLoraTagText(text: string): ParsedLoraTagText {
     const rows: LoraTagRow[] = [];
@@ -70,7 +77,7 @@ export function parseLoraTagText(text: string): ParsedLoraTagText {
     TAG_RE.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = TAG_RE.exec(source)) !== null) {
-        rest += source.slice(last, match.index);
+        rest = appendRest(rest, source.slice(last, match.index));
         last = match.index + match[0].length;
         const full = match[0];
         const tagType = match[1] ?? 'lora';
@@ -87,7 +94,7 @@ export function parseLoraTagText(text: string): ParsedLoraTagText {
             clipStrength: parsed.clipStrength,
         });
     }
-    rest += source.slice(last);
+    rest = appendRest(rest, source.slice(last));
     return { rows, rest };
 }
 
@@ -113,8 +120,14 @@ export function serializeLoraTagText(
     rest = '',
     options: SerializeLoraTagOptions = { includeClip: false },
 ): string {
-    const tags = rows.map((row) => formatTag(row, options.includeClip)).join('');
-    return `${tags}${rest}`;
+    // One tag per line — easier to read in image / workflow metadata.
+    const tags = rows.map((row) => formatTag(row, options.includeClip)).join('\n');
+    const leftover = rest.trim();
+    if (!leftover)
+        return tags;
+    if (!tags)
+        return leftover;
+    return `${tags}\n${leftover}`;
 }
 
 export function createEmptyLoraRow(name = ''): LoraTagRow {

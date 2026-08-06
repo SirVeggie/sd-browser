@@ -80,7 +80,13 @@
         min-width: 0;
         width: 100%;
 
-        &.disabled {
+        /* Dim chrome / trigger only — never an ancestor of the fixed menu
+           (opacity on ancestors fades position:fixed descendants). */
+        &.disabled > :global(:not(.lora)) {
+            opacity: 0.55;
+        }
+
+        &.disabled :global(.lora .trigger) {
             opacity: 0.55;
         }
     }
