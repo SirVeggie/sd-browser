@@ -1038,16 +1038,13 @@
       }
 
       &.full {
-        position: fixed;
-        top: 0;
-        left: 0;
-        // Must match .image_overlay; right:0 sizes to the window and overlaps controls.
-        right: var(--flyout-width);
-        bottom: 0;
-
-        :global(.flanimate) & {
-          transition: right 0.2s ease;
-        }
+        // Fill the overlay (already inset by --flyout-width). Do not use
+        // position:fixed + right:var(--flyout-width): .image_overlay has
+        // backdrop-filter, which makes fixed descendants resolve against the
+        // overlay — double-applying the flyout inset (narrow left column on
+        // browsers that honor that, e.g. Samsung Internet).
+        position: absolute;
+        inset: 0;
 
         & > .card-frame {
           height: 100%;

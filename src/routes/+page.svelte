@@ -2797,6 +2797,7 @@
         .resize-overlay {
             position: fixed;
             inset: 0;
+            right: var(--flyout-width);
             display: flex;
             align-items: center;
             justify-content: center;

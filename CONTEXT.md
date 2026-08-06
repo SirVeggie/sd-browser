@@ -99,11 +99,13 @@ Nav arrows are full-height hit targets (`z-index: 46`). The slideshow control mu
 
 ---
 
-## Full-view layout respects flyout width
+## Full-view / gallery overlays respect flyout width
 
-**Files:** `src/lib/items/ImageFull.svelte` (`.image_overlay`, `.layout.full`), `src/lib/components/NavArrows.svelte`
+**Files:** `src/lib/items/ImageFull.svelte` (`.image_overlay`, `.layout.full`), `src/lib/components/NavArrows.svelte`, `src/routes/+page.svelte` (`.resize-overlay`)
 
-Maximized image view (`.layout.full`) is `position: fixed` and must use `right: var(--flyout-width)`, same as the overlay — not `right: 0`. Window-sized full view puts three-dots/copy under the flyout-edge nav arrows. Arrow hit/icon size and overlay `--pad` should use `(100vw - var(--flyout-width))`, not raw `vw`.
+`.image_overlay` is `position: fixed` with `right: var(--flyout-width)`. Maximized `.layout.full` must be `position: absolute; inset: 0` to fill that overlay — **not** `position: fixed` with another `right: var(--flyout-width)`. The overlay’s `backdrop-filter` makes fixed descendants resolve against the overlay box, so a second flyout inset shrinks the view to a left column (seen on Samsung Internet; desktop Chrome can look fine).
+
+Nav arrows / overlay `--pad` / “Adjusting layout…” (`.resize-overlay`) still size against the non-flyout area: `right: var(--flyout-width)` or `(100vw - var(--flyout-width))`, not raw `vw`.
 
 ---
 
