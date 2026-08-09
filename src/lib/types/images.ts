@@ -178,13 +178,33 @@ export type ComfyWorkflowNodeProperties = {
     [key: string]: unknown;
 };
 
+/** Internal subgraph link (dict form — main-graph links stay 6-tuples). */
+export type ComfySubgraphLink = {
+    id: number;
+    origin_id: number;
+    origin_slot: number;
+    target_id: number;
+    target_slot: number;
+    type?: string;
+};
+
+export type ComfySubgraphInput = {
+    id?: string;
+    name: string;
+    type?: string;
+    label?: string;
+    linkIds?: number[];
+};
+
 export type ComfySubgraphDefinition = {
     id: string;
     name: string;
     nodes: ComfyWorkflowNode[];
-    inputs?: unknown[];
+    inputs?: ComfySubgraphInput[];
     outputs?: unknown[];
     widgets?: unknown[];
+    /** Present on modern Comfy exports; used to recover promoted widgets without proxyWidgets. */
+    links?: ComfySubgraphLink[];
 };
 
 export type ComfyWorkflow = {

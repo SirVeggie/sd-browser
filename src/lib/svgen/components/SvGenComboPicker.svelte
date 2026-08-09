@@ -94,10 +94,22 @@
     }
     $: if (open && activeIndex >= 0) {
         void activeIndex;
-        void tick().then(() => {
-            listEl?.querySelector(`[data-nav-index="${activeIndex}"]`)
-                ?.scrollIntoView({ block: 'nearest' });
-        });
+        void tick().then(scrollActiveIntoList);
+    }
+
+    /** Scroll only the menu list — `scrollIntoView` also shifts column ancestors. */
+    function scrollActiveIntoList() {
+        if (!listEl || activeIndex < 0)
+            return;
+        const item = listEl.querySelector<HTMLElement>(`[data-nav-index="${activeIndex}"]`);
+        if (!item)
+            return;
+        const listRect = listEl.getBoundingClientRect();
+        const itemRect = item.getBoundingClientRect();
+        if (itemRect.top < listRect.top)
+            listEl.scrollTop -= listRect.top - itemRect.top;
+        else if (itemRect.bottom > listRect.bottom)
+            listEl.scrollTop += itemRect.bottom - listRect.bottom;
     }
 
     function buildLeaves(values: string[]): Leaf[] {
@@ -240,7 +252,7 @@
         if (event.key === 'Escape') {
             event.preventDefault();
             close();
-            triggerEl?.focus();
+            triggerEl?.focus({ preventScroll: true });
         }
     }
 
@@ -311,7 +323,9 @@
     function focusSearch() {
         if (!finePointer || !showSearch)
             return;
-        searchEl?.focus();
+        // Menu is position:fixed but still under the column scroll root; default
+        // focus scrolling would jump the Generate panel.
+        searchEl?.focus({ preventScroll: true });
     }
 
     async function enterFolder(folderName: string) {

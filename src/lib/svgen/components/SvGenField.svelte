@@ -81,9 +81,17 @@
 
     // Re-measure on programmatic value changes (Use params, int-control advance, session hydrate).
     // Typing also hits autosize() in onText; this covers paths that never fire input.
+    // Skip when only the field object identity changed (e.g. LoRA toggle rediscovers all
+    // cards) — height:'auto' flash in every textarea jumps the column scroll.
+    let lastAutosizeValue: string | undefined;
     $: if (useTextarea) {
-        void field.value;
-        void tick().then(autosize);
+        const next = String(field.value ?? '');
+        if (next !== lastAutosizeValue) {
+            lastAutosizeValue = next;
+            void tick().then(autosize);
+        }
+    } else {
+        lastAutosizeValue = undefined;
     }
 
     function onNumber(e: Event) {

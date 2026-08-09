@@ -131,6 +131,83 @@ function getProxyWidgets(node: ComfyWorkflowNode): ComfyProxyWidget[] | undefine
     return valid.length ? valid : undefined;
 }
 
+type ProxyWidgetBinding = {
+    proxies: ComfyProxyWidget[];
+    /**
+     * When set, these are the authoritative outer socket names (subgraph input
+     * names). Skip label/title matching — required for modern exports where
+     * `value` / `value_1` are already disambiguated on the shell.
+     */
+    outerNames?: string[];
+};
+
+/**
+ * Newer Comfy builds stopped serializing `properties.proxyWidgets`. Promoted
+ * widgets are ordinary subgraph inputs linked from inputNode (-10) onto an
+ * interior widget slot. Rebuild [[innerId, widgetName], …] plus the outer
+ * socket name (subgraph input name) from that topology.
+ */
+function synthesizeProxyWidgetsFromPromotedInputs(
+    subgraph: ComfySubgraphDefinition,
+): ProxyWidgetBinding | undefined {
+    const inputs = subgraph.inputs;
+    const links = subgraph.links;
+    if (!Array.isArray(inputs) || !inputs.length || !Array.isArray(links) || !links.length)
+        return undefined;
+
+    const linksById = new Map<number, (typeof links)[number]>();
+    for (const link of links) {
+        if (link && typeof link.id === 'number')
+            linksById.set(link.id, link);
+    }
+
+    const proxies: ComfyProxyWidget[] = [];
+    const outerNames: string[] = [];
+    const seen = new Set<string>();
+    for (const input of inputs) {
+        if (!input?.name || !Array.isArray(input.linkIds))
+            continue;
+        for (const linkId of input.linkIds) {
+            const link = linksById.get(linkId);
+            if (!link)
+                continue;
+            // Promotions originate at the subgraph input boundary node.
+            if (Number(link.origin_id) !== -10)
+                continue;
+
+            const inner = findInnerNode(subgraph, String(link.target_id));
+            if (!inner)
+                continue;
+            const targetInput = inner.inputs?.[link.target_slot];
+            if (!targetInput?.widget)
+                continue;
+            const widgetName = targetInput.widget.name || targetInput.name;
+            if (!widgetName)
+                continue;
+
+            const key = `${inner.id}:${widgetName}:${input.name}`;
+            if (seen.has(key))
+                continue;
+            seen.add(key);
+            proxies.push([String(inner.id), widgetName]);
+            outerNames.push(input.name);
+            break;
+        }
+    }
+    return proxies.length ? { proxies, outerNames } : undefined;
+}
+
+/** Legacy proxyWidgets, else reconstruct from slot-promoted subgraph inputs. */
+function resolveProxyWidgetBinding(
+    node: ComfyWorkflowNode,
+    subgraph: ComfySubgraphDefinition | undefined,
+): ProxyWidgetBinding | undefined {
+    const legacy = getProxyWidgets(node);
+    if (legacy?.length)
+        return { proxies: legacy };
+    return subgraph ? synthesizeProxyWidgetsFromPromotedInputs(subgraph) : undefined;
+}
+
 /** Promoted Comfy canvas image preview (`$$canvas-image-preview`) on a subgraph shell. */
 function proxyHasCanvasImagePreview(proxies: ComfyProxyWidget[] | undefined): boolean {
     if (!proxies?.length)
@@ -1071,9 +1148,12 @@ function buildSlotsForProxyNode(
     node: ComfyWorkflowNode,
     subgraph: ComfySubgraphDefinition,
     objectInfo: ObjectInfoMap | null | undefined,
+    binding: ProxyWidgetBinding = {
+        proxies: getProxyWidgets(node) ?? [],
+    },
 ): SlotBuild[] {
-    const proxyWidgets = getProxyWidgets(node);
-    if (!proxyWidgets?.length)
+    const proxyWidgets = binding.proxies;
+    if (!proxyWidgets.length)
         return [];
 
     const outerRaw = asWidgetValues(node.widgets_values);
@@ -1084,16 +1164,24 @@ function buildSlotsForProxyNode(
     } = filterControlValues(outerRaw);
 
     const uniqueProxies: ComfyProxyWidget[] = [];
+    const uniqueOuterNames: string[] = [];
     const seenProxy = new Set<string>();
-    for (const proxy of proxyWidgets) {
-        const proxyKey = `${proxy[0]}:${proxy[1]}`;
+    for (let i = 0; i < proxyWidgets.length; i++) {
+        const proxy = proxyWidgets[i];
+        const proxyKey = binding.outerNames
+            ? `${proxy[0]}:${proxy[1]}:${binding.outerNames[i] ?? i}`
+            : `${proxy[0]}:${proxy[1]}`;
         if (seenProxy.has(proxyKey))
             continue;
         seenProxy.add(proxyKey);
         uniqueProxies.push(proxy);
+        if (binding.outerNames)
+            uniqueOuterNames.push(binding.outerNames[i] ?? proxy[1]);
     }
 
-    const outerNames = resolveOuterProxyWidgetNames(node, subgraph, uniqueProxies);
+    const outerNames = binding.outerNames
+        ? uniqueOuterNames
+        : resolveOuterProxyWidgetNames(node, subgraph, uniqueProxies);
     const outerByProxy = alignOuterProxyValues(
         node,
         uniqueProxies,
@@ -1282,12 +1370,13 @@ export function discoverCards(
             continue;
 
         const subgraph = subgraphsByType.get(String(node.type));
-        const proxyWidgets = getProxyWidgets(node);
+        const proxyBinding = resolveProxyWidgetBinding(node, subgraph);
+        const proxyWidgets = proxyBinding?.proxies;
         const title = nodeDisplayTitle(node, objectInfo, subgraph);
 
         let fields: SvgenField[] = [];
-        if (proxyWidgets && subgraph) {
-            const slots = buildSlotsForProxyNode(node, subgraph, objectInfo);
+        if (proxyBinding && subgraph) {
+            const slots = buildSlotsForProxyNode(node, subgraph, objectInfo, proxyBinding);
             // Wire-check against the *outer* subgraph node only. Inner links to the
             // subgraph inputNode are normal for promoted widgets and must not hide them.
             fields = [];
@@ -1338,9 +1427,6 @@ export function discoverCards(
             fields = slotsToFields(node, buildSlotsForConcreteNode(node, objectInfo), objectInfo);
             for (const f of fields)
                 f.nodeTitle = title;
-        } else if (subgraph && !proxyWidgets) {
-            // UUID subgraph without proxyWidgets — nothing editable on the shell
-            fields = [];
         }
 
         const classType = resolveNodeClassType(node);

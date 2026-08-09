@@ -19,7 +19,7 @@
     aria-label={checked ? 'Enabled' : 'Disabled'}
     {title}
     on:click|stopPropagation={() => dispatch('change', !checked)}
-    on:pointerdown|stopPropagation
+    on:pointerdown|stopPropagation|preventDefault
 >
     <span class="thumb" aria-hidden="true" />
 </button>
