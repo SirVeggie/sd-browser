@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
     createEmptyLoraRow,
     forceDisableLoraTagsInText,
+    overlayLoraRowStrengths,
     parseLoraTagText,
     serializeLoraTagText,
 } from '../src/lib/svgen/loraTagText.ts';
@@ -92,6 +93,43 @@ function testEmptyNameRoundTrip() {
     assert.equal(rows[0].strength, 1);
 }
 
+function testOverlayStrengthWithoutClipCopiesBoth() {
+    const { rows } = parseLoraTagText('<lora:a.safetensors:1>');
+    const next = overlayLoraRowStrengths(
+        rows,
+        [{ id: rows[0].id, key: 'strength', raw: '0.4' }],
+        false,
+    );
+    assert.equal(next[0].strength, 0.4);
+    assert.equal(next[0].clipStrength, 0.4);
+    assert.equal(rows[0].strength, 1);
+    assert.equal(
+        serializeLoraTagText(next, '', { includeClip: false }),
+        '<lora:a.safetensors:0.4>',
+    );
+}
+
+function testOverlayClipIndependentWhenShowClip() {
+    const { rows } = parseLoraTagText('<lora:a.safetensors:1:1>');
+    const next = overlayLoraRowStrengths(
+        rows,
+        [{ id: rows[0].id, key: 'clipStrength', raw: '0.2' }],
+        true,
+    );
+    assert.equal(next[0].strength, 1);
+    assert.equal(next[0].clipStrength, 0.2);
+}
+
+function testOverlayIgnoresInvalidRaw() {
+    const { rows } = parseLoraTagText('<lora:a.safetensors:1>');
+    const next = overlayLoraRowStrengths(
+        rows,
+        [{ id: rows[0].id, key: 'strength', raw: 'nope' }],
+        false,
+    );
+    assert.equal(next[0].strength, 1);
+}
+
 testParseBasic();
 testParseClipStrength();
 testParseDisabled();
@@ -102,4 +140,7 @@ testForceDisablePreservesDisabled();
 testForceDisableNoopWhenAlreadyOff();
 testEmptyRow();
 testEmptyNameRoundTrip();
+testOverlayStrengthWithoutClipCopiesBoth();
+testOverlayClipIndependentWhenShowClip();
+testOverlayIgnoresInvalidRaw();
 console.log('loraTagText.test.ts: ok');

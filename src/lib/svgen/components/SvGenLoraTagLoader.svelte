@@ -4,11 +4,14 @@
     import { type NumberDragParams } from '../../../actions/numberDrag';
     import {
         createEmptyLoraRow,
+        overlayLoraRowStrengths,
         parseLoraTagText,
         serializeLoraTagText,
+        type LoraStrengthOverlay,
         type LoraTagRow,
     } from '$lib/svgen/loraTagText';
     import { uniqueLoraNames } from '$lib/svgen/loraTriggers';
+    import { registerPendingFieldPeek } from '$lib/svgen/pendingFieldFlush';
     import { svgenLayoutStore } from '$lib/svgen/stores';
     import type { SvgenField } from '$lib/svgen/types';
     import SvGenEnablePill from './SvGenEnablePill.svelte';
@@ -35,6 +38,7 @@
     let strengthScrubDirty = false;
     let strengthFlushArmed = false;
     let triggersOpen = false;
+    let rootEl: HTMLDivElement;
 
     $: text = String(field.value ?? '');
     $: if (text !== lastText) {
@@ -169,6 +173,41 @@
         armStrengthFlush();
     }
 
+    function liveStrengthOverlays() {
+        if (!rootEl)
+            return [];
+        const overlays: LoraStrengthOverlay[] = [];
+        for (const el of rootEl.querySelectorAll('input.strength')) {
+            if (!(el instanceof HTMLInputElement))
+                continue;
+            const id = el.dataset.loraRow;
+            const key = el.dataset.loraKey;
+            if (!id || (key !== 'strength' && key !== 'clipStrength'))
+                continue;
+            overlays.push({ id, key, raw: el.value });
+        }
+        return overlays;
+    }
+
+    function peekPendingWrite() {
+        const next = serializeLoraTagText(
+            overlayLoraRowStrengths(rows, liveStrengthOverlays(), showClip),
+            rest,
+            { includeClip: showClip },
+        );
+        if (next === String(field.value ?? ''))
+            return null;
+        return {
+            nodeId: field.nodeId,
+            widgetName: field.widgetName,
+            value: next,
+            valueIndex: field.valueIndex,
+            writeMode: field.writeMode,
+            innerNodeId: field.innerNodeId,
+            outerValueIndex: field.outerValueIndex,
+        };
+    }
+
     const strengthDragByKey = new Map<string, NumberDragParams>();
 
     function strengthDrag(id: string, key: 'strength' | 'clipStrength'): NumberDragParams {
@@ -196,10 +235,14 @@
         }
     }
 
-    onDestroy(disarmStrengthFlush);
+    const unregisterPendingPeek = registerPendingFieldPeek(peekPendingWrite);
+    onDestroy(() => {
+        unregisterPendingPeek();
+        disarmStrengthFlush();
+    });
 </script>
 
-<div class="lora-loader" class:editing={editMode}>
+<div class="lora-loader" class:editing={editMode} bind:this={rootEl}>
     {#if rows.length}
         {#if editMode}
             <SortableList

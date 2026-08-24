@@ -57,6 +57,7 @@
         captureLastUsedSeeds,
     } from '$lib/svgen/intControl';
     import { applyLoraTagMasterOverrides } from '$lib/svgen/loraTagMaster';
+    import { applyPendingFieldWrites } from '$lib/svgen/pendingFieldFlush';
     import { applyParamsFromWorkflow } from '$lib/svgen/paramsInherit';
     import {
         effectiveColumnCount,
@@ -545,9 +546,10 @@
             return undefined;
         const objectInfo = get(svgenObjectInfoStore);
         const layout = get(svgenLayoutStore);
-        // Master-off rewrite is queue-only — session text keeps per-row enables.
+        // Live number edits stay uncommitted (focus/caret). Overlay them on the
+        // convert snapshot only — do not write the session store.
         const queueWorkflow = applyLoraTagMasterOverrides(
-            current.workflow,
+            applyPendingFieldWrites(current.workflow),
             layout,
             objectInfo,
         );

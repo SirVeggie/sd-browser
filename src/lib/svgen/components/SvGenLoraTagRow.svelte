@@ -17,6 +17,16 @@
     export let onName: (name: string) => void;
     export let onStrengthType: (raw: string, key: 'strength' | 'clipStrength') => void;
     export let onRemove: (() => void) | undefined = undefined;
+
+    let strengthFocused = false;
+    let strengthLive = '';
+    let clipFocused = false;
+    let clipLive = '';
+
+    $: if (!strengthFocused)
+        strengthLive = String(row.strength);
+    $: if (!clipFocused)
+        clipLive = String(row.clipStrength);
 </script>
 
 <div class="row" class:disabled={!row.enabled}>
@@ -45,9 +55,21 @@
         type="number"
         step={strengthStep}
         aria-label="LoRA strength"
-        value={row.strength}
+        data-lora-row={row.id}
+        data-lora-key="strength"
+        value={strengthFocused ? strengthLive : row.strength}
         use:numberDrag={strengthDrag(row.id, 'strength')}
+        on:focus={(e) => {
+            strengthFocused = true;
+            strengthLive = e.currentTarget.value;
+        }}
+        on:input={(e) => {
+            strengthLive = e.currentTarget.value;
+        }}
         on:change={(e) => onStrengthType(e.currentTarget.value, 'strength')}
+        on:blur={() => {
+            strengthFocused = false;
+        }}
     />
     {#if showClip}
         <input
@@ -55,9 +77,21 @@
             type="number"
             step={strengthStep}
             aria-label="LoRA CLIP strength"
-            value={row.clipStrength}
+            data-lora-row={row.id}
+            data-lora-key="clipStrength"
+            value={clipFocused ? clipLive : row.clipStrength}
             use:numberDrag={strengthDrag(row.id, 'clipStrength')}
+            on:focus={(e) => {
+                clipFocused = true;
+                clipLive = e.currentTarget.value;
+            }}
+            on:input={(e) => {
+                clipLive = e.currentTarget.value;
+            }}
             on:change={(e) => onStrengthType(e.currentTarget.value, 'clipStrength')}
+            on:blur={() => {
+                clipFocused = false;
+            }}
         />
     {/if}
     {#if editMode && onRemove}

@@ -128,6 +128,46 @@ export function serializeLoraTagText(
     return `${tags}\n${leftover}`;
 }
 
+export type LoraStrengthOverlay = {
+    id: string;
+    key: 'strength' | 'clipStrength';
+    raw: string;
+};
+
+/** Copy rows and apply live input strings (queue snapshot; does not commit). */
+export function overlayLoraRowStrengths(
+    rows: readonly LoraTagRow[],
+    overlays: readonly LoraStrengthOverlay[],
+    showClip: boolean,
+): LoraTagRow[] {
+    if (!overlays.length)
+        return rows.map((row) => ({ ...row }));
+    const byId = new Map(rows.map((row) => [row.id, { ...row }]));
+    for (const overlay of overlays) {
+        const row = byId.get(overlay.id);
+        if (!row)
+            continue;
+        const num = Number(overlay.raw);
+        if (!Number.isFinite(num))
+            continue;
+        switch (overlay.key) {
+            case 'strength':
+                row.strength = num;
+                if (!showClip)
+                    row.clipStrength = num;
+                break;
+            case 'clipStrength':
+                row.clipStrength = num;
+                break;
+            default: {
+                const _exhaustive: never = overlay.key;
+                void _exhaustive;
+            }
+        }
+    }
+    return rows.map((row) => byId.get(row.id) ?? { ...row });
+}
+
 export function createEmptyLoraRow(name = ''): LoraTagRow {
     return {
         id: makeRowId(),
