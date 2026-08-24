@@ -41,8 +41,6 @@ function parseTagBody(body: string): {
     if (!parts.length)
         return null;
     const name = parts[0]?.trim() ?? '';
-    if (!name)
-        return null;
 
     let strength = 1;
     let clipStrength = 1;
@@ -133,7 +131,7 @@ export function serializeLoraTagText(
 export function createEmptyLoraRow(name = ''): LoraTagRow {
     return {
         id: makeRowId(),
-        enabled: true,
+        enabled: false,
         tagType: 'lora',
         name,
         strength: 1,

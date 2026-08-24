@@ -42,7 +42,15 @@ const TEXT_DISPLAY_TYPES = new Set([
 
 const SD_BROWSER_NODE_TYPE = 'SV-SdBrowserImage';
 const LORA_TAG_LOADER_TYPE = 'SV-LoraTagLoader';
+const LORA_TAG_LOADER_TYPES = new Set([
+    LORA_TAG_LOADER_TYPE,
+    'LoraTagLoader',
+]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isLoraTagLoaderClass(classType: string): boolean {
+    return LORA_TAG_LOADER_TYPES.has(classType);
+}
 
 type SlotBuild = {
     widgetName: string;
@@ -387,14 +395,23 @@ function resolveLabel(node: ComfyWorkflowNode, widgetName: string): string {
     return humanizeWidgetName(widgetName);
 }
 
+/** Types that are widgets even when Comfy omitted `input.widget` (common on V3 STRING). */
+function isWidgetTypeName(type: string): boolean {
+    if (['STRING', 'INT', 'FLOAT', 'BOOLEAN', 'NUMBER', 'COMBO', 'IMAGE'].includes(type))
+        return true;
+    return type.includes('COMBO');
+}
+
 /** Widget-bearing input names in node order (deduped). */
 function inputWidgetNames(node: ComfyWorkflowNode): string[] {
     const names: string[] = [];
     const seen = new Set<string>();
     for (const input of node.inputs ?? []) {
-        if (!input.widget)
-            continue;
-        const name = input.widget.name || input.name;
+        let name = '';
+        if (input.widget)
+            name = input.widget.name || input.name;
+        else if (isWidgetTypeName(String(input.type ?? '')))
+            name = input.name;
         if (!name || seen.has(name))
             continue;
         seen.add(name);
@@ -838,11 +855,16 @@ function detectKind(
     ) {
         return 'image';
     }
-    if (
-        classType === LORA_TAG_LOADER_TYPE
-        && (widgetName === 'text' || widgetName === 'string')
-    ) {
-        return 'lora_tags';
+    if (isLoraTagLoaderClass(classType)) {
+        const name = widgetName.toLowerCase();
+        if (
+            name === 'text'
+            || name === 'string'
+            || typeof value === 'string'
+            || value == null
+        ) {
+            return 'lora_tags';
+        }
     }
 
     // Trust runtime booleans over a mismatched STRING schema (misaligned zip).
@@ -1476,8 +1498,25 @@ export function discoverCards(
         const canvasPreview = proxyHasCanvasImagePreview(proxyWidgets);
         const hasImagePicker = fields.some(fieldIsImagePicker);
         const isImageDisplay = isImageDisplayType || (canvasPreview && !hasImagePicker);
-        const isLoraTagLoader = classType === LORA_TAG_LOADER_TYPE
-            || fields.some((f) => f.kind === 'lora_tags');
+        const isLoraTagLoader = isLoraTagLoaderClass(classType)
+            || isLoraTagLoaderClass(String(node.type))
+            || fields.some((f) => f.kind === 'lora_tags' || isLoraTagLoaderClass(f.nodeType));
+        if (isLoraTagLoader) {
+            for (const field of fields) {
+                if (
+                    field.kind === 'string'
+                    && (
+                        isLoraTagLoaderClass(classType)
+                        || isLoraTagLoaderClass(String(node.type))
+                        || isLoraTagLoaderClass(field.nodeType)
+                    )
+                ) {
+                    field.kind = 'lora_tags';
+                    field.tall = true;
+                    field.options = withLoraTagOptions('lora_tags', field.options, objectInfo);
+                }
+            }
+        }
 
         if (!fields.length && !isImageDisplay && !isTextDisplay)
             continue;

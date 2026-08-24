@@ -3,6 +3,7 @@ import { authStore } from '$lib/stores/authStore';
 import { page } from '$app/stores';
 import type { ComfyPrompt, ComfyWorkflow } from '$lib/types/images';
 import type { ObjectInfoMap, SvgenWorkflowSummary } from './types';
+import { parseLoraTriggerMap } from './loraTriggers';
 
 export class SvgenComfyAuthError extends Error {
     constructor(message = 'ComfyUI authentication required') {
@@ -81,6 +82,20 @@ export async function convertWorkflow(
     const body = await parseJson(response);
     throwIfError(response, body, 'Workflow convert failed');
     return body as ComfyPrompt;
+}
+
+export async function fetchLoraTriggers(
+    names: string[],
+    comfyToken?: string,
+): Promise<Record<string, string[]>> {
+    const response = await fetch(originUrl('/api/svgen/lora-triggers'), {
+        method: 'POST',
+        headers: headers(comfyToken),
+        body: JSON.stringify({ names }),
+    });
+    const body = await parseJson(response);
+    throwIfError(response, body, 'LoRA triggers failed');
+    return parseLoraTriggerMap(body);
 }
 
 export async function submitPrompt(payload: {

@@ -8,10 +8,12 @@
         serializeLoraTagText,
         type LoraTagRow,
     } from '$lib/svgen/loraTagText';
+    import { uniqueLoraNames } from '$lib/svgen/loraTriggers';
     import { svgenLayoutStore } from '$lib/svgen/stores';
     import type { SvgenField } from '$lib/svgen/types';
     import SvGenEnablePill from './SvGenEnablePill.svelte';
     import SvGenLoraTagRow from './SvGenLoraTagRow.svelte';
+    import SvGenLoraTriggersModal from './SvGenLoraTriggersModal.svelte';
 
     export let field: SvgenField;
     export let editMode = false;
@@ -32,6 +34,7 @@
     /** Scrub changed a strength; flush widget text on pointerup (not each step). */
     let strengthScrubDirty = false;
     let strengthFlushArmed = false;
+    let triggersOpen = false;
 
     $: text = String(field.value ?? '');
     $: if (text !== lastText) {
@@ -49,8 +52,10 @@
     $: options = field.options?.values ?? [];
 
     function commit(nextRows: LoraTagRow[]) {
-        rows = nextRows;
         const next = serializeLoraTagText(nextRows, rest, { includeClip: showClip });
+        if (next === lastText)
+            return;
+        rows = nextRows;
         lastText = next;
         dispatch('change', next);
     }
@@ -66,10 +71,15 @@
         const row = rowById.get(id);
         if (!row)
             return;
-        if (key === 'strength' && !showClip)
+        if (key === 'strength' && !showClip) {
+            if (row.strength === num && row.clipStrength === num)
+                return;
             patchRow(id, { strength: num, clipStrength: num });
-        else
-            patchRow(id, { [key]: num });
+            return;
+        }
+        if (row[key] === num)
+            return;
+        patchRow(id, { [key]: num });
     }
 
     function removeRow(id: string) {
@@ -77,7 +87,7 @@
     }
 
     function addRow() {
-        commit([...rows, createEmptyLoraRow(options[0] ?? '')]);
+        commit([...rows, createEmptyLoraRow()]);
     }
 
     function onReorder(ids: string[]) {
@@ -125,6 +135,8 @@
         // Reassign once after scrub so Svelte picks up mutated strengths.
         rows = rows.map((row) => ({ ...row }));
         const next = serializeLoraTagText(rows, rest, { includeClip: showClip });
+        if (next === lastText)
+            return;
         lastText = next;
         dispatch('change', next);
     }
@@ -252,10 +264,20 @@
                     />
                 </label>
             {/if}
+            <button type="button" class="triggers" on:click={() => (triggersOpen = true)}>
+                Triggers
+            </button>
             <button type="button" class="add" on:click={addRow}>Add LoRA</button>
         </div>
     {/if}
 </div>
+
+{#if triggersOpen}
+    <SvGenLoraTriggersModal
+        names={uniqueLoraNames(rows.map((row) => row.name))}
+        on:close={() => (triggersOpen = false)}
+    />
+{/if}
 
 <style lang="scss">
     .lora-loader {
@@ -298,6 +320,22 @@
         color: var(--muted);
         cursor: pointer;
         user-select: none;
+    }
+
+    .triggers {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font-size: 0.68rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0.35rem 0.25rem;
+        cursor: pointer;
+
+        &:hover {
+            color: var(--accent);
+        }
     }
 
     .add {

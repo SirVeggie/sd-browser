@@ -76,10 +76,20 @@ function testForceDisableNoopWhenAlreadyOff() {
 }
 
 function testEmptyRow() {
-    const row = createEmptyLoraRow('x.safetensors');
-    assert.equal(row.enabled, true);
+    const row = createEmptyLoraRow();
+    assert.equal(row.enabled, false);
     assert.equal(row.strength, 1);
-    assert.equal(row.name, 'x.safetensors');
+    assert.equal(row.name, '');
+}
+
+function testEmptyNameRoundTrip() {
+    const text = serializeLoraTagText([createEmptyLoraRow()], '', { includeClip: false });
+    assert.equal(text, '<#lora::1>');
+    const { rows } = parseLoraTagText(text);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].enabled, false);
+    assert.equal(rows[0].name, '');
+    assert.equal(rows[0].strength, 1);
 }
 
 testParseBasic();
@@ -91,4 +101,5 @@ testRoundTrip();
 testForceDisablePreservesDisabled();
 testForceDisableNoopWhenAlreadyOff();
 testEmptyRow();
+testEmptyNameRoundTrip();
 console.log('loraTagText.test.ts: ok');

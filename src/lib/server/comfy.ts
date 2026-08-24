@@ -274,6 +274,35 @@ export async function convertWorkflowToApi(
     return body as Record<string, unknown>;
 }
 
+export async function fetchComfyLoraTriggers(
+    names: string[],
+    token?: string,
+): Promise<Record<string, string[]>> {
+    const response = await comfyFetch('/sv_sd_browser/lora_triggers', {
+        method: 'POST',
+        token,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ names }),
+    });
+    const body = await readComfyJson(response);
+    if (!response.ok) {
+        const message = typeof body === 'object' && body && 'error' in body
+            ? String((body as { error: unknown }).error)
+            : `ComfyUI lora_triggers failed (${response.status})`;
+        throw new ComfyRequestError(message, response.status, body);
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        throw new ComfyRequestError('ComfyUI lora_triggers returned invalid JSON', 502, body);
+    }
+    const out: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+        if (!Array.isArray(value))
+            continue;
+        out[key] = value.filter((item): item is string => typeof item === 'string');
+    }
+    return out;
+}
+
 export type ComfyPromptSubmit = {
     prompt: Record<string, unknown>;
     clientId?: string;
