@@ -141,6 +141,8 @@ The frosted sticky bar is **full viewport width** so it doesn’t cut a hard edg
 
 `[refs]` (case-insensitive) expands to every current image-reference id, space-separated, in slot order — same client-side expansion path as `#n` / `[n]`. Empty refs → invalid (zero-result search), like a missing slot.
 
+`ID` accepts the same space-separated id list (`parseIdSearchTarget` in `searching.ts`) — not commas — so `ID [refs]` works after expansion.
+
 ### Custom (`temp:…`) references
 
 **Files:** `src/lib/stores/imageRefStore.ts`, `src/routes/api/images/temp-embed/+server.ts`, `src/lib/server/searching.ts`

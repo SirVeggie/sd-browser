@@ -183,7 +183,8 @@ export const searchKeywordHelpSections = [
             {
                 keyword: 'ID',
                 summary: 'Matches specific image ids.',
-                details: 'Use one or more image ids to pin the search to those images.',
+                details:
+                    'Use one or more space-separated image ids (or #n / [n] / [refs]) to pin the search to those images.',
                 example: 'ID abc123 def456',
             },
         ],

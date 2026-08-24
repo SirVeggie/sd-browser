@@ -994,7 +994,7 @@ async function resolvePromptSimilarMatchScores(
 }
 
 function parseIdSearchTarget(raw: string): string[] {
-    return raw.split(/[,\|]\s*/).map((id) => id.trim()).filter(Boolean);
+    return raw.trim().split(/\s+/).filter(Boolean);
 }
 
 export type SearchOptions = {
