@@ -478,6 +478,8 @@
         min-height: 0;
         overflow-y: auto;
         overscroll-behavior: contain;
+        /* Card rediscovery / focus churn must not re-anchor mid-list. */
+        overflow-anchor: none;
         display: flex;
         flex-direction: column;
         gap: 0.35rem;

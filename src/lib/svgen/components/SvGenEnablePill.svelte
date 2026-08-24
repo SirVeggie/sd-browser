@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { createEventDispatcher } from 'svelte';
+    import { createEventDispatcher, tick } from 'svelte';
+    import { pinColumnScroll } from '$lib/svgen/pinColumnScroll';
 
     export let checked = false;
     export let title = 'Enable';
@@ -7,6 +8,45 @@
     export let compact = false;
 
     const dispatch = createEventDispatcher<{ change: boolean }>();
+
+    function isEditable(el: Element | null): el is HTMLElement {
+        if (!(el instanceof HTMLElement))
+            return false;
+        if (el instanceof HTMLTextAreaElement)
+            return true;
+        if (el instanceof HTMLInputElement) {
+            const type = el.type;
+            return type !== 'button' && type !== 'submit' && type !== 'checkbox'
+                && type !== 'radio' && type !== 'file' && type !== 'reset';
+        }
+        return el.isContentEditable;
+    }
+
+    function onPointerDown(event: PointerEvent) {
+        event.stopPropagation();
+        pinColumnScroll(event.currentTarget);
+
+        // Touch: blur text controls first — `preventDefault` alone would *keep*
+        // focus there and reopen the soft keyboard on every toggle.
+        const touch = event.pointerType === 'touch' || event.pointerType === 'pen';
+        const active = document.activeElement;
+        if (touch && isEditable(active))
+            active.blur();
+
+        // Block the pill from taking focus (column focus-scroll). On mouse this
+        // also preserves the caret in the active text field.
+        event.preventDefault();
+    }
+
+    async function onClick(event: MouseEvent) {
+        event.stopPropagation();
+        const target = event.currentTarget;
+        pinColumnScroll(target);
+        dispatch('change', !checked);
+        // Workflow rediscovery / row re-render can still nudge scroll on mobile.
+        await tick();
+        pinColumnScroll(target);
+    }
 </script>
 
 <button
@@ -18,8 +58,8 @@
     aria-checked={checked}
     aria-label={checked ? 'Enabled' : 'Disabled'}
     {title}
-    on:click|stopPropagation={() => dispatch('change', !checked)}
-    on:pointerdown|stopPropagation|preventDefault
+    on:click={onClick}
+    on:pointerdown={onPointerDown}
 >
     <span class="thumb" aria-hidden="true" />
 </button>
