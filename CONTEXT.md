@@ -6,6 +6,14 @@ Keep entries short and actionable. Prefer linking to code over restating it.
 
 ---
 
+## Tests live in `tests/`
+
+Node assert (and a few vitest) files are `tests/*.test.ts`. Fixtures are `tests/fixtures/`. Do not put new tests in `scripts/` — that folder is build/dev helpers (`build-extradata-worker.mjs`, `copy-dev-images.mjs`) plus the Node loader hooks some tests import (`register-ts-extension.mjs`).
+
+Run via `npm run test:<name>` or `node --experimental-strip-types tests/<file>.test.ts`. Tests that import extensionless `../src/...` paths also need `--import ./scripts/register-ts-extension.mjs`.
+
+---
+
 ## Operations progress is layout-owned
 
 **Files:** `src/lib/stores/operationWatch.ts`, `src/lib/components/OperationProgress.svelte`, `src/routes/api/operations/events/+server.ts`
