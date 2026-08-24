@@ -46,9 +46,11 @@
         matchingMode,
         compressedMode,
         slideDelay,
+        slideDelayVideo,
         buildSearchParams,
         syncSearchInput,
         similarityThreshold,
+        videoSlideshowMode,
         type SearchParams,
     } from "$lib/stores/searchStore";
     import { imageFlow, imageSize, imageSpacing } from "$lib/stores/styleStore";
@@ -66,6 +68,11 @@
         isNearTop,
     } from "$lib/tools/scrollLoadMore";
     import { bindDropdownOutsideClick } from "$lib/tools/dropdownOutsideClick";
+    import {
+        videoSlideshowOnEvent,
+        videoSlideshowSetup,
+    } from "$lib/tools/videoSlideshow";
+    import { videoLoopOverride, videoPlayback } from "$lib/stores/videoPlaybackStore";
     import {
         buildFolderTree,
         folderTreeToMenuOptions,
@@ -150,7 +157,10 @@
     let inputSearchTimer: ReturnType<typeof setTimeout> | undefined;
     let searchHistoryTimer: ReturnType<typeof setTimeout> | undefined;
     let info: ImageInfo | undefined = undefined;
-    let slideTimer: ReturnType<typeof setInterval> | undefined;
+    let slideTimer: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | undefined;
+    let slideshowActive = false;
+    let slideGen = 0;
+    let loopUntilFinishing = false;
     let slideDir: "left" | "right" = "right";
     let streamAbort: AbortController | undefined;
     let streamRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -265,6 +275,7 @@
         galleryImageById = nextImages;
     }
     $: slideshowInterval = Math.max($slideDelay, 100);
+    $: slideshowVideoInterval = Math.max($slideDelayVideo, 100);
     $: masonryEnabled = $imageFlow === "masonry";
     $: sortingOptions = [
         ...sortingMethods,
@@ -754,16 +765,20 @@
             scrollToImage();
             loadFullscreenImageInfo(currentImage!.id);
 
-            if (slideTimer && slideDir === "right") {
-                startSlideshow("left", false);
-                notify("Sliding left", undefined, "dir");
+            if (slideshowActive && mode !== "auto") {
+                if (slideDir === "right") {
+                    startSlideshow("left", false);
+                    notify("Sliding left", undefined, "dir");
+                } else {
+                    scheduleSlideshowTick();
+                }
             }
         }
 
         return true;
     }
 
-    function goRight() {
+    function goRight(mode?: ActionMode) {
         if (live) {
             closeImage();
             openImage(galleryImages[0]);
@@ -775,9 +790,13 @@
             scrollToImage();
             loadFullscreenImageInfo(currentImage!.id);
 
-            if (slideTimer && slideDir === "left") {
-                startSlideshow("right", false);
-                notify("Sliding right", undefined, "dir");
+            if (slideshowActive && mode !== "auto") {
+                if (slideDir === "left") {
+                    startSlideshow("right", false);
+                    notify("Sliding right", undefined, "dir");
+                } else {
+                    scheduleSlideshowTick();
+                }
             }
         }
     }
@@ -1501,40 +1520,128 @@
         requestAnimationFrame(() => maybeAutoLoadMore());
     }
 
-    function slideshowLoop(dir: "left" | "right") {
-        if (dir === "right") {
-            goRight();
-        } else {
-            const success = goLeft("auto");
+    function clearSlideTimers() {
+        if (slideTimer) {
+            clearTimeout(slideTimer);
+            clearInterval(slideTimer);
+            slideTimer = undefined;
+        }
+    }
 
-            if (!success) {
-                clearInterval(slideTimer);
-                slideTimer = setInterval(slideshowWait, 100);
+    function videoSlideshowConfig() {
+        return {
+            mode: get(videoSlideshowMode),
+            intervalMs: slideshowVideoInterval,
+            loopEnabled: get(videoPlayback).loop,
+            finishing: loopUntilFinishing,
+        };
+    }
+
+    function scheduleSlideshowTick() {
+        clearSlideTimers();
+        loopUntilFinishing = false;
+        videoLoopOverride.set(null);
+        if (!slideshowActive)
+            return;
+
+        slideGen += 1;
+        const gen = slideGen;
+
+        if (currentImage?.type === "video") {
+            const setup = videoSlideshowSetup(videoSlideshowConfig());
+            if (setup.timerMs !== null) {
+                slideTimer = setTimeout(() => {
+                    if (gen !== slideGen)
+                        return;
+                    onVideoSlideshowEvent("timeout");
+                }, setup.timerMs);
+            }
+            return;
+        }
+
+        slideTimer = setTimeout(() => {
+            if (gen !== slideGen)
+                return;
+            slideshowLoop(slideDir);
+        }, slideshowInterval);
+    }
+
+    function onVideoSlideshowEvent(event: "timeout" | "ended") {
+        if (!slideshowActive || currentImage?.type !== "video")
+            return;
+        const action = videoSlideshowOnEvent(videoSlideshowConfig(), event);
+        switch (action.type) {
+            case "advance":
+                slideGen += 1;
+                slideshowLoop(slideDir);
+                return;
+            case "disable-loop":
+                loopUntilFinishing = true;
+                videoLoopOverride.set(false);
+                return;
+            case "ignore":
+                return;
+            default: {
+                const _exhaustive: never = action;
+                return _exhaustive;
             }
         }
     }
 
+    function onSlideshowPlaythroughEnd(id: string) {
+        if (!slideshowActive)
+            return;
+        if (currentImage?.id !== id || currentImage.type !== "video")
+            return;
+        onVideoSlideshowEvent("ended");
+    }
+
+    function slideshowLoop(dir: "left" | "right") {
+        const beforeId = currentImage?.id;
+        if (dir === "right") {
+            goRight("auto");
+        } else {
+            const success = goLeft("auto");
+
+            if (!success) {
+                clearSlideTimers();
+                slideTimer = setInterval(slideshowWait, 100);
+                return;
+            }
+        }
+
+        if (currentImage?.id === beforeId) {
+            clearSlideTimers();
+            slideTimer = setTimeout(() => slideshowLoop(dir), slideshowInterval);
+            return;
+        }
+
+        scheduleSlideshowTick();
+    }
+
     function slideshowWait() {
         if (prevIndex >= 0) {
-            clearInterval(slideTimer);
-            slideTimer = setInterval(() => slideshowLoop("left"), slideshowInterval);
+            clearSlideTimers();
             goLeft("auto");
+            scheduleSlideshowTick();
         }
     }
 
     function startSlideshow(dir: "left" | "right" = "right", ui = true) {
-        if (slideTimer) stopSlideshow(false);
+        stopSlideshow(false);
+        slideshowActive = true;
         slideDir = dir;
-        slideTimer = setInterval(() => slideshowLoop(dir), slideshowInterval);
+        scheduleSlideshowTick();
         if (ui) notify("Slideshow started");
     }
 
     function stopSlideshow(ui = true) {
-        if (slideTimer) {
-            clearInterval(slideTimer);
-            slideTimer = undefined;
-            if (ui) notify("Slideshow stopped");
-        }
+        const wasActive = slideshowActive;
+        slideshowActive = false;
+        slideGen += 1;
+        clearSlideTimers();
+        videoLoopOverride.set(null);
+        if (wasActive && ui) notify("Slideshow stopped");
     }
 
     function cycleSorting() {
@@ -1572,7 +1679,7 @@
         } else if (e.key === " ") {
             if (!currentImage) return;
             e.preventDefault();
-            if (slideTimer) {
+            if (slideshowActive) {
                 stopSlideshow();
             } else {
                 startSlideshow();
@@ -2392,6 +2499,7 @@
     data={info}
     {live}
     cancel={closeImage}
+    on:playthroughend={(e) => onSlideshowPlaythroughEnd(e.detail.id)}
 />
 
 {#if bulkOpen}
@@ -2421,7 +2529,7 @@
     hidden={live}
 />
 
-{#if currentImage && !slideTimer}
+{#if currentImage && !slideshowActive}
     <div class="slideshow" transition:fade={{ duration: 100 }}>
         <Button on:click={() => startSlideshow()}>Slideshow</Button>
     </div>

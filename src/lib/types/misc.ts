@@ -35,6 +35,35 @@ export function isGeneratedQualityMode(mode: QualityMode): mode is GeneratedQual
     return mode !== 'original';
 }
 
+export const videoSlideshowModes = ['strict', 'play-full', 'max-duration', 'loop-until'] as const;
+export type VideoSlideshowMode = typeof videoSlideshowModes[number];
+export function isVideoSlideshowMode(object: unknown): object is VideoSlideshowMode {
+    return videoSlideshowModes.some((mode) => mode === object);
+}
+
+export const videoSlideshowModeOptions = [
+    {
+        value: 'strict',
+        label: 'Strict interval',
+        title: 'Move to the next item exactly after the video interval.',
+    },
+    {
+        value: 'play-full',
+        label: 'Play full',
+        title: 'Ignore the interval and move next when the video finishes playing.',
+    },
+    {
+        value: 'max-duration',
+        label: 'Max duration',
+        title: 'Move next when the video finishes, or when the interval is reached, whichever comes first.',
+    },
+    {
+        value: 'loop-until',
+        label: 'Loop until',
+        title: 'Loop until the interval, then finish the current playthrough and move next. If loop is off, move next when the video ends.',
+    },
+] as const;
+
 export const explorationModes = ['none', 'unique', 'similar', 'sparse'] as const;
 export type ExplorationMode = typeof explorationModes[number];
 export function isExplorationMode(object: any): object is ExplorationMode {

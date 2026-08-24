@@ -801,6 +801,7 @@
               bind:stageWidth
               bind:stageHeight
               on:stagechange={onStageChange}
+              on:playthroughend
             />
           </div>
           <!-- svelte-ignore a11y-click-events-have-key-events -->

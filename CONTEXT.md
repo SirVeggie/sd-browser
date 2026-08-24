@@ -401,6 +401,31 @@ Isolated Generate feature inside the side flyout (tabbed with WebUI iframe). Kee
 
 Svelte 4 tracks `$:` dependencies from the statement AST only — reads inside helpers like `mediaUrlFor()` do **not** count. `mediaQuery` (and thus `showOriginal`) must appear lexically in the `$: panelEntries = …` expression (inline `` `/api/images/${id}?${mediaQuery}` ``). Putting the helper call in the `$:` block or only in the `{#each}` template is not enough; "Show original" will keep serving the compressed URL. Panel keys should include `mediaQuery` so quality flips remount panels.
 
+## Fullscreen video controls
+
+**Files:** `src/lib/items/FullscreenVideoControls.svelte`, `src/lib/items/FullscreenMediaPanel.svelte`
+
+Stage videos get a custom overlay (not native `controls`): play/pause, seek, loop, mute, volume. Autoplay uses the saved mute flag (unmuted autoplay may stay paused until Play — browser policy). Loop / mute / volume persist in localStorage (`videoPlayback`). Volume slider is perceptual (48 dB log → `HTMLMediaElement.volume`); linear amplitude packed almost all audible change into the bottom quarter.
+
+- Fine pointer: mousemove over the media shows the bar, idle ~1.8s hides it (stays while hovering the bar).
+- Coarse pointer: tap the bottom `min(20vh, 35%)` of the video element shows the bar; it stays while the finger is down and for **2.5s** after lift. Touching the bar (or using a control) resets that 2.5s. Do **not** hide on `pointerleave` for touch/pen — those fire on finger-up and made the bar vanish before it could be used. That tap must not close fullscreen (`stopPropagation`). Control chrome also stops overlay-close clicks.
+- Space toggles play/pause (capture) while a stage video is open, so it does not start the gallery slideshow.
+- Neighbor panels stay mounted across arrow swaps (`role` flips on the same keyed instance). Rewind `currentTime` to 0 when leaving the stage and when becoming stage again, or a return visit resumes mid-clip.
+- `,` / `.` frame-step is not implemented — HTML video has no reliable FPS; leave for v2.
+
+## Video slideshow
+
+**Files:** `src/lib/tools/videoSlideshow.ts`, `src/routes/+page.svelte`, Settings (`slideDelayVideo`, `videoSlideshowMode`)
+
+Still images keep using Slideshow interval. Videos use **Slideshow interval (video)** plus **Video slideshow mode**:
+
+- **Strict interval** — advance after the video interval, ignoring playback.
+- **Play full** — ignore the interval; advance when the current playthrough ends (`ended`, or a loop wrap back to the start).
+- **Max duration** — advance on playthrough end or interval, whichever first.
+- **Loop until** — if loop is on, keep looping until the interval, then force loop off and wait for that playthrough to finish. If loop is off, advance when the video ends.
+
+Do not drive video slides with the still-image `setInterval` metronome — each item reschedules when shown. Play-full has no timer, so slideshow running state is `slideshowActive`, not `slideTimer`.
+
 ---
 
 ## Gallery hotkeys
@@ -412,3 +437,4 @@ Svelte 4 tracks `$:` dependencies from the statement AST only — reads inside h
 - `Ctrl/⌘+D` toggles Filters via `toggleOpenAndFocus()` — arrow keys follow visual direction (DOM index flips when `dropUp` / column-reverse); Space/Enter toggle (native button).
 - Plain letter/arrow/Space shortcuts skip when a text field is focused; Ctrl/⌘ chords do not.
 - Opening fullscreen from the grid (`openImage`) must `blur()` `document.activeElement` — gallery `Clickable` `preventDefault`s mousedown, so focus would otherwise stay in the flyout (Generate inputs / WebUI iframe) and arrows/Space would not reach the gallery listener.
+- Space on a fullscreen **video** toggles play/pause (capture in `FullscreenVideoControls`) instead of the slideshow.

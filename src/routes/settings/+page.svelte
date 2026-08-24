@@ -26,8 +26,10 @@
         similarityAlgorithm,
         similarityThreshold,
         slideDelay,
+        slideDelayVideo,
         sparseFrequency,
         thumbMode,
+        videoSlideshowMode,
     } from "$lib/stores/searchStore";
     import {
         activeCustomFilterIds,
@@ -41,6 +43,7 @@
         searchKeywords,
         searchModes,
         similarityAlgorithms,
+        videoSlideshowModeOptions,
     } from "$lib/types/misc";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import {
@@ -1084,6 +1087,27 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             Slideshow interval (milliseconds)
             <NumInput bind:value={$slideDelay} />
         </label>
+
+        <!-- svelte-ignore a11y-label-has-associated-control -->
+        <label
+            class="inline"
+            title="How long a video stays on screen during a slideshow, depending on video slideshow mode."
+        >
+            Slideshow interval (video)
+            <NumInput bind:value={$slideDelayVideo} />
+        </label>
+
+        <div
+            class="select-field"
+            title="How the slideshow treats videos. Hover an option for details."
+        >
+            <span>Video slideshow mode</span>
+            <Select
+                id="videoSlideshowMode"
+                bind:value={$videoSlideshowMode}
+                options={videoSlideshowModeOptions}
+            />
+        </div>
     </div>
     </div>
 

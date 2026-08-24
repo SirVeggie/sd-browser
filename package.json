@@ -34,7 +34,8 @@
 		"test:png-text": "node --experimental-strip-types tests/pngTextChunks.test.ts",
 		"test:flyout-width": "node --experimental-strip-types tests/flyoutWidth.test.ts",
 		"test:file-settle": "node --experimental-strip-types tests/fileSettle.test.ts",
-		"test:byte-range": "node --experimental-strip-types tests/byteRange.test.ts"
+		"test:byte-range": "node --experimental-strip-types tests/byteRange.test.ts",
+		"test:video-slideshow": "node --experimental-strip-types tests/videoSlideshow.test.ts"
 	},
 	"dependencies": {
 		"@napi-rs/webcodecs": "^1.3.1",

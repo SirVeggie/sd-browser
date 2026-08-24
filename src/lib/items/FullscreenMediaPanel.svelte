@@ -4,6 +4,9 @@
   import { get } from "svelte/store";
   import { imageFadeMs } from "$lib/stores/styleStore";
   import type { ClientImage } from "$lib/types/images";
+  import { videoLoopOverride, videoPlayback } from "$lib/stores/videoPlaybackStore";
+  import { isVideoPlaythroughWrap } from "$lib/tools/videoSlideshow";
+  import FullscreenVideoControls from "./FullscreenVideoControls.svelte";
 
   export let image: ClientImage | undefined = undefined;
   /** When empty or loadEnabled is false, the panel does not hit the network. */
@@ -17,6 +20,7 @@
   const dispatch = createEventDispatcher<{
     ready: { id: string };
     unready: { id: string };
+    playthroughend: { id: string };
   }>();
 
   const maxMediaRetries = 6;
@@ -94,6 +98,7 @@
     mediaLoaded = false;
     placeholderVisible = !!nextBaseUrl;
     emitUnready();
+    lastPlaythroughTime = 0;
   }
 
   function scheduleRetry() {
@@ -169,12 +174,62 @@
     }
   }
 
-  $: if (role === "stage" && isVideo && videoElement && mediaLoaded) {
-    void videoElement.play().catch(() => {
+  let lastVideoRole: "stage" | "hidden" | undefined;
+  let lastPlaythroughTime = 0;
+
+  $: applyVideoRole(role, isVideo, videoElement, mediaLoaded);
+  $: videoLoop = $videoLoopOverride ?? $videoPlayback.loop;
+
+  function applyVideoRole(
+    nextRole: "stage" | "hidden",
+    video: boolean,
+    el: HTMLVideoElement | undefined,
+    loaded: boolean,
+  ) {
+    if (!el || !video) {
+      lastVideoRole = nextRole;
+      return;
+    }
+
+    if (nextRole === "hidden") {
+      el.pause();
+      if (lastVideoRole === "stage")
+        el.currentTime = 0;
+      lastVideoRole = nextRole;
+      lastPlaythroughTime = 0;
+      return;
+    }
+
+    if (!loaded)
+      return;
+
+    if (lastVideoRole !== "stage") {
+      lastPlaythroughTime = 0;
+      el.currentTime = 0;
+    }
+    lastVideoRole = nextRole;
+    void el.play().catch(() => {
       // Autoplay can be blocked; muted loop usually succeeds.
     });
-  } else if (role === "hidden" && videoElement) {
-    videoElement.pause();
+  }
+
+  function emitPlaythroughEnd() {
+    if (role !== "stage" || !panelId) return;
+    dispatch("playthroughend", { id: panelId });
+  }
+
+  function onVideoEnded() {
+    emitPlaythroughEnd();
+  }
+
+  function onVideoTimeUpdate(event: Event) {
+    const el = event.currentTarget;
+    if (!(el instanceof HTMLVideoElement)) return;
+    const nextTime = el.currentTime || 0;
+    const duration = Number.isFinite(el.duration) ? el.duration : 0;
+    if (isVideoPlaythroughWrap(lastPlaythroughTime, nextTime, duration))
+      emitPlaythroughEnd();
+    lastPlaythroughTime = nextTime;
   }
 
   onDestroy(() => {
@@ -206,13 +261,16 @@
         <video
           bind:this={videoElement}
           autoplay={role === "stage"}
-          loop
-          muted
+          loop={videoLoop}
+          muted={$videoPlayback.muted}
+          playsinline
           preload={loadEnabled ? "auto" : "none"}
           src={displayUrl}
           class:media-hidden={!mediaLoaded}
           on:canplay={markReady}
           on:error={scheduleRetry}
+          on:ended={onVideoEnded}
+          on:timeupdate={onVideoTimeUpdate}
         >
           <source src={displayUrl} type="video/mp4" />
         </video>
@@ -227,6 +285,9 @@
         />
       {/if}
     {/key}
+  {/if}
+  {#if isVideo && role === "stage" && videoElement && mediaLoaded}
+    <FullscreenVideoControls video={videoElement} />
   {/if}
 </div>
 

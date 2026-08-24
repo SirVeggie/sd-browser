@@ -15,6 +15,8 @@ import {
     type QualityMode,
     type SearchMode,
     type SimilarityAlgorithm,
+    isVideoSlideshowMode,
+    type VideoSlideshowMode,
 } from "$lib/types/misc";
 import type { TempEmbeddingsMap } from "$lib/types/requests";
 import { get, writable, type Writable } from "svelte/store";
@@ -44,6 +46,8 @@ export const similarityAlgorithm = writable<SimilarityAlgorithm>(defaultExplorat
 export const similarityThreshold = writable(defaultExplorationSettings.similarityThreshold);
 export const matchingMode = writable<SearchMode>('regex');
 export const slideDelay = writable(4000);
+export const slideDelayVideo = writable(4000);
+export const videoSlideshowMode = writable<VideoSlideshowMode>('strict');
 
 export function buildSearchParams(searchText?: string): SearchParams {
     const filters: string[] = [];
@@ -89,4 +93,7 @@ export function syncSearchWithLocalStorage() {
     syncMemory('similarityThreshold', similarityThreshold, true);
     syncMemory('matchingMode', matchingMode);
     syncMemory('slideDelay', slideDelay);
+    syncMemory('slideDelayVideo', slideDelayVideo);
+    syncMemory('videoSlideshowMode', videoSlideshowMode);
+    videoSlideshowMode.update((value) => isVideoSlideshowMode(value) ? value : 'strict');
 }

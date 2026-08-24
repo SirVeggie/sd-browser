@@ -16,6 +16,7 @@
 
   const dispatch = createEventDispatcher<{
     stagechange: { id: string; width?: number; height?: number };
+    playthroughend: { id: string };
   }>();
 
   let waiting = false;
@@ -286,6 +287,9 @@
       showWaitingLoader={entry.showWaitingLoader}
       on:ready={(e) => entry.onReady(e.detail.id)}
       on:unready={(e) => entry.onUnready(e.detail.id)}
+      on:playthroughend={(e) => {
+        if (entry.role === "stage") dispatch("playthroughend", e.detail);
+      }}
     />
   {/each}
 </div>
