@@ -61,7 +61,7 @@ export type SvgenCard = {
     fields: SvgenField[];
     /** Shows an output-image preview slot (Danbooru / PreviewImage / etc.). */
     imageDisplay?: boolean;
-    /** Shows a read-only text preview slot (SV-PreviewText). */
+    /** Shows a read-only text preview slot (SV-PreviewText, SV-WorkflowTimer). */
     textDisplay?: boolean;
     /**
      * SV-LoraTagLoader — row UI over the text widget (`lora_tags` field).

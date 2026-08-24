@@ -69,7 +69,7 @@ export function makeNodePreviewEntry(images: ComfyOutputImageRef[]): NodePreview
 }
 
 /**
- * Parse `executed` WS payload → preview text (PreviewText / SV-PreviewText).
+ * Parse `executed` WS payload → preview text (PreviewText / SV-PreviewText / SV-WorkflowTimer).
  * Comfy serializes `ui.PreviewText` as `{ text: [value] }` (tuple → array).
  */
 export function parseExecutedOutputText(data: unknown): string | null {

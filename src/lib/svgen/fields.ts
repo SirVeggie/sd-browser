@@ -37,6 +37,7 @@ const IMAGE_DISPLAY_TYPES = new Set([
 /** Output nodes that only show executed text (no editable widgets in the workflow). */
 const TEXT_DISPLAY_TYPES = new Set([
     'SV-PreviewText',
+    'SV-WorkflowTimer',
 ]);
 
 const SD_BROWSER_NODE_TYPE = 'SV-SdBrowserImage';
