@@ -8,6 +8,7 @@ import type { GeneratedQualityMode } from "$lib/types/misc";
 import type { ServerError } from "$lib/types/requests";
 import { repairMissingVideoPreview } from "./imageUtils";
 import { notifyImageChange } from "./imageChangeHub";
+import { parseByteRange } from "./byteRange";
 
 export function error(message: string | ServerError, status = 500) {
     if (typeof message === 'string') message = { error: message };
@@ -25,6 +26,7 @@ export async function image(
     type?: string,
     defer?: boolean,
     preview?: boolean,
+    rangeHeader?: string | null,
 ) {
     const img = getImage(imageid ?? '');
     if (!img) return error('Image not found', 404);
@@ -59,6 +61,7 @@ export async function image(
     return imageResponse(
         buffer,
         preview && img.preview ? undefined : getImageType(img),
+        rangeHeader,
     );
 }
 
@@ -97,11 +100,51 @@ async function getImageTier(
     });
 }
 
-function imageResponse(buffer: Buffer, type?: 'image' | 'video') {
-    return new Response(buffer as any, {
-        status: 200,
-        headers: {
-            'Content-Type': type === 'video' ? 'video/mp4' : 'image/png',
-        },
-    });
+function imageResponse(buffer: Buffer, type?: 'image' | 'video', rangeHeader?: string | null) {
+    const contentType = type === 'video' ? 'video/mp4' : 'image/png';
+    if (type !== 'video') {
+        return new Response(buffer as any, {
+            status: 200,
+            headers: { 'Content-Type': contentType },
+        });
+    }
+
+    const size = buffer.byteLength;
+    const parsed = parseByteRange(rangeHeader, size);
+    switch (parsed.kind) {
+        case 'none':
+            return new Response(buffer as any, {
+                status: 200,
+                headers: {
+                    'Content-Type': contentType,
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': String(size),
+                },
+            });
+        case 'unsatisfiable':
+            return new Response(null, {
+                status: 416,
+                headers: {
+                    'Content-Type': contentType,
+                    'Accept-Ranges': 'bytes',
+                    'Content-Range': `bytes */${size}`,
+                },
+            });
+        case 'range': {
+            const slice = buffer.subarray(parsed.start, parsed.end + 1);
+            return new Response(slice as any, {
+                status: 206,
+                headers: {
+                    'Content-Type': contentType,
+                    'Accept-Ranges': 'bytes',
+                    'Content-Range': `bytes ${parsed.start}-${parsed.end}/${size}`,
+                    'Content-Length': String(slice.byteLength),
+                },
+            });
+        }
+        default: {
+            const _exhaustive: never = parsed;
+            return _exhaustive;
+        }
+    }
 }

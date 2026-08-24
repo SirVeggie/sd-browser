@@ -246,7 +246,7 @@ Do not reintroduce a catch-all that marks every id in the chunk as failed on a s
 
 ## Video preview PNGs
 
-**Files:** `src/lib/server/videoPreview.ts`, `src/lib/server/filemanager.ts`, `src/lib/server/imageUtils.ts`, `src/lib/server/responses.ts`, `src/lib/server/fileSettle.ts`
+**Files:** `src/lib/server/videoPreview.ts`, `src/lib/server/filemanager.ts`, `src/lib/server/imageUtils.ts`, `src/lib/server/responses.ts`, `src/lib/server/byteRange.ts`, `src/lib/server/fileSettle.ts`
 
 Videos (`.mp4`) use a same-basename companion PNG (`foo.mp4` + `foo.png`) for gallery thumbs (`preview=true`) and IMG embeddings.
 
@@ -259,6 +259,7 @@ Videos (`.mp4`) use a same-basename companion PNG (`foo.mp4` + `foo.png`) for ga
 - When serving `preview=true`, use an image `Content-Type`, not `video/mp4`. Quality-tier WebP caches stay keyed by the **video’s id**, not `hashPath(companion.png)` — PNG hashes are not in the image list, so `cleanTempImages` deleted those thumbs every startup.
 - Watcher `add`/`change` wait until the file is ready before preview extract: size `0` is never settled; size must hold for 500ms; skip while write-locked (`EBUSY`/`ETXTBSY`). Videos retry first-frame decode until it works, and give up only after ~5s stable-and-unlocked following a failure. `change` retries videos indexed with an empty `preview`.
 - Serving `preview=true` for a video with empty `preview` tries `repairMissingVideoPreview` once (coalesced; failures remembered for the process) and persists the PNG. Do not fall back to sending the MP4 as the thumb.
+- Serving the MP4 itself must honor HTTP `Range` and return `206` with `Accept-Ranges: bytes` (`byteRange.ts`, `image()` in `responses.ts`). Browsers seek by requesting a byte range; a full-file `200` on that request resets playback to the start.
 
 Videos still without a preview after generation failure are skipped for vectorize (`canVectorizeImage`) — do not guess a missing `.png` path.
 
