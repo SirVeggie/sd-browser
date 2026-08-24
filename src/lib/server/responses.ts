@@ -3,10 +3,11 @@ import { generateQualityImage, generateQualityTask } from "./convert";
 import { generationDisabled, getImage } from "./dataIndex";
 import { qualityTierPaths } from "./paths";
 import path from "path";
-import { getImageType, skipGeneration } from "$lib/tools/misc";
+import { getImageType, isVideo, skipGeneration } from "$lib/tools/misc";
 import type { GeneratedQualityMode } from "$lib/types/misc";
 import type { ServerError } from "$lib/types/requests";
-import { hashPath } from "./imageUtils";
+import { repairMissingVideoPreview } from "./imageUtils";
+import { notifyImageChange } from "./imageChangeHub";
 
 export function error(message: string | ServerError, status = 500) {
     if (typeof message === 'string') message = { error: message };
@@ -29,9 +30,16 @@ export async function image(
     if (!img) return error('Image not found', 404);
     let file = img.file;
 
+    if (preview && isVideo(img.file) && !img.preview) {
+        const repaired = await repairMissingVideoPreview(img);
+        if (repaired)
+            notifyImageChange();
+    }
+
     if (preview && img.preview) {
         file = img.preview;
-        imageid = hashPath(file);
+    } else if (preview && isVideo(img.file)) {
+        return error('Video preview not available', 500);
     }
 
     const skip = skipGeneration(file);
@@ -48,7 +56,10 @@ export async function image(
         return error('Failed to read file', 500);
     }
 
-    return imageResponse(buffer, preview && img.preview ? undefined : getImageType(img));
+    return imageResponse(
+        buffer,
+        preview && img.preview ? undefined : getImageType(img),
+    );
 }
 
 function isGeneratedTier(type: string | undefined): type is GeneratedQualityMode {
@@ -91,6 +102,6 @@ function imageResponse(buffer: Buffer, type?: 'image' | 'video') {
         status: 200,
         headers: {
             'Content-Type': type === 'video' ? 'video/mp4' : 'image/png',
-        }
+        },
     });
 }

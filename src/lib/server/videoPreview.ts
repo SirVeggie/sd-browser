@@ -141,7 +141,7 @@ async function extractFirstFrameToPng(videoPath: string, outputPath: string): Pr
 }
 
 /** Ensure a companion PNG exists next to the video; generate first frame if missing. */
-export async function ensureVideoPreview(videoPath: string): Promise<string | undefined> {
+export async function ensureVideoPreview(videoPath: string, quiet = false): Promise<string | undefined> {
     const previewPath = videoPreviewPath(videoPath);
     if (await fileExists(previewPath))
         return previewPath;
@@ -151,12 +151,15 @@ export async function ensureVideoPreview(videoPath: string): Promise<string | un
             return previewPath;
 
         try {
-            console.log(`Generating video preview for ${path.basename(videoPath)}`);
+            if (!quiet)
+                console.log(`Generating video preview for ${path.basename(videoPath)}`);
             await extractFirstFrameToPng(videoPath, previewPath);
             return previewPath;
         } catch (error) {
-            console.log(`Failed to generate video preview for ${path.basename(videoPath)}`);
-            console.error(error);
+            if (!quiet) {
+                console.log(`Failed to generate video preview for ${path.basename(videoPath)}`);
+                console.error(error);
+            }
             await fs.unlink(previewPath).catch(() => undefined);
             await fs.unlink(`${previewPath}.tmp.png`).catch(() => undefined);
             return undefined;

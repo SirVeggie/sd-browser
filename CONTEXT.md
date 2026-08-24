@@ -246,7 +246,7 @@ Do not reintroduce a catch-all that marks every id in the chunk as failed on a s
 
 ## Video preview PNGs
 
-**Files:** `src/lib/server/videoPreview.ts`, `src/lib/server/filemanager.ts`, `src/lib/server/imageUtils.ts`, `src/lib/server/responses.ts`
+**Files:** `src/lib/server/videoPreview.ts`, `src/lib/server/filemanager.ts`, `src/lib/server/imageUtils.ts`, `src/lib/server/responses.ts`, `src/lib/server/fileSettle.ts`
 
 Videos (`.mp4`) use a same-basename companion PNG (`foo.mp4` + `foo.png`) for gallery thumbs (`preview=true`) and IMG embeddings.
 
@@ -256,7 +256,9 @@ Videos (`.mp4`) use a same-basename companion PNG (`foo.mp4` + `foo.png`) for ga
 - Index **preview generation before dimensions** for newly indexed videos: gallery `width`/`height` should come from the oriented PNG. Do not scan/repair all cached videos on every startup.
 - `image.preview` must be set whenever the companion PNG exists — **including when EXIF is empty** (`readMetadataFromExif`). Linking must not depend on successful metadata parse.
 - Watcher PNG attach (`updateImageMetadata`) must persist `preview` to MetaDB (and calc DB), not only memory.
-- When serving `preview=true`, use an image `Content-Type`, not `video/mp4`.
+- When serving `preview=true`, use an image `Content-Type`, not `video/mp4`. Quality-tier WebP caches stay keyed by the **video’s id**, not `hashPath(companion.png)` — PNG hashes are not in the image list, so `cleanTempImages` deleted those thumbs every startup.
+- Watcher `add`/`change` wait until the file is ready before preview extract: size `0` is never settled; size must hold for 500ms; skip while write-locked (`EBUSY`/`ETXTBSY`). Videos retry first-frame decode until it works, and give up only after ~5s stable-and-unlocked following a failure. `change` retries videos indexed with an empty `preview`.
+- Serving `preview=true` for a video with empty `preview` tries `repairMissingVideoPreview` once (coalesced; failures remembered for the process) and persists the PNG. Do not fall back to sending the MP4 as the thumb.
 
 Videos still without a preview after generation failure are skipped for vectorize (`canVectorizeImage`) — do not guess a missing `.png` path.
 
@@ -305,7 +307,7 @@ Already-generated WebP caches and already-stored dimensions are not rewritten au
 - `readMetadataFromExif` must catch parse failures and return the image (preview may still be set).
 - Never `return readMetadataFromExif(...)` without `await` inside a try/catch — a rejected promise bypasses the catch.
 - Watcher/`checkFiles` must `.catch` fire-and-forget `addFile` / `renameFile` / `indexFiles` so a stray rejection cannot take down the Node process (`ERR_UNHANDLED_REJECTION`).
-- `addFile` waits for file size to stabilize (same as videos) before EXIF/metadata so mid-copy PNGs are not parsed early.
+- `addFile` waits until the file is settled (`waitUntilFileSettled` in `fileSettle.ts`) before EXIF/metadata: size `0` is not ready; size unchanged for 500ms; not write-locked. Do not treat an empty create-event as done.
 
 ---
 

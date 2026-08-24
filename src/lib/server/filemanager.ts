@@ -20,6 +20,7 @@ import { invalidateExplorationPools, repairExplorationCaches, repairUniqueCacheA
 import { notifyImageChange, notifyMetadataChange } from './imageChangeHub';
 import { ensureDefaultTagsRegistry } from './tags';
 import { ensureVideoPreview } from './videoPreview';
+import { FILE_SETTLE_POLL_MS, isFileWriteLocked, waitUntilFileSettled } from './fileSettle';
 import {
     getImageList,
     recordDeletion,
@@ -554,6 +555,12 @@ function setupWatcher() {
             });
         });
 
+        watcher.on('change', (file) => {
+            void addFile(file).catch((err) => {
+                console.error(`Failed to index changed file ${file}`, err);
+            });
+        });
+
         watcher.on('rename', (from, to) => {
             void renameFile(from, to).catch((err) => {
                 console.error(`Failed to handle rename ${from} -> ${to}`, err);
@@ -617,18 +624,88 @@ function setupWatcher() {
     console.log(`Listening to file changes in ${roots.length} root(s)...`);
 }
 
+const inflightAdds = new Map<string, Promise<void>>();
+const VIDEO_PREVIEW_FAIL_STABLE_MS = 5_000;
+
 async function addFile(file: string, hash?: string) {
     if (!isMedia(file)) return;
+    const key = path.resolve(file);
+    const existing = inflightAdds.get(key);
+    if (existing)
+        return existing;
+
+    const work = addFileInner(file, hash).finally(() => {
+        if (inflightAdds.get(key) === work)
+            inflightAdds.delete(key);
+    });
+    inflightAdds.set(key, work);
+    return work;
+}
+
+async function attachVideoPreview(image: ServerImage, videoFile: string): Promise<void> {
+    if (!await waitUntilFileSettled(videoFile))
+        return;
+    const preview = await ensureVideoPreviewReady(videoFile);
+    if (!preview)
+        return;
+    await updateImageMetadata(image, preview);
+    notifyImageChange();
+}
+
+/** Retry first-frame extract until it works, or the file looks finished and still fails. */
+async function ensureVideoPreviewReady(file: string): Promise<string | undefined> {
+    let lastFailSize = -1;
+    let failSince: number | undefined;
+    let attempted = false;
+
+    while (true) {
+        const preview = await ensureVideoPreview(file, attempted);
+        if (preview)
+            return preview;
+        attempted = true;
+
+        let size: number;
+        try {
+            size = (await fs.stat(file)).size;
+        } catch {
+            return undefined;
+        }
+
+        const now = Date.now();
+        if (size !== lastFailSize || await isFileWriteLocked(file)) {
+            lastFailSize = size;
+            failSince = now;
+            await sleep(FILE_SETTLE_POLL_MS);
+            continue;
+        }
+
+        failSince ??= now;
+        if (now - failSince >= VIDEO_PREVIEW_FAIL_STABLE_MS) {
+            console.log(`Failed to generate video preview for ${path.basename(file)}`);
+            return undefined;
+        }
+        await sleep(FILE_SETTLE_POLL_MS);
+    }
+}
+
+async function addFileInner(file: string, hash?: string) {
     if (!hash)
         hash = hashPath(file);
 
     // Already indexed (e.g. moveImages beat the watcher) — do not clobber tags/annotation.
-    if (getImageList().has(hash))
+    // Change events can still retry a video that was indexed before its preview existed.
+    const existing = getImageList().get(hash);
+    if (existing) {
+        if (isVideo(file) && !existing.preview)
+            await attachVideoPreview(existing, file);
         return;
+    }
 
     if (file.endsWith('.png')) {
         const video = videoExists(file);
         if (video) {
+            if (!await waitUntilFileSettled(file))
+                return;
             await updateImageMetadata(video, file);
             notifyImageChange();
             return;
@@ -640,20 +717,14 @@ async function addFile(file: string, hash?: string) {
         }
     }
 
-    // Wait until the write finishes — incomplete PNGs make exifr throw "Unknown file format".
-    let size = 0;
-    let newsize = (await fs.stat(file)).size;
-    while (size != newsize) {
-        await sleep(500);
-        size = newsize;
-        newsize = (await fs.stat(file)).size;
-    }
+    if (!await waitUntilFileSettled(file))
+        return;
 
     if (isVideo(file)) {
         const image = videoPreviewExists(file);
         if (image)
             deleteFile(image.file);
-        await ensureVideoPreview(file);
+        await ensureVideoPreviewReady(file);
     }
 
     console.log(`Added ${file}`);

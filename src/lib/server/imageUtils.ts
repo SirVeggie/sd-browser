@@ -11,6 +11,7 @@ import { populateMediaDimensions } from "./imageDimensions";
 import { computeExtradataFromFull } from "./extradataComputeCore";
 import { readPngSdMetadata } from "./pngTextChunks";
 import { getImageRoots } from "./paths";
+import { ensureVideoPreview } from "./videoPreview";
 
 /** Defer shipping blobs when combined length exceeds this (32 KiB). */
 export const METADATA_BLOBS_DEFER_THRESHOLD = 32 * 1024;
@@ -204,6 +205,41 @@ export async function updateImageMetadata(image: ServerImage, source: string) {
     image.height = newFull.height;
     MetaDB.set(newFull);
     MetaCalcDB.set(newImage);
+}
+
+const inflightPreviewRepair = new Map<string, Promise<string | undefined>>();
+const failedPreviewRepair = new Set<string>();
+
+/**
+ * One-shot companion PNG generate for a video indexed without `preview`.
+ * Coalesces concurrent callers; remembers failures for this process so gallery
+ * scroll does not keep re-decoding an unsupported file.
+ */
+export async function repairMissingVideoPreview(image: ServerImage): Promise<string | undefined> {
+    if (image.preview)
+        return image.preview;
+    if (!isVideo(image.file) || failedPreviewRepair.has(image.id))
+        return undefined;
+
+    const pending = inflightPreviewRepair.get(image.id);
+    if (pending)
+        return pending;
+
+    const work = (async () => {
+        const preview = await ensureVideoPreview(image.file);
+        if (!preview) {
+            failedPreviewRepair.add(image.id);
+            return undefined;
+        }
+        failedPreviewRepair.delete(image.id);
+        await updateImageMetadata(image, preview);
+        return preview;
+    })().finally(() => {
+        if (inflightPreviewRepair.get(image.id) === work)
+            inflightPreviewRepair.delete(image.id);
+    });
+    inflightPreviewRepair.set(image.id, work);
+    return work;
 }
 
 export function buildImageInfo(
