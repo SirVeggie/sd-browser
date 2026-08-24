@@ -64,8 +64,9 @@ type SlotBuild = {
     /** widgets_values had a control_after_generate companion after this slot. */
     hadControlCompanion?: boolean;
     /**
-     * Combo option list when object_info has none (CustomCombo builds options
-     * from sibling `option*` string widgets at runtime).
+     * Combo option list when object_info has none / stale defaults.
+     * CustomCombo builds options from sibling `option*` string widgets;
+     * SV-Combo uses a single comma-separated `options` string.
      */
     comboValues?: string[];
 };
@@ -741,6 +742,15 @@ function withLoraTagOptions(
     return { ...(options ?? {}), values };
 }
 
+const SV_COMBO_TYPE = 'SV-Combo';
+
+function parseCommaSeparatedOptions(raw: string): string[] {
+    return raw
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+}
+
 /**
  * CustomCombo (Comfy utilities): object_info declares `choice` as COMBO with
  * empty options; the frontend fills values from widgets named `option*`.
@@ -766,6 +776,31 @@ function customComboChoiceOptions(
             options.push(value);
     }
     return options.length ? options : undefined;
+}
+
+/**
+ * SV-Combo: schema order is `[choice, options]` where `options` is a
+ * comma-separated string. Prefer that over object_info defaults so the panel
+ * shows the user's list (and index stays correct via backend lookup).
+ */
+function svComboChoiceOptions(
+    node: ComfyWorkflowNode | undefined,
+): string[] | undefined {
+    if (!node || resolveNodeClassType(node) !== SV_COMBO_TYPE)
+        return undefined;
+    const values = asWidgetValues(node.widgets_values);
+    // Layout: [choice, options]
+    if (values.length >= 2 && typeof values[1] === 'string') {
+        const options = parseCommaSeparatedOptions(values[1]);
+        return options.length ? options : undefined;
+    }
+    return undefined;
+}
+
+function dynamicChoiceOptions(
+    node: ComfyWorkflowNode | undefined,
+): string[] | undefined {
+    return customComboChoiceOptions(node) ?? svComboChoiceOptions(node);
 }
 
 function withComboValues(
@@ -1000,7 +1035,7 @@ function buildSlotsForConcreteNode(
             schemaType: classType,
             hadControlCompanion: entry.hadControlCompanion,
             comboValues: entry.name === 'choice'
-                ? customComboChoiceOptions(node)
+                ? dynamicChoiceOptions(node)
                 : undefined,
         });
     }
@@ -1221,7 +1256,7 @@ function buildSlotsForProxyNode(
         }
 
         const comboValues = innerWidgetName === 'choice'
-            ? customComboChoiceOptions(inner)
+            ? dynamicChoiceOptions(inner)
             : undefined;
 
         // Instance values live on the outer node for promoted proxies; convert still
