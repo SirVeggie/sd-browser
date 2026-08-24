@@ -6,6 +6,8 @@ export type FlyoutStore = {
     enabled: boolean;
     url: string;
     mode: FlyoutMode;
+    /** Absolute pixel width for custom mode. Window resize never writes this. */
+    customWidth?: number;
 };
 export const flyoutStore = writable<FlyoutStore>({
     enabled: false,
@@ -16,6 +18,9 @@ export const flyoutHistory = writable<string[]>([]);
 export const flyoutState = writable(false);
 export const flyoutButton = writable(true);
 export const flyoutButtonTop = writable(true);
+
+/** Live drag width; not persisted. Null when the separator is not being dragged. */
+export const flyoutCustomDragWidth = writable<number | null>(null);
 
 export function syncFlyoutWithLocalStorage() {
     syncMemory('flyout', flyoutStore);

@@ -2,6 +2,7 @@
     import {
         flyoutButton,
         flyoutButtonTop,
+        flyoutCustomDragWidth,
         flyoutState,
         flyoutStore,
     } from '$lib/stores/flyoutStore';
@@ -14,9 +15,21 @@
     import { sdBrowserPickerStore } from '$lib/svgen/sdBrowserPickerStore';
     import SvGenPanel from '$lib/svgen/components/SvGenPanel.svelte';
     import SvGenSdBrowserImageModal from '$lib/svgen/components/SvGenSdBrowserImageModal.svelte';
+    import {
+        clampFlyoutCustomWidth,
+        resolvedFlyoutCustomWidth,
+        shouldPersistFlyoutCustomWidth,
+    } from '$lib/tools/flyoutWidth';
+    import { browser } from '$app/environment';
+    import { onDestroy } from 'svelte';
 
     let iframe: HTMLIFrameElement;
     let genPanel: SvGenPanel;
+    let handleEl: HTMLButtonElement | undefined;
+    let dragging = false;
+    let dragPointerId: number | null = null;
+    let dragStartX = 0;
+    let dragStartWidth = 0;
 
     $: webuiAvailable = $flyoutStore.enabled && !!$flyoutStore.url?.trim();
     $: genAvailable = $svgenUiStore.enabled;
@@ -24,6 +37,7 @@
     $: showTabs = webuiAvailable && genAvailable;
     $: disabled = !$flyoutState || !flyoutAvailable;
     $: isTop = $flyoutButtonTop;
+    $: customResize = !disabled && $flyoutStore.mode === 'custom';
 
     $: if ($svgenOpenImageRequest && genPanel) {
         const imageId = $svgenOpenImageRequest;
@@ -65,9 +79,98 @@
     function toggle() {
         flyoutState.set(!$flyoutState);
     }
+
+    function viewportWidth() {
+        return browser ? window.innerWidth : 1280;
+    }
+
+    function displayedCustomWidth() {
+        return clampFlyoutCustomWidth(
+            $flyoutCustomDragWidth ??
+                resolvedFlyoutCustomWidth($flyoutStore.customWidth),
+            viewportWidth(),
+        );
+    }
+
+    function applyLiveWidth(px: number) {
+        const next = Math.round(clampFlyoutCustomWidth(px, viewportWidth()));
+        flyoutCustomDragWidth.set(next);
+        const main = document.querySelector('main');
+        if (main instanceof HTMLElement)
+            main.style.setProperty('--flyout-width', `${next}px`);
+    }
+
+    function stopCustomResizeListeners() {
+        if (!browser)
+            return;
+        window.removeEventListener('pointermove', onCustomResizeMove);
+        window.removeEventListener('pointerup', endCustomResize);
+        window.removeEventListener('pointercancel', endCustomResize);
+    }
+
+    function cancelCustomResize() {
+        dragging = false;
+        dragPointerId = null;
+        stopCustomResizeListeners();
+        flyoutCustomDragWidth.set(null);
+    }
+
+    function endCustomResize(event: PointerEvent) {
+        if (!dragging || event.pointerId !== dragPointerId)
+            return;
+
+        const next = displayedCustomWidth();
+        const saved = $flyoutStore.customWidth;
+        if (shouldPersistFlyoutCustomWidth(saved, next, viewportWidth())) {
+            flyoutStore.update((store) => ({ ...store, customWidth: next }));
+        }
+
+        try {
+            handleEl?.releasePointerCapture(event.pointerId);
+        } catch {
+            /* capture may already be released */
+        }
+        cancelCustomResize();
+    }
+
+    function onCustomResizeMove(event: PointerEvent) {
+        if (!dragging || event.pointerId !== dragPointerId)
+            return;
+        event.preventDefault();
+        const delta = dragStartX - event.clientX;
+        applyLiveWidth(dragStartWidth + delta);
+    }
+
+    function startCustomResize(event: PointerEvent) {
+        if (event.button !== 0)
+            return;
+        event.preventDefault();
+        dragging = true;
+        dragPointerId = event.pointerId;
+        dragStartX = event.clientX;
+        dragStartWidth = displayedCustomWidth();
+        applyLiveWidth(dragStartWidth);
+        try {
+            handleEl?.setPointerCapture(event.pointerId);
+        } catch {
+            /* capture can fail; window listeners still track the gesture */
+        }
+        if (!browser)
+            return;
+        window.addEventListener('pointermove', onCustomResizeMove);
+        window.addEventListener('pointerup', endCustomResize);
+        window.addEventListener('pointercancel', endCustomResize);
+    }
+
+    $: if (!customResize && dragging)
+        cancelCustomResize();
+
+    onDestroy(() => {
+        cancelCustomResize();
+    });
 </script>
 
-<div class="flyout no-scrollbar" class:disabled>
+<div class="flyout no-scrollbar" class:disabled class:dragging>
     {#if showTabs}
         <div class="tabs" role="tablist">
             <button
@@ -109,6 +212,18 @@
             </div>
         {/if}
     </div>
+
+    {#if customResize}
+        <button
+            bind:this={handleEl}
+            type="button"
+            class="resize-handle"
+            class:dragging
+            tabindex="-1"
+            aria-label="Resize flyout"
+            on:pointerdown={startCustomResize}
+        />
+    {/if}
 </div>
 
 {#if $sdBrowserPickerStore}
@@ -158,6 +273,59 @@
             opacity: 0;
             pointer-events: none;
             transform: translateX(100%);
+        }
+
+        &.dragging {
+            user-select: none;
+
+            iframe {
+                pointer-events: none;
+            }
+        }
+    }
+
+    .resize-handle {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 16px;
+        transform: translateX(-50%);
+        z-index: 60;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        appearance: none;
+        display: block;
+        background: transparent;
+        min-width: 0;
+        min-height: 0;
+        cursor: ew-resize;
+        touch-action: none;
+        user-select: none;
+        outline: none;
+
+        &::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            transform: translateX(-50%);
+            background: var(--accent);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+            &:hover::before {
+                opacity: 1;
+            }
+        }
+
+        &.dragging::before {
+            opacity: 1;
         }
     }
 
@@ -240,7 +408,7 @@
             bottom: auto;
         }
 
-        :global(.flanimate) & {
+        :global(.flanimate):not(:global(.flresizing)) & {
             transition: right 0.2s ease;
         }
 

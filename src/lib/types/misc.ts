@@ -19,7 +19,7 @@ export function isSearchMode(object: any): object is SearchMode {
     return searchModes.includes(object);
 }
 
-export const flyoutModes = ['normal', 'wide', 'half', 'fullscreen'] as const;
+export const flyoutModes = ['normal', 'wide', 'half', 'fullscreen', 'custom'] as const;
 export type FlyoutMode = typeof flyoutModes[number];
 export function isFlyoutMode(object: any): object is FlyoutMode {
     return flyoutModes.includes(object);

@@ -10,6 +10,10 @@
         flyoutHistory,
         flyoutStore,
     } from "$lib/stores/flyoutStore";
+    import {
+        FLYOUT_CUSTOM_DEFAULT_PX,
+        readCurrentFlyoutWidthPx,
+    } from "$lib/tools/flyoutWidth";
     import { svgenUiStore } from "$lib/svgen/stores";
     import Button from "$lib/items/Button.svelte";
     import { notify } from "$lib/components/Notifier.svelte";
@@ -176,7 +180,22 @@
     }
 
     function onFlyoutModeChange() {
-        flyoutStore.update((x) => ({ ...x, mode: flyoutMode }));
+        flyoutStore.update((x) => {
+            if (flyoutMode !== "custom")
+                return { ...x, mode: flyoutMode };
+            const hasSaved =
+                typeof x.customWidth === "number" &&
+                Number.isFinite(x.customWidth) &&
+                x.customWidth > 0;
+            if (hasSaved)
+                return { ...x, mode: "custom" };
+            return {
+                ...x,
+                mode: "custom",
+                customWidth:
+                    readCurrentFlyoutWidthPx() ?? FLYOUT_CUSTOM_DEFAULT_PX,
+            };
+        });
     }
 
     function onFlyoutButtonPositionChange() {

@@ -2,10 +2,19 @@
     import "../global.css";
     import "../scroll.css";
     import Webui from "$lib/components/Webui.svelte";
-    import { flyoutState, flyoutStore } from "$lib/stores/flyoutStore";
+    import {
+        flyoutCustomDragWidth,
+        flyoutState,
+        flyoutStore,
+    } from "$lib/stores/flyoutStore";
+    import {
+        clampFlyoutCustomWidth,
+        resolvedFlyoutCustomWidth,
+    } from "$lib/tools/flyoutWidth";
     import { svgenUiStore } from "$lib/svgen/stores";
     import Notifier from "../lib/components/Notifier.svelte";
     import { assets } from "$app/paths";
+    import { browser } from "$app/environment";
     import { fullscreenState } from "$lib/stores/fullscreenStore";
     import ContextMenuManager from "$lib/items/ContextMenuManager.svelte";
     import Confirm from "$lib/components/Confirm.svelte";
@@ -18,14 +27,25 @@
     let timestamp = Date.now();
     let fltimeout: any;
     let flanimate = false;
+    let viewportWidth = browser ? window.innerWidth : 1280;
     $: flwide = $flyoutStore.mode === "wide";
     $: flhalf = $flyoutStore.mode === "half";
     $: flfull = $flyoutStore.mode === "fullscreen";
+    $: flcustom = $flyoutStore.mode === "custom";
+    $: flresizing = $flyoutCustomDragWidth != null;
 
     $: webuiAvailable = $flyoutStore.enabled && !!$flyoutStore.url?.trim();
     $: genAvailable = $svgenUiStore.enabled;
     $: flyoutAvailable = webuiAvailable || genAvailable;
     $: flvisible = $flyoutState && flyoutAvailable;
+    $: customFlyoutStyle =
+        flvisible && flcustom
+            ? `--flyout-width: ${clampFlyoutCustomWidth(
+                  $flyoutCustomDragWidth ??
+                      resolvedFlyoutCustomWidth($flyoutStore.customWidth),
+                  viewportWidth,
+              )}px`
+            : undefined;
     $: {
         $flyoutState;
         clearTimeout(fltimeout);
@@ -37,14 +57,24 @@
         }, 250);
     }
 
-    onMount(async () => {
-        if (!(await attemptLogin())) {
-            authStore.set({
-                password: "",
-                valid: false,
-            });
-        }
+    function onViewportResize() {
+        viewportWidth = window.innerWidth;
+    }
 
+    onMount(() => {
+        viewportWidth = window.innerWidth;
+        window.addEventListener("resize", onViewportResize);
+        void (async () => {
+            if (!(await attemptLogin())) {
+                authStore.set({
+                    password: "",
+                    valid: false,
+                });
+            }
+        })();
+        return () => {
+            window.removeEventListener("resize", onViewportResize);
+        };
     });
 </script>
 
@@ -63,7 +93,16 @@
     {/if}
 </svelte:head>
 
-<main class:flvisible class:flanimate class:flwide class:flhalf class:flfull>
+<main
+    class:flvisible
+    class:flanimate
+    class:flwide
+    class:flhalf
+    class:flfull
+    class:flcustom
+    class:flresizing
+    style={customFlyoutStyle}
+>
     {#if $authStore.valid}
         <OperationProgress />
     {/if}
@@ -107,7 +146,7 @@
         &.flvisible {
             --flyout-width: 500px;
 
-            &:not(.flwide, .flfull) {
+            &:not(.flwide, .flfull, .flcustom) {
                 @media (width < 1000px) {
                     --flyout-width: 50dvw;
                 }
@@ -116,6 +155,11 @@
                     --content-width: 100%;
                     --flyout-button-reset: 0;
                 }
+            }
+
+            &.flcustom {
+                --content-width: calc(100% - var(--flyout-width));
+                --flyout-button-reset: 1;
             }
 
             &.flwide {
@@ -148,7 +192,7 @@
             }
         }
 
-        &:global(.flanimate) .content {
+        &.flanimate:not(.flresizing) .content {
             transition: width 0.2s ease;
         }
     }

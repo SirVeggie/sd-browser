@@ -115,6 +115,16 @@ Nav arrows are full-height hit targets (`z-index: 46`). The slideshow control mu
 
 Nav arrows / overlay `--pad` / “Adjusting layout…” (`.resize-overlay`) still size against the non-flyout area: `right: var(--flyout-width)` or `(100vw - var(--flyout-width))`, not raw `vw`.
 
+## Custom flyout width
+
+**Files:** `src/lib/tools/flyoutWidth.ts`, `src/lib/stores/flyoutStore.ts`, `src/routes/+layout.svelte`, `src/lib/components/Webui.svelte`
+
+Settings **Styling** includes `custom`. Width is stored as absolute px (`flyoutStore.customWidth` in the existing `flyout` localStorage blob). Window resize never writes it — only a separator drag (pointerup) or first-time seed when choosing Custom.
+
+Display/drag max is **80vw** of the current viewport (`clampFlyoutCustomWidth`). If the window shrinks below the saved px, show 80vw; growing the window restores the saved px (still capped at the new 80vw). Custom ignores preset 50dvw/100% overlay breakpoints. The full-height seam handle is invisible until hover (fine pointer) or drag.
+
+If a drag is still hard against the 80vw cap and the saved px is larger, do not overwrite the saved width. Resize listeners live on `window` — guard with `browser` (`$app/environment`); SvelteKit SSR destroys the component after render and `onDestroy` must not touch `window`.
+
 ---
 
 ## Settings header is sticky

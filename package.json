@@ -31,7 +31,8 @@
 		"test:convert": "node --experimental-strip-types tests/convert.test.ts",
 		"test:folder-menu": "node --experimental-strip-types tests/folderMenu.test.ts",
 		"test:params-inherit": "node --experimental-strip-types --import ./tests/register-ts-extension.mjs tests/paramsInherit.test.ts",
-		"test:png-text": "node --experimental-strip-types tests/pngTextChunks.test.ts"
+		"test:png-text": "node --experimental-strip-types tests/pngTextChunks.test.ts",
+		"test:flyout-width": "node --experimental-strip-types tests/flyoutWidth.test.ts"
 	},
 	"dependencies": {
 		"@napi-rs/webcodecs": "^1.3.1",
