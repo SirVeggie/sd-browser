@@ -3,7 +3,6 @@ import type {
     ComfyMetadataSection,
     ComfyNode,
     ComfyPrompt,
-    ComfyProxyWidget,
     ComfySubgraphDefinition,
     ComfyWorkflow,
     ComfyWorkflowNode,
@@ -11,6 +10,11 @@ import type {
     ModelCandidate,
     ServerImage,
 } from "$lib/types/images";
+import {
+    findInnerNode,
+    resolveProxyWidgetBinding,
+    type ProxyWidgetBinding,
+} from "./comfyProxyWidgets";
 
 export function simplifyPrompt(image: ServerImage | undefined): string {
     if (!image)
@@ -318,19 +322,27 @@ function collectComfyModelCandidates(prompt: ComfyPrompt, ctx: ComfyWorkflowCont
     }
 
     for (const workflowNode of ctx.workflow.nodes ?? []) {
-        const proxyWidgets = getProxyWidgets(workflowNode);
-        if (!proxyWidgets)
-            continue;
         const subgraph = getSubgraphDefinition(ctx, workflowNode);
+        const binding = resolveProxyWidgetBinding(workflowNode, subgraph);
+        if (!binding)
+            continue;
         const containerTitle = resolveNodeTitle(
             workflowNode.id,
             prompt[String(workflowNode.id)],
             workflowNode,
             subgraph,
         );
-        for (const [innerId, widgetName] of proxyWidgets) {
-            const promptNode = prompt[`${workflowNode.id}:${innerId}`];
-            const value = promptNode?.inputs?.[widgetName];
+        const outerValues = stripControlWidgetValues(asWidgetValues(workflowNode.widgets_values));
+        for (let i = 0; i < binding.proxies.length; i++) {
+            const [innerId, widgetName] = binding.proxies[i];
+            const value = resolvePromotedLiteral(
+                prompt,
+                workflowNode.id,
+                innerId,
+                widgetName,
+                binding.outerNames?.[i],
+                outerValues[i],
+            );
             if (typeof value !== 'string' || !isModelFilename(value))
                 continue;
             const innerNode = findInnerNode(subgraph, innerId);
@@ -612,6 +624,8 @@ function collectNumericLiteralFields(
     return results;
 }
 
+const CONTROL_WIDGET_VALUES = new Set(['fixed', 'increment', 'decrement', 'randomize']);
+
 function asWidgetValues(
     values: ComfyWorkflowNode['widgets_values'] | undefined,
 ): (string | number | boolean | null)[] {
@@ -622,11 +636,31 @@ function asWidgetValues(
     return [];
 }
 
-function isComfyProxyWidget(entry: unknown): entry is [string | number, string] {
-    return Array.isArray(entry)
-        && entry.length >= 2
-        && (typeof entry[0] === 'string' || typeof entry[0] === 'number')
-        && typeof entry[1] === 'string';
+function stripControlWidgetValues(
+    values: (string | number | boolean | null)[],
+): (string | number | boolean | null)[] {
+    return values.filter(value => !(typeof value === 'string' && CONTROL_WIDGET_VALUES.has(value)));
+}
+
+function resolvePromotedLiteral(
+    prompt: ComfyPrompt,
+    containerId: number,
+    innerId: string,
+    widgetName: string,
+    outerName: string | undefined,
+    outerValue: string | number | boolean | null | undefined,
+): unknown {
+    const expanded = prompt[`${containerId}:${innerId}`]?.inputs?.[widgetName];
+    if (isLiteralInput(expanded))
+        return expanded;
+    if (outerName) {
+        const fromOuterPrompt = prompt[String(containerId)]?.inputs?.[outerName];
+        if (isLiteralInput(fromOuterPrompt))
+            return fromOuterPrompt;
+    }
+    if (isLiteralInput(outerValue))
+        return outerValue;
+    return undefined;
 }
 
 function isWorkflowInputWired(input: ComfyWorkflowNodeInput): boolean {
@@ -720,20 +754,12 @@ function isCollapsed(node: ComfyWorkflowNode | undefined): boolean {
     return node?.flags?.collapsed === true;
 }
 
-function isSubgraphContainer(node: ComfyWorkflowNode): boolean {
-    return getProxyWidgets(node) !== undefined || UUID_RE.test(node.type);
-}
-
-function getProxyWidgets(node: ComfyWorkflowNode): ComfyProxyWidget[] | undefined {
-    const proxyWidgets = node.properties?.proxyWidgets;
-    if (!Array.isArray(proxyWidgets) || !proxyWidgets.length)
-        return undefined;
-    const valid = proxyWidgets
-        .filter(isComfyProxyWidget)
-        .map(([innerId, widgetName]): ComfyProxyWidget => [String(innerId), widgetName]);
-    if (!valid.length)
-        return undefined;
-    return valid;
+function isSubgraphContainer(node: ComfyWorkflowNode, ctx?: ComfyWorkflowContext): boolean {
+    if (UUID_RE.test(node.type))
+        return true;
+    if (ctx && getSubgraphDefinition(ctx, node))
+        return true;
+    return resolveProxyWidgetBinding(node, undefined) !== undefined;
 }
 
 function getSubgraphDefinition(ctx: ComfyWorkflowContext, node: ComfyWorkflowNode): ComfySubgraphDefinition | undefined {
@@ -811,13 +837,6 @@ function findWorkflowInput(node: ComfyWorkflowNode | undefined, key: string): Co
     return node?.inputs?.find(input => input.name === key || input.widget?.name === key);
 }
 
-function findInnerNode(subgraph: ComfySubgraphDefinition | undefined, innerId: string): ComfyWorkflowNode | undefined {
-    if (!subgraph)
-        return undefined;
-    const numericId = Number(innerId);
-    return subgraph.nodes?.find(node => node.id === numericId);
-}
-
 function resolveProxyWidgetLabel(
     subgraph: ComfySubgraphDefinition | undefined,
     innerId: string,
@@ -878,27 +897,55 @@ function getLiteralFieldsWithContext(
     });
 }
 
+function resolvePromotedFieldLabel(
+    containerNode: ComfyWorkflowNode,
+    subgraph: ComfySubgraphDefinition | undefined,
+    innerId: string,
+    widgetName: string,
+    outerName?: string,
+): string {
+    if (outerName) {
+        const outerInput = findWorkflowInput(containerNode, outerName);
+        if (outerInput)
+            return resolveInputLabel(outerInput, outerName);
+        const subgraphInput = subgraph?.inputs?.find(input => input.name === outerName);
+        if (subgraphInput?.label)
+            return subgraphInput.label;
+    }
+    return resolveProxyWidgetLabel(subgraph, innerId, widgetName);
+}
+
 function getPromotedSubgraphFieldsWithContext(
     containerId: number,
     containerNode: ComfyWorkflowNode,
     prompt: ComfyPrompt,
     subgraph: ComfySubgraphDefinition | undefined,
+    binding: ProxyWidgetBinding,
 ): ComfyMetadataFieldWithContext[] {
-    const proxyWidgets = getProxyWidgets(containerNode);
-    if (!proxyWidgets)
-        return [];
+    const outerValues = stripControlWidgetValues(asWidgetValues(containerNode.widgets_values));
     const results: ComfyMetadataFieldWithContext[] = [];
-    for (const [innerId, widgetName] of proxyWidgets) {
-        const promptNode = prompt[`${containerId}:${innerId}`];
-        if (!promptNode?.inputs)
-            continue;
-        const value = promptNode.inputs[widgetName];
+    for (let i = 0; i < binding.proxies.length; i++) {
+        const [innerId, widgetName] = binding.proxies[i];
+        const value = resolvePromotedLiteral(
+            prompt,
+            containerId,
+            innerId,
+            widgetName,
+            binding.outerNames?.[i],
+            outerValues[i],
+        );
         if (!isLiteralInput(value))
             continue;
         const innerNode = findInnerNode(subgraph, innerId);
         results.push({
             field: {
-                label: resolveProxyWidgetLabel(subgraph, innerId, widgetName),
+                label: resolvePromotedFieldLabel(
+                    containerNode,
+                    subgraph,
+                    innerId,
+                    widgetName,
+                    binding.outerNames?.[i],
+                ),
                 value,
                 inputKey: widgetName,
             },
@@ -992,30 +1039,90 @@ function buildComfyMetadataSectionDrafts(
     ctx: ComfyWorkflowContext,
 ): ComfyMetadataSectionDraft[] {
     const drafts: ComfyMetadataSectionDraft[] = [];
+    const usedPromptIds = new Set<string>();
     const sortedNodes = [...(ctx.workflow.nodes ?? [])].sort((a, b) => a.id - b.id);
 
+    const pushItems = (
+        title: string,
+        items: ComfyMetadataFieldWithContext[],
+        nodeId?: number,
+        promptId?: string,
+    ) => {
+        if (!items.length)
+            return;
+        drafts.push(draftToSection(title, items, nodeId));
+        if (promptId)
+            usedPromptIds.add(promptId);
+    };
+
     for (const workflowNode of sortedNodes) {
-        const proxyWidgets = getProxyWidgets(workflowNode);
-        if (proxyWidgets) {
-            const subgraph = getSubgraphDefinition(ctx, workflowNode);
-            const items = getPromotedSubgraphFieldsWithContext(workflowNode.id, workflowNode, prompt, subgraph);
-            if (!items.length)
-                continue;
-            drafts.push(draftToSection(
-                resolveNodeTitle(workflowNode.id, prompt[String(workflowNode.id)], workflowNode, subgraph),
-                items,
-                workflowNode.id,
-            ));
+        const subgraph = getSubgraphDefinition(ctx, workflowNode);
+        const binding = resolveProxyWidgetBinding(workflowNode, subgraph);
+
+        if (subgraph) {
+            let addedInner = false;
+            for (const inner of subgraph.nodes ?? []) {
+                if (isCollapsed(inner))
+                    continue;
+                const promptId = `${workflowNode.id}:${inner.id}`;
+                const promptNode = prompt[promptId];
+                if (!promptNode)
+                    continue;
+                const items = getLiteralFieldsWithContext(promptNode, inner);
+                if (!items.length)
+                    continue;
+                pushItems(
+                    resolveNodeTitle(promptId, promptNode, inner),
+                    items,
+                    workflowNode.id,
+                    promptId,
+                );
+                addedInner = true;
+            }
+            if (!addedInner && binding) {
+                pushItems(
+                    resolveNodeTitle(
+                        workflowNode.id,
+                        prompt[String(workflowNode.id)],
+                        workflowNode,
+                        subgraph,
+                    ),
+                    getPromotedSubgraphFieldsWithContext(
+                        workflowNode.id,
+                        workflowNode,
+                        prompt,
+                        subgraph,
+                        binding,
+                    ),
+                    workflowNode.id,
+                );
+            }
             continue;
         }
 
-        if (isSubgraphContainer(workflowNode))
+        if (binding) {
+            pushItems(
+                resolveNodeTitle(workflowNode.id, prompt[String(workflowNode.id)], workflowNode),
+                getPromotedSubgraphFieldsWithContext(
+                    workflowNode.id,
+                    workflowNode,
+                    prompt,
+                    undefined,
+                    binding,
+                ),
+                workflowNode.id,
+            );
+            continue;
+        }
+
+        if (isSubgraphContainer(workflowNode, ctx))
             continue;
 
         if (isCollapsed(workflowNode))
             continue;
 
-        const promptNode = prompt[String(workflowNode.id)];
+        const promptId = String(workflowNode.id);
+        const promptNode = prompt[promptId];
         if (!promptNode)
             continue;
 
@@ -1023,11 +1130,31 @@ function buildComfyMetadataSectionDrafts(
         if (!items.length)
             continue;
 
-        drafts.push(draftToSection(
+        pushItems(
             resolveNodeTitle(workflowNode.id, promptNode, workflowNode),
             items,
             workflowNode.id,
-        ));
+            promptId,
+        );
+    }
+
+    // Expanded `outerId:innerId` prompt nodes whose subgraph definition was missing.
+    for (const id of Object.keys(prompt).sort()) {
+        if (usedPromptIds.has(id) || !id.includes(':'))
+            continue;
+        const promptNode = prompt[id];
+        if (!promptNode)
+            continue;
+        const items = getLiteralFieldsWithContext(promptNode, undefined);
+        if (!items.length)
+            continue;
+        const outerId = Number(id.split(':')[0]);
+        pushItems(
+            resolveNodeTitle(id, promptNode, undefined),
+            items,
+            Number.isFinite(outerId) ? outerId : undefined,
+            id,
+        );
     }
 
     return drafts;

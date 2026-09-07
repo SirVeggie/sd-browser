@@ -19,7 +19,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "eslint .",
-		"test:models": "node --experimental-strip-types tests/model-parser.test.ts",
+		"test:models": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/model-parser.test.ts",
 		"test:exploration": "node --experimental-strip-types tests/exploration.unique.test.ts",
 		"test:searching": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/searching.test.ts",
 		"test:search-regex": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/searchRegex.test.ts",
