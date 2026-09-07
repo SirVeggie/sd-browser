@@ -3,6 +3,7 @@ import { authStore } from '$lib/stores/authStore';
 import { page } from '$app/stores';
 import type { ComfyPrompt, ComfyWorkflow } from '$lib/types/images';
 import type { ObjectInfoMap, SvgenWorkflowSummary } from './types';
+import { formatUnknownError } from './formatError';
 import { parseLoraTriggerMap } from './loraTriggers';
 
 export class SvgenComfyAuthError extends Error {
@@ -43,10 +44,7 @@ function throwIfError(response: Response, body: unknown, fallback: string): void
     ) {
         throw new SvgenComfyAuthError();
     }
-    const message = body && typeof body === 'object' && 'error' in body
-        ? String((body as { error: unknown }).error)
-        : fallback;
-    throw new Error(message);
+    throw new Error(formatUnknownError(body, fallback), { cause: body });
 }
 
 export async function fetchSvgenStatus(comfyToken?: string): Promise<{

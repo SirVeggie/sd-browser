@@ -4,6 +4,7 @@
     import Button from '$lib/items/Button.svelte';
     import { notify } from '$lib/components/Notifier.svelte';
     import { fetchLoraTriggers } from '$lib/svgen/comfyClient';
+    import { reportSvgenError } from '$lib/svgen/formatError';
     import {
         triggersForLoraName,
         uniqueLoraNames,
@@ -39,7 +40,7 @@
         try {
             map = await fetchLoraTriggers(requested, storedComfyToken());
         } catch (cause) {
-            error = cause instanceof Error ? cause.message : 'Failed to load trigger words';
+            error = reportSvgenError(cause, 'Failed to load trigger words');
         } finally {
             loading = false;
         }

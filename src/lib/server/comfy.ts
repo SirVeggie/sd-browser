@@ -1,4 +1,5 @@
 import { env } from '$env/dynamic/private';
+import { formatUnknownError } from '$lib/svgen/formatError';
 
 const DEFAULT_COMFY_URL = 'http://127.0.0.1:8188';
 
@@ -45,6 +46,16 @@ export class ComfyRequestError extends Error {
         this.status = status;
         this.body = body;
     }
+}
+
+/** API body: readable `error` plus the original Comfy payload for the browser console. */
+export function comfyErrorResponseBody(cause: ComfyRequestError): {
+    error: string;
+    detail?: unknown;
+} {
+    return cause.body === undefined
+        ? { error: cause.message }
+        : { error: cause.message, detail: cause.body };
 }
 
 function authorizationHeaders(token: string | undefined): HeadersInit {
@@ -149,10 +160,11 @@ export async function fetchPendingPanelWorkflow(
     const response = await comfyFetch('/sv_sd_browser/pending_panel_workflow', { token });
     const body = await readComfyJson(response);
     if (!response.ok) {
-        const message = typeof body === 'object' && body && 'error' in body
-            ? String((body as { error: unknown }).error)
-            : `Pending panel workflow fetch failed (${response.status})`;
-        throw new ComfyRequestError(message, response.status, body);
+        throw new ComfyRequestError(
+            formatUnknownError(body, `Pending panel workflow fetch failed (${response.status})`),
+            response.status,
+            body,
+        );
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
         throw new ComfyRequestError('Pending panel workflow returned invalid JSON', 502, body);
@@ -262,10 +274,11 @@ export async function convertWorkflowToApi(
 
     const body = await readComfyJson(response);
     if (!response.ok) {
-        const message = typeof body === 'object' && body && 'error' in body
-            ? String((body as { error: unknown }).error)
-            : `ComfyUI convert failed (${response.status})`;
-        throw new ComfyRequestError(message, response.status, body);
+        throw new ComfyRequestError(
+            formatUnknownError(body, `ComfyUI convert failed (${response.status})`),
+            response.status,
+            body,
+        );
     }
 
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -286,10 +299,11 @@ export async function fetchComfyLoraTriggers(
     });
     const body = await readComfyJson(response);
     if (!response.ok) {
-        const message = typeof body === 'object' && body && 'error' in body
-            ? String((body as { error: unknown }).error)
-            : `ComfyUI lora_triggers failed (${response.status})`;
-        throw new ComfyRequestError(message, response.status, body);
+        throw new ComfyRequestError(
+            formatUnknownError(body, `ComfyUI lora_triggers failed (${response.status})`),
+            response.status,
+            body,
+        );
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
         throw new ComfyRequestError('ComfyUI lora_triggers returned invalid JSON', 502, body);
@@ -343,10 +357,11 @@ export async function submitComfyPrompt(payload: ComfyPromptSubmit): Promise<unk
 
     const result = await readComfyJson(response);
     if (!response.ok) {
-        const message = typeof result === 'object' && result && 'error' in result
-            ? String((result as { error: unknown }).error)
-            : `ComfyUI prompt failed (${response.status})`;
-        throw new ComfyRequestError(message, response.status, result);
+        throw new ComfyRequestError(
+            formatUnknownError(result, `ComfyUI prompt failed (${response.status})`),
+            response.status,
+            result,
+        );
     }
     return result;
 }

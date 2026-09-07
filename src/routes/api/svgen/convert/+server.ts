@@ -1,5 +1,5 @@
 import { invalidAuth } from '$lib/server/auth';
-import { ComfyAuthError, ComfyRequestError, convertWorkflowToApi } from '$lib/server/comfy';
+import { ComfyAuthError, ComfyRequestError, comfyErrorResponseBody, convertWorkflowToApi } from '$lib/server/comfy';
 import { error, success } from '$lib/server/responses';
 import { getComfyTokenFromRequest } from '$lib/server/svgen/token';
 
@@ -37,7 +37,7 @@ export async function POST(e) {
             }, 401);
         }
         if (cause instanceof ComfyRequestError) {
-            return error(cause.message, cause.status);
+            return error(comfyErrorResponseBody(cause), cause.status);
         }
         const message = cause instanceof Error ? cause.message : 'Workflow convert failed';
         return error(message, 502);

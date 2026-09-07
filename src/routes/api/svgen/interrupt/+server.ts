@@ -1,5 +1,5 @@
 import { invalidAuth } from '$lib/server/auth';
-import { ComfyAuthError, ComfyRequestError, interruptComfyPrompt } from '$lib/server/comfy';
+import { ComfyAuthError, ComfyRequestError, comfyErrorResponseBody, interruptComfyPrompt } from '$lib/server/comfy';
 import { error, success } from '$lib/server/responses';
 import { getComfyTokenFromRequest } from '$lib/server/svgen/token';
 
@@ -22,7 +22,7 @@ function handleComfyError(cause: unknown, fallback: string): Response {
         }, 401);
     }
     if (cause instanceof ComfyRequestError) {
-        return error(cause.message, cause.status);
+        return error(comfyErrorResponseBody(cause), cause.status);
     }
     const message = cause instanceof Error ? cause.message : fallback;
     return error(message, 502);

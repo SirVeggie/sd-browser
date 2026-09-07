@@ -1,5 +1,5 @@
 import { invalidAuth } from '$lib/server/auth';
-import { ComfyAuthError, ComfyRequestError, uploadComfyImage } from '$lib/server/comfy';
+import { ComfyAuthError, ComfyRequestError, comfyErrorResponseBody, uploadComfyImage } from '$lib/server/comfy';
 import { error, success } from '$lib/server/responses';
 import { getComfyTokenFromRequest } from '$lib/server/svgen/token';
 
@@ -36,7 +36,7 @@ export async function POST(e) {
         if (cause instanceof ComfyAuthError)
             return error({ error: 'ComfyUI authentication required', code: 'comfy_auth_required' }, 401);
         if (cause instanceof ComfyRequestError)
-            return error(cause.message, cause.status);
+            return error(comfyErrorResponseBody(cause), cause.status);
         const detail = cause instanceof Error ? cause.message : String(cause);
         return error(detail, 502);
     }

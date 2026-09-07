@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { authStore } from '$lib/stores/authStore';
 import { page } from '$app/stores';
+import { reportSvgenError } from './formatError';
 
 const LOCAL_PREFIX = 'local:';
 const COMFY_TOKEN_KEY = 'comfyWorkflowOpenToken';
@@ -219,10 +220,10 @@ export async function uploadComfyImageFile(
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-        const message = data && typeof data === 'object' && 'error' in data
-            ? String(data.error)
-            : `Upload failed (${response.status})`;
-        throw new Error(message);
+        throw new Error(
+            reportSvgenError(data, `Upload failed (${response.status})`),
+            { cause: data },
+        );
     }
     const name = String(data.name || data.filename || file.name);
     const subfolder = String(data.subfolder || '');

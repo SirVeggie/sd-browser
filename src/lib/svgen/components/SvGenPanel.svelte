@@ -50,6 +50,7 @@
         submitPrompt,
         SvgenComfyAuthError,
     } from '$lib/svgen/comfyClient';
+    import { reportSvgenError } from '$lib/svgen/formatError';
     import { connectComfyWs, createClientId } from '$lib/svgen/comfyWs';
     import { applyFieldOrderAndHidden, discoverCards, setWidgetValue } from '$lib/svgen/fields';
     import {
@@ -191,7 +192,7 @@
                 }
             }
         } catch (cause) {
-            const reason = cause instanceof Error ? cause.message : 'Status check failed';
+            const reason = reportSvgenError(cause, 'Status check failed');
             svgenStatusStore.set({
                 available: false,
                 reason,
@@ -318,7 +319,7 @@
                     break;
             }
         } catch (cause) {
-            svgenErrorStore.set(cause instanceof Error ? cause.message : 'Infinite queue failed');
+            svgenErrorStore.set(reportSvgenError(cause, 'Infinite queue failed'));
         } finally {
             toppingUp = false;
         }
@@ -338,7 +339,7 @@
                 await deleteQueued(pendingIds, getStoredComfyToken());
             await refreshQueueStatus({ skipTopUp: true });
         } catch (cause) {
-            svgenErrorStore.set(cause instanceof Error ? cause.message : 'Stop infinite failed');
+            svgenErrorStore.set(reportSvgenError(cause, 'Stop infinite failed'));
         }
     }
 
@@ -392,11 +393,7 @@
                     void refreshQueueStatus({ skipTopUp: false });
                 },
                 onError: (err) => {
-                    svgenErrorStore.set(
-                        typeof err === 'object' && err && 'exception_message' in err
-                            ? String((err as { exception_message: unknown }).exception_message)
-                            : 'Execution error',
-                    );
+                    svgenErrorStore.set(reportSvgenError(err, 'Execution error'));
                     if (!infiniteActive)
                         svgenGeneratingStore.set(false);
                 },
@@ -625,7 +622,7 @@
                     return;
                 }
             }
-            const message = cause instanceof Error ? cause.message : 'Generate failed';
+            const message = reportSvgenError(cause, 'Generate failed');
             svgenErrorStore.set(message);
             notify(message, 'error');
             infiniteActive = false;
@@ -638,7 +635,7 @@
             await interruptPrompt(undefined, getStoredComfyToken());
             await refreshQueueStatus({ skipTopUp: true });
         } catch (cause) {
-            svgenErrorStore.set(cause instanceof Error ? cause.message : 'Interrupt failed');
+            svgenErrorStore.set(reportSvgenError(cause, 'Interrupt failed'));
         }
     }
 
@@ -685,7 +682,7 @@
             await refreshWorkflowList();
             saveModalOpen = false;
         } catch (cause) {
-            const message = cause instanceof Error ? cause.message : 'Save failed';
+            const message = reportSvgenError(cause, 'Save failed');
             svgenErrorStore.set(message);
             notify(message, 'error');
         }
@@ -721,7 +718,7 @@
                 svgenErrorStore.set(null);
             }
         } catch (cause) {
-            const message = cause instanceof Error ? cause.message : 'Open failed';
+            const message = reportSvgenError(cause, 'Open failed');
             svgenErrorStore.set(message);
             notify(message, 'error');
         }
@@ -740,8 +737,7 @@
             await deleteWorkflow(id);
             await refreshWorkflowList();
         } catch (cause) {
-            const message = cause instanceof Error ? cause.message : 'Delete failed';
-            notify(message, 'error');
+            notify(reportSvgenError(cause, 'Delete failed'), 'error');
         }
     }
 
@@ -781,8 +777,7 @@
                     return;
                 }
             }
-            const message = cause instanceof Error ? cause.message : 'Failed to open in Comfy';
-            notify(message, 'error');
+            notify(reportSvgenError(cause, 'Failed to open in Comfy'), 'error');
         }
     }
 
@@ -899,7 +894,7 @@
                 sourceImageId: data.sourceImageId,
             });
         } catch (cause) {
-            const message = cause instanceof Error ? cause.message : 'Open failed';
+            const message = reportSvgenError(cause, 'Open failed');
             svgenErrorStore.set(message);
             notify(message, 'error');
         }
@@ -935,7 +930,7 @@
                 );
             }
         } catch (cause) {
-            const message = cause instanceof Error ? cause.message : 'Use params failed';
+            const message = reportSvgenError(cause, 'Use params failed');
             svgenErrorStore.set(message);
             notify(message, 'error');
         }
@@ -1051,9 +1046,7 @@
                     await clearQueued(getStoredComfyToken());
                     await refreshQueueStatus({ skipTopUp: true });
                 } catch (cause) {
-                    svgenErrorStore.set(
-                        cause instanceof Error ? cause.message : 'Clear queue failed',
-                    );
+                    svgenErrorStore.set(reportSvgenError(cause, 'Clear queue failed'));
                 }
             }}
             on:cancel={async (e) => {
@@ -1061,9 +1054,7 @@
                     await deleteQueued([e.detail], getStoredComfyToken());
                     await refreshQueueStatus({ skipTopUp: true });
                 } catch (cause) {
-                    svgenErrorStore.set(
-                        cause instanceof Error ? cause.message : 'Cancel failed',
-                    );
+                    svgenErrorStore.set(reportSvgenError(cause, 'Cancel failed'));
                 }
             }}
         />
@@ -1142,6 +1133,8 @@
         border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
         color: var(--danger);
         font-size: 0.85rem;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
     }
 
     .empty {
