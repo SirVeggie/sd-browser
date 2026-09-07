@@ -5,6 +5,7 @@
 
 <script lang="ts">
     import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+    import { comboListScrollDelta } from '$lib/svgen/comboListScroll';
     import { bindDropdownOutsideClick } from '$lib/tools/dropdownOutsideClick';
 
     export let value: string;
@@ -31,6 +32,7 @@
     let query = '';
     let activeIndex = -1;
     let lastNavKey = '';
+    let pendingScrollAlign: 'center' | 'nearest' = 'nearest';
     let rootEl: HTMLDivElement;
     let triggerEl: HTMLButtonElement;
     let searchEl: HTMLInputElement | undefined;
@@ -91,14 +93,25 @@
             (item) => item.kind === 'option' && item.value === value,
         );
         activeIndex = selectedIdx >= 0 ? selectedIdx : (navItems.length ? 0 : -1);
+        // Center the selected row when the folder/search list is rebuilt.
+        pendingScrollAlign = 'center';
     }
     $: if (open && activeIndex >= 0) {
         void activeIndex;
-        void tick().then(scrollActiveIntoList);
+        queueActiveScroll();
     }
 
-    /** Scroll only the menu list — `scrollIntoView` also shifts column ancestors. */
-    function scrollActiveIntoList() {
+    function queueActiveScroll() {
+        const align = pendingScrollAlign;
+        pendingScrollAlign = 'nearest';
+        void tick().then(() => scrollActiveIntoList(align));
+    }
+
+    /**
+     * Scroll only the menu list — `scrollIntoView` also shifts column ancestors.
+     * `center` is for open / folder / search; `nearest` is for ↑/↓.
+     */
+    function scrollActiveIntoList(align: 'center' | 'nearest' = 'nearest') {
         if (!listEl || activeIndex < 0)
             return;
         const item = listEl.querySelector<HTMLElement>(`[data-nav-index="${activeIndex}"]`);
@@ -106,10 +119,13 @@
             return;
         const listRect = listEl.getBoundingClientRect();
         const itemRect = item.getBoundingClientRect();
-        if (itemRect.top < listRect.top)
-            listEl.scrollTop -= listRect.top - itemRect.top;
-        else if (itemRect.bottom > listRect.bottom)
-            listEl.scrollTop += itemRect.bottom - listRect.bottom;
+        listEl.scrollTop += comboListScrollDelta(
+            listRect.top,
+            listRect.bottom,
+            itemRect.top,
+            itemRect.bottom,
+            align,
+        );
     }
 
     function buildLeaves(values: string[]): Leaf[] {
@@ -315,6 +331,9 @@
         open = true;
         await tick();
         reposition();
+        // Max-height is applied after reposition; scroll before that is a no-op.
+        await tick();
+        scrollActiveIntoList('center');
         focusSearch();
         window.addEventListener('resize', reposition);
         document.addEventListener('scroll', reposition, true);
