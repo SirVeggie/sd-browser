@@ -340,13 +340,13 @@ Prompt detection matches persisted titles first (`_meta.title` / workflow `title
 
 ---
 
-## Comfy metadata includes subgraph nodes
+## Comfy metadata params follow Generate panel node visibility
 
-**Files:** `src/lib/tools/metadataInterpreter.ts` (`buildComfyMetadataSectionDrafts`), `src/lib/tools/comfyProxyWidgets.ts`
+**Files:** `src/lib/tools/metadataInterpreter.ts` (`buildComfyMetadataSectionDrafts`), `src/lib/tools/comfyUiVisibility.ts`, `src/lib/svgen/fields.ts`
 
-Parameter sections walk inner subgraph nodes via prompt keys `outerId:innerId` (same as seed collection). Do **not** skip UUID subgraph shells — modern Comfy omits `proxyWidgets`, and skipping those containers dropped every inner node from params.
+Parameter sections use the same node inclusion as Generate cards: skip collapsed nodes and nodes whose title or type starts with `_`. Do **not** emit a section per inner subgraph node (`outerId:innerId` prompt keys). A subgraph shell is one section of promoted widgets via `resolveProxyWidgetBinding` (legacy `proxyWidgets`, else inputNode `-10` reconstruction in `comfyProxyWidgets.ts`).
 
-When expanded prompt keys are missing, fall back to `resolveProxyWidgetBinding` (legacy `proxyWidgets`, else the same inputNode `-10` reconstruction as svgen field discovery) and outer `widgets_values`. Shared helper lives in `comfyProxyWidgets.ts` — do not fork a metadata-only copy.
+`isPromptLikeNode` must use the inner node when present — a shell titled “Prompt Pack” must not hide every promoted field. Seeds/models/prompts may still read expanded inner prompt keys.
 
 ---
 

@@ -18,6 +18,7 @@ import {
     resolveProxyWidgetBinding,
     type ProxyWidgetBinding,
 } from '../tools/comfyProxyWidgets';
+import { shouldIncludeComfyUiNode } from '../tools/comfyUiVisibility';
 
 /**
  * Reconstructs panel fields from save-format workflow JSON.
@@ -215,16 +216,6 @@ function shouldIncludeSlot(
     if (widgetName === 'search' && resolveNodeClassType(node) === SD_BROWSER_NODE_TYPE)
         return false;
     if (isWired(node, widgetName))
-        return false;
-    return true;
-}
-
-function shouldIncludeNode(node: ComfyWorkflowNode): boolean {
-    if (node.flags?.collapsed)
-        return false;
-    const title = node.title || '';
-    const type = String(node.type ?? '');
-    if (title.startsWith('_') || type.startsWith('_'))
         return false;
     return true;
 }
@@ -1328,7 +1319,7 @@ export function discoverCards(
     for (const node of workflow.nodes ?? []) {
         if (!node || node.id === undefined || node.id === null)
             continue;
-        if (!shouldIncludeNode(node))
+        if (!shouldIncludeComfyUiNode(node))
             continue;
 
         const subgraph = subgraphsByType.get(String(node.type));

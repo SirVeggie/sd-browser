@@ -15,6 +15,7 @@ import {
     resolveProxyWidgetBinding,
     type ProxyWidgetBinding,
 } from "./comfyProxyWidgets";
+import { shouldIncludeComfyUiNode } from "./comfyUiVisibility";
 
 export function simplifyPrompt(image: ServerImage | undefined): string {
     if (!image)
@@ -750,10 +751,6 @@ function isLiteralInput(value: unknown): value is string | number | boolean {
     return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }
 
-function isCollapsed(node: ComfyWorkflowNode | undefined): boolean {
-    return node?.flags?.collapsed === true;
-}
-
 function isSubgraphContainer(node: ComfyWorkflowNode, ctx?: ComfyWorkflowContext): boolean {
     if (UUID_RE.test(node.type))
         return true;
@@ -1039,75 +1036,38 @@ function buildComfyMetadataSectionDrafts(
     ctx: ComfyWorkflowContext,
 ): ComfyMetadataSectionDraft[] {
     const drafts: ComfyMetadataSectionDraft[] = [];
-    const usedPromptIds = new Set<string>();
     const sortedNodes = [...(ctx.workflow.nodes ?? [])].sort((a, b) => a.id - b.id);
 
     const pushItems = (
         title: string,
         items: ComfyMetadataFieldWithContext[],
         nodeId?: number,
-        promptId?: string,
     ) => {
         if (!items.length)
             return;
         drafts.push(draftToSection(title, items, nodeId));
-        if (promptId)
-            usedPromptIds.add(promptId);
     };
 
     for (const workflowNode of sortedNodes) {
+        if (!shouldIncludeComfyUiNode(workflowNode))
+            continue;
+
         const subgraph = getSubgraphDefinition(ctx, workflowNode);
         const binding = resolveProxyWidgetBinding(workflowNode, subgraph);
 
-        if (subgraph) {
-            let addedInner = false;
-            for (const inner of subgraph.nodes ?? []) {
-                if (isCollapsed(inner))
-                    continue;
-                const promptId = `${workflowNode.id}:${inner.id}`;
-                const promptNode = prompt[promptId];
-                if (!promptNode)
-                    continue;
-                const items = getLiteralFieldsWithContext(promptNode, inner);
-                if (!items.length)
-                    continue;
-                pushItems(
-                    resolveNodeTitle(promptId, promptNode, inner),
-                    items,
-                    workflowNode.id,
-                    promptId,
-                );
-                addedInner = true;
-            }
-            if (!addedInner && binding) {
-                pushItems(
-                    resolveNodeTitle(
-                        workflowNode.id,
-                        prompt[String(workflowNode.id)],
-                        workflowNode,
-                        subgraph,
-                    ),
-                    getPromotedSubgraphFieldsWithContext(
-                        workflowNode.id,
-                        workflowNode,
-                        prompt,
-                        subgraph,
-                        binding,
-                    ),
-                    workflowNode.id,
-                );
-            }
-            continue;
-        }
-
         if (binding) {
             pushItems(
-                resolveNodeTitle(workflowNode.id, prompt[String(workflowNode.id)], workflowNode),
+                resolveNodeTitle(
+                    workflowNode.id,
+                    prompt[String(workflowNode.id)],
+                    workflowNode,
+                    subgraph,
+                ),
                 getPromotedSubgraphFieldsWithContext(
                     workflowNode.id,
                     workflowNode,
                     prompt,
-                    undefined,
+                    subgraph,
                     binding,
                 ),
                 workflowNode.id,
@@ -1115,10 +1075,7 @@ function buildComfyMetadataSectionDrafts(
             continue;
         }
 
-        if (isSubgraphContainer(workflowNode, ctx))
-            continue;
-
-        if (isCollapsed(workflowNode))
+        if (subgraph || isSubgraphContainer(workflowNode, ctx))
             continue;
 
         const promptId = String(workflowNode.id);
@@ -1134,26 +1091,6 @@ function buildComfyMetadataSectionDrafts(
             resolveNodeTitle(workflowNode.id, promptNode, workflowNode),
             items,
             workflowNode.id,
-            promptId,
-        );
-    }
-
-    // Expanded `outerId:innerId` prompt nodes whose subgraph definition was missing.
-    for (const id of Object.keys(prompt).sort()) {
-        if (usedPromptIds.has(id) || !id.includes(':'))
-            continue;
-        const promptNode = prompt[id];
-        if (!promptNode)
-            continue;
-        const items = getLiteralFieldsWithContext(promptNode, undefined);
-        if (!items.length)
-            continue;
-        const outerId = Number(id.split(':')[0]);
-        pushItems(
-            resolveNodeTitle(id, promptNode, undefined),
-            items,
-            Number.isFinite(outerId) ? outerId : undefined,
-            id,
         );
     }
 
@@ -1203,14 +1140,14 @@ function isPromptLikeField(field: ComfyMetadataField): boolean {
 }
 
 function isPromptLikeNode(context: ComfyFieldContext): boolean {
-    for (const node of [context.innerNode, context.workflowNode]) {
-        const title = node?.title;
-        if (!title)
-            continue;
-        if (isPositivePromptTitle(title) || isNegativePromptTitle(title))
-            return true;
-    }
-    return false;
+    // Subgraph shells reuse the container as workflowNode; a title like
+    // "Prompt Pack" must not hide every promoted field. Use the inner node
+    // when present, otherwise the concrete node.
+    const node = context.innerNode ?? context.workflowNode;
+    const title = node?.title;
+    if (!title)
+        return false;
+    return isPositivePromptTitle(title) || isNegativePromptTitle(title);
 }
 
 function shouldExcludeMetadataField(

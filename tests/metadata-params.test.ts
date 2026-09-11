@@ -127,14 +127,11 @@ const subgraphWorkflowNoProxy = JSON.stringify({
 });
 
 const subgraphParams = getComfyMetadataParamsText(subgraphInnerPrompt, subgraphWorkflowNoProxy);
-assert.ok(subgraphParams.includes('Seconds'), 'expanded inner subgraph node appears');
-assert.ok(subgraphParams.includes('value: 10'), 'inner subgraph widget value appears');
-assert.ok(subgraphParams.includes('Last Frame'), 'second inner subgraph node appears');
-assert.ok(subgraphParams.includes('choice: Disabled'), 'inner combo value appears');
-assert.ok(
-    !subgraphParams.includes('Prompt Pack'),
-    'container shell is not the only section when inners exist',
-);
+assert.ok(subgraphParams.includes('Prompt Pack'), 'subgraph shell is the section title');
+assert.ok(subgraphParams.includes('seconds: 10'), 'promoted seconds from outer widgets_values');
+assert.ok(subgraphParams.includes('last frame: Disabled'), 'promoted combo from outer widgets_values');
+assert.ok(!subgraphParams.includes('Seconds'), 'inner node title is not a section');
+assert.ok(!subgraphParams.includes('Last Frame'), 'inner node title is not a section');
 
 const subgraphOuterOnlyPrompt = JSON.stringify({
     '99': {
@@ -199,5 +196,61 @@ assert.ok(promotedFallback.includes('Sampler'), 'synthesized proxy section appea
 assert.ok(promotedFallback.includes('sampler: euler'), 'outer widgets_values map onto promoted fields');
 assert.ok(promotedFallback.includes('cfg: 7'), 'promoted cfg from outer widgets_values');
 assert.ok(promotedFallback.includes('steps: 20'), 'promoted steps from outer widgets_values');
+
+const collapsedWorkflow = JSON.stringify({
+    nodes: [
+        { id: 3, type: 'CheckpointLoaderSimple', title: 'Load Checkpoint' },
+        { id: 5, type: 'KSampler', title: 'KSampler', flags: { collapsed: true } },
+    ],
+});
+const collapsedParams = getComfyMetadataParamsText(prompt, collapsedWorkflow);
+assert.ok(collapsedParams.includes('Load Checkpoint'), 'visible node still appears');
+assert.ok(!collapsedParams.includes('KSampler'), 'collapsed node is omitted');
+
+const hiddenTitleWorkflow = JSON.stringify({
+    nodes: [
+        { id: 3, type: 'CheckpointLoaderSimple', title: 'Load Checkpoint' },
+        { id: 5, type: 'KSampler', title: '_KSampler' },
+    ],
+});
+const hiddenTitleParams = getComfyMetadataParamsText(prompt, hiddenTitleWorkflow);
+assert.ok(hiddenTitleParams.includes('Load Checkpoint'), 'visible node still appears');
+assert.ok(!hiddenTitleParams.includes('KSampler'), '_-prefixed title is omitted');
+
+const collapsedSubgraphWorkflow = JSON.parse(subgraphWorkflowNoProxy) as {
+    nodes: Array<Record<string, unknown>>;
+};
+collapsedSubgraphWorkflow.nodes[0] = {
+    ...collapsedSubgraphWorkflow.nodes[0],
+    flags: { collapsed: true },
+};
+const collapsedSubgraphParams = getComfyMetadataParamsText(
+    subgraphInnerPrompt,
+    JSON.stringify(collapsedSubgraphWorkflow),
+);
+assert.equal(collapsedSubgraphParams, '', 'collapsed subgraph shell is omitted');
+
+const orphanInnerPrompt = JSON.stringify({
+    '3': {
+        inputs: { ckpt_name: 'model.safetensors' },
+        class_type: 'CheckpointLoaderSimple',
+        _meta: { title: 'Load Checkpoint' },
+    },
+    '132:128': {
+        inputs: { value: 99 },
+        class_type: 'SV-Integer',
+        _meta: { title: 'Hidden Inner' },
+    },
+});
+const orphanInnerWorkflow = JSON.stringify({
+    nodes: [
+        { id: 3, type: 'CheckpointLoaderSimple', title: 'Load Checkpoint' },
+        { id: 132, type: subgraphId, title: 'Ghost', properties: {} },
+    ],
+});
+const orphanInnerParams = getComfyMetadataParamsText(orphanInnerPrompt, orphanInnerWorkflow);
+assert.ok(orphanInnerParams.includes('Load Checkpoint'), 'top-level node still appears');
+assert.ok(!orphanInnerParams.includes('Hidden Inner'), 'expanded inner prompt key is not a section');
+assert.ok(!orphanInnerParams.includes('value: 99'), 'inner-only widget is omitted');
 
 console.log('metadata-params.test.ts: all assertions passed');
