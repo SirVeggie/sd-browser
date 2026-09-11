@@ -138,6 +138,7 @@ The frosted sticky bar is **full viewport width** so it doesn’t cut a hard edg
 **File:** `src/routes/settings/+page.svelte` (`.settings-main`, `.cards`, `.wrapper`)
 
 - Body content (help + cards) is capped in `.settings-main` (`max-width: 56rem`, centered).
+- Autocomplete (`SvGenAutocompleteSettings`) uses the same card recipes as Flyout/Search: page-owned `h4`, toggle checkboxes, `NumInput` rows, `Button`. Add/edit sources via `AutocompleteSourceModal` (help text lives in the modal, not on the card).
 - `.cards` uses CSS multi-column masonry (`column-count: 2`, `break-inside: avoid` on cards). Keep modals **outside** `.cards` so they aren’t column items.
 - Cards are `display: flex` with `overflow: hidden` (not `inline-flex` / `overflow: visible`) so expanded collapsibles cannot paint into the neighboring column.
 - Non-chrome `Select` panels are viewport-fixed (see Select note above) so card/column overflow cannot clip them.
@@ -404,6 +405,8 @@ Isolated Generate feature inside the side flyout (tabbed with WebUI iframe). Kee
 - **Multi-open sessions (A1):** `svgenOpenSessionsStore` + helpers in `sessions.ts`. Session dropdown replaces name field + Load. Menu = open (switch/close) → separator → saved (open copy / × delete). Deleting a saved workflow asks via shared `askConfirmation` before `DELETE`. Opening saved creates an **unlinked** in-memory copy (`workflowId: null`) with layout cloned from the saved id; name uniquified among open sessions (`Name (2)`…). Save always opens `SvGenSaveModal` (overwrite warning by saved name); POST uses existing id when names match. After save, `workflowId` is set only so layout can auto-persist. Outside opens (image / Comfy) **add** a session. No dirty UI. No Comfy status in the bar — `notify()` on offline / convert loss / generate failures.
 - **Open-session localStorage:** `syncOpenSessionsWithLocalStorage` (`sessions.ts`, key `svgenOpenSessions`) restores the open bag + hydrates the active session into live stores. Live session/layout/seed edits flush into the bag (suspend that flush while switching/hydrating so `activeId` cannot lag). Writes are debounced; `pagehide`/`beforeunload` flush immediately. Saved library workflows stay in SQLite; this only restores unsaved open tabs across refresh.
 - **Persistence:** `LOCAL_DATA/svgen.sqlite3` (saved workflows + layouts), not MiscDB. Open tabs: localStorage as above.
+- **Optional layout fields:** persisted open-session layouts may predate newly added preferences. `autocompleteSources` is optional; missing means no per-card override, so enabled-by-default sources apply.
+- **Autocomplete list:** hide the popup when every remaining match would leave the field unchanged (exact complete item as the only option, e.g. `contrapposto` after `1girl, contrapposto`).
 
 ---
 

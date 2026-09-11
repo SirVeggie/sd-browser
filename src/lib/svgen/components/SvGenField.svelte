@@ -16,12 +16,14 @@
     import SvGenComfyImagePicker from './SvGenComfyImagePicker.svelte';
     import SvGenIntControl from './SvGenIntControl.svelte';
     import SvGenSdBrowserImagePicker from './SvGenSdBrowserImagePicker.svelte';
+    import SvGenAutocomplete from './SvGenAutocomplete.svelte';
 
     export let field: SvgenField;
     export let editMode = false;
     export let hideLabel = false;
     /** Dimmed in Edit when excluded from the normal card view. */
     export let hidden = false;
+    export let sourceIds: string[] = [];
 
     const dispatch = createEventDispatcher<{
         change: string | number | boolean | null;
@@ -36,7 +38,7 @@
         persistLayout: void;
     }>();
 
-    let textareaEl: HTMLTextAreaElement | undefined;
+    let textEl: HTMLInputElement | HTMLTextAreaElement | undefined;
     const MULTILINE_MAX_LINES = 12;
 
     $: numberDragParams = {
@@ -51,19 +53,19 @@
     };
 
     function autosize() {
-        if (!textareaEl)
+        if (!(textEl instanceof HTMLTextAreaElement))
             return;
-        textareaEl.style.height = 'auto';
-        const styles = getComputedStyle(textareaEl);
+        textEl.style.height = 'auto';
+        const styles = getComputedStyle(textEl);
         const lineHeight = Number.parseFloat(styles.lineHeight)
             || Number.parseFloat(styles.fontSize) * 1.35;
         const pad = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
         const border = Number.parseFloat(styles.borderTopWidth)
             + Number.parseFloat(styles.borderBottomWidth);
         const maxHeight = lineHeight * MULTILINE_MAX_LINES + pad + border;
-        const next = Math.min(textareaEl.scrollHeight, maxHeight);
-        textareaEl.style.height = `${next}px`;
-        textareaEl.style.overflowY = textareaEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
+        const next = Math.min(textEl.scrollHeight, maxHeight);
+        textEl.style.height = `${next}px`;
+        textEl.style.overflowY = textEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
     }
 
     $: useTextarea = !!field.options?.multiline || (!!field.tall && field.kind === 'string');
@@ -287,7 +289,7 @@
     {:else if useTextarea}
         <textarea
             id={fieldDomId}
-            bind:this={textareaEl}
+            bind:this={textEl}
             rows="1"
             value={String(field.value ?? '')}
             on:input={onText}
@@ -296,10 +298,15 @@
     {:else}
         <input
             id={fieldDomId}
+            bind:this={textEl}
             type="text"
             value={String(field.value ?? '')}
+            on:input={onText}
             on:change={onText}
         />
+    {/if}
+    {#if field.kind === 'string' && sourceIds.length}
+        <SvGenAutocomplete target={textEl} {sourceIds} />
     {/if}
 </div>
 

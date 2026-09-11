@@ -2,6 +2,7 @@
     import { createEventDispatcher, onDestroy, tick } from 'svelte';
     import { bindDropdownOutsideClick } from '$lib/tools/dropdownOutsideClick';
     import type { SvgenOpenSession, SvgenProgress, SvgenWorkflowSummary } from '$lib/svgen/types';
+    import { svgenAutocompleteBehaviorStore } from '$lib/svgen/stores';
 
     export let progress: SvgenProgress | null;
     export let busy = false;
@@ -160,6 +161,15 @@
         dispatch('openInComfy');
     }
 
+    function toggleAutocompleteBehavior(
+        key: 'autoSuggest' | 'showInfo',
+    ) {
+        svgenAutocompleteBehaviorStore.update((settings) => ({
+            ...settings,
+            [key]: !settings[key],
+        }));
+    }
+
     onDestroy(() => {
         removeOutside?.();
         removeBurgerOutside?.();
@@ -276,6 +286,25 @@
                 </button>
                 <button type="button" role="menuitem" on:click={onDownload}>
                     JSON
+                </button>
+                <div class="menu-separator" />
+                <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={$svgenAutocompleteBehaviorStore.autoSuggest}
+                    on:click={() => toggleAutocompleteBehavior('autoSuggest')}
+                >
+                    <span class="menu-check">{$svgenAutocompleteBehaviorStore.autoSuggest ? '✓' : ''}</span>
+                    Auto-suggest
+                </button>
+                <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={$svgenAutocompleteBehaviorStore.showInfo}
+                    on:click={() => toggleAutocompleteBehavior('showInfo')}
+                >
+                    <span class="menu-check">{$svgenAutocompleteBehaviorStore.showInfo ? '✓' : ''}</span>
+                    Show autocomplete info
                 </button>
             </div>
         </div>
@@ -641,6 +670,20 @@
                     background: rgba(255, 255, 255, 0.12);
                     transform: none;
                 }
+            }
+
+            .menu-separator {
+                height: 1px;
+                margin: 0.15em 0.35em;
+                background: color-mix(in srgb, var(--ink) 13%, transparent);
+            }
+
+            .menu-check {
+                display: inline-flex;
+                width: 1.15em;
+                justify-content: center;
+                color: var(--accent);
+                font-weight: 700;
             }
         }
     }

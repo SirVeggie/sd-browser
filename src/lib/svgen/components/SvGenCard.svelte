@@ -5,6 +5,7 @@
     import type { SvgenCard, SvgenField } from '$lib/svgen/types';
     import {
         nodePreviewStoreKey,
+        svgenAutocompleteSourcesStore,
         svgenLayoutStore,
         svgenNodePreviewsStore,
         svgenNodeTextPreviewsStore,
@@ -15,6 +16,11 @@
     import SvGenEnablePill from './SvGenEnablePill.svelte';
     import SvGenField from './SvGenField.svelte';
     import SvGenLoraTagLoader from './SvGenLoraTagLoader.svelte';
+    import {
+        openContextMenu,
+        refreshContextMenus,
+        type ContextMenuOption,
+    } from '$lib/items/ContextMenuManager.svelte';
 
     export let card: SvgenCard;
     export let collapsed = false;
@@ -25,6 +31,9 @@
     export let startDrag: ((event: PointerEvent) => void) | undefined = undefined;
 
     let editMode = false;
+    let titleHoldTimer: ReturnType<typeof setTimeout> | undefined;
+    let titleHoldStart: { x: number; y: number } | undefined;
+    let suppressTitleClick = false;
     const dispatch = createEventDispatcher<{
         fieldChange: {
             nodeId: string;
@@ -116,6 +125,16 @@
         ($svgenLayoutStore.loraTagMasterEnabled ?? {})[card.nodeId] !== false;
 
     $: activeSessionId = $svgenOpenSessionsStore.activeId;
+    $: autocompleteSources = $svgenLayoutStore.autocompleteSources ?? {};
+    $: hasExplicitAutocompleteSources = Object.prototype.hasOwnProperty.call(
+        autocompleteSources,
+        card.nodeId,
+    );
+    $: autocompleteSourceIds = hasExplicitAutocompleteSources
+        ? (autocompleteSources[card.nodeId] ?? [])
+        : $svgenAutocompleteSourcesStore
+            .filter((source) => source.enabledByDefault)
+            .map((source) => source.id);
     $: outputPreview = card.imageDisplay && activeSessionId
         ? (lookupNodePreview($svgenNodePreviewsStore, activeSessionId, card.nodeId) ?? null)
         : null;
@@ -187,6 +206,108 @@
         });
         dispatch('fieldOrder', { nodeId: card.nodeId, order });
     }
+
+    function sourceEnabled(sourceId: string): boolean {
+        if (Object.prototype.hasOwnProperty.call(
+            autocompleteSources,
+            card.nodeId,
+        )) {
+            return (autocompleteSources[card.nodeId] ?? []).includes(sourceId);
+        }
+        return $svgenAutocompleteSourcesStore.some(
+            (source) => source.id === sourceId && source.enabledByDefault,
+        );
+    }
+
+    function setSourceEnabled(sourceId: string, enabled: boolean) {
+        const current = autocompleteSourceIds;
+        const next = enabled
+            ? [...new Set([...current, sourceId])]
+            : current.filter((id) => id !== sourceId);
+        svgenLayoutStore.update((layout) => ({
+            ...layout,
+            autocompleteSources: {
+                ...(layout.autocompleteSources ?? {}),
+                [card.nodeId]: next,
+            },
+        }));
+        dispatch('persistLayout');
+    }
+
+    function sourceMenuOption(sourceId: string, name: string): ContextMenuOption {
+        const option: ContextMenuOption = {
+            name,
+            checked: sourceEnabled(sourceId),
+            handler() {
+                const enabled = !sourceEnabled(sourceId);
+                setSourceEnabled(sourceId, enabled);
+                option.checked = enabled;
+                refreshContextMenus();
+                return 'keep';
+            },
+        };
+        return option;
+    }
+
+    function openTitleMenu(x: number, y: number) {
+        if (!$svgenAutocompleteSourcesStore.length)
+            return;
+        openContextMenu(
+            { x, y },
+            [{
+                name: 'Autocomplete',
+                submenu: true,
+                handler: () => $svgenAutocompleteSourcesStore.map((source) =>
+                    sourceMenuOption(source.id, source.name),
+                ),
+            }],
+        );
+    }
+
+    function onTitleContextMenu(event: MouseEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        openTitleMenu(event.clientX, event.clientY);
+    }
+
+    function clearTitleHold() {
+        if (titleHoldTimer)
+            clearTimeout(titleHoldTimer);
+        titleHoldTimer = undefined;
+        titleHoldStart = undefined;
+    }
+
+    function onTitlePointerDown(event: PointerEvent) {
+        if (event.pointerType !== 'touch' && event.pointerType !== 'pen')
+            return;
+        titleHoldStart = { x: event.clientX, y: event.clientY };
+        titleHoldTimer = setTimeout(() => {
+            suppressTitleClick = true;
+            openTitleMenu(event.clientX, event.clientY);
+            navigator.vibrate?.(20);
+        }, 600);
+    }
+
+    function onTitlePointerMove(event: PointerEvent) {
+        if (
+            titleHoldStart
+            && Math.hypot(
+                event.clientX - titleHoldStart.x,
+                event.clientY - titleHoldStart.y,
+            ) > 8
+        ) {
+            clearTitleHold();
+        }
+    }
+
+    function onTitleClick() {
+        clearTitleHold();
+        if (suppressTitleClick) {
+            suppressTitleClick = false;
+            return;
+        }
+        dispatch('toggleCollapse', card.nodeId);
+    }
 </script>
 
 <article class="card" class:collapsed class:inline={useInline} data-column={columnIndex}>
@@ -196,10 +317,18 @@
                 label="Drag to reorder {card.title}"
                 on:pointerdown={(e) => startDrag?.(e)}
             />
-            <h3 class="title">{card.title}</h3>
+            <h3
+                class="title"
+                on:contextmenu={onTitleContextMenu}
+                on:pointerdown={onTitlePointerDown}
+                on:pointermove={onTitlePointerMove}
+                on:pointerup={clearTitleHold}
+                on:pointercancel={clearTitleHold}
+            >{card.title}</h3>
             <div class="inline-field">
                 <SvGenField
                     field={bodyFields[0]}
+                    sourceIds={autocompleteSourceIds}
                     hideLabel
                     on:change={(e) => emitFieldChange(bodyFields[0], e.detail)}
                     on:persistLayout={() => dispatch('persistLayout')}
@@ -223,7 +352,12 @@
                 type="button"
                 class="title-btn"
                 tabindex="-1"
-                on:click={() => dispatch('toggleCollapse', card.nodeId)}
+                on:click={onTitleClick}
+                on:contextmenu={onTitleContextMenu}
+                on:pointerdown={onTitlePointerDown}
+                on:pointermove={onTitlePointerMove}
+                on:pointerup={clearTitleHold}
+                on:pointercancel={clearTitleHold}
             >
                 {card.title}
             </button>
@@ -295,6 +429,7 @@
                                 <div class="field-wrap" class:tall={field.tall}>
                                     <SvGenField
                                         {field}
+                                        sourceIds={autocompleteSourceIds}
                                         editMode={false}
                                         hideLabel={visibleOtherFields.length <= 1}
                                         on:change={(e) => emitFieldChange(field, e.detail)}
@@ -339,6 +474,7 @@
                                     {/if}
                                     <SvGenField
                                         {field}
+                                        sourceIds={autocompleteSourceIds}
                                         {editMode}
                                         hidden={hiddenSet.has(field.widgetName)}
                                         hideLabel={false}
@@ -361,6 +497,7 @@
                             <div class="field-wrap" class:tall={field.tall}>
                                 <SvGenField
                                     {field}
+                                    sourceIds={autocompleteSourceIds}
                                     {editMode}
                                     hideLabel={bodyFields.length <= 1 && !editMode && !card.imageDisplay && !card.textDisplay}
                                     on:change={(e) => emitFieldChange(field, e.detail)}
@@ -424,6 +561,8 @@
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 40%;
+        user-select: none;
+        -webkit-touch-callout: none;
     }
 
     .title-btn {
@@ -442,6 +581,8 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         padding: 0;
+        user-select: none;
+        -webkit-touch-callout: none;
     }
 
     .edit {

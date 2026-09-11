@@ -98,6 +98,13 @@ export type SvgenLayoutState = {
      * per-row enable state in the text widget.
      */
     loraTagMasterEnabled: Record<string, boolean>;
+    /**
+     * Explicit autocomplete source ids per card. A missing node key means use
+     * sources marked enabled-by-default; an empty array explicitly disables all.
+     * The record itself is optional because persisted layouts may predate
+     * autocomplete support.
+     */
+    autocompleteSources?: Record<string, string[]>;
     nodeSignatures: Record<string, string>;
 };
 

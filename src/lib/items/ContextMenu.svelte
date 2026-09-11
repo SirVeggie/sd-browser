@@ -121,8 +121,10 @@
             return;
         }
 
+        const result = option.handler();
+        if (result === "keep") return;
         closeContextMenu(menu.id);
-        await option.handler();
+        await result;
     }
 
     function menuEnter() {
@@ -153,7 +155,8 @@
         {#if option.visible ?? true}
             <button
                 type="button"
-                role="menuitem"
+                role={option.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+                aria-checked={option.checked}
                 style="--stagger-i: {index}"
                 disabled={!(option.enabled ?? true)}
                 aria-haspopup={option.submenu ? "menu" : undefined}
@@ -165,7 +168,12 @@
                 class:disabled={!(option.enabled ?? true)}
                 class:has-submenu={option.submenu}
             >
-                <span class="label">{option.name}</span>
+                <span class="label">
+                    {#if option.checked !== undefined}
+                        <span class="checkmark" aria-hidden="true">{option.checked ? "✓" : ""}</span>
+                    {/if}
+                    {option.name}
+                </span>
                 {#if option.submenu}
                     <span class="submenu-chevron" aria-hidden="true" />
                 {/if}
@@ -251,6 +259,21 @@
             color: var(--muted);
             cursor: default;
         }
+    }
+
+    .label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4em;
+    }
+
+    .checkmark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1em;
+        color: var(--accent);
+        font-weight: 700;
     }
 
     .label {

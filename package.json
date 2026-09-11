@@ -40,7 +40,8 @@
 		"test:keyed-element-map": "node --experimental-strip-types tests/keyedElementMap.test.ts",
 		"test:error-dismiss": "node --experimental-strip-types tests/errorDismiss.test.ts",
 		"test:int-control": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/intControl.test.ts",
-		"test:layout-inherit": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/layoutInherit.test.ts"
+		"test:layout-inherit": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/layoutInherit.test.ts",
+		"test:autocomplete": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/autocomplete.test.ts"
 	},
 	"dependencies": {
 		"@napi-rs/webcodecs": "^1.3.1",

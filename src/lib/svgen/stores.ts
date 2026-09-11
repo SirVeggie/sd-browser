@@ -11,6 +11,11 @@ import {
 } from './nodePreviews';
 import type { ObjectInfoMap, SvgenLayoutState, SvgenOpenSession, SvgenProgress, SvgenSession } from './types';
 import { emptyLayout } from './layout';
+import {
+    defaultAutocompleteBehavior,
+    type AutocompleteBehaviorSettings,
+    type AutocompleteSource,
+} from './autocompleteTypes';
 
 export type FlyoutTab = 'webui' | 'generate';
 
@@ -22,6 +27,11 @@ export type SvgenUiStore = {
 export const svgenUiStore = writable<SvgenUiStore>({
     enabled: true,
 });
+
+export const svgenAutocompleteBehaviorStore = writable<AutocompleteBehaviorSettings>({
+    ...defaultAutocompleteBehavior,
+});
+export const svgenAutocompleteSourcesStore = writable<AutocompleteSource[]>([]);
 
 /** Active flyout tab — localStorage only */
 export const flyoutTabStore = writable<FlyoutTab>('webui');
@@ -145,6 +155,7 @@ export function setSvgenNodeTextPreviews(
 
 export function syncSvgenWithLocalStorage() {
     syncMemory('svgenUi', svgenUiStore);
+    syncMemory('svgenAutocompleteBehavior', svgenAutocompleteBehaviorStore);
     syncMemory('flyoutTab', flyoutTabStore);
 }
 

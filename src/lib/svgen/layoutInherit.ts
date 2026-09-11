@@ -284,6 +284,14 @@ export function remapLayoutToCards(
             savedToNext,
             (_saved, _nextId, value) => (typeof value === 'boolean' ? value : undefined),
         ),
+        autocompleteSources: remapKeyedRecord(
+            savedLayout.autocompleteSources,
+            savedToNext,
+            (_saved, _nextId, value) =>
+                Array.isArray(value) && value.every((id) => typeof id === 'string')
+                    ? value
+                    : undefined,
+        ),
         nodeSignatures: {},
     };
 

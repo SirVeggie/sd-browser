@@ -1,5 +1,33 @@
 # Migrations
 
+## Optional Generate autocomplete layout preference (2026-09)
+
+### What changed
+
+Generate layouts may include `autocompleteSources`, a per-card source override. The
+property is optional: missing means no override, so sources marked
+enabled-by-default apply.
+
+### Affected data
+
+Open Generate sessions saved in localStorage before autocomplete support have no
+`layout.autocompleteSources` property. They remain valid and are not rewritten
+eagerly.
+
+### Compatibility code
+
+- [`src/lib/svgen/types.ts`](../src/lib/svgen/types.ts) — models the property as optional.
+- [`src/lib/svgen/components/SvGenCard.svelte`](../src/lib/svgen/components/SvGenCard.svelte) — reads a missing property as an empty override record.
+
+### How to verify
+
+Restore an open session whose layout omits `autocompleteSources`; the Generate
+panel should render without an exception and use enabled-by-default sources.
+
+### Removal
+
+Do not remove while persisted open sessions can outlive deployments.
+
 ## In-memory JS IMG search; optimized query setting removed (2026-07)
 
 ### What changed

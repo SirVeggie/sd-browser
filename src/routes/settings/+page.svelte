@@ -83,6 +83,9 @@
     import type { TagDefinition } from "$lib/types/tags";
     import SortableList from "$lib/components/SortableList.svelte";
     import DragHandle from "$lib/components/DragHandle.svelte";
+    import SvGenAutocompleteSettings from "$lib/svgen/components/SvGenAutocompleteSettings.svelte";
+    import AutocompleteSourceModal from "$lib/svgen/components/AutocompleteSourceModal.svelte";
+    import type { AutocompleteBoundary } from "$lib/svgen/autocompleteTypes";
 
     import {
         closeContextMenu,
@@ -116,6 +119,29 @@
     let modalTagName = "";
     let modalTagColor = "#5b9cf5";
     let extradataRecalcStarting = false;
+    let autocompleteSettings: {
+        saveSourceDraft: (next: {
+            name: string;
+            path: string;
+            enabledByDefault: boolean;
+            boundary: AutocompleteBoundary;
+        }) => Promise<void>;
+        closeSourceModal: () => void;
+    } | undefined;
+    let autocompleteModalOpen = false;
+    let autocompleteEditingId: string | null = null;
+    let autocompleteSourceBusy = false;
+    let autocompleteDraft: {
+        name: string;
+        path: string;
+        enabledByDefault: boolean;
+        boundary: AutocompleteBoundary;
+    } = {
+        name: "",
+        path: "",
+        enabledByDefault: false,
+        boundary: "comma",
+    };
 
     $: extradataRecalcRunning = extradataRecalcStarting || hasRunningOperation($operationStore, 'extradata-recalc');
     $: extradataRecalcOp = $operationStore.find(op => op.type === 'extradata-recalc' && op.status === 'running');
@@ -695,6 +721,17 @@
     </div>
 
     <div class="settings-card">
+        <h4>Autocomplete</h4>
+        <SvGenAutocompleteSettings
+            bind:this={autocompleteSettings}
+            bind:modalOpen={autocompleteModalOpen}
+            bind:editingId={autocompleteEditingId}
+            bind:draft={autocompleteDraft}
+            bind:sourceBusy={autocompleteSourceBusy}
+        />
+    </div>
+
+    <div class="settings-card">
         <h4>Visual</h4>
         <div class="settings-group visual-group">
 
@@ -1184,6 +1221,20 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     </div>
     </div>
     </div>
+
+    {#if autocompleteModalOpen}
+        <AutocompleteSourceModal
+            title={autocompleteEditingId ? "Edit autocomplete source" : "Add autocomplete source"}
+            bind:name={autocompleteDraft.name}
+            bind:path={autocompleteDraft.path}
+            bind:enabledByDefault={autocompleteDraft.enabledByDefault}
+            bind:boundary={autocompleteDraft.boundary}
+            saveLabel={autocompleteEditingId ? "Save" : "Add and index"}
+            busy={autocompleteSourceBusy}
+            on:save={(event) => autocompleteSettings?.saveSourceDraft(event.detail)}
+            on:close={() => autocompleteSettings?.closeSourceModal()}
+        />
+    {/if}
 
     {#if instructionModalOpen}
         <SystemInstructionModal

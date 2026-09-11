@@ -13,6 +13,7 @@ export function emptyLayout(): SvgenLayoutState {
         intControlModes: {},
         loraClipStrength: {},
         loraTagMasterEnabled: {},
+        autocompleteSources: {},
         nodeSignatures: {},
     };
 }
@@ -192,6 +193,16 @@ export function parseLayoutJson(raw: string | null | undefined): SvgenLayoutStat
             loraTagMasterEnabled:
                 parsed.loraTagMasterEnabled && typeof parsed.loraTagMasterEnabled === 'object'
                     ? parsed.loraTagMasterEnabled
+                    : {},
+            autocompleteSources:
+                parsed.autocompleteSources && typeof parsed.autocompleteSources === 'object'
+                    ? Object.fromEntries(
+                        Object.entries(parsed.autocompleteSources)
+                            .filter((entry): entry is [string, string[]] =>
+                                Array.isArray(entry[1])
+                                && entry[1].every((id) => typeof id === 'string'),
+                            ),
+                    )
                     : {},
         };
     } catch {

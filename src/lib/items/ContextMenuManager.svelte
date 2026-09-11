@@ -22,6 +22,7 @@
         visible?: boolean;
         enabled?: boolean;
         submenu?: boolean;
+        checked?: boolean;
     };
 
     const menuStore = writable<IContextMenu[]>([]);
@@ -90,6 +91,10 @@
     export function closeAllContextMenus() {
         menuStore.set([]);
         window.removeEventListener("keydown", handleEsc);
+    }
+
+    export function refreshContextMenus() {
+        menuStore.update((menus) => menus.slice());
     }
 </script>
 

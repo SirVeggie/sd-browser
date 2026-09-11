@@ -3,6 +3,7 @@ import { emptyLayout } from '../src/lib/svgen/layout.ts';
 import {
     matchableFromCards,
     pickBestSavedLayout,
+    remapLayoutToCards,
     type SavedLayoutCandidate,
 } from '../src/lib/svgen/layoutInherit.ts';
 import type { SvgenCard, SvgenField, SvgenLayoutState } from '../src/lib/svgen/types.ts';
@@ -91,4 +92,17 @@ const opened = candidate('open-1', matching, 'opened');
     ];
     const weak = candidate('weak', unmatched, 'saved');
     assert.equal(pickBestSavedLayout(next, [weak]), null);
+}
+
+{
+    const layout = emptyLayout();
+    layout.autocompleteSources.s2 = ['booru', 'custom'];
+    const remapped = remapLayoutToCards(
+        layout,
+        new Map([['s1', 'n1'], ['s2', 'n2']]),
+        next,
+    );
+    assert.deepEqual(remapped.autocompleteSources, {
+        n2: ['booru', 'custom'],
+    });
 }

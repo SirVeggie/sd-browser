@@ -12,6 +12,7 @@
         svgenGeneratingStore,
         svgenLastUsedSeedsStore,
         svgenLayoutStore,
+        svgenAutocompleteSourcesStore,
         svgenObjectInfoStore,
         svgenOpenSessionsStore,
         svgenProgressStore,
@@ -95,6 +96,7 @@
     import SvGenQueueBar from './SvGenQueueBar.svelte';
     import SvGenQueueList from './SvGenQueueList.svelte';
     import SvGenSaveModal from './SvGenSaveModal.svelte';
+    import { listAutocompleteSources } from '$lib/svgen/autocompleteClient';
 
     const COMFY_TOKEN_KEY = 'comfyWorkflowOpenToken';
     const PENDING_PANEL_POLL_MS = 1500;
@@ -1025,6 +1027,9 @@
     onMount(() => {
         void refreshStatus();
         void refreshWorkflowList();
+        void listAutocompleteSources()
+            .then((sources) => svgenAutocompleteSourcesStore.set(sources))
+            .catch((cause) => console.error('Failed to load autocomplete sources', cause));
         void pollPendingPanelWorkflow();
         void refreshQueueStatus({ skipTopUp: true });
         scheduleQueuePoll();
