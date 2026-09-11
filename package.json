@@ -36,7 +36,8 @@
 		"test:byte-range": "node --experimental-strip-types tests/byteRange.test.ts",
 		"test:video-slideshow": "node --experimental-strip-types tests/videoSlideshow.test.ts",
 		"test:flyout-width": "node --experimental-strip-types tests/flyoutWidth.test.ts",
-		"test:format-error": "node --experimental-strip-types tests/formatError.test.ts"
+		"test:format-error": "node --experimental-strip-types tests/formatError.test.ts",
+		"test:keyed-element-map": "node --experimental-strip-types tests/keyedElementMap.test.ts"
 	},
 	"dependencies": {
 		"@napi-rs/webcodecs": "^1.3.1",
