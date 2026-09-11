@@ -50,6 +50,7 @@
         submitPrompt,
         SvgenComfyAuthError,
     } from '$lib/svgen/comfyClient';
+    import { createQueuedErrorDismiss } from '$lib/svgen/errorDismiss';
     import { reportSvgenError } from '$lib/svgen/formatError';
     import { connectComfyWs, createClientId } from '$lib/svgen/comfyWs';
     import { applyFieldOrderAndHidden, discoverCards, setWidgetValue } from '$lib/svgen/fields';
@@ -127,6 +128,13 @@
     let layoutSaveTimer: ReturnType<typeof setTimeout> | undefined;
     let statusPrimed = false;
     let saveModalOpen = false;
+    const queuedErrorDismiss = createQueuedErrorDismiss({
+        hasError: () => get(svgenErrorStore) != null,
+        clearError: () => svgenErrorStore.set(null),
+    });
+    const unsubscribeErrorDismiss = svgenErrorStore.subscribe((value) => {
+        queuedErrorDismiss.onErrorChanged(value);
+    });
 
     $: session = $svgenSessionStore;
     $: layout = $svgenLayoutStore;
@@ -569,6 +577,7 @@
                 workflow: applyControlsAfterQueuedPrompt(s.workflow),
             };
         });
+        queuedErrorDismiss.scheduleAfterQueue();
         return result.prompt_id;
     }
 
@@ -999,6 +1008,8 @@
             clearTimeout(queuePollTimer);
         if (pendingPanelPollTimer)
             clearInterval(pendingPanelPollTimer);
+        queuedErrorDismiss.dispose();
+        unsubscribeErrorDismiss();
     });
 </script>
 
