@@ -5,6 +5,7 @@
         rectFromDOM,
         targetIndexFromPointer,
     } from '$lib/tools/sortableGeometry';
+    import { bindKeyedElement } from '$lib/tools/keyedElementMap';
     import type { ColumnPlacement, SvgenCard } from '$lib/svgen/types';
     import SvGenCard from './SvGenCard.svelte';
 
@@ -57,24 +58,13 @@
     const AUTO_SCROLL_MAX_PX = 18;
 
     const itemEls = new Map<string, HTMLElement>();
+    const itemAction = bindKeyedElement(itemEls);
     const columnEls: HTMLElement[] = [];
+    let columnsEl: HTMLElement | undefined;
+    let captureEl: HTMLElement | null = null;
 
     $: if (!dragging)
         visualColumns = placement.columns.map((col) => col.slice());
-
-    function itemAction(node: HTMLElement, id: string) {
-        itemEls.set(id, node);
-        return {
-            update(nextId: string) {
-                itemEls.delete(id);
-                id = nextId;
-                itemEls.set(id, node);
-            },
-            destroy() {
-                itemEls.delete(id);
-            },
-        };
-    }
 
     function columnAction(node: HTMLElement, index: number) {
         columnEls[index] = node;
@@ -114,6 +104,8 @@
 
     async function flip(prev: Map<string, DOMRect>) {
         await tick();
+        if (!dragging)
+            return;
         for (const col of visualColumns) {
             for (const id of col) {
                 const el = itemEls.get(id);
@@ -310,8 +302,15 @@
         lastPointerX = event.clientX;
         lastPointerY = event.clientY;
 
+        // Capture on the columns root — the handle remounts when the card
+        // moves into another column's {#each}, which would drop capture.
         const handle = event.currentTarget as HTMLElement;
-        handle.setPointerCapture(event.pointerId);
+        captureEl = columnsEl ?? handle;
+        try {
+            captureEl.setPointerCapture(event.pointerId);
+        } catch {
+            captureEl = null;
+        }
         addWindowListeners();
         startAutoScroll();
     }
@@ -345,12 +344,25 @@
         updateDropFromPointer(event.clientX, event.clientY);
     }
 
+    function releaseCapture() {
+        if (!captureEl || pointerId < 0)
+            return;
+        try {
+            if (captureEl.hasPointerCapture(pointerId))
+                captureEl.releasePointerCapture(pointerId);
+        } catch {
+            // element already gone
+        }
+        captureEl = null;
+    }
+
     function finishDrag(commit: boolean) {
         if (!dragging)
             return;
 
         stopAutoScroll();
         removeWindowListeners();
+        releaseCapture();
         clearFlipStyles();
 
         const nextColumns = commit
@@ -392,10 +404,16 @@
     onDestroy(() => {
         stopAutoScroll();
         removeWindowListeners();
+        releaseCapture();
     });
 </script>
 
-<div class="columns" class:is-dragging={dragging} style={`--cols: ${visualColumns.length}`}>
+<div
+    bind:this={columnsEl}
+    class="columns"
+    class:is-dragging={dragging}
+    style={`--cols: ${visualColumns.length}`}
+>
     {#each visualColumns as col, colIndex}
         <div class="column-shell" use:overlayScrollbar use:columnAction={colIndex}>
             <div class="column" data-overlay-scroll role="list">
