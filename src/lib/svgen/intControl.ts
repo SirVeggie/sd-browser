@@ -132,8 +132,12 @@ export function captureLastUsedSeeds(
 }
 
 /**
- * After a successful queue, advance INT/seed widgets according to their
- * control-after-generate mode (skips frozen keys).
+ * Advance INT/seed widgets according to their control-after-generate mode
+ * (skips frozen keys).
+ *
+ * Call this in the same synchronous turn as snapshotting the workflow for
+ * convert/submit — before any `await`. A later advance leaves a window where
+ * a second Generate click snapshots the same seeds.
  */
 export function applyIntControlsAfterQueue(
     workflow: ComfyWorkflow,

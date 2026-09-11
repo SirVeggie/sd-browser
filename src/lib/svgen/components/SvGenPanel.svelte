@@ -558,6 +558,18 @@
             layout,
             objectInfo,
         );
+        // Claim the next seeds on the *live* workflow before convert/submit
+        // yields. A second Generate click otherwise snapshots the same INTs.
+        // Do not write `queueWorkflow` back — that snapshot is older than
+        // edits typed during I/O (caret jump / lost chars on infinite top-up).
+        svgenSessionStore.update((s) => {
+            if (!s)
+                return s;
+            return {
+                ...s,
+                workflow: applyControlsAfterQueuedPrompt(s.workflow),
+            };
+        });
         const prompt = await convertWorkflow(queueWorkflow, getStoredComfyToken());
         const result = await submitPrompt({
             prompt,
@@ -565,18 +577,7 @@
             clientId,
             comfyToken: getStoredComfyToken(),
         });
-        // Int-control advances must land on the *live* workflow. Convert/submit used a
-        // snapshot from before those awaits; writing that snapshot back would wipe edits
-        // typed during convert/submit (caret jump + lost chars on infinite top-up).
-        svgenSessionStore.update((s) => {
-            if (!s)
-                return s;
-            return {
-                ...s,
-                prompt,
-                workflow: applyControlsAfterQueuedPrompt(s.workflow),
-            };
-        });
+        svgenSessionStore.update((s) => (s ? { ...s, prompt } : s));
         queuedErrorDismiss.scheduleAfterQueue();
         return result.prompt_id;
     }
