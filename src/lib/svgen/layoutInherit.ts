@@ -290,14 +290,37 @@ export function remapLayoutToCards(
     return ensureBaseLayouts(remapped, orderedIds);
 }
 
+export type LayoutCandidateSource = 'saved' | 'opened';
+
 export type SavedLayoutCandidate = {
     workflowId: string;
     cards: MatchableCard[];
     layout: SvgenLayoutState;
+    /** Saved library vs an already-open session. Missing → saved. */
+    source?: LayoutCandidateSource;
 };
 
+function layoutCandidateSource(candidate: SavedLayoutCandidate): LayoutCandidateSource {
+    return candidate.source ?? 'saved';
+}
+
+/** Opened layouts are preferred on an equal identity match (more recently edited). */
+function sourceRank(source: LayoutCandidateSource): number {
+    switch (source) {
+        case 'opened':
+            return 1;
+        case 'saved':
+            return 0;
+        default: {
+            const _never: never = source;
+            return _never;
+        }
+    }
+}
+
 /**
- * Pick the saved layout with the most identity matches (≥ 50% of next cards).
+ * Pick the layout with the most identity matches (≥ 50% of next cards).
+ * On an equal match, prefer an opened-session layout over a saved one.
  * Returns null when nothing clears the threshold.
  */
 export function pickBestSavedLayout(
@@ -313,6 +336,7 @@ export function pickBestSavedLayout(
         layout: SvgenLayoutState;
         matched: number;
         ratio: number;
+        source: LayoutCandidateSource;
     } | null = null;
 
     for (const candidate of candidates) {
@@ -322,16 +346,23 @@ export function pickBestSavedLayout(
         const ratio = matched / nextCards.length;
         if (ratio < 0.5)
             continue;
+        const source = layoutCandidateSource(candidate);
         if (
             !best
             || matched > best.matched
             || (matched === best.matched && ratio > best.ratio)
+            || (
+                matched === best.matched
+                && ratio === best.ratio
+                && sourceRank(source) > sourceRank(best.source)
+            )
         ) {
             best = {
                 workflowId: candidate.workflowId,
                 layout: remapLayoutToCards(candidate.layout, savedToNext, nextCards),
                 matched,
                 ratio,
+                source,
             };
         }
     }

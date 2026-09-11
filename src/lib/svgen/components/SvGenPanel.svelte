@@ -87,7 +87,7 @@
         type KnownQueueItem,
         type SvgenQueueItem,
     } from '$lib/svgen/queue';
-    import type { SvgenCard, SvgenWorkflowSummary } from '$lib/svgen/types';
+    import type { ObjectInfoMap, SvgenCard, SvgenLayoutState, SvgenWorkflowSummary } from '$lib/svgen/types';
     import type { ComfyPrompt, ComfyWorkflow } from '$lib/types/images';
     import { get } from 'svelte/store';
     import SvGenColumns from './SvGenColumns.svelte';
@@ -791,6 +791,38 @@
         }
     }
 
+    function fieldNamesFromLayout(layout: SvgenLayoutState, nodeId: string): string[] {
+        const names = new Set<string>([
+            ...(layout.fieldOrder[nodeId] ?? []),
+            ...(layout.hiddenFields[nodeId] ?? []),
+        ]);
+        for (const key of Object.keys(layout.intControlModes ?? {})) {
+            if (!key.startsWith(`${nodeId}:`))
+                continue;
+            const widget = key.slice(nodeId.length + 1).split(':').pop();
+            if (widget)
+                names.add(widget);
+        }
+        return [...names];
+    }
+
+    function matchableCardsForLayout(
+        layout: SvgenLayoutState,
+        workflow: ComfyWorkflow | undefined,
+        objectInfo: ObjectInfoMap | null,
+    ) {
+        let cards = matchableFromSignatures(layout.nodeSignatures);
+        if (!cards.length) {
+            if (!workflow)
+                return [];
+            return matchableFromCards(discoverCards(workflow, objectInfo));
+        }
+        return cards.map((card) => ({
+            ...card,
+            fieldNames: fieldNamesFromLayout(layout, card.nodeId),
+        }));
+    }
+
     async function collectSavedLayoutCandidates(): Promise<SavedLayoutCandidate[]> {
         if (!workflows.length) {
             try {
@@ -804,32 +836,19 @@
             try {
                 const raw = await getLayout(summary.id);
                 const layout = parseLayoutJson(raw);
-                let cards = matchableFromSignatures(layout.nodeSignatures);
-                if (!cards.length) {
+                let workflow: ComfyWorkflow | undefined;
+                if (!matchableFromSignatures(layout.nodeSignatures).length) {
                     const row = await getWorkflow(summary.id);
-                    cards = matchableFromCards(discoverCards(row.workflow, objectInfo));
-                } else {
-                    cards = cards.map((card) => {
-                        const names = new Set<string>([
-                            ...(layout.fieldOrder[card.nodeId] ?? []),
-                            ...(layout.hiddenFields[card.nodeId] ?? []),
-                        ]);
-                        for (const key of Object.keys(layout.intControlModes ?? {})) {
-                            if (!key.startsWith(`${card.nodeId}:`))
-                                continue;
-                            const widget = key.slice(card.nodeId.length + 1).split(':').pop();
-                            if (widget)
-                                names.add(widget);
-                        }
-                        return { ...card, fieldNames: [...names] };
-                    });
+                    workflow = row.workflow;
                 }
+                const cards = matchableCardsForLayout(layout, workflow, objectInfo);
                 if (!cards.length)
                     return null;
                 return {
                     workflowId: summary.id,
                     cards,
                     layout,
+                    source: 'saved',
                 } satisfies SavedLayoutCandidate;
             } catch {
                 return null;
@@ -838,12 +857,36 @@
         return results.filter((entry): entry is SavedLayoutCandidate => !!entry);
     }
 
+    function collectOpenedLayoutCandidates(): SavedLayoutCandidate[] {
+        persistActiveOpenSession();
+        const objectInfo = get(svgenObjectInfoStore);
+        const { sessions } = get(svgenOpenSessionsStore);
+        const out: SavedLayoutCandidate[] = [];
+        for (const open of sessions) {
+            const cards = matchableCardsForLayout(open.layout, open.workflow, objectInfo);
+            if (!cards.length)
+                continue;
+            out.push({
+                workflowId: open.id,
+                cards,
+                layout: open.layout,
+                source: 'opened',
+            });
+        }
+        return out;
+    }
+
+    async function collectLayoutCandidates(): Promise<SavedLayoutCandidate[]> {
+        const saved = await collectSavedLayoutCandidates();
+        return [...saved, ...collectOpenedLayoutCandidates()];
+    }
+
     async function layoutForUnsavedOpen(
         discovered: SvgenCard[],
         workflowNodes: ComfyWorkflow['nodes'],
     ) {
         const orderedIds = orderedNodeIdsForAutoLayout(discovered);
-        const candidates = await collectSavedLayoutCandidates();
+        const candidates = await collectLayoutCandidates();
         const best = pickBestSavedLayout(discovered, candidates);
         const layout = best?.layout ?? ensureBaseLayouts(emptyLayout(), orderedIds);
         layout.nodeSignatures = signaturesFromCards(discovered, workflowNodes ?? []);
