@@ -522,11 +522,6 @@
         :global(.select .chevron.open) {
             margin-top: 0.08em;
         }
-
-        :global(.select .panel) {
-            z-index: 10060;
-            font-size: 12px;
-        }
     }
 
     .search input {

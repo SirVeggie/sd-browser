@@ -29,6 +29,7 @@
     let panelBottom = 0;
     let panelMinWidth = 0;
     let panelMaxHeight = 0;
+    let panelFontSize = "";
     let removePositionListeners: (() => void) | undefined;
 
     function normalize(option: SelectOption): {
@@ -88,13 +89,15 @@
         panelMaxHeight = dropUp
             ? Math.max(120, rootRect.top - 8)
             : Math.max(120, window.innerHeight - rootRect.bottom - 8);
+        // Portaled panels inherit from body; keep the trigger's size.
+        panelFontSize = getComputedStyle(rootEl).fontSize;
     }
 
     $: panelStyle = chrome
         ? `left: ${panelLeft}px; min-width: ${panelMinWidth}px; max-height: ${panelMaxHeight}px;`
         : dropUp
-          ? `left: ${panelLeft}px; bottom: ${panelBottom}px; min-width: ${panelMinWidth}px; max-height: ${panelMaxHeight}px;`
-          : `left: ${panelLeft}px; top: ${panelTop}px; min-width: ${panelMinWidth}px; max-height: ${panelMaxHeight}px;`;
+          ? `left: ${panelLeft}px; bottom: ${panelBottom}px; min-width: ${panelMinWidth}px; max-height: ${panelMaxHeight}px; font-size: ${panelFontSize};`
+          : `left: ${panelLeft}px; top: ${panelTop}px; min-width: ${panelMinWidth}px; max-height: ${panelMaxHeight}px; font-size: ${panelFontSize};`;
 
     function startPositionListeners() {
         stopPositionListeners();
@@ -332,6 +335,10 @@
 
         &.viewport {
             position: fixed;
+            /* Above picker overlays (10050) and toasts (10000). In-tree 220
+               is not enough once the panel is portaled onto document.body —
+               descendant :global(.select .panel) rules do not follow it. */
+            z-index: 10060;
             /* top / bottom come from inline styles via getBoundingClientRect */
             top: auto;
             bottom: auto;
