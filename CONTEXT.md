@@ -153,6 +153,12 @@ If a drag is still hard against the 80vw cap and the saved px is larger, do not 
 
 The frosted sticky bar is **full viewport width** so it doesn’t cut a hard edge against the page glow. Title/actions sit in `.top-inner` (`max-width: 56rem`, centered). The accent radial lives on a **viewport-fixed** `::before`, not on the scrolling `.settings` background — do not put the gradient back on `.settings` or use an opaque sticky header that covers it.
 
+## NumInput steppers inside labels
+
+**File:** `src/lib/items/NumInput.svelte`
+
+Buttons are labelable. Settings `.inline` rows wrap `NumInput` in a `<label>`, so if Decrease is first in the DOM it becomes `label.control`. Pressing + then `:active`-highlights both steppers (Chrome still does this even when the extra click is suppressed). Keep the `<input>` first in the DOM and use flex `order` for the visual [−][value][+] layout.
+
 ## Settings cards layout
 
 **File:** `src/routes/settings/+page.svelte` (`.settings-main`, `.cards`, `.wrapper`)

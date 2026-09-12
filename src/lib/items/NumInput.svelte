@@ -19,14 +19,7 @@
 </script>
 
 <div class="num">
-    <button
-        type="button"
-        class="step"
-        aria-label="Decrease"
-        tabindex="-1"
-        on:mousedown|preventDefault|stopPropagation
-        on:click={(e) => bump(-1, e)}
-    >−</button>
+    <!-- Input first: wrapping <label> would otherwise treat Decrease as the control. -->
     <input
         type="number"
         bind:this={element}
@@ -38,7 +31,15 @@
     />
     <button
         type="button"
-        class="step"
+        class="step dec"
+        aria-label="Decrease"
+        tabindex="-1"
+        on:mousedown|preventDefault|stopPropagation
+        on:click={(e) => bump(-1, e)}
+    >−</button>
+    <button
+        type="button"
+        class="step inc"
         aria-label="Increase"
         tabindex="-1"
         on:mousedown|preventDefault|stopPropagation
@@ -66,6 +67,7 @@
     }
 
     input {
+        order: 1;
         flex: 1 1 auto;
         min-width: 0;
         width: 100%;
@@ -93,6 +95,14 @@
         }
     }
 
+    .dec {
+        order: 0;
+    }
+
+    .inc {
+        order: 2;
+    }
+
     .step {
         flex: 0 0 auto;
         appearance: none;
@@ -114,7 +124,10 @@
             outline: none;
         }
 
-        &:active {
+        /* Require :hover/:focus so a wrapping <label> activating another
+           control cannot paint this stepper as pressed. */
+        &:hover:active,
+        &:focus-visible:active {
             background: rgba(196, 165, 116, 0.28);
         }
     }
