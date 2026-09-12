@@ -371,6 +371,14 @@ Parameter sections use the same node inclusion as Generate cards: skip collapsed
 
 Live mode (`live` prop) shows the newest gallery image with **no metadata panel and no scrollable card chrome**. Parent leaves `data`/`info` undefined; ImageFull must also clear `stageInfo` while `live` so a previous fullscreen open of the same id cannot leak metadata into live.
 
+### Next from live opens the first image (same id is correct)
+
+**Files:** `src/routes/+page.svelte` (`goRight`)
+
+Next from live must open `galleryImages[0]` even when that is already on stage. Live has no metadata; the point of the first next is to exit live onto that image so the panel can show. Do **not** skip to `[1]`.
+
+Do **not** `closeImage()` before `openImage([0])`. `closeImage` clears `currentImage` and `live` together; a store flush inside `stopSlideshow` can tear down ImageFull before `openImage` runs, leaving a hybrid neither-live-nor-fullscreen view. Set `live = false` and `openImage(galleryImages[0])` in the same turn. Preload `[0]` metadata while live so the panel can bind immediately. Nav arrows ignore the ghost `click` after `touchstart` so one tap does not then advance to `[1]`.
+
 ---
 
 ## Fullscreen neighbor metadata preload

@@ -703,7 +703,11 @@
     }
 
     // Warm neighbor metadata so swaps can bind info as soon as media promotes.
-    $: if (!live && currentImage) {
+    // Live has no panel, but next opens [0] (often the same pixels) — cache it
+    // so metadata can appear immediately instead of a chrome-only in-between.
+    $: if (live) {
+        preloadImageInfo(galleryImages[0]?.id);
+    } else if (currentImage) {
         if (prevIndex >= 0) preloadImageInfo(galleryImages[prevIndex]?.id);
         if (nextIndex >= 0 && nextIndex < galleryImages.length)
             preloadImageInfo(galleryImages[nextIndex]?.id);
@@ -780,8 +784,13 @@
 
     function goRight(mode?: ActionMode) {
         if (live) {
-            closeImage();
-            openImage(galleryImages[0]);
+            const first = galleryImages[0];
+            if (!first) return;
+            // Do not closeImage() first — that clears currentImage/live together
+            // and can tear down ImageFull (store flush) before openImage runs,
+            // leaving a hybrid neither-live-nor-fullscreen state.
+            live = false;
+            openImage(first);
         } else if (rightArrow) {
             currentImage = galleryImages[nextIndex];
             if (nextIndex == galleryImages.length - 1) {

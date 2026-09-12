@@ -6,13 +6,26 @@
     export let hidden = false;
     export let enabled = true;
 
+    let ignoreClickUntil = 0;
+
     function handleTouch(action: () => void) {
         return (e: TouchEvent) => {
             e.preventDefault();
             e.stopPropagation();
+            // Ghost clicks still fire after touchstart on some browsers even
+            // with preventDefault. One tap would then run goRight twice:
+            // live→first, then first→second.
+            ignoreClickUntil = performance.now() + 700;
             action();
 
             continueTouch(action);
+        };
+    }
+
+    function handleClick(action: () => void) {
+        return () => {
+            if (performance.now() < ignoreClickUntil) return;
+            action();
         };
     }
 
@@ -34,8 +47,8 @@
         class="nav-arrow left"
         class:hidden
         aria-label="Previous image"
-        on:click={onLeft}
-        on:touchstart={handleTouch(onLeft)}
+        on:click={handleClick(onLeft)}
+        on:touchstart|nonpassive={handleTouch(onLeft)}
     >
         <span class="glow" aria-hidden="true"></span>
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -57,8 +70,8 @@
         class="nav-arrow right"
         class:hidden
         aria-label="Next image"
-        on:click={onRight}
-        on:touchstart={handleTouch(onRight)}
+        on:click={handleClick(onRight)}
+        on:touchstart|nonpassive={handleTouch(onRight)}
     >
         <span class="glow" aria-hidden="true"></span>
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -87,6 +100,7 @@
         top: 0;
         bottom: 0;
         z-index: 46;
+        touch-action: manipulation;
         // Size against the non-flyout content width, not the window.
         width: max(calc((100vw - var(--flyout-width)) * 0.055), 3.5rem);
         display: flex;
