@@ -47,8 +47,8 @@ import type { AutocompleteMatch } from '../src/lib/svgen/autocompleteTypes.ts';
 {
     assert.equal(autocompleteInputAction('insertText', 'gre', 'green'), 'search');
     assert.equal(autocompleteInputAction('insertCompositionText', 'gre', 'green'), 'search');
-    assert.equal(autocompleteInputAction('deleteContentBackward', 'green', 'gree'), 'close');
-    assert.equal(autocompleteInputAction(undefined, 'green', 'gree'), 'close');
+    assert.equal(autocompleteInputAction('deleteContentBackward', 'green', 'gree'), 'delete');
+    assert.equal(autocompleteInputAction(undefined, 'green', 'gree'), 'delete');
     assert.equal(autocompleteInputAction(undefined, 'gre', 'green'), 'search');
     assert.equal(autocompleteInputAction('insertText', 'green', 'green'), 'ignore');
 }

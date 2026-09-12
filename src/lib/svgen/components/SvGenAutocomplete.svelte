@@ -428,9 +428,10 @@
                 }
                 scheduleSearch(false);
                 return;
-            case 'close':
+            case 'delete':
                 lastCaret = caret;
-                close();
+                if (open && $svgenAutocompleteBehaviorStore.autoSuggest)
+                    scheduleSearch(false);
                 return;
             case 'ignore':
                 break;

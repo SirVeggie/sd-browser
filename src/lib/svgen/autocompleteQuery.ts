@@ -120,9 +120,9 @@ export function applyAutocompleteMatch(
     };
 }
 
-export type AutocompleteInputAction = 'search' | 'close' | 'ignore';
+export type AutocompleteInputAction = 'search' | 'delete' | 'ignore';
 
-/** Inserted text searches; delete/backspace closes and must not reopen. */
+/** Inserted text searches. Delete refreshes an open list and must not open a closed one. */
 export function autocompleteInputAction(
     inputType: string | undefined,
     previousValue: string,
@@ -133,7 +133,7 @@ export function autocompleteInputAction(
     const deleted = inputType
         ? inputType.startsWith('delete')
         : nextValue.length < previousValue.length;
-    return deleted ? 'close' : 'search';
+    return deleted ? 'delete' : 'search';
 }
 
 /** Drop matches that would leave the field unchanged (exact complete item). */
