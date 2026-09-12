@@ -44,6 +44,9 @@
     let idleOpacityPercent = Math.round(
         get(svgenAutocompleteBehaviorStore).idleOpacity * 100,
     );
+    let fadeDelaySeconds = Number(
+        (get(svgenAutocompleteBehaviorStore).fadeDelayMs / 1000).toFixed(1),
+    );
 
     $: sourceBusy = busyId !== null;
     $: {
@@ -53,6 +56,21 @@
             svgenAutocompleteBehaviorStore.update((settings) => ({
                 ...settings,
                 idleOpacity: unit,
+            }));
+        }
+    }
+    $: {
+        const seconds = Math.max(
+            0.1,
+            Math.min(10, Math.round((Number(fadeDelaySeconds) || 2) * 10) / 10),
+        );
+        if (fadeDelaySeconds !== seconds)
+            fadeDelaySeconds = seconds;
+        const ms = Math.round(seconds * 10) * 100;
+        if ($svgenAutocompleteBehaviorStore.fadeDelayMs !== ms) {
+            svgenAutocompleteBehaviorStore.update((settings) => ({
+                ...settings,
+                fadeDelayMs: ms,
             }));
         }
     }
@@ -195,7 +213,10 @@
             minChars: Math.max(1, Math.min(20, Math.round(Number(settings.minChars) || 3))),
             maxRows: Math.max(1, Math.min(100, Math.round(Number(settings.maxRows) || 50))),
             idleOpacity: Math.max(0.04, Math.min(0.7, Number(settings.idleOpacity) || 0.22)),
-            fadeDelayMs: Math.max(100, Math.min(10_000, Math.round(Number(settings.fadeDelayMs) || 2000))),
+            fadeDelayMs: Math.max(
+                100,
+                Math.min(10_000, Math.round((Number(settings.fadeDelayMs) || 2000) / 100) * 100),
+            ),
         }));
     }
 </script>
@@ -247,9 +268,10 @@
 
     <!-- svelte-ignore a11y-label-has-associated-control -->
     <label class="inline">
-        Fade after interaction (ms)
+        Fade after interaction (s)
         <NumInput
-            bind:value={$svgenAutocompleteBehaviorStore.fadeDelayMs}
+            bind:value={fadeDelaySeconds}
+            step={0.1}
             on:change={clampBehavior}
         />
     </label>
