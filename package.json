@@ -42,7 +42,8 @@
 		"test:int-control": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/intControl.test.ts",
 		"test:layout-inherit": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/layoutInherit.test.ts",
 		"test:autocomplete": "node --experimental-strip-types --import ./scripts/register-ts-extension.mjs tests/autocomplete.test.ts",
-		"test:dropdown-outside-click": "node --experimental-strip-types tests/dropdownOutsideClick.test.ts"
+		"test:dropdown-outside-click": "node --experimental-strip-types tests/dropdownOutsideClick.test.ts",
+		"test:textarea-autosize": "node --experimental-strip-types tests/textareaAutosize.test.ts"
 	},
 	"dependencies": {
 		"@napi-rs/webcodecs": "^1.3.1",

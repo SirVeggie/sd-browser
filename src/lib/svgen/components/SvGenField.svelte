@@ -1,6 +1,8 @@
 <script lang="ts">
-    import { createEventDispatcher, tick } from 'svelte';
+    import { createEventDispatcher } from 'svelte';
     import { numberDrag } from '../../../actions/numberDrag';
+    import { textareaAutosize } from '../../../actions/textareaAutosize';
+    import { autosizeTextarea } from '$lib/svgen/textareaAutosize';
     import {
         computeNextIntControlValue,
         getIntControlMode,
@@ -39,7 +41,6 @@
     }>();
 
     let textEl: HTMLInputElement | HTMLTextAreaElement | undefined;
-    const MULTILINE_MAX_LINES = 12;
 
     $: numberDragParams = {
         getValue: () => Number(field.value ?? 0),
@@ -53,19 +54,8 @@
     };
 
     function autosize() {
-        if (!(textEl instanceof HTMLTextAreaElement))
-            return;
-        textEl.style.height = 'auto';
-        const styles = getComputedStyle(textEl);
-        const lineHeight = Number.parseFloat(styles.lineHeight)
-            || Number.parseFloat(styles.fontSize) * 1.35;
-        const pad = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
-        const border = Number.parseFloat(styles.borderTopWidth)
-            + Number.parseFloat(styles.borderBottomWidth);
-        const maxHeight = lineHeight * MULTILINE_MAX_LINES + pad + border;
-        const next = Math.min(textEl.scrollHeight, maxHeight);
-        textEl.style.height = `${next}px`;
-        textEl.style.overflowY = textEl.scrollHeight > maxHeight ? 'auto' : 'hidden';
+        if (textEl instanceof HTMLTextAreaElement)
+            autosizeTextarea(textEl);
     }
 
     $: useTextarea = !!field.options?.multiline || (!!field.tall && field.kind === 'string');
@@ -80,21 +70,6 @@
     $: controlKey = intControlModeKey(field);
     $: intMode = getIntControlMode($svgenLayoutStore.intControlModes, field);
     $: frozen = $svgenFrozenSeedsStore.has(controlKey);
-
-    // Re-measure on programmatic value changes (Use params, int-control advance, session hydrate).
-    // Typing also hits autosize() in onText; this covers paths that never fire input.
-    // Skip when only the field object identity changed (e.g. LoRA toggle rediscovers all
-    // cards) — height:'auto' flash in every textarea jumps the column scroll.
-    let lastAutosizeValue: string | undefined;
-    $: if (useTextarea) {
-        const next = String(field.value ?? '');
-        if (next !== lastAutosizeValue) {
-            lastAutosizeValue = next;
-            void tick().then(autosize);
-        }
-    } else {
-        lastAutosizeValue = undefined;
-    }
 
     function onNumber(e: Event) {
         const raw = (e.currentTarget as HTMLInputElement).value;
@@ -290,6 +265,7 @@
         <textarea
             id={fieldDomId}
             bind:this={textEl}
+            use:textareaAutosize={String(field.value ?? '')}
             rows="1"
             value={String(field.value ?? '')}
             on:input={onText}
