@@ -3,6 +3,7 @@ import { error, success } from '$lib/server/responses';
 import { AutocompleteDB } from '$lib/server/svgen/autocompleteDb';
 import {
     indexAutocompleteSource,
+    refreshAllAutocompleteSourcesIfStale,
     validateAutocompleteSourceInput,
 } from '$lib/server/svgen/autocompleteService';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,6 +12,7 @@ export async function GET(e) {
     const authError = invalidAuth(e);
     if (authError)
         return authError;
+    await refreshAllAutocompleteSourcesIfStale();
     return success({ sources: AutocompleteDB.listSources() });
 }
 

@@ -53,7 +53,7 @@
         <p class="help">
             Files stay in place and are read by the server. Paste an absolute path; browsers cannot
             expose a dropped file's path. JSON arrays, Danbooru JSON, a1111 CSV, and CSV-style text
-            are supported.
+            are supported. The search index refreshes when the file's modified time changes.
         </p>
 
         <!-- svelte-ignore a11y-label-has-associated-control -->

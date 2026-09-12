@@ -6,6 +6,7 @@ import {
 } from '../src/lib/svgen/autocompleteQuery.ts';
 import { parseAutocompleteSource } from '../src/lib/server/svgen/autocompleteParser.ts';
 import { compareAutocompleteMatches } from '../src/lib/server/svgen/autocompleteRank.ts';
+import { sourceFileNeedsReindex } from '../src/lib/server/svgen/autocompleteFreshness.ts';
 import type { AutocompleteMatch } from '../src/lib/svgen/autocompleteTypes.ts';
 
 {
@@ -178,6 +179,34 @@ function match(value: string, matchedText = value): AutocompleteMatch {
     assert.deepEqual(
         usefulAutocompleteMatches([partial], partialValue).map((item) => item.value),
         ['contrapposto'],
+    );
+}
+
+{
+    assert.equal(
+        sourceFileNeedsReindex(1000, 2000, null),
+        false,
+        'missing file does not reindex',
+    );
+    assert.equal(
+        sourceFileNeedsReindex(null, 2000, 1500),
+        false,
+        'legacy stored mtime skips reindex when the file is older than last index',
+    );
+    assert.equal(
+        sourceFileNeedsReindex(null, 2000, 2500),
+        true,
+        'legacy stored mtime reindexes when the file is newer than last index',
+    );
+    assert.equal(
+        sourceFileNeedsReindex(1000, 2000, 1000),
+        false,
+        'unchanged mtime does not reindex',
+    );
+    assert.equal(
+        sourceFileNeedsReindex(1000, 2000, 1001),
+        true,
+        'changed mtime reindexes',
     );
 }
 

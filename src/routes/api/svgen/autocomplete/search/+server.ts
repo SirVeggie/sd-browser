@@ -2,6 +2,7 @@ import { invalidAuth } from '$lib/server/auth';
 import { error, success } from '$lib/server/responses';
 import { AutocompleteDB } from '$lib/server/svgen/autocompleteDb';
 import { compareAutocompleteMatches } from '$lib/server/svgen/autocompleteRank';
+import { refreshAutocompleteSourcesIfStale } from '$lib/server/svgen/autocompleteService';
 import type {
     AutocompleteMatch,
     AutocompleteSearchQuery,
@@ -66,9 +67,11 @@ export async function POST(e) {
         return error('Invalid autocomplete search sources', 400);
     }
     const maxRows = Math.max(1, Math.min(100, Number(request.maxRows) || 50));
+    const sources = request.sources as AutocompleteSourceSearch[];
+    await refreshAutocompleteSourcesIfStale(sources.map((source) => source.sourceId));
 
     const byValue = new Map<string, AutocompleteMatch>();
-    for (const source of request.sources as AutocompleteSourceSearch[]) {
+    for (const source of sources) {
         for (const match of AutocompleteDB.searchSource(source.sourceId, source.queries, maxRows)) {
             const key = match.value;
             const existing = byValue.get(key);

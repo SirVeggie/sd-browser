@@ -69,6 +69,39 @@ should still find the tag (via alias).
 Keep the parse transform; it is the intended stored shape, not a temporary
 bridge.
 
+## Autocomplete source file mtime (2026-09)
+
+### What changed
+
+Each autocomplete source stores the source file's `mtime` from the last successful
+index. Search and the settings source list `stat` the path: if the file still
+exists and mtime differs, sqlite is rebuilt from the file. A missing file keeps
+the previous index. A failed auto-refresh leaves existing items in place.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| `LOCAL_DATA/svgen.sqlite3` `autocomplete_sources.fileMtime` | New nullable INTEGER (ms) |
+
+Existing sources have `fileMtime` NULL until the next successful index or a
+no-op freshness check (file unchanged since `updatedAt` → backfill only).
+
+### Compatibility code
+
+- [`src/lib/server/svgen/autocompleteDb.ts`](../src/lib/server/svgen/autocompleteDb.ts) — `ensureAutocompleteSourceFileMtimeColumn`
+- [`src/lib/server/svgen/autocompleteFreshness.ts`](../src/lib/server/svgen/autocompleteFreshness.ts) — reindex decision
+- [`src/lib/server/svgen/autocompleteService.ts`](../src/lib/server/svgen/autocompleteService.ts) — `refreshAutocompleteSourcesIfStale`
+
+### How to verify
+
+Index a small source, edit the file, type in Generate — new tags appear without
+pressing Reindex. Delete/rename the file — old suggestions still work.
+
+### Removal
+
+Keep the ALTER while `svgen.sqlite3` files created before this change exist.
+
 ## Optional Generate autocomplete layout preference (2026-09)
 
 ### What changed

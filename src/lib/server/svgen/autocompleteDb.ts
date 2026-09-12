@@ -24,6 +24,15 @@ type SourceRow = {
     itemCount: number;
     error: string | null;
     updatedAt: number;
+    fileMtime: number | null;
+};
+
+export type AutocompleteSourceFreshness = {
+    id: string;
+    path: string;
+    itemCount: number;
+    updatedAt: number;
+    fileMtime: number | null;
 };
 
 type SearchRow = {
@@ -38,8 +47,25 @@ type SearchRow = {
 
 function sourceFromRow(row: SourceRow): AutocompleteSource {
     return {
-        ...row,
+        id: row.id,
+        name: row.name,
+        path: row.path,
         enabledByDefault: row.enabledByDefault !== 0,
+        boundary: row.boundary,
+        position: row.position,
+        itemCount: row.itemCount,
+        error: row.error,
+        updatedAt: row.updatedAt,
+    };
+}
+
+function freshnessFromRow(row: SourceRow): AutocompleteSourceFreshness {
+    return {
+        id: row.id,
+        path: row.path,
+        itemCount: row.itemCount,
+        updatedAt: row.updatedAt,
+        fileMtime: row.fileMtime,
     };
 }
 
@@ -97,6 +123,17 @@ function ensureAutocompleteItemScoreColumn(db: BetterSqlite3): void {
     db.exec('ALTER TABLE autocomplete_items ADD COLUMN score REAL');
 }
 
+function ensureAutocompleteSourceFileMtimeColumn(db: BetterSqlite3): void {
+    const result = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM pragma_table_info('autocomplete_sources')
+        WHERE name = 'fileMtime'
+    `).get() as { count: number };
+    if (result.count)
+        return;
+    db.exec('ALTER TABLE autocomplete_sources ADD COLUMN fileMtime INTEGER');
+}
+
 export class AutocompleteDB {
     private static db: BetterSqlite3;
     private static ready = false;
@@ -116,7 +153,8 @@ export class AutocompleteDB {
                 position INTEGER NOT NULL DEFAULT 0,
                 itemCount INTEGER NOT NULL DEFAULT 0,
                 error TEXT,
-                updatedAt INTEGER NOT NULL
+                updatedAt INTEGER NOT NULL,
+                fileMtime INTEGER
             );
             CREATE TABLE IF NOT EXISTS autocomplete_items (
                 id INTEGER PRIMARY KEY,
@@ -140,6 +178,7 @@ export class AutocompleteDB {
         `);
         AutocompleteDB.ready = true;
         ensureAutocompleteItemScoreColumn(AutocompleteDB.db);
+        ensureAutocompleteSourceFileMtimeColumn(AutocompleteDB.db);
         return AutocompleteDB.db;
     }
 
@@ -156,6 +195,31 @@ export class AutocompleteDB {
             .prepare('SELECT * FROM autocomplete_sources WHERE id = ?')
             .get(id) as SourceRow | undefined;
         return row ? sourceFromRow(row) : undefined;
+    }
+
+    static listSourceFreshness(): AutocompleteSourceFreshness[] {
+        const rows = AutocompleteDB.setup().prepare(`
+            SELECT id, path, itemCount, updatedAt, fileMtime
+            FROM autocomplete_sources
+        `).all() as SourceRow[];
+        return rows.map(freshnessFromRow);
+    }
+
+    static getSourceFreshness(id: string): AutocompleteSourceFreshness | undefined {
+        const row = AutocompleteDB.setup().prepare(`
+            SELECT id, path, itemCount, updatedAt, fileMtime
+            FROM autocomplete_sources
+            WHERE id = ?
+        `).get(id) as SourceRow | undefined;
+        return row ? freshnessFromRow(row) : undefined;
+    }
+
+    static setSourceFileMtime(id: string, fileMtime: number): void {
+        AutocompleteDB.setup().prepare(`
+            UPDATE autocomplete_sources
+            SET fileMtime = ?
+            WHERE id = ?
+        `).run(fileMtime, id);
     }
 
     static upsertSource(source: AutocompleteSource): void {
