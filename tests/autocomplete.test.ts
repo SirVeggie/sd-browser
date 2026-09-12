@@ -54,15 +54,39 @@ import type { AutocompleteMatch } from '../src/lib/svgen/autocompleteTypes.ts';
 }
 
 {
-    const queries = buildAutocompleteQueries('(blue ha:1.1)', 14, 'comma', 3);
-    assert.equal(queries[0]?.text, 'blue ha');
+    const weighted = '(chromatic:1.5)';
+    const weightedQueries = buildAutocompleteQueries(weighted, weighted.length, 'comma', 3);
+    assert.deepEqual(weightedQueries.map((query) => query.text), ['chromatic:1.5)']);
+
+    const colon = '(chromatic:';
+    const colonQueries = buildAutocompleteQueries(colon, colon.length, 'comma', 3);
+    assert.deepEqual(colonQueries.map((query) => query.text), ['chromatic:']);
+    assert.equal(colonQueries[0]?.replaceStart, 1);
+
+    const prefix = '(chromatic';
+    const prefixQueries = buildAutocompleteQueries(prefix, prefix.length, 'comma', 3);
+    assert.deepEqual(prefixQueries.map((query) => query.text), ['chromatic']);
     const applied = applyAutocompleteMatch(
-        '(blue ha:1.1)',
-        'blue_hair',
-        queries[0]!.replaceStart,
-        queries[0]!.replaceEnd,
+        prefix,
+        'chromatic aberration',
+        prefixQueries[0]!.replaceStart,
+        prefixQueries[0]!.replaceEnd,
     );
-    assert.equal(applied.value, '(blue_hair:1.1)');
+    assert.equal(applied.value, '(chromatic aberration');
+}
+
+{
+    const value = 'green (dress';
+    const queries = buildAutocompleteQueries(value, value.length, 'comma', 3);
+    assert.deepEqual(queries.map((query) => query.text), [
+        'green (dress',
+        'dress',
+    ]);
+    assert.equal(queries[1]?.replaceStart, 'green ('.length);
+
+    const wordQueries = buildAutocompleteQueries(value, value.length, 'word', 3);
+    assert.deepEqual(wordQueries.map((query) => query.text), ['dress']);
+    assert.equal(wordQueries[0]?.replaceStart, 'green ('.length);
 }
 
 {

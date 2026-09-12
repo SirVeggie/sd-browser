@@ -4,9 +4,8 @@ import type {
     AutocompleteSearchQuery,
 } from './autocompleteTypes';
 
-const LEADING_WRAPPERS = /^[\s([{<]+/;
-const TRAILING_WRAPPERS = /[\s)\]}>]+$/;
-const WEIGHT_SUFFIX = /:\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*[\])}>]*$/;
+/** Letters, numbers, `_`, and `-` are word characters; anything else may prefix a query. */
+const LEADING_NON_WORD = /^[^\p{L}\p{N}_-]+/u;
 
 type CompletionRange = {
     start: number;
@@ -27,29 +26,33 @@ const WORD_BREAKS = [',', ' ', '\n', '\r', '\t'] as const;
 
 function completionRange(value: string, caret: number, boundary: AutocompleteBoundary): CompletionRange {
     const safeCaret = Math.max(0, Math.min(caret, value.length));
-    let start = lastBreak(
+    const start = lastBreak(
         value,
         safeCaret,
         boundary === 'comma' ? COMMA_BREAKS : WORD_BREAKS,
     );
-    let end = safeCaret;
-    let raw = value.slice(start, end);
-
-    const weight = raw.match(WEIGHT_SUFFIX);
-    if (weight?.index != null) {
-        end = start + weight.index;
-        raw = raw.slice(0, weight.index);
-    }
-
-    const leading = raw.match(LEADING_WRAPPERS)?.[0].length ?? 0;
-    const trailing = raw.match(TRAILING_WRAPPERS)?.[0].length ?? 0;
-    start += leading;
-    end = Math.max(start, end - trailing);
-
     return {
         start,
-        end,
-        text: value.slice(start, end),
+        end: safeCaret,
+        text: value.slice(start, safeCaret),
+    };
+}
+
+function queryFromText(
+    text: string,
+    replaceStart: number,
+    replaceEnd: number,
+    minChars: number,
+    manual: boolean,
+): AutocompleteSearchQuery | null {
+    const skipped = text.match(LEADING_NON_WORD)?.[0].length ?? 0;
+    const queryText = text.slice(skipped);
+    if (!passesMinimum(queryText, minChars, manual))
+        return null;
+    return {
+        text: queryText,
+        replaceStart: replaceStart + skipped,
+        replaceEnd,
     };
 }
 
@@ -72,15 +75,8 @@ export function buildAutocompleteQueries(
             : [];
 
     if (boundary === 'word') {
-        const leading = trimmed.match(/^\s*/)?.[0].length ?? 0;
-        const text = trimmed.slice(leading);
-        return passesMinimum(text, minChars, manual)
-            ? [{
-                text,
-                replaceStart: range.start + leading,
-                replaceEnd: range.end,
-            }]
-            : [];
+        const query = queryFromText(trimmed, range.start, range.end, minChars, manual);
+        return query ? [query] : [];
     }
 
     const queries: AutocompleteSearchQuery[] = [];
@@ -88,13 +84,9 @@ export function buildAutocompleteQueries(
     let text = trimmed.slice(offset);
 
     while (text) {
-        if (passesMinimum(text, minChars, manual)) {
-            queries.push({
-                text,
-                replaceStart: range.start + offset,
-                replaceEnd: range.end,
-            });
-        }
+        const query = queryFromText(text, range.start + offset, range.end, minChars, manual);
+        if (query)
+            queries.push(query);
         const firstWord = text.match(/^\S+\s+/);
         if (!firstWord)
             break;
