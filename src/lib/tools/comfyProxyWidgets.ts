@@ -105,3 +105,73 @@ export function resolveProxyWidgetBinding(
         return { proxies: legacy };
     return subgraph ? synthesizeProxyWidgetsFromPromotedInputs(subgraph) : undefined;
 }
+
+const MAX_PROXY_CHAIN_DEPTH = 32;
+
+export type LeafProxyWidget = {
+    node: ComfyWorkflowNode;
+    widgetName: string;
+};
+
+/** Map a socket/widget name on a subgraph shell to the matching proxy slot. */
+function matchProxySlot(
+    binding: ProxyWidgetBinding,
+    widgetName: string,
+): ComfyProxyWidget | undefined {
+    if (binding.outerNames?.length) {
+        const byOuter = binding.outerNames.indexOf(widgetName);
+        if (byOuter >= 0)
+            return binding.proxies[byOuter];
+    }
+    const hits = binding.proxies.filter((proxy, i) => (
+        proxy[1] === widgetName || binding.outerNames?.[i] === widgetName
+    ));
+    return hits.length === 1 ? hits[0] : undefined;
+}
+
+/**
+ * Walk nested subgraph shells until the concrete widget node.
+ * One-level proxies already point at that node; two+ deep they point at an
+ * inner subgraph instance whose type is a UUID — schema/combo lookup must
+ * not stop there.
+ */
+export function resolveLeafProxyWidget(
+    subgraphsByType: Map<string, ComfySubgraphDefinition>,
+    startNode: ComfyWorkflowNode | undefined,
+    startWidgetName: string,
+): LeafProxyWidget | undefined {
+    if (!startNode || !startWidgetName)
+        return undefined;
+
+    let node = startNode;
+    let widgetName = startWidgetName;
+    const visited = new Set<string>();
+
+    for (let depth = 0; depth < MAX_PROXY_CHAIN_DEPTH; depth++) {
+        const nested = subgraphsByType.get(String(node.type));
+        if (!nested)
+            return { node, widgetName };
+
+        const visitKey = `${nested.id}\0${node.id}\0${widgetName}`;
+        if (visited.has(visitKey))
+            return { node, widgetName };
+        visited.add(visitKey);
+
+        const binding = resolveProxyWidgetBinding(node, nested);
+        if (!binding)
+            return { node, widgetName };
+
+        const proxy = matchProxySlot(binding, widgetName);
+        if (!proxy)
+            return { node, widgetName };
+
+        const next = findInnerNode(nested, String(proxy[0]));
+        if (!next)
+            return { node, widgetName };
+
+        node = next;
+        widgetName = proxy[1];
+    }
+
+    return { node, widgetName };
+}

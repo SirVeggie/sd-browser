@@ -15,6 +15,7 @@ import type {
 import {
     findInnerNode,
     getProxyWidgets,
+    resolveLeafProxyWidget,
     resolveProxyWidgetBinding,
     type ProxyWidgetBinding,
 } from '../tools/comfyProxyWidgets';
@@ -1104,6 +1105,7 @@ function buildSlotsForProxyNode(
     binding: ProxyWidgetBinding = {
         proxies: getProxyWidgets(node) ?? [],
     },
+    subgraphsByType: Map<string, ComfySubgraphDefinition> = new Map(),
 ): SlotBuild[] {
     const proxyWidgets = binding.proxies;
     if (!proxyWidgets.length)
@@ -1150,9 +1152,16 @@ function buildSlotsForProxyNode(
         const outerWidgetName = outerNames[proxyIndex] ?? innerWidgetName;
         const proxyKey = `${innerId}:${innerWidgetName}`;
         const inner = findInnerNode(subgraph, innerId);
-        const schemaType = inner ? resolveNodeClassType(inner) : resolveNodeClassType(node);
+        const leaf = inner
+            ? resolveLeafProxyWidget(subgraphsByType, inner, innerWidgetName)
+            : undefined;
+        const schemaNode = leaf?.node ?? inner;
+        const schemaWidgetName = leaf?.widgetName ?? innerWidgetName;
+        const schemaType = schemaNode
+            ? resolveNodeClassType(schemaNode)
+            : resolveNodeClassType(node);
         const label = resolveProxyLabel(node, inner, outerWidgetName, innerWidgetName);
-        const schema = lookupSchema(objectInfo, schemaType, innerWidgetName);
+        const schema = lookupSchema(objectInfo, schemaType, schemaWidgetName);
         // Outer instance values win when present; else inner definition values
         // (positional). Linked force_inputs may be omitted from inner wv.
         const innerWired = !!(inner && isWired(inner, innerWidgetName));
@@ -1173,8 +1182,8 @@ function buildSlotsForProxyNode(
             value = defaultValueForSchema(schema);
         }
 
-        const comboValues = innerWidgetName === 'choice'
-            ? dynamicChoiceOptions(inner)
+        const comboValues = schemaWidgetName === 'choice'
+            ? dynamicChoiceOptions(schemaNode)
             : undefined;
 
         // Instance values live on the outer node for promoted proxies; convert still
@@ -1184,7 +1193,7 @@ function buildSlotsForProxyNode(
         if (fromOuter && (innerWired || !fromInner)) {
             slots.push({
                 widgetName: outerWidgetName,
-                schemaWidgetName: innerWidgetName,
+                schemaWidgetName,
                 label,
                 value,
                 write: {
@@ -1201,7 +1210,7 @@ function buildSlotsForProxyNode(
         } else if (fromInner) {
             slots.push({
                 widgetName: outerWidgetName,
-                schemaWidgetName: innerWidgetName,
+                schemaWidgetName,
                 label,
                 value,
                 write: {
@@ -1218,7 +1227,7 @@ function buildSlotsForProxyNode(
         } else if (fromOuter) {
             slots.push({
                 widgetName: outerWidgetName,
-                schemaWidgetName: innerWidgetName,
+                schemaWidgetName,
                 label,
                 value,
                 write: { mode: 'outer', valueIndex: fromOuter.valueIndex },
@@ -1230,7 +1239,7 @@ function buildSlotsForProxyNode(
             // No stored value index — still surface the promoted widget (schema default).
             slots.push({
                 widgetName: outerWidgetName,
-                schemaWidgetName: innerWidgetName,
+                schemaWidgetName,
                 label,
                 value,
                 write: {
@@ -1329,7 +1338,13 @@ export function discoverCards(
 
         let fields: SvgenField[] = [];
         if (proxyBinding && subgraph) {
-            const slots = buildSlotsForProxyNode(node, subgraph, objectInfo, proxyBinding);
+            const slots = buildSlotsForProxyNode(
+                node,
+                subgraph,
+                objectInfo,
+                proxyBinding,
+                subgraphsByType,
+            );
             // Wire-check against the *outer* subgraph node only. Inner links to the
             // subgraph inputNode are normal for promoted widgets and must not hide them.
             fields = [];
