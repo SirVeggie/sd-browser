@@ -60,6 +60,23 @@ import type { AutocompleteMatch } from '../src/lib/svgen/autocompleteTypes.ts';
             score: 4114588,
         }],
     );
+    assert.deepEqual(
+        parseAutocompleteSource('hatsune_miku_(vocaloid),4,900,"miku,miku_(vocaloid)"'),
+        [{
+            value: 'hatsune miku \\(vocaloid\\)',
+            info: 'character · 900',
+            aliases: ['hatsune_miku_(vocaloid)', 'miku', 'miku_(vocaloid)'],
+            score: 900,
+        }],
+    );
+    assert.deepEqual(
+        parseAutocompleteSource('green_shirt, A shirt, green_top'),
+        [{
+            value: 'green_shirt',
+            info: 'A shirt',
+            aliases: ['green_top'],
+        }],
+    );
 }
 
 {
@@ -69,7 +86,7 @@ import type { AutocompleteMatch } from '../src/lib/svgen/autocompleteTypes.ts';
             { value: 'solo', aliases: ['alone'] },
         ])),
         [
-            { value: 'blue_hair', aliases: [], info: 'general · 1.5M', score: 1_500_000 },
+            { value: 'blue hair', aliases: ['blue_hair'], info: 'general · 1.5M', score: 1_500_000 },
             { value: 'solo', aliases: ['alone'], info: '' },
         ],
     );

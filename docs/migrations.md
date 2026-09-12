@@ -28,12 +28,46 @@ Existing indexed sources keep `score` NULL until **Reindex**.
 
 Reindex a Danbooru/a1111 tag file, then type a prefix shared by two tags; the
 higher post-count tag should sort first when the matching segment is the same
-length (e.g. `green_shirt` over `green_cat`). A shorter matching segment still
-wins over score.
+length (e.g. `green shirt` over `green cat` after generation-form parse). A
+shorter matching segment still wins over score.
 
 ### Removal
 
 Keep the ALTER while `svgen.sqlite3` files created before this change exist.
+
+## Booru autocomplete generation spelling (2026-09)
+
+### What changed
+
+Danbooru JSON and a1111 CSV autocomplete items store the inserted `value` in
+image-generation form: underscores become spaces, and `()` are escaped as
+`\(\)`. The original booru tag is kept as an alias. Custom CSV/JSON sources are
+unchanged.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| `LOCAL_DATA/svgen.sqlite3` `autocomplete_items.value` / `aliases` | Booru rows rewrite on reindex |
+
+Existing indexed booru sources keep underscore/`()` tags until **Reindex**.
+
+### Compatibility code
+
+- [`src/lib/server/svgen/autocompleteParser.ts`](../src/lib/server/svgen/autocompleteParser.ts) — `toGenerationBooruTag` / `applyBooruGenerationValue`
+
+No schema change; parse-time only. No live rewrite of already-indexed rows.
+
+### How to verify
+
+Reindex a Danbooru/a1111 tag file, then accept `hatsune_miku_(vocaloid)` — the
+field should receive `hatsune miku \(vocaloid\)`. Typing the underscore form
+should still find the tag (via alias).
+
+### Removal
+
+Keep the parse transform; it is the intended stored shape, not a temporary
+bridge.
 
 ## Optional Generate autocomplete layout preference (2026-09)
 

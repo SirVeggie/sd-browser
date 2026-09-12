@@ -65,6 +65,38 @@ function stringArray(value: unknown): string[] {
         .filter(Boolean);
 }
 
+function toGenerationBooruTag(value: string): string {
+    return value
+        .replaceAll('_', ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replaceAll('(', '\\(')
+        .replaceAll(')', '\\)');
+}
+
+function isBooruRecord(record: Record<string, unknown>): boolean {
+    if (record.post_count != null)
+        return true;
+    const category = String(record.category ?? '').trim();
+    return Boolean(DANBOORU_CATEGORIES[category]);
+}
+
+function applyBooruGenerationValue(item: ParsedAutocompleteItem): ParsedAutocompleteItem {
+    const value = toGenerationBooruTag(item.value);
+    if (value === item.value)
+        return item;
+    return {
+        ...item,
+        value,
+        aliases: [
+            ...new Set([
+                item.value,
+                ...item.aliases.filter((alias) => alias !== value),
+            ]),
+        ],
+    };
+}
+
 function recordItem(value: unknown): ParsedAutocompleteItem | null {
     if (typeof value === 'string') {
         const trimmed = value.trim();
@@ -81,12 +113,13 @@ function recordItem(value: unknown): ParsedAutocompleteItem | null {
         return null;
 
     const score = inferredScore(record);
-    return {
+    const item: ParsedAutocompleteItem = {
         value: itemValue,
         aliases: stringArray(record.aliases ?? record.alias),
         info: inferredInfo(record),
         ...(score != null ? { score } : {}),
     };
+    return isBooruRecord(record) ? applyBooruGenerationValue(item) : item;
 }
 
 export function parseCsvLine(line: string): string[] {
@@ -131,7 +164,7 @@ function parseTextLines(content: string): ParsedAutocompleteItem[] {
             && /^[01345]$/.test(fields[1] ?? '')
             && /^\d+$/.test(fields[2] ?? '');
         if (looksLikeA1111) {
-            result.push({
+            result.push(applyBooruGenerationValue({
                 value,
                 aliases: fields[3]
                     ? fields[3].split(',').map((alias) => alias.trim()).filter(Boolean)
@@ -141,7 +174,7 @@ function parseTextLines(content: string): ParsedAutocompleteItem[] {
                     compactCount(fields[2]),
                 ].filter(Boolean).join(' · '),
                 score: numericScore(fields[2]),
-            });
+            }));
             continue;
         }
 
