@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
     applyAutocompleteMatch,
+    autocompleteInputAction,
     buildAutocompleteQueries,
     usefulAutocompleteMatches,
 } from '../src/lib/svgen/autocompleteQuery.ts';
@@ -21,6 +22,35 @@ import type { AutocompleteMatch } from '../src/lib/svgen/autocompleteTypes.ts';
         'cat ey',
     ]);
     assert.equal(queries[1]?.replaceStart, '1girl, red '.length);
+}
+
+{
+    const value = '1girl, red hair\ngre';
+    const queries = buildAutocompleteQueries(value, value.length, 'comma', 3);
+    assert.deepEqual(queries.map((query) => query.text), ['gre']);
+    assert.equal(queries[0]?.replaceStart, value.lastIndexOf('\n') + 1);
+}
+
+{
+    const value = 'solo\r\nblue eyes';
+    const queries = buildAutocompleteQueries(value, value.length, 'comma', 3);
+    assert.deepEqual(queries.map((query) => query.text), ['blue eyes', 'eyes']);
+    assert.equal(queries[0]?.replaceStart, value.lastIndexOf('\n') + 1);
+}
+
+{
+    const value = 'foo bar\nbaz';
+    const queries = buildAutocompleteQueries(value, value.length, 'word', 3);
+    assert.deepEqual(queries.map((query) => query.text), ['baz']);
+}
+
+{
+    assert.equal(autocompleteInputAction('insertText', 'gre', 'green'), 'search');
+    assert.equal(autocompleteInputAction('insertCompositionText', 'gre', 'green'), 'search');
+    assert.equal(autocompleteInputAction('deleteContentBackward', 'green', 'gree'), 'close');
+    assert.equal(autocompleteInputAction(undefined, 'green', 'gree'), 'close');
+    assert.equal(autocompleteInputAction(undefined, 'gre', 'green'), 'search');
+    assert.equal(autocompleteInputAction('insertText', 'green', 'green'), 'ignore');
 }
 
 {

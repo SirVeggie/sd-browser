@@ -14,16 +14,24 @@ type CompletionRange = {
     text: string;
 };
 
+function lastBreak(value: string, caret: number, marks: readonly string[]): number {
+    let index = -1;
+    for (const mark of marks) {
+        index = Math.max(index, value.lastIndexOf(mark, caret - 1));
+    }
+    return index + 1;
+}
+
+const COMMA_BREAKS = [',', '\n', '\r'] as const;
+const WORD_BREAKS = [',', ' ', '\n', '\r', '\t'] as const;
+
 function completionRange(value: string, caret: number, boundary: AutocompleteBoundary): CompletionRange {
     const safeCaret = Math.max(0, Math.min(caret, value.length));
-    let start = boundary === 'comma'
-        ? value.lastIndexOf(',', safeCaret - 1) + 1
-        : Math.max(
-            value.lastIndexOf(',', safeCaret - 1),
-            value.lastIndexOf(' ', safeCaret - 1),
-            value.lastIndexOf('\n', safeCaret - 1),
-            value.lastIndexOf('\t', safeCaret - 1),
-        ) + 1;
+    let start = lastBreak(
+        value,
+        safeCaret,
+        boundary === 'comma' ? COMMA_BREAKS : WORD_BREAKS,
+    );
     let end = safeCaret;
     let raw = value.slice(start, end);
 
@@ -110,6 +118,22 @@ export function applyAutocompleteMatch(
         value: next,
         caret: start + replacement.length,
     };
+}
+
+export type AutocompleteInputAction = 'search' | 'close' | 'ignore';
+
+/** Inserted text searches; delete/backspace closes and must not reopen. */
+export function autocompleteInputAction(
+    inputType: string | undefined,
+    previousValue: string,
+    nextValue: string,
+): AutocompleteInputAction {
+    if (previousValue === nextValue)
+        return 'ignore';
+    const deleted = inputType
+        ? inputType.startsWith('delete')
+        : nextValue.length < previousValue.length;
+    return deleted ? 'close' : 'search';
 }
 
 /** Drop matches that would leave the field unchanged (exact complete item). */

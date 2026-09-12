@@ -3,6 +3,7 @@
     import { bindDropdownOutsideClick } from '$lib/tools/dropdownOutsideClick';
     import {
         applyAutocompleteMatch,
+        autocompleteInputAction,
         buildAutocompleteQueries,
         usefulAutocompleteMatches,
     } from '$lib/svgen/autocompleteQuery';
@@ -18,6 +19,17 @@
 
     export let target: HTMLInputElement | HTMLTextAreaElement | undefined;
     export let sourceIds: string[] = [];
+
+    const TOUCH_TAP_SLOP_PX = 12;
+
+    type TouchGesture = {
+        pointerId: number;
+        startX: number;
+        startY: number;
+        index: number | null;
+        solidAtStart: boolean;
+        dragged: boolean;
+    };
 
     let portal: HTMLDivElement;
     let listEl: HTMLDivElement;
@@ -35,8 +47,11 @@
     let controller: AbortController | undefined;
     let requestVersion = 0;
     let manualRequest = false;
-    let touchPrimedIndex: number | null = null;
+    let touchGesture: TouchGesture | null = null;
     let composing = false;
+    let applyingMatch = false;
+    let lastValue = '';
+    let lastCaret = 0;
     let lastSourceKey = '';
 
     $: infoVisible = showInfoOverride ?? $svgenAutocompleteBehaviorStore.showInfo;
@@ -73,7 +88,7 @@
         showInfoOverride = null;
         matches = [];
         selected = 0;
-        touchPrimedIndex = null;
+        touchGesture = null;
         clearSearchTimer();
         clearFadeTimer();
         controller?.abort();
@@ -81,38 +96,127 @@
         requestVersion += 1;
     }
 
+    function holdSolid() {
+        solid = true;
+        clearFadeTimer();
+    }
+
     function fadeLater() {
         clearFadeTimer();
-        if (!open || hovered || $svgenAutocompleteBehaviorStore.idleFade === false)
+        if (!open || hovered || touchGesture || $svgenAutocompleteBehaviorStore.idleFade === false)
             return;
         fadeTimer = setTimeout(() => {
-            if (!hovered)
+            if (!hovered && !touchGesture)
                 solid = false;
         }, $svgenAutocompleteBehaviorStore.fadeDelayMs);
     }
 
-    function reveal() {
-        solid = true;
-        touchPrimedIndex = null;
-        fadeLater();
+    function keepVisible() {
+        holdSolid();
+        if (!hovered && !touchGesture)
+            fadeLater();
     }
 
-    function onPointerEnter() {
+    function isCoarsePointer(event: PointerEvent): boolean {
+        return event.pointerType === 'touch' || event.pointerType === 'pen';
+    }
+
+    function onPointerEnter(event: PointerEvent) {
+        if (isCoarsePointer(event))
+            return;
         hovered = true;
-        solid = true;
-        clearFadeTimer();
+        holdSolid();
     }
 
-    function onPointerMove() {
+    function onPointerMove(event: PointerEvent) {
+        if (isCoarsePointer(event)) {
+            if (!touchGesture || event.pointerId !== touchGesture.pointerId)
+                return;
+            holdSolid();
+            markTouchDrag(event);
+            return;
+        }
         if (!hovered)
             return;
-        solid = true;
-        clearFadeTimer();
+        holdSolid();
     }
 
-    function onPointerLeave() {
+    function onPointerLeave(event: PointerEvent) {
+        if (isCoarsePointer(event))
+            return;
         hovered = false;
+        if (!touchGesture)
+            fadeLater();
+    }
+
+    function onPopupScroll() {
+        if (touchGesture)
+            touchGesture.dragged = true;
+        keepVisible();
+    }
+
+    function onPopupWheel() {
+        keepVisible();
+    }
+
+    function markTouchDrag(event: PointerEvent) {
+        if (!touchGesture || event.pointerId !== touchGesture.pointerId)
+            return;
+        const dx = event.clientX - touchGesture.startX;
+        const dy = event.clientY - touchGesture.startY;
+        if (dx * dx + dy * dy > TOUCH_TAP_SLOP_PX * TOUCH_TAP_SLOP_PX)
+            touchGesture.dragged = true;
+    }
+
+    function beginTouchGesture(event: PointerEvent, index: number | null) {
+        if (!isCoarsePointer(event))
+            return;
+        if (touchGesture) {
+            if (touchGesture.pointerId !== event.pointerId)
+                return;
+            if (index != null) {
+                touchGesture.index = index;
+                selected = index;
+            }
+            holdSolid();
+            return;
+        }
+        touchGesture = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            index,
+            solidAtStart: solid,
+            dragged: false,
+        };
+        holdSolid();
+        if (index != null)
+            selected = index;
+    }
+
+    function onPopupPointerDown(event: PointerEvent) {
+        beginTouchGesture(event, null);
+    }
+
+    function onTouchGestureEnd(event: PointerEvent) {
+        if (!touchGesture || event.pointerId !== touchGesture.pointerId)
+            return;
+        markTouchDrag(event);
+        const gesture = touchGesture;
+        touchGesture = null;
+        if (!gesture.dragged && gesture.solidAtStart && gesture.index != null && open) {
+            accept(gesture.index);
+            return;
+        }
         fadeLater();
+    }
+
+    function caretFromElement(element: HTMLInputElement | HTMLTextAreaElement): number {
+        const start = element.selectionStart;
+        const end = element.selectionEnd;
+        if (start == null && end == null)
+            return element.value.length;
+        return Math.max(start ?? 0, end ?? 0);
     }
 
     function inputAnchor(element: HTMLInputElement | HTMLTextAreaElement): { x: number; y: number } {
@@ -138,7 +242,7 @@
         mirror.style.whiteSpace = 'pre-wrap';
         mirror.style.overflowWrap = 'break-word';
         mirror.style.wordBreak = styles.wordBreak;
-        mirror.textContent = element.value.slice(0, element.selectionStart ?? element.value.length);
+        mirror.textContent = element.value.slice(0, caretFromElement(element));
         marker.textContent = '\u200b';
         mirror.append(marker);
         document.body.append(mirror);
@@ -195,7 +299,7 @@
         if (!target)
             return [];
         const enabled = new Set(sourceIds);
-        const caret = target.selectionStart ?? target.value.length;
+        const caret = readTargetCaret();
         return $svgenAutocompleteSourcesStore
             .filter((source) => enabled.has(source.id) && !source.error)
             .map((source) => ({
@@ -245,9 +349,10 @@
             }
             matches = next;
             selected = 0;
+            const alreadySolid = open && solid;
             open = true;
             manualRequest = manual;
-            solid = manual || !idleFade;
+            solid = alreadySolid || manual || !idleFade;
             if (solid)
                 fadeLater();
             await tick();
@@ -274,7 +379,7 @@
         if (!matches.length)
             return;
         selected = (selected + delta + matches.length) % matches.length;
-        reveal();
+        keepVisible();
         scrollSelectedIntoList();
         void reposition();
     }
@@ -290,26 +395,68 @@
             match.replaceEnd,
         );
         target.value = applied.value;
+        applyingMatch = true;
+        lastValue = applied.value;
+        lastCaret = applied.caret;
         target.dispatchEvent(new Event('input', { bubbles: true }));
         target.focus({ preventScroll: true });
         target.setSelectionRange(applied.caret, applied.caret);
+        applyingMatch = false;
         close();
     }
 
-    function onTargetInput() {
-        if (composing)
-            return;
-        if (!$svgenAutocompleteBehaviorStore.autoSuggest) {
-            close();
-            return;
-        }
-        scheduleSearch(false);
+    function readTargetCaret(): number {
+        if (!target)
+            return lastCaret;
+        return caretFromElement(target);
     }
 
-    function onTargetCaret() {
-        if (!open)
+    function syncFromTarget(inputType?: string) {
+        if (!target || applyingMatch)
             return;
-        scheduleSearch(false, 0);
+        const value = target.value;
+        const caret = readTargetCaret();
+        const action = autocompleteInputAction(inputType, lastValue, value);
+        lastValue = value;
+
+        switch (action) {
+            case 'search':
+                lastCaret = caret;
+                if (!$svgenAutocompleteBehaviorStore.autoSuggest) {
+                    close();
+                    return;
+                }
+                scheduleSearch(false);
+                return;
+            case 'close':
+                lastCaret = caret;
+                close();
+                return;
+            case 'ignore':
+                break;
+            default: {
+                const _exhaustive: never = action;
+                return _exhaustive;
+            }
+        }
+
+        if (caret === lastCaret)
+            return;
+        lastCaret = caret;
+        if (composing)
+            return;
+        if (open)
+            close();
+    }
+
+    function onTargetInput(event: Event) {
+        const inputType = (event as InputEvent).inputType
+            ?? (composing ? 'insertCompositionText' : undefined);
+        syncFromTarget(inputType);
+    }
+
+    function onTargetClick() {
+        syncFromTarget();
     }
 
     function onTargetKeydown(event: Event) {
@@ -319,7 +466,7 @@
             keyboardEvent.stopPropagation();
             if (open) {
                 showInfoOverride = !infoVisible;
-                reveal();
+                keepVisible();
                 void tick().then(reposition);
             } else {
                 scheduleSearch(true, 0);
@@ -358,18 +505,17 @@
 
     function onCompositionStart() {
         composing = true;
-        close();
     }
 
     function onCompositionEnd() {
+        syncFromTarget('insertCompositionText');
+        lastCaret = readTargetCaret();
         composing = false;
-        if ($svgenAutocompleteBehaviorStore.autoSuggest)
-            scheduleSearch(false);
     }
 
     function onSelectionChange() {
         if (document.activeElement === target)
-            onTargetCaret();
+            syncFromTarget();
     }
 
     function attach(next: typeof target) {
@@ -380,19 +526,21 @@
         if (!next)
             return;
         next.addEventListener('input', onTargetInput);
-        next.addEventListener('click', onTargetCaret);
+        next.addEventListener('click', onTargetClick);
         next.addEventListener('keydown', onTargetKeydown);
         next.addEventListener('blur', onTargetBlur);
         next.addEventListener('scroll', reposition);
         next.addEventListener('compositionstart', onCompositionStart);
         next.addEventListener('compositionend', onCompositionEnd);
+        lastValue = next.value;
+        lastCaret = caretFromElement(next);
     }
 
     function detach() {
         if (!attachedTarget)
             return;
         attachedTarget.removeEventListener('input', onTargetInput);
-        attachedTarget.removeEventListener('click', onTargetCaret);
+        attachedTarget.removeEventListener('click', onTargetClick);
         attachedTarget.removeEventListener('keydown', onTargetKeydown);
         attachedTarget.removeEventListener('blur', onTargetBlur);
         attachedTarget.removeEventListener('scroll', reposition);
@@ -407,15 +555,9 @@
         event.preventDefault();
         event.stopPropagation();
         selected = index;
-        if (event.pointerType === 'touch' || event.pointerType === 'pen') {
-            if (!solid || touchPrimedIndex !== index) {
-                solid = true;
-                touchPrimedIndex = index;
-                clearFadeTimer();
-                scrollSelectedIntoList();
-                void reposition();
-                return;
-            }
+        if (isCoarsePointer(event)) {
+            beginTouchGesture(event, index);
+            return;
         }
         accept(index);
     }
@@ -429,6 +571,8 @@
     onMount(() => {
         document.body.append(portal);
         document.addEventListener('selectionchange', onSelectionChange);
+        document.addEventListener('pointerup', onTouchGestureEnd);
+        document.addEventListener('pointercancel', onTouchGestureEnd);
         window.addEventListener('resize', onViewportChange);
         window.addEventListener('scroll', onViewportChange, true);
         const unbindOutside = bindDropdownOutsideClick(
@@ -442,6 +586,8 @@
     onDestroy(() => {
         detach();
         document.removeEventListener('selectionchange', onSelectionChange);
+        document.removeEventListener('pointerup', onTouchGestureEnd);
+        document.removeEventListener('pointercancel', onTouchGestureEnd);
         window.removeEventListener('resize', onViewportChange);
         window.removeEventListener('scroll', onViewportChange, true);
         portal?.remove();
@@ -460,7 +606,9 @@
             on:pointerenter={onPointerEnter}
             on:pointermove={onPointerMove}
             on:pointerleave={onPointerLeave}
-            on:wheel={reveal}
+            on:pointerdown={onPopupPointerDown}
+            on:wheel={onPopupWheel}
+            on:scroll={onPopupScroll}
         >
             {#each matches as match, index (`${match.value}\0${match.sourceId}`)}
                 <button
@@ -486,7 +634,9 @@
                 on:pointerenter={onPointerEnter}
                 on:pointermove={onPointerMove}
                 on:pointerleave={onPointerLeave}
-                on:wheel={reveal}
+                on:pointerdown={onPopupPointerDown}
+                on:wheel={onPopupWheel}
+                on:scroll={onPopupScroll}
             >
                 {selectedMatch.info}
             </div>
@@ -524,6 +674,7 @@
         overflow-y: auto;
         overscroll-behavior: contain;
         pointer-events: auto;
+        touch-action: pan-y;
         scrollbar-width: thin;
     }
 
@@ -572,5 +723,6 @@
         white-space: pre-wrap;
         overflow-wrap: anywhere;
         pointer-events: auto;
+        touch-action: pan-y;
     }
 </style>
