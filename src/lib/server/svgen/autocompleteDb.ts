@@ -33,6 +33,7 @@ type SearchRow = {
     value: string;
     aliases: string;
     info: string;
+    score: number | null;
 };
 
 function sourceFromRow(row: SourceRow): AutocompleteSource {
@@ -66,6 +67,7 @@ function uniqueSearchRows(rows: SearchRow[], query: string): SearchRow[] {
             value: previous.value,
             aliases: [],
             info: '',
+            score: previous.score ?? undefined,
             matchedText: previous.matchedText,
             matchedAlias: previous.matchedAlias !== 0,
             query,
@@ -76,11 +78,23 @@ function uniqueSearchRows(rows: SearchRow[], query: string): SearchRow[] {
             ...previousMatch,
             matchedText: row.matchedText,
             matchedAlias: row.matchedAlias !== 0,
+            score: row.score ?? undefined,
         };
         if (compareAutocompleteMatches(nextMatch, previousMatch) < 0)
             best.set(row.itemId, row);
     }
     return [...best.values()];
+}
+
+function ensureAutocompleteItemScoreColumn(db: BetterSqlite3): void {
+    const result = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM pragma_table_info('autocomplete_items')
+        WHERE name = 'score'
+    `).get() as { count: number };
+    if (result.count)
+        return;
+    db.exec('ALTER TABLE autocomplete_items ADD COLUMN score REAL');
 }
 
 export class AutocompleteDB {
@@ -110,6 +124,7 @@ export class AutocompleteDB {
                 value TEXT NOT NULL,
                 aliases TEXT NOT NULL,
                 info TEXT NOT NULL,
+                score REAL,
                 FOREIGN KEY(sourceId) REFERENCES autocomplete_sources(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS autocomplete_items_source
@@ -124,6 +139,7 @@ export class AutocompleteDB {
             );
         `);
         AutocompleteDB.ready = true;
+        ensureAutocompleteItemScoreColumn(AutocompleteDB.db);
         return AutocompleteDB.db;
     }
 
@@ -179,8 +195,8 @@ export class AutocompleteDB {
     static replaceItems(sourceId: string, items: ParsedAutocompleteItem[]): void {
         const db = AutocompleteDB.setup();
         const insertItem = db.prepare(`
-            INSERT INTO autocomplete_items (sourceId, value, aliases, info)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO autocomplete_items (sourceId, value, aliases, info, score)
+            VALUES (?, ?, ?, ?, ?)
         `);
         const insertTerm = db.prepare(`
             INSERT INTO autocomplete_terms (
@@ -196,6 +212,7 @@ export class AutocompleteDB {
                     item.value,
                     JSON.stringify(item.aliases),
                     item.info,
+                    item.score ?? null,
                 ).lastInsertRowid);
                 insertTerm.run(
                     sourceId,
@@ -247,10 +264,10 @@ export class AutocompleteDB {
         if (!normalized) {
             return db.prepare(`
                 SELECT i.id AS itemId, i.value AS matchedText, 0 AS matchedAlias,
-                       i.value, i.aliases, i.info
+                       i.value, i.aliases, i.info, i.score
                 FROM autocomplete_items i
                 WHERE i.sourceId = ?
-                ORDER BY i.value COLLATE NOCASE ASC
+                ORDER BY i.score DESC, i.value COLLATE NOCASE ASC
                 LIMIT ?
             `).all(sourceId, limit) as SearchRow[];
         }
@@ -258,7 +275,7 @@ export class AutocompleteDB {
         if (normalized.length < 3) {
             return db.prepare(`
                 SELECT i.id AS itemId, t.matchedText, t.matchedAlias,
-                       i.value, i.aliases, i.info
+                       i.value, i.aliases, i.info, i.score
                 FROM autocomplete_terms t
                 JOIN autocomplete_items i ON i.id = t.itemId
                 WHERE t.sourceId = ? AND t.term LIKE ? ESCAPE '\\'
@@ -268,7 +285,8 @@ export class AutocompleteDB {
                         WHEN t.term LIKE ? ESCAPE '\\' OR t.term LIKE ? ESCAPE '\\' THEN 1
                         ELSE 2
                     END,
-                    length(t.term) ASC
+                    length(t.term) ASC,
+                    i.score DESC
                 LIMIT ?
             `).all(
                 sourceId,
@@ -283,7 +301,7 @@ export class AutocompleteDB {
         const phrase = `"${normalized.replaceAll('"', '""')}"`;
         return db.prepare(`
             SELECT i.id AS itemId, t.matchedText, t.matchedAlias,
-                   i.value, i.aliases, i.info
+                   i.value, i.aliases, i.info, i.score
             FROM autocomplete_terms t
             JOIN autocomplete_items i ON i.id = t.itemId
             WHERE autocomplete_terms MATCH ? AND t.sourceId = ?
@@ -293,7 +311,8 @@ export class AutocompleteDB {
                     WHEN t.term LIKE ? ESCAPE '\\' OR t.term LIKE ? ESCAPE '\\' THEN 1
                     ELSE 2
                 END,
-                length(t.term) ASC
+                length(t.term) ASC,
+                i.score DESC
             LIMIT ?
         `).all(
             phrase,
@@ -323,6 +342,7 @@ export class AutocompleteDB {
                     value: row.value,
                     aliases: parseAliases(row.aliases),
                     info: row.info,
+                    ...(row.score != null ? { score: row.score } : {}),
                     matchedText: row.matchedText,
                     matchedAlias: row.matchedAlias !== 0,
                     query: query.text,

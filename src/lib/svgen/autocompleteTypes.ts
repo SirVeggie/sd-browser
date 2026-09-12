@@ -15,6 +15,8 @@ export type AutocompleteSource = {
 export type AutocompleteBehaviorSettings = {
     autoSuggest: boolean;
     showInfo: boolean;
+    /** Missing in older localStorage blobs means on. */
+    idleFade?: boolean;
     minChars: number;
     maxRows: number;
     idleOpacity: number;
@@ -24,10 +26,11 @@ export type AutocompleteBehaviorSettings = {
 export const defaultAutocompleteBehavior: AutocompleteBehaviorSettings = {
     autoSuggest: true,
     showInfo: true,
+    idleFade: true,
     minChars: 3,
     maxRows: 50,
     idleOpacity: 0.22,
-    fadeDelayMs: 1200,
+    fadeDelayMs: 2000,
 };
 
 export type AutocompleteSearchQuery = {
@@ -46,6 +49,8 @@ export type AutocompleteMatch = {
     value: string;
     aliases: string[];
     info: string;
+    /** Popularity / booru count; missing is treated as 0. */
+    score?: number;
     matchedText: string;
     matchedAlias: boolean;
     query: string;

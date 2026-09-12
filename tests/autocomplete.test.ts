@@ -57,6 +57,7 @@ import type { AutocompleteMatch } from '../src/lib/svgen/autocompleteTypes.ts';
             value: '1girl',
             info: 'general · 4.1M',
             aliases: ['1girls', 'sole_female'],
+            score: 4114588,
         }],
     );
 }
@@ -68,7 +69,7 @@ import type { AutocompleteMatch } from '../src/lib/svgen/autocompleteTypes.ts';
             { value: 'solo', aliases: ['alone'] },
         ])),
         [
-            { value: 'blue_hair', aliases: [], info: 'general · 1.5M' },
+            { value: 'blue_hair', aliases: [], info: 'general · 1.5M', score: 1_500_000 },
             { value: 'solo', aliases: ['alone'], info: '' },
         ],
     );
@@ -97,6 +98,40 @@ function match(value: string, matchedText = value): AutocompleteMatch {
         match('claw'),
     ].sort(compareAutocompleteMatches).map((item) => item.value);
     assert.deepEqual(values, ['law', 'claw', 'green_claw', 'claws', 'clawing']);
+}
+
+{
+    const popular = {
+        ...match('green_shirt', 'green_shirt'),
+        query: 'green',
+        score: 50_000,
+    };
+    const rare = {
+        ...match('green_cat', 'green_cat'),
+        query: 'green',
+        score: 245,
+    };
+    assert.deepEqual(
+        [rare, popular].sort(compareAutocompleteMatches).map((item) => item.value),
+        ['green_shirt', 'green_cat'],
+        'score beats shorter full value when the matching segment is the same length',
+    );
+
+    const shortSegment = {
+        ...match('green_cat', 'green_cat'),
+        query: 'green',
+        score: 10,
+    };
+    const longSegment = {
+        ...match('greenery', 'greenery'),
+        query: 'green',
+        score: 50_000,
+    };
+    assert.deepEqual(
+        [longSegment, shortSegment].sort(compareAutocompleteMatches).map((item) => item.value),
+        ['green_cat', 'greenery'],
+        'shorter matching segment still beats a higher score',
+    );
 }
 
 {

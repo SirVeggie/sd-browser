@@ -40,8 +40,11 @@
     let lastSourceKey = '';
 
     $: infoVisible = showInfoOverride ?? $svgenAutocompleteBehaviorStore.showInfo;
+    $: idleFade = $svgenAutocompleteBehaviorStore.idleFade !== false;
     $: selectedMatch = matches[selected];
     $: sourceKey = sourceIds.join('\0');
+    $: if (open && !idleFade)
+        solid = true;
     $: if (sourceKey !== lastSourceKey) {
         lastSourceKey = sourceKey;
         if (open && sourceKey)
@@ -80,7 +83,7 @@
 
     function fadeLater() {
         clearFadeTimer();
-        if (!open || hovered)
+        if (!open || hovered || $svgenAutocompleteBehaviorStore.idleFade === false)
             return;
         fadeTimer = setTimeout(() => {
             if (!hovered)
@@ -244,13 +247,11 @@
             selected = 0;
             open = true;
             manualRequest = manual;
-            if (open) {
-                solid = manual;
-                if (solid)
-                    fadeLater();
-                await tick();
-                await reposition();
-            }
+            solid = manual || !idleFade;
+            if (solid)
+                fadeLater();
+            await tick();
+            await reposition();
         } catch (cause) {
             if (!(cause instanceof DOMException && cause.name === 'AbortError'))
                 console.error(cause);

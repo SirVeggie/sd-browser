@@ -1,5 +1,40 @@
 # Migrations
 
+## Autocomplete item score column (2026-09)
+
+### What changed
+
+Autocomplete items may store an optional numeric `score`. Ranking uses it after
+match group and matching-segment length, before full-value length (higher first).
+Booru/a1111 sources set it from post count.
+
+### Affected data
+
+| Location | Change |
+|----------|--------|
+| `LOCAL_DATA/svgen.sqlite3` `autocomplete_items.score` | New nullable REAL column |
+| localStorage `svgenAutocompleteBehavior.idleFade` | Optional; missing means on |
+| localStorage `svgenAutocompleteBehavior.fadeDelayMs` | Default for new blobs is 2000 |
+
+Existing indexed sources keep `score` NULL until **Reindex**.
+
+### Compatibility code
+
+- [`src/lib/server/svgen/autocompleteDb.ts`](../src/lib/server/svgen/autocompleteDb.ts) — `ensureAutocompleteItemScoreColumn`
+- [`src/lib/server/svgen/autocompleteParser.ts`](../src/lib/server/svgen/autocompleteParser.ts) — booru/a1111 count → score
+- [`src/lib/svgen/autocompleteTypes.ts`](../src/lib/svgen/autocompleteTypes.ts) — optional `score` / `idleFade`
+
+### How to verify
+
+Reindex a Danbooru/a1111 tag file, then type a prefix shared by two tags; the
+higher post-count tag should sort first when the matching segment is the same
+length (e.g. `green_shirt` over `green_cat`). A shorter matching segment still
+wins over score.
+
+### Removal
+
+Keep the ALTER while `svgen.sqlite3` files created before this change exist.
+
 ## Optional Generate autocomplete layout preference (2026-09)
 
 ### What changed

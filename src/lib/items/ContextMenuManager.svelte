@@ -22,8 +22,22 @@
         visible?: boolean;
         enabled?: boolean;
         submenu?: boolean;
-        checked?: boolean;
+        /**
+         * When set, this is a checkable item. The menu stays open on click.
+         * A function is re-read after each click so mixed menus can toggle in place.
+         */
+        checked?: boolean | (() => boolean);
     };
+
+    export function contextMenuOptionChecked(
+        option: ContextMenuOption,
+    ): boolean | undefined {
+        if (option.checked === undefined)
+            return undefined;
+        return typeof option.checked === 'function'
+            ? option.checked()
+            : option.checked;
+    }
 
     const menuStore = writable<IContextMenu[]>([]);
 

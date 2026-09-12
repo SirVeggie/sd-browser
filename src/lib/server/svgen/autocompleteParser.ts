@@ -2,6 +2,7 @@ export type ParsedAutocompleteItem = {
     value: string;
     aliases: string[];
     info: string;
+    score?: number;
 };
 
 const DANBOORU_CATEGORIES: Record<string, string> = {
@@ -11,6 +12,21 @@ const DANBOORU_CATEGORIES: Record<string, string> = {
     '4': 'character',
     '5': 'meta',
 };
+
+function numericScore(value: unknown): number | undefined {
+    if (typeof value === 'number')
+        return Number.isFinite(value) ? value : undefined;
+    if (typeof value !== 'string' || !value.trim())
+        return undefined;
+    const count = Number(value.trim());
+    return Number.isFinite(count) ? count : undefined;
+}
+
+function inferredScore(record: Record<string, unknown>): number | undefined {
+    return numericScore(record.score)
+        ?? numericScore(record.post_count)
+        ?? numericScore(record.count);
+}
 
 function compactCount(value: unknown): string {
     const count = Number(value);
@@ -64,10 +80,12 @@ function recordItem(value: unknown): ParsedAutocompleteItem | null {
     if (!itemValue)
         return null;
 
+    const score = inferredScore(record);
     return {
         value: itemValue,
         aliases: stringArray(record.aliases ?? record.alias),
         info: inferredInfo(record),
+        ...(score != null ? { score } : {}),
     };
 }
 
@@ -122,6 +140,7 @@ function parseTextLines(content: string): ParsedAutocompleteItem[] {
                     categoryName(fields[1]),
                     compactCount(fields[2]),
                 ].filter(Boolean).join(' · '),
+                score: numericScore(fields[2]),
             });
             continue;
         }
@@ -145,6 +164,7 @@ function dedupeItems(items: ParsedAutocompleteItem[]): ParsedAutocompleteItem[] 
                 value: item.value,
                 info: item.info,
                 aliases: [...new Set(item.aliases.filter((alias) => alias !== item.value))],
+                ...(item.score != null ? { score: item.score } : {}),
             });
             continue;
         }
@@ -156,6 +176,8 @@ function dedupeItems(items: ParsedAutocompleteItem[]): ParsedAutocompleteItem[] 
         ];
         if (!existing.info && item.info)
             existing.info = item.info;
+        if (item.score != null && (existing.score == null || item.score > existing.score))
+            existing.score = item.score;
     }
     return [...byValue.values()];
 }

@@ -162,11 +162,11 @@
     }
 
     function toggleAutocompleteBehavior(
-        key: 'autoSuggest' | 'showInfo',
+        key: 'autoSuggest' | 'showInfo' | 'idleFade',
     ) {
         svgenAutocompleteBehaviorStore.update((settings) => ({
             ...settings,
-            [key]: !settings[key],
+            [key]: !(settings[key] ?? true),
         }));
     }
 
@@ -305,6 +305,15 @@
                 >
                     <span class="menu-check">{$svgenAutocompleteBehaviorStore.showInfo ? '✓' : ''}</span>
                     Show autocomplete info
+                </button>
+                <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={$svgenAutocompleteBehaviorStore.idleFade !== false}
+                    on:click={() => toggleAutocompleteBehavior('idleFade')}
+                >
+                    <span class="menu-check">{$svgenAutocompleteBehaviorStore.idleFade !== false ? '✓' : ''}</span>
+                    Idle fade
                 </button>
             </div>
         </div>

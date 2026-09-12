@@ -5,7 +5,9 @@
         cancelContextMenuHoverClose,
         closeContextMenu,
         closeContextMenuChildren,
+        contextMenuOptionChecked,
         openContextMenu,
+        refreshContextMenus,
         scheduleContextMenuHoverClose,
         type ContextMenuOption,
         type IContextMenu,
@@ -67,12 +69,11 @@
         const menuRect = element.getBoundingClientRect();
 
         const result = await option.handler();
-        if (!result) {
+        if (!Array.isArray(result)) {
             activeSubmenuOption = null;
             closeContextMenuChildren(menu.id);
             return;
         }
-        if (result === "keep") return;
 
         const subposition = {
             x: menuRect.right,
@@ -121,10 +122,14 @@
             return;
         }
 
-        const result = option.handler();
-        if (result === "keep") return;
+        if (option.checked !== undefined) {
+            await option.handler();
+            refreshContextMenus();
+            return;
+        }
+
         closeContextMenu(menu.id);
-        await result;
+        await option.handler();
     }
 
     function menuEnter() {
@@ -153,10 +158,11 @@
 >
     {#each menu.options as option, index (option.name)}
         {#if option.visible ?? true}
+            {@const checked = contextMenuOptionChecked(option)}
             <button
                 type="button"
-                role={option.checked === undefined ? "menuitem" : "menuitemcheckbox"}
-                aria-checked={option.checked}
+                role={checked === undefined ? "menuitem" : "menuitemcheckbox"}
+                aria-checked={checked}
                 style="--stagger-i: {index}"
                 disabled={!(option.enabled ?? true)}
                 aria-haspopup={option.submenu ? "menu" : undefined}
@@ -169,8 +175,8 @@
                 class:has-submenu={option.submenu}
             >
                 <span class="label">
-                    {#if option.checked !== undefined}
-                        <span class="checkmark" aria-hidden="true">{option.checked ? "✓" : ""}</span>
+                    {#if checked !== undefined}
+                        <span class="checkmark" class:on={checked} aria-hidden="true">✓</span>
                     {/if}
                     {option.name}
                 </span>
@@ -265,20 +271,26 @@
         display: inline-flex;
         align-items: center;
         gap: 0.4em;
+        flex: 1;
+        min-width: 0;
+        line-height: 1.2;
     }
 
     .checkmark {
+        flex-shrink: 0;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         width: 1em;
+        height: 1em;
         color: var(--accent);
         font-weight: 700;
-    }
+        line-height: 1;
+        visibility: hidden;
 
-    .label {
-        flex: 1;
-        min-width: 0;
+        &.on {
+            visibility: visible;
+        }
     }
 
     .submenu-chevron {

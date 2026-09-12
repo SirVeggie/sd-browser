@@ -91,7 +91,7 @@
     }
 
     function closeModal() {
-        if (busyId === 'new' || busyId === editingId)
+        if (busyId !== null)
             return;
         modalOpen = false;
         editingId = null;
@@ -195,7 +195,7 @@
             minChars: Math.max(1, Math.min(20, Math.round(Number(settings.minChars) || 3))),
             maxRows: Math.max(1, Math.min(100, Math.round(Number(settings.maxRows) || 50))),
             idleOpacity: Math.max(0.04, Math.min(0.7, Number(settings.idleOpacity) || 0.22)),
-            fadeDelayMs: Math.max(100, Math.min(10_000, Math.round(Number(settings.fadeDelayMs) || 1200))),
+            fadeDelayMs: Math.max(100, Math.min(10_000, Math.round(Number(settings.fadeDelayMs) || 2000))),
         }));
     }
 </script>
@@ -208,6 +208,17 @@
     <label class="checkbox">
         Show item info
         <input type="checkbox" bind:checked={$svgenAutocompleteBehaviorStore.showInfo} />
+    </label>
+    <label class="checkbox">
+        Idle fade
+        <input
+            type="checkbox"
+            checked={$svgenAutocompleteBehaviorStore.idleFade !== false}
+            on:change={(event) => svgenAutocompleteBehaviorStore.update((settings) => ({
+                ...settings,
+                idleFade: event.currentTarget.checked,
+            }))}
+        />
     </label>
 
     <!-- svelte-ignore a11y-label-has-associated-control -->

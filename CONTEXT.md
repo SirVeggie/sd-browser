@@ -95,6 +95,12 @@ Full-screen overlays use `dismissOverlayBackdrop` on the backdrop (SD Browser / 
 
 Tag picker (`TagPickerPopup`, z-index 220) sits above `Modal` (210). Opening Add-tag from **+ add new** must close the picker first (`createNew` + `close`, and parents clear `tagPickerOpen`) — otherwise the picker’s backdrop swallows the extra click before the modal is usable. Picker entries are the `Tag` button itself; do not wrap `interactive={false}` (`.preview` forces `cursor: default`) in a pointer button or only the pill edge shows a pointer.
 
+### Context menu checkable items
+
+**Files:** `src/lib/items/ContextMenu.svelte`, `src/lib/items/ContextMenuManager.svelte`
+
+`ContextMenuOption.checked` (`boolean` or `() => boolean`) marks a checkable item in the shared context menu — not a separate multi-select submenu. Clicking it toggles in place and does not close the menu. Unchecked items still reserve the ✓ slot (`visibility`) so row height does not jump. Generate card title uses this for autocomplete sources.
+
 ---
 
 ## Toasts stay above everything
@@ -428,7 +434,7 @@ Isolated Generate feature inside the side flyout (tabbed with WebUI iframe). Kee
 - **Open-session localStorage:** `syncOpenSessionsWithLocalStorage` (`sessions.ts`, key `svgenOpenSessions`) restores the open bag + hydrates the active session into live stores. Live session/layout/seed edits flush into the bag (suspend that flush while switching/hydrating so `activeId` cannot lag). Writes are debounced; `pagehide`/`beforeunload` flush immediately. Saved library workflows stay in SQLite; this only restores unsaved open tabs across refresh.
 - **Persistence:** `LOCAL_DATA/svgen.sqlite3` (saved workflows + layouts), not MiscDB. Open tabs: localStorage as above.
 - **Optional layout fields:** persisted open-session layouts may predate newly added preferences. `autocompleteSources` is optional; missing means no per-card override, so enabled-by-default sources apply.
-- **Autocomplete list:** hide the popup when every remaining match would leave the field unchanged (exact complete item as the only option, e.g. `contrapposto` after `1girl, contrapposto`).
+- **Autocomplete list:** hide the popup when every remaining match would leave the field unchanged (exact complete item as the only option, e.g. `contrapposto` after `1girl, contrapposto`). Rank: match group, then shorter matching segment, then higher `score` (booru post count), then shorter full value. Reindex a source after this lands so stored rows get scores. `idleFade` missing in localStorage means on; default fade delay is 2000ms.
 
 ---
 

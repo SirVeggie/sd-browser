@@ -51,6 +51,7 @@ export function compareAutocompleteMatches(
     const b = rankText(right.matchedText, right.query);
     return a.group - b.group
         || a.segmentLength - b.segmentLength
+        || (right.score ?? 0) - (left.score ?? 0)
         || a.fullLength - b.fullLength
         || left.value.localeCompare(right.value);
 }

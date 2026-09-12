@@ -306,6 +306,11 @@
         editingInstruction = null;
     }
 
+    function closeAutocompleteSourceModal() {
+        autocompleteSettings?.closeSourceModal();
+        autocompleteModalOpen = false;
+    }
+
     function saveInstruction(event: CustomEvent<{ name: string; text: string }>) {
         const { name, text } = event.detail;
 
@@ -1232,7 +1237,7 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             saveLabel={autocompleteEditingId ? "Save" : "Add and index"}
             busy={autocompleteSourceBusy}
             on:save={(event) => autocompleteSettings?.saveSourceDraft(event.detail)}
-            on:close={() => autocompleteSettings?.closeSourceModal()}
+            on:close={closeAutocompleteSourceModal}
         />
     {/if}
 

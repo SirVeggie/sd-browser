@@ -18,8 +18,6 @@
     import SvGenLoraTagLoader from './SvGenLoraTagLoader.svelte';
     import {
         openContextMenu,
-        refreshContextMenus,
-        type ContextMenuOption,
     } from '$lib/items/ContextMenuManager.svelte';
 
     export let card: SvgenCard;
@@ -234,33 +232,18 @@
         dispatch('persistLayout');
     }
 
-    function sourceMenuOption(sourceId: string, name: string): ContextMenuOption {
-        const option: ContextMenuOption = {
-            name,
-            checked: sourceEnabled(sourceId),
-            handler() {
-                const enabled = !sourceEnabled(sourceId);
-                setSourceEnabled(sourceId, enabled);
-                option.checked = enabled;
-                refreshContextMenus();
-                return 'keep';
-            },
-        };
-        return option;
-    }
-
     function openTitleMenu(x: number, y: number) {
         if (!$svgenAutocompleteSourcesStore.length)
             return;
         openContextMenu(
             { x, y },
-            [{
-                name: 'Autocomplete',
-                submenu: true,
-                handler: () => $svgenAutocompleteSourcesStore.map((source) =>
-                    sourceMenuOption(source.id, source.name),
-                ),
-            }],
+            $svgenAutocompleteSourcesStore.map((source) => ({
+                name: source.name,
+                checked: () => sourceEnabled(source.id),
+                handler() {
+                    setSourceEnabled(source.id, !sourceEnabled(source.id));
+                },
+            })),
         );
     }
 
