@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onDestroy, onMount, tick } from 'svelte';
+    import { bindDropdownOutsideClick } from '$lib/tools/dropdownOutsideClick';
     import {
         applyAutocompleteMatch,
         buildAutocompleteQueries,
@@ -429,6 +430,12 @@
         document.addEventListener('selectionchange', onSelectionChange);
         window.addEventListener('resize', onViewportChange);
         window.addEventListener('scroll', onViewportChange, true);
+        const unbindOutside = bindDropdownOutsideClick(
+            () => open,
+            close,
+            () => [portal, attachedTarget],
+        );
+        return () => unbindOutside();
     });
 
     onDestroy(() => {

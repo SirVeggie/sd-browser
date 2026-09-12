@@ -18,6 +18,7 @@
         writeSdBrowserPickerSearch,
         type SdBrowserPickerSession,
     } from '$lib/svgen/sdBrowserPickerStore';
+    import { dismissOverlayBackdrop } from '$lib/tools/dropdownOutsideClick';
     import { hasMmrSearchParts, hasSimilaritySearchParts } from '$lib/tools/searchParsing';
     import {
         syncTemporarySorts,
@@ -305,20 +306,24 @@
             closeSdBrowserPicker();
         }
     }
+
+    function onBackdrop(event: Event) {
+        dismissOverlayBackdrop(event, closeSdBrowserPicker);
+    }
 </script>
 
 <svelte:window on:keydown={onKeydown} />
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <!-- Portaled to document.body so flyout overflow cannot clip it; scoped styles still apply. -->
 <div
     bind:this={overlayEl}
     class="overlay"
     role="presentation"
-    on:pointerdown={(e) => {
-        if (e.target === e.currentTarget)
-            closeSdBrowserPicker();
-    }}
+    on:pointerdown={onBackdrop}
+    on:touchstart={onBackdrop}
+    on:click={onBackdrop}
 >
     <div
         class="modal"
@@ -327,6 +332,8 @@
         aria-modal="true"
         aria-label="Select sd-browser image"
         on:pointerdown|stopPropagation
+        on:touchstart|stopPropagation
+        on:click|stopPropagation
         on:dragover|preventDefault={() => (dropActive = true)}
         on:dragleave={() => (dropActive = false)}
         on:drop={onDrop}

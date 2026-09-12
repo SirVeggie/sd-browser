@@ -222,6 +222,7 @@
     function openCreateTagModal() {
         modalTagName = "";
         modalTagColor = DEFAULT_TAG_COLOR;
+        tagPickerOpen = false;
         tagModalOpen = true;
     }
 

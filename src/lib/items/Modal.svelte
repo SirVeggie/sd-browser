@@ -2,15 +2,30 @@
     import { fade } from "svelte/transition";
     import { cubicOut } from "svelte/easing";
     import { onMount } from "svelte";
+    import { dismissOverlayBackdrop } from "$lib/tools/dropdownOutsideClick";
 
     export let close = () => {};
+
+    function onBackdrop(event) {
+        dismissOverlayBackdrop(event, close);
+    }
+
+    function onKeydown(event) {
+        if (event.key !== "Escape")
+            return;
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+    }
 
     let rootEl;
 
     onMount(() => {
         if (!rootEl) return;
         document.body.appendChild(rootEl);
+        window.addEventListener("keydown", onKeydown);
         return () => {
+            window.removeEventListener("keydown", onKeydown);
             rootEl?.remove();
         };
     });
@@ -22,9 +37,11 @@
     bind:this={rootEl}
     class="modal"
     transition:fade={{ duration: 200, easing: cubicOut }}
-    on:click|self={close}
+    on:pointerdown={onBackdrop}
+    on:touchstart={onBackdrop}
+    on:click={onBackdrop}
 >
-    <div class="box" on:click|stopPropagation>
+    <div class="box" on:pointerdown|stopPropagation on:touchstart|stopPropagation on:click|stopPropagation>
         <slot />
     </div>
 </div>

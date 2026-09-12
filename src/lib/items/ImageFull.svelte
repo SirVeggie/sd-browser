@@ -52,6 +52,7 @@
     type ContextMenuOption,
   } from "./ContextMenuManager.svelte";
   import FullscreenMediaStage from "./FullscreenMediaStage.svelte";
+  import { dismissOverlay } from "$lib/tools/dropdownOutsideClick";
 
   export let cancel: () => void;
   export let image: ClientImage | undefined;
@@ -370,6 +371,10 @@
     e.preventDefault();
   }
 
+  function onOverlayDismiss(event: Event) {
+    dismissOverlay(event, cancel);
+  }
+
   function getTopMetadataActions(): ContextMenuOption[] {
     const actions: ContextMenuOption[] = [];
 
@@ -651,6 +656,7 @@
   function openCreateTagModal() {
     modalTagName = "";
     modalTagColor = DEFAULT_TAG_COLOR;
+    tagPickerOpen = false;
     tagModalOpen = true;
   }
 
@@ -778,7 +784,7 @@
 {#if enabled && image?.id}
   <div
     class="image_overlay"
-    on:click={cancel}
+    on:pointerdown={onOverlayDismiss}
     transition:fade={{ duration: 300, easing: cubicOut }}
   >
     <div class="layout" class:full class:live>
@@ -806,7 +812,7 @@
           </div>
           <!-- svelte-ignore a11y-click-events-have-key-events -->
           {#if stageInfo && !live}
-            <div class="info" on:click={prevent}>
+            <div class="info" on:pointerdown|stopPropagation on:click={prevent}>
               <div class="basic">
                 <p>{basicInfo}</p>
                 <button

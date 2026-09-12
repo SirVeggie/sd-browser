@@ -14,6 +14,12 @@ Run via `npm run test:<name>` or `node --experimental-strip-types tests/<file>.t
 
 ---
 
+## Do not start a UI test server unless asked
+
+Starting a disposable Vite/dev server from the agent to drive the browser does not work in this environment (process gets aborted / ports don’t stay usable). **Do not** open the app in the browser or spin up `vite` / `npm run dev` to verify UI unless the user explicitly asks. Use unit tests, code inspection, or the user’s already-running instance. Temporary until that harness is fixed.
+
+---
+
 ## Operations progress is layout-owned
 
 **Files:** `src/lib/stores/operationWatch.ts`, `src/lib/components/OperationProgress.svelte`, `src/routes/api/operations/events/+server.ts`
@@ -75,11 +81,19 @@ Overflow-thumb measurement reads the column’s `clientWidth`; measuring the fit
 
 Non-chrome `Select` panels portal to `document.body` and use `position: fixed` + `getBoundingClientRect`. In-tree fixed is not enough: `Modal` `.box` also has `backdrop-filter` (+ `overflow-y: auto`), which traps fixed descendants so the menu expands the modal scroll area and never floats above it. Outside-click must treat the portaled panel as inside the dropdown (`bindDropdownOutsideClick` accepts multiple roots).
 
-### Dropdown outside clicks are swallowed
+### Overlay / dropdown dismiss swallows the gesture
 
-**File:** `src/lib/tools/dropdownOutsideClick.ts` (same idea as `src/actions/outclick.ts` for context menus)
+**Files:** `src/lib/tools/dropdownOutsideClick.ts`, `src/actions/outclick.ts`
 
-When a dropdown is open, an outside `pointerdown` / `touchstart` / `click` must close it and be consumed (`preventDefault` + `stopPropagation`) so the gesture does not also select an image, press a button, etc. Do not revert to close-only listeners.
+App-wide (not chrome-only): dismissing a menu, dropdown, picker, or modal overlay must consume the outside `pointerdown` / `touchstart` / `click` (`preventDefault` + `stopPropagation`) so that gesture does not also activate whatever is behind it (gallery images, generate fields, nav, etc.).
+
+Dismiss on gesture start (`pointerdown` / `touchstart`), not on the leftover mouse `click`. A press that starts inside (text selection) and is released outside must not close — that `click` targets the common ancestor (often the backdrop). Keyboard activation is a `click` with `detail === 0`. ImageFull uses `dismissOverlay` on the overlay (click-image-to-close) and stops `pointerdown` on the metadata panel.
+
+`bindDropdownOutsideClick` is the shared helper for dropdowns — Select, combo/LoRA pickers, session/burger menus, int-control, autocomplete, chrome filters, context-menu `outclick`. After close it keeps swallowing the rest of the gesture: close-on-`pointerdown` unmounts the UI, then `click` / compatibility mouse events retarget onto the newly exposed control unless consumed.
+
+Full-screen overlays use `dismissOverlayBackdrop` on the backdrop (SD Browser / Comfy image pickers, `Modal`, tag picker, image-ref preview). Do not close on overlay `pointerdown` without swallowing, and do not add a third outside-click system.
+
+Tag picker (`TagPickerPopup`, z-index 220) sits above `Modal` (210). Opening Add-tag from **+ add new** must close the picker first (`createNew` + `close`, and parents clear `tagPickerOpen`) — otherwise the picker’s backdrop swallows the extra click before the modal is usable. Picker entries are the `Tag` button itself; do not wrap `interactive={false}` (`.preview` forces `cursor: default`) in a pointer button or only the pill edge shows a pointer.
 
 ---
 

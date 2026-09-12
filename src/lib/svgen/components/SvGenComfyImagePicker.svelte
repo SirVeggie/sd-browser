@@ -8,6 +8,7 @@
         type ComfyFolderType,
         uploadComfyImageFile,
     } from '$lib/svgen/comfyImageUrls';
+    import { dismissOverlayBackdrop } from '$lib/tools/dropdownOutsideClick';
     import SvGenAuthImg from './SvGenAuthImg.svelte';
 
     export let value: string;
@@ -149,6 +150,10 @@
         }
     }
 
+    function onBackdrop(event: Event) {
+        dismissOverlayBackdrop(event, closeModal);
+    }
+
     onDestroy(() => {
         // Blob URLs are owned by the shared cache — do not revoke on unmount.
         previewToken += 1;
@@ -188,14 +193,14 @@
 
 {#if open}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
         bind:this={overlayEl}
         class="overlay"
         role="presentation"
-        on:pointerdown={(e) => {
-            if (e.target === e.currentTarget)
-                closeModal();
-        }}
+        on:pointerdown={onBackdrop}
+        on:touchstart={onBackdrop}
+        on:click={onBackdrop}
     >
         <div
             class="modal"
@@ -204,6 +209,8 @@
             aria-modal="true"
             aria-label="Select image"
             on:pointerdown|stopPropagation
+            on:touchstart|stopPropagation
+            on:click|stopPropagation
             on:dragover|preventDefault={() => (dropActive = true)}
             on:dragleave={() => (dropActive = false)}
             on:drop={onDrop}

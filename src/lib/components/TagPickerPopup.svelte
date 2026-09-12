@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
+    import { dismissOverlayBackdrop } from "$lib/tools/dropdownOutsideClick";
     import { fade, fly } from "svelte/transition";
     import { cubicOut } from "svelte/easing";
     import Tag from "$lib/items/Tag.svelte";
@@ -49,6 +50,10 @@
         dispatch("close");
     }
 
+    function onBackdrop(event: Event) {
+        dismissOverlayBackdrop(event, close);
+    }
+
     onMount(() => {
         if (rootEl) {
             document.body.appendChild(rootEl);
@@ -71,7 +76,9 @@
         type="button"
         class="backdrop"
         aria-label="Close tag picker"
-        on:click|stopPropagation={close}
+        on:pointerdown={onBackdrop}
+        on:touchstart={onBackdrop}
+        on:click={onBackdrop}
     ></button>
 
     <div
@@ -83,23 +90,32 @@
     >
         <div class="picker-header">
             <span class="title">select tags</span>
-            <button type="button" class="add-new" on:click|stopPropagation={() => dispatch("createNew")}>
+            <button
+                type="button"
+                class="add-new"
+                on:click|stopPropagation={() => {
+                    dispatch("createNew");
+                    close();
+                }}
+            >
                 + add new
             </button>
         </div>
         {#if tags.length}
             <div class="picker-tags">
                 {#each tags as tag, index (tag)}
-                    <button
-                        type="button"
+                    <span
                         class="picker-tag-entry"
                         in:fade={{ duration: 160, delay: index * 35, easing: cubicOut }}
-                        on:click|stopPropagation={() => dispatch("select", tag)}
                     >
-                        <Tag color={pillColor(tag)} highlightOnHover interactive={false}>
+                        <Tag
+                            color={pillColor(tag)}
+                            highlightOnHover
+                            on:click={() => dispatch("select", tag)}
+                        >
                             {tag}
                         </Tag>
-                    </button>
+                    </span>
                 {/each}
             </div>
         {:else}
@@ -184,12 +200,6 @@
 
     .picker-tag-entry {
         display: inline-flex;
-        appearance: none;
-        margin: 0;
-        padding: 0;
-        border: none;
-        background: transparent;
-        cursor: pointer;
         line-height: 0;
     }
 

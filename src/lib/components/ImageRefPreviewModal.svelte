@@ -3,6 +3,7 @@
     import { fade } from "svelte/transition";
     import { cubicOut } from "svelte/easing";
     import { onMount } from "svelte";
+    import { dismissOverlayBackdrop } from "$lib/tools/dropdownOutsideClick";
 
     export let ref: ImageSearchRef;
     export let imageUrl: string;
@@ -34,6 +35,10 @@
             onClose();
         }
     }
+
+    function onBackdrop(event: Event) {
+        dismissOverlayBackdrop(event, onClose);
+    }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -44,11 +49,13 @@
     bind:this={overlayEl}
     class="overlay"
     transition:fade={{ duration: 180, easing: cubicOut }}
-    on:click|self={onClose}
+    on:pointerdown={onBackdrop}
+    on:touchstart={onBackdrop}
+    on:click={onBackdrop}
 >
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-    <div class="frame" on:click={handleImageClick} role="img" aria-label={`Reference #${ref.slot}`}>
+    <div class="frame" on:pointerdown|stopPropagation on:touchstart|stopPropagation on:click={handleImageClick} role="img" aria-label={`Reference #${ref.slot}`}>
         {#if imageUrl}
             <img src={imageUrl} alt={`Reference #${ref.slot}`} draggable="false" />
         {:else}
