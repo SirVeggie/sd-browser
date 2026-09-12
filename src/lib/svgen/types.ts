@@ -58,6 +58,8 @@ export type SvgenCard = {
     nodeId: string;
     nodeType: string;
     title: string;
+    /** Subgraph definition name when this card is a subgraph shell. */
+    subgraphName?: string;
     fields: SvgenField[];
     /** Shows an output-image preview slot (Danbooru / PreviewImage / etc.). */
     imageDisplay?: boolean;

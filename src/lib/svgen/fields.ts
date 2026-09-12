@@ -1435,6 +1435,7 @@ export function discoverCards(
             nodeId: String(node.id),
             nodeType: classType,
             title,
+            subgraphName: subgraph?.name?.trim() || undefined,
             fields,
             imageDisplay: isImageDisplay,
             textDisplay: isTextDisplay,

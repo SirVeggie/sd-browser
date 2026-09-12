@@ -1,3 +1,4 @@
+import type { ComfyWorkflowNode } from '$lib/types/images';
 import type { SvgenCard, SvgenLayoutState, ColumnPlacement } from './types';
 import { normalizeIntControlModes } from './intControl';
 
@@ -70,10 +71,14 @@ export function ensureBaseLayouts(layout: SvgenLayoutState, nodeIds: string[]): 
     return next;
 }
 
+/** Persist type, title, subgraph name, and field names for later identity matching. */
 export function signaturesFromCards(cards: SvgenCard[], _nodes?: ComfyWorkflowNode[]): Record<string, string> {
     const out: Record<string, string> = {};
-    for (const card of cards)
-        out[card.nodeId] = `${card.nodeType}\u0000${card.title}\u0000`;
+    for (const card of cards) {
+        const subgraphName = card.subgraphName ?? '';
+        const fields = card.fields.map((field) => field.widgetName).join('\u0001');
+        out[card.nodeId] = `${card.nodeType}\u0000${card.title}\u0000${subgraphName}\u0000${fields}`;
+    }
     return out;
 }
 

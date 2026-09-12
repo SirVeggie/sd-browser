@@ -821,7 +821,9 @@
         }
         return cards.map((card) => ({
             ...card,
-            fieldNames: fieldNamesFromLayout(layout, card.nodeId),
+            fieldNames: card.fieldNames.length
+                ? card.fieldNames
+                : fieldNamesFromLayout(layout, card.nodeId),
         }));
     }
 
