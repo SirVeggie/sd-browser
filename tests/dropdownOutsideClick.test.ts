@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import {
     DISMISS_SWALLOW_MS,
     createOutsideClickController,
+    dismissOverlay,
     dismissOverlayBackdrop,
+    dismissOverlayOnClick,
     swallowEvent,
 } from '../src/lib/tools/dropdownOutsideClick.ts';
 
@@ -17,6 +19,7 @@ function fakeEvent(
     target: EventTarget | null,
     currentTarget: EventTarget | null = null,
     detail = 1,
+    button?: number,
 ): FakeEvent {
     let defaultPrevented = false;
     let propagationStopped = false;
@@ -41,6 +44,7 @@ function fakeEvent(
         stopImmediatePropagation() {
             propagationStopped = true;
         },
+        ...(button !== undefined ? { button } : {}),
     };
     return event as FakeEvent;
 }
@@ -184,4 +188,62 @@ function fakeEvent(
         closed += 1;
     });
     assert.equal(closed, 2, 'keyboard click on backdrop dismisses overlay');
+}
+
+{
+    const outside = {} as EventTarget;
+    let open = true;
+    let closed = 0;
+    const controller = createOutsideClickController({
+        isOpen: () => open,
+        close: () => {
+            open = false;
+            closed += 1;
+        },
+        isInside: () => false,
+        now: () => 1000,
+    });
+    const rightDown = fakeEvent('pointerdown', outside, null, 1, 2);
+    assert.equal(controller.handle(rightDown), false, 'right-click pointerdown does not dismiss');
+    assert.equal(open, true);
+    assert.equal(closed, 0);
+    assert.equal(rightDown.defaultPrevented, false);
+
+    let overlayClosed = 0;
+    const overlayRight = fakeEvent('pointerdown', outside, null, 1, 2);
+    dismissOverlay(overlayRight, () => {
+        overlayClosed += 1;
+    });
+    assert.equal(overlayClosed, 0, 'dismissOverlay ignores non-primary pointerdown');
+    assert.equal(overlayRight.defaultPrevented, false);
+}
+
+{
+    let closed = 0;
+    const close = () => {
+        closed += 1;
+    };
+
+    dismissOverlayOnClick(fakeEvent('pointerdown', null), close);
+    assert.equal(closed, 0, 'ImageFull does not close on pointerdown');
+
+    const rightClick = fakeEvent('click', null, null, 1, 2);
+    dismissOverlayOnClick(rightClick, close);
+    assert.equal(closed, 0, 'ImageFull does not close on non-primary click');
+    assert.equal(rightClick.defaultPrevented, false);
+
+    const tap = fakeEvent('click', null);
+    dismissOverlayOnClick(tap, close);
+    assert.equal(closed, 1, 'ImageFull closes on primary click/tap');
+    assert.equal(tap.defaultPrevented, true);
+
+    const menu = fakeEvent('contextmenu', null);
+    dismissOverlayOnClick(menu, close);
+    assert.equal(closed, 1, 'contextmenu does not close fullscreen');
+    assert.equal(menu.defaultPrevented, false, 'native copy/save menu is not cancelled');
+
+    const leftover = fakeEvent('click', null);
+    dismissOverlayOnClick(leftover, close);
+    assert.equal(closed, 1, 'click after contextmenu does not close');
+    assert.equal(leftover.defaultPrevented, false);
 }

@@ -394,6 +394,7 @@
     max-height: calc(100dvh - var(--pad, 0px) * 2);
     max-width: 100%;
     object-fit: contain;
+    -webkit-touch-callout: default;
     transition: opacity var(--image-fade-ms, 180ms) ease;
 
     &.media-hidden {

@@ -6,6 +6,7 @@
     export let title = 'Enable';
     /** Smaller toggle for dense card headers. */
     export let compact = false;
+    export let id: string | undefined = undefined;
 
     const dispatch = createEventDispatcher<{ change: boolean }>();
 
@@ -54,6 +55,7 @@
     class="pill"
     class:is-on={checked}
     class:compact
+    {id}
     role="switch"
     aria-checked={checked}
     aria-label={checked ? 'Enabled' : 'Disabled'}

@@ -39,6 +39,7 @@ const captureOpts: AddEventListenerOptions = { capture: true, passive: false };
 
 let trailingUntil = 0;
 let trailingBound = false;
+let skipClickUntil = 0;
 
 export function swallowEvent(event: Event): void {
     if (event.cancelable)
@@ -46,12 +47,25 @@ export function swallowEvent(event: Event): void {
     event.stopPropagation();
 }
 
+function eventButton(event: Event): number | undefined {
+    if (!('button' in event))
+        return undefined;
+    const button = (event as MouseEvent).button;
+    return typeof button === 'number' ? button : undefined;
+}
+
+/** Left click / tap. Right/middle must not dismiss — they open context menus. */
+export function isPrimaryDismissButton(event: Event): boolean {
+    const button = eventButton(event);
+    return button === undefined || button === 0 || button === -1;
+}
+
 /** True for a new dismiss gesture, not a leftover click after an inside press. */
 export function isGestureDismissStart(event: Event): boolean {
     switch (event.type) {
         case 'pointerdown':
         case 'touchstart':
-            return true;
+            return isPrimaryDismissButton(event);
         case 'click':
             return 'detail' in event && (event as MouseEvent).detail === 0;
         default:
@@ -104,6 +118,33 @@ export function dismissOverlay(event: Event, close: () => void): void {
     swallowEvent(event);
     close();
     armDismissEventSwallow();
+}
+
+/**
+ * Close on a completed click/tap, not on `pointerdown`.
+ *
+ * ImageFull is the click target (click-image-to-close). Dismissing on
+ * pointerdown would unmount before a right-click or long-press `contextmenu`
+ * and `preventDefault` would block Copy/Save on the image.
+ *
+ * Do not `preventDefault` the context menu. Skip the leftover `click` some
+ * mobile browsers fire after a long-press menu (window = DISMISS_SWALLOW_MS).
+ */
+export function dismissOverlayOnClick(event: Event, close: () => void): void {
+    if (event.type === 'contextmenu') {
+        skipClickUntil = Date.now() + DISMISS_SWALLOW_MS;
+        return;
+    }
+    if (event.type !== 'click')
+        return;
+    if (Date.now() < skipClickUntil) {
+        skipClickUntil = 0;
+        return;
+    }
+    if (!isPrimaryDismissButton(event))
+        return;
+    swallowEvent(event);
+    close();
 }
 
 /**

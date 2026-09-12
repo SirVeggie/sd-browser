@@ -295,9 +295,10 @@
     {#if editMode}
         <div class="edit-bar">
             {#if clipInputWired}
-                <label class="clip-toggle">
+                <label class="clip-toggle" for="svgen-lora-clip-{nodeId}">
                     <span>Clip strength</span>
                     <SvGenEnablePill
+                        id="svgen-lora-clip-{nodeId}"
                         compact
                         checked={showClipPref}
                         title={showClipPref

@@ -335,12 +335,14 @@
     on:pointermove={onPointerMove}
     on:pointerleave={onPointerLeave}
 >
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
         class="tap-zone"
         on:pointerdown={onTapZonePointerDown}
         on:click={onTapZoneClick}
     ></div>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
         class="bar"

@@ -202,6 +202,7 @@
         on:touchstart={onBackdrop}
         on:click={onBackdrop}
     >
+        <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
         <div
             class="modal"
             class:drop={dropActive}

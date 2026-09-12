@@ -395,6 +395,7 @@
             class="menu"
             style={menuStyle}
             role="listbox"
+            tabindex="-1"
             on:keydown={onMenuKeydown}
         >
             {#if showSearch}

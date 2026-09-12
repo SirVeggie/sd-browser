@@ -1,6 +1,5 @@
 import type { ClientImage, ServerImage } from "$lib/types/images";
 import shuffle from "lodash/shuffle";
-import rl from "readline";
 
 export const imageFiletypes = ['png', 'jpg', 'jpeg', 'webp'] as const;
 export const txtFiletypes = ['txt', 'yaml', 'yml', 'json'] as const;
@@ -103,9 +102,8 @@ export function printLine(str: string) {
 }
 
 export function updateLine(str: string) {
-    rl.cursorTo(process.stdout, 0);
-    rl.clearLine(process.stdout, 0);
-    process.stdout.write(str);
+    // ANSI, not Node `readline` — this module is imported by the client bundle.
+    process.stdout.write(`\r\x1b[K${str}`);
 }
 
 export function calcTimeSpent(start: number) {

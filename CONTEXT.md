@@ -6,6 +6,14 @@ Keep entries short and actionable. Prefer linking to code over restating it.
 
 ---
 
+## Shared `misc.ts` stays browser-safe
+
+**File:** `src/lib/tools/misc.ts`
+
+Gallery/client code imports this module. Do not add Node built-ins (`readline`, `fs`, …) at the top level — Vite will externalize them and warn on `npm run build`. Server-only stdout helpers (`updateLine`) use ANSI cursor/erase sequences instead of `readline`.
+
+---
+
 ## Tests live in `tests/`
 
 Node assert (and a few vitest) files are `tests/*.test.ts`. Fixtures are `tests/fixtures/`. Do not put new tests in `scripts/` — that folder is build/dev helpers (`build-extradata-worker.mjs`, `copy-dev-images.mjs`) plus the Node loader hooks some tests import (`register-ts-extension.mjs`).
@@ -87,7 +95,9 @@ Non-chrome `Select` panels portal to `document.body` and use `position: fixed` +
 
 App-wide (not chrome-only): dismissing a menu, dropdown, picker, or modal overlay must consume the outside `pointerdown` / `touchstart` / `click` (`preventDefault` + `stopPropagation`) so that gesture does not also activate whatever is behind it (gallery images, generate fields, nav, etc.).
 
-Dismiss on gesture start (`pointerdown` / `touchstart`), not on the leftover mouse `click`. A press that starts inside (text selection) and is released outside must not close — that `click` targets the common ancestor (often the backdrop). Keyboard activation is a `click` with `detail === 0`. ImageFull uses `dismissOverlay` on the overlay (click-image-to-close) and stops `pointerdown` on the metadata panel.
+Dismiss on gesture start (`pointerdown` / `touchstart`), not on the leftover mouse `click`. A press that starts inside (text selection) and is released outside must not close — that `click` targets the common ancestor (often the backdrop). Keyboard activation is a `click` with `detail === 0`. Non-primary buttons (right/middle) are not a dismiss — they open context menus.
+
+ImageFull is the exception: click-image-to-close uses `dismissOverlayOnClick`, **not** pointerdown. Closing on pointerdown unmounted the view before right-click / long-press `contextmenu`, so Copy/Save hit the gallery instead. Do not `preventDefault` that menu. Skip the leftover tap `click` some mobile browsers fire after the menu. Metadata panel still stops `pointerdown` so panel interaction does not bubble as a close click.
 
 `bindDropdownOutsideClick` is the shared helper for dropdowns — Select, combo/LoRA pickers, session/burger menus, int-control, autocomplete, chrome filters, context-menu `outclick`. After close it keeps swallowing the rest of the gesture: close-on-`pointerdown` unmounts the UI, then `click` / compatibility mouse events retarget onto the newly exposed control unless consumed.
 

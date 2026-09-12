@@ -52,7 +52,7 @@
     type ContextMenuOption,
   } from "./ContextMenuManager.svelte";
   import FullscreenMediaStage from "./FullscreenMediaStage.svelte";
-  import { dismissOverlay } from "$lib/tools/dropdownOutsideClick";
+  import { dismissOverlayOnClick } from "$lib/tools/dropdownOutsideClick";
 
   export let cancel: () => void;
   export let image: ClientImage | undefined;
@@ -372,7 +372,7 @@
   }
 
   function onOverlayDismiss(event: Event) {
-    dismissOverlay(event, cancel);
+    dismissOverlayOnClick(event, cancel);
   }
 
   function getTopMetadataActions(): ContextMenuOption[] {
@@ -784,7 +784,8 @@
 {#if enabled && image?.id}
   <div
     class="image_overlay"
-    on:pointerdown={onOverlayDismiss}
+    on:click={onOverlayDismiss}
+    on:contextmenu={onOverlayDismiss}
     transition:fade={{ duration: 300, easing: cubicOut }}
   >
     <div class="layout" class:full class:live>
