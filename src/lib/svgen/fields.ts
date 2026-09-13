@@ -86,6 +86,16 @@ type SlotBuild = {
      * SV-Combo uses a single comma-separated `options` string.
      */
     comboValues?: string[];
+    /**
+     * Number min/max/step/precision when object_info has stale defaults.
+     * SV-Float reads sibling `min` / `max` / `step` / `decimals` widgets.
+     */
+    numberOptions?: {
+        min?: number;
+        max?: number;
+        step?: number;
+        precision?: number;
+    };
 };
 
 function asWidgetValues(
@@ -657,6 +667,11 @@ function withLoraTagOptions(
 }
 
 const SV_COMBO_TYPE = 'SV-Combo';
+const SV_FLOAT_TYPE = 'SV-Float';
+const SV_FLOAT_VALUE_WIDGET = 'value';
+const SV_FLOAT_CONFIG_WIDGETS = new Set(['min', 'max', 'step', 'decimals']);
+const SV_FLOAT_MAX_DECIMALS = 8;
+const SV_FLOAT_LAYOUT = ['value', 'min', 'max', 'step', 'decimals'] as const;
 
 function parseCommaSeparatedOptions(raw: string): string[] {
     return raw
@@ -711,6 +726,84 @@ function svComboChoiceOptions(
     return undefined;
 }
 
+function parseFiniteNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value))
+        return value;
+    if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed))
+            return parsed;
+    }
+    return undefined;
+}
+
+function svFloatWidgetMap(
+    node: ComfyWorkflowNode,
+): Map<string, string | number | boolean | null> {
+    const values = asWidgetValues(node.widgets_values);
+    const names = inputWidgetNames(node);
+    const map = new Map<string, string | number | boolean | null>();
+    const namedCount = Math.min(names.length, values.length);
+    for (let i = 0; i < namedCount; i++)
+        map.set(names[i], values[i]);
+    // Layout: [value, min, max, step, decimals] when input names are missing.
+    if (values.length >= SV_FLOAT_LAYOUT.length) {
+        for (let i = 1; i < SV_FLOAT_LAYOUT.length; i++) {
+            const name = SV_FLOAT_LAYOUT[i];
+            if (!map.has(name))
+                map.set(name, values[i]);
+        }
+    }
+    return map;
+}
+
+/**
+ * SV-Float: schema order is `[value, min, max, step, decimals]`. Prefer those
+ * sibling widgets over object_info defaults (0–1 / 0.01) so the panel matches
+ * the canvas widget. `decimals` is stored as `precision`.
+ */
+function svFloatValueOptions(
+    node: ComfyWorkflowNode | undefined,
+): SlotBuild['numberOptions'] | undefined {
+    if (!node || resolveNodeClassType(node) !== SV_FLOAT_TYPE)
+        return undefined;
+    const byName = svFloatWidgetMap(node);
+    let min = parseFiniteNumber(byName.get('min'));
+    let max = parseFiniteNumber(byName.get('max'));
+    if (min != null && max != null && max < min) {
+        const swap = min;
+        min = max;
+        max = swap;
+    }
+    let step = parseFiniteNumber(byName.get('step'));
+    if (step != null && !(step > 0))
+        step = undefined;
+    const decimals = parseFiniteNumber(byName.get('decimals'));
+    const precision = decimals == null
+        ? undefined
+        : Math.min(Math.max(Math.round(decimals), 0), SV_FLOAT_MAX_DECIMALS);
+
+    const options: NonNullable<SlotBuild['numberOptions']> = {};
+    if (min != null)
+        options.min = min;
+    if (max != null)
+        options.max = max;
+    if (step != null)
+        options.step = step;
+    if (precision != null)
+        options.precision = precision;
+    return Object.keys(options).length ? options : undefined;
+}
+
+function isSvFloatConfigSlot(slot: SlotBuild): boolean {
+    const name = slot.schemaWidgetName ?? slot.widgetName;
+    return slot.schemaType === SV_FLOAT_TYPE && SV_FLOAT_CONFIG_WIDGETS.has(name);
+}
+
+function isSvFloatValueWidget(name: string): boolean {
+    return name === SV_FLOAT_VALUE_WIDGET;
+}
+
 function dynamicChoiceOptions(
     node: ComfyWorkflowNode | undefined,
 ): string[] | undefined {
@@ -731,6 +824,18 @@ function withComboValues(
         kind: 'combo',
         options: { ...(options ?? {}), values: comboValues },
     };
+}
+
+function withNumberOptions(
+    kind: SvgenFieldKind,
+    options: SvgenField['options'] | undefined,
+    numberOptions: SlotBuild['numberOptions'],
+): SvgenField['options'] | undefined {
+    if (!numberOptions)
+        return options;
+    if (kind !== 'number' && kind !== 'seed')
+        return options;
+    return { ...(options ?? {}), ...numberOptions };
 }
 
 function detectKind(
@@ -955,6 +1060,9 @@ function buildSlotsForConcreteNode(
             hadControlCompanion: entry.hadControlCompanion,
             comboValues: entry.name === 'choice'
                 ? dynamicChoiceOptions(node)
+                : undefined,
+            numberOptions: isSvFloatValueWidget(entry.name)
+                ? svFloatValueOptions(node)
                 : undefined,
         });
     }
@@ -1185,6 +1293,9 @@ function buildSlotsForProxyNode(
         const comboValues = schemaWidgetName === 'choice'
             ? dynamicChoiceOptions(schemaNode)
             : undefined;
+        const numberOptions = isSvFloatValueWidget(schemaWidgetName)
+            ? svFloatValueOptions(schemaNode)
+            : undefined;
 
         // Instance values live on the outer node for promoted proxies; convert still
         // needs inner updates when the definition holds a writable slot.
@@ -1206,6 +1317,7 @@ function buildSlotsForProxyNode(
                 schemaType,
                 hadControlCompanion,
                 comboValues,
+                numberOptions,
             });
         } else if (fromInner) {
             slots.push({
@@ -1223,6 +1335,7 @@ function buildSlotsForProxyNode(
                 schemaType,
                 hadControlCompanion,
                 comboValues,
+                numberOptions,
             });
         } else if (fromOuter) {
             slots.push({
@@ -1234,6 +1347,7 @@ function buildSlotsForProxyNode(
                 schemaType,
                 hadControlCompanion,
                 comboValues,
+                numberOptions,
             });
         } else {
             // No stored value index — still surface the promoted widget (schema default).
@@ -1251,6 +1365,7 @@ function buildSlotsForProxyNode(
                 schemaType,
                 hadControlCompanion,
                 comboValues,
+                numberOptions,
             });
         }
     }
@@ -1268,6 +1383,8 @@ function slotsToFields(
     for (const slot of slots) {
         if (!shouldIncludeSlot(wireNode, slot.widgetName, slot.label, slot.schemaWidgetName))
             continue;
+        if (isSvFloatConfigSlot(slot))
+            continue;
         // Also hide if outer container wires the same name
         if (wireNode !== node && isWired(node, slot.widgetName))
             continue;
@@ -1281,7 +1398,8 @@ function slotsToFields(
             options,
             slot.comboValues,
         );
-        options = withLoraTagOptions(kind, withCombo, objectInfo);
+        options = withNumberOptions(kind, withCombo, slot.numberOptions);
+        options = withLoraTagOptions(kind, options, objectInfo);
         if (kind === 'string') {
             const lower = schemaName.toLowerCase();
             if (
@@ -1351,6 +1469,8 @@ export function discoverCards(
             for (const slot of slots) {
                 if (!shouldIncludeSlot(node, slot.widgetName, slot.label, slot.schemaWidgetName))
                     continue;
+                if (isSvFloatConfigSlot(slot))
+                    continue;
                 const schemaName = slot.schemaWidgetName ?? slot.widgetName;
                 const schema = lookupSchema(objectInfo, slot.schemaType, schemaName);
                 const detected = detectKind(slot.schemaType, schemaName, slot.value, schema);
@@ -1360,7 +1480,8 @@ export function discoverCards(
                     options,
                     slot.comboValues,
                 );
-                options = withLoraTagOptions(kind, withCombo, objectInfo);
+                options = withNumberOptions(kind, withCombo, slot.numberOptions);
+                options = withLoraTagOptions(kind, options, objectInfo);
                 if (kind === 'string') {
                     const lower = schemaName.toLowerCase();
                     if (

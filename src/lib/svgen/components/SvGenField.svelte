@@ -50,6 +50,7 @@
         },
         getMin: () => field.options?.min,
         getMax: () => field.options?.max,
+        getPrecision: () => field.options?.precision,
         onChange: (value: number) => dispatch('change', value),
     };
 
@@ -71,10 +72,33 @@
     $: intMode = getIntControlMode($svgenLayoutStore.intControlModes, field);
     $: frozen = $svgenFrozenSeedsStore.has(controlKey);
 
+    function clampNumberField(raw: number): number {
+        let value = raw;
+        const min = field.options?.min;
+        const max = field.options?.max;
+        if (min != null && Number.isFinite(min))
+            value = Math.max(min, value);
+        if (max != null && Number.isFinite(max))
+            value = Math.min(max, value);
+        const precision = field.options?.precision;
+        if (
+            typeof precision === 'number'
+            && Number.isInteger(precision)
+            && precision >= 0
+            && precision <= 12
+            && Number.isFinite(value)
+        ) {
+            const factor = 10 ** precision;
+            if (Math.abs(value) * factor <= Number.MAX_SAFE_INTEGER)
+                value = Math.round(value * factor) / factor;
+        }
+        return value;
+    }
+
     function onNumber(e: Event) {
         const raw = (e.currentTarget as HTMLInputElement).value;
         const num = Number(raw);
-        dispatch('change', Number.isFinite(num) ? num : raw);
+        dispatch('change', Number.isFinite(num) ? clampNumberField(num) : raw);
     }
 
     function setIntMode(mode: IntControlMode) {

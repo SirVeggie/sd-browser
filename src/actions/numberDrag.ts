@@ -15,6 +15,7 @@ export type NumberDragParams = {
     getStep: () => number;
     getMin?: () => number | undefined;
     getMax?: () => number | undefined;
+    getPrecision?: () => number | undefined;
     onChange: (value: number) => void;
 };
 
@@ -37,12 +38,29 @@ function dragPixelsPerStep(step: number): number {
     return Math.max(1, DRAG_PIXELS_PER_STEP / (2 ** places));
 }
 
+function applyPrecision(value: number, precision: number | undefined): number {
+    if (
+        precision == null
+        || !Number.isInteger(precision)
+        || precision < 0
+        || precision > 12
+        || !Number.isFinite(value)
+    ) {
+        return value;
+    }
+    const factor = 10 ** precision;
+    if (Math.abs(value) * factor > Number.MAX_SAFE_INTEGER)
+        return value;
+    return Math.round(value * factor) / factor;
+}
+
 function normalizeDragValue(
     rawValue: number,
     step: number,
     min: number | undefined,
     max: number | undefined,
     fallback: number,
+    precision?: number,
 ): number {
     let value = Number(rawValue);
     if (Number.isNaN(value))
@@ -51,6 +69,8 @@ function normalizeDragValue(
         value = Math.max(min, value);
     if (max != null && Number.isFinite(max))
         value = Math.min(max, value);
+    if (precision != null)
+        return applyPrecision(value, precision);
     if (!Number.isFinite(step) || step <= 0)
         return value;
 
@@ -92,6 +112,7 @@ export function numberDrag(input: HTMLInputElement, params: NumberDragParams) {
             opts.getMin?.(),
             opts.getMax?.(),
             currentValue,
+            opts.getPrecision?.(),
         );
         if (Object.is(clamped, currentValue))
             return;

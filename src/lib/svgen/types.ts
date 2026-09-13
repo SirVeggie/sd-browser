@@ -45,6 +45,8 @@ export type SvgenField = {
         min?: number;
         max?: number;
         step?: number;
+        /** Decimal places for rounding (SV-Float `decimals`). */
+        precision?: number;
         multiline?: boolean;
         values?: string[];
         imageUpload?: boolean;
