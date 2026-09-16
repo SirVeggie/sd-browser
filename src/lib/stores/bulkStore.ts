@@ -27,6 +27,7 @@ export type BulkModalSettings = {
     resultTemplate: string;
     appendResult: boolean;
     vectorizeForce: boolean;
+    classifyOverwrite: boolean;
 };
 
 export const bulkModalDefaults: BulkModalSettings = {
@@ -46,6 +47,7 @@ export const bulkModalDefaults: BulkModalSettings = {
     appendResult: false,
     vectorizeMode: "embed",
     vectorizeForce: false,
+    classifyOverwrite: false,
 };
 
 export const bulkModalStore = writable<BulkModalSettings>({ ...bulkModalDefaults });
@@ -64,6 +66,7 @@ export function syncBulkModalWithLocalStorage() {
             selectedTags: value.selectedTags ?? [],
             systemInstructionPresetId:
                 value.systemInstructionPresetId ?? CUSTOM_INSTRUCTION_ID,
+            classifyOverwrite: value.classifyOverwrite ?? false,
         });
     }
 

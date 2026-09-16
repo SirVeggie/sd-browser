@@ -273,7 +273,7 @@ Image ids are path hashes (`hashPath`), so move/rename changes the id. Capture t
 
 In-app CPU ONNX (`deepghs/anime_dbrating` MobileNetV3). Do not host this like embeddings. Do not add a `RATING` search keyword or a rating table.
 
-- Each of `general` / `sensitive` / `questionable` / `explicit` maps to zero or more **user tags**. The predicted class’s tags are applied; tags that appear in the mapping are treated as classifier-owned and replaced on reclassify.
+- Each of `general` / `sensitive` / `questionable` / `explicit` maps to zero or more **user tags**. Predicted-class tags are **appended** (missing tags only). Bulk **classify** skips images that already have any mapped tag unless **Overwrite classified images** is on.
 - If every class has an empty tag list, do not run. Bulk **classify** errors with `NSFW_CLASSIFY_NOT_CONFIGURED_MESSAGE`. Auto-classify (off by default) no-ops.
 - Auto-classify only on watcher **new** images (and video preview attach), never the startup index path.
 - Inference stays on a worker-thread pool (`onnxruntime-node` CPU). Download `model.onnx` into `LOCAL_DATA/models/` on first use. Workers do not open SQLite.

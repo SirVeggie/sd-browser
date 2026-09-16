@@ -3,7 +3,9 @@ import {
     addMappedClassifyTag,
     applyClassifyTags,
     hasAssignedClassifyTags,
+    imageHasAnyClassifyTag,
     labelFromScores,
+    managedClassifyTagList,
     normalizeNsfwClassifySettings,
     nsfwClassifyStoreDefaults,
     removeMappedClassifyTag,
@@ -25,8 +27,12 @@ const mapped = addMappedClassifyTag(
 );
 
 assert.deepEqual(applyClassifyTags(['favourite'], 'explicit', mapped), ['favourite', 'nsfw']);
-assert.deepEqual(applyClassifyTags(['favourite', 'nsfw'], 'general', mapped), ['favourite', 'safe']);
-assert.deepEqual(applyClassifyTags(['favourite', 'safe'], 'explicit', mapped), ['favourite', 'nsfw']);
+assert.deepEqual(applyClassifyTags(['favourite', 'nsfw'], 'general', mapped), ['favourite', 'nsfw', 'safe']);
+assert.deepEqual(applyClassifyTags(['favourite', 'safe'], 'explicit', mapped), ['favourite', 'safe', 'nsfw']);
+
+assert.equal(imageHasAnyClassifyTag(['favourite'], mapped), false);
+assert.equal(imageHasAnyClassifyTag(['favourite', 'nsfw'], mapped), true);
+assert.deepEqual(managedClassifyTagList(mapped), ['safe', 'nsfw']);
 
 const renamed = renameMappedClassifyTags(mapped, 'nsfw', 'explicit');
 assert.deepEqual(renamed.labels.explicit, ['explicit']);

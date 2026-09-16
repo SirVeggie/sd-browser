@@ -309,6 +309,7 @@ export type BulkVectorizeOptions = {
 
 export type BulkClassifyOptions = {
     type: 'classify';
+    overwrite: boolean;
 };
 
 export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOptions | BulkTagOptions | BulkVectorizeOptions | BulkClassifyOptions;

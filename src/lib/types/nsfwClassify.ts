@@ -93,14 +93,27 @@ export function managedClassifyTags(settings: NsfwClassifySettings): Set<string>
     return tags;
 }
 
-/** Replace classifier-owned tags, then add the tags mapped to the predicted label. */
+export function managedClassifyTagList(settings: NsfwClassifySettings): string[] {
+    return [...managedClassifyTags(settings)];
+}
+
+export function imageHasAnyClassifyTag(
+    tags: readonly string[] | undefined,
+    settings: NsfwClassifySettings,
+): boolean {
+    if (!tags?.length)
+        return false;
+    const managed = managedClassifyTags(settings);
+    return tags.some((tag) => managed.has(tag));
+}
+
+/** Add tags mapped to the predicted label. Existing tags are kept. */
 export function applyClassifyTags(
     existing: readonly string[],
     label: NsfwClassifyLabel,
     settings: NsfwClassifySettings,
 ): string[] {
-    const managed = managedClassifyTags(settings);
-    const next = existing.filter((tag) => !managed.has(tag));
+    const next = [...existing];
     for (const tag of settings.labels[label]) {
         if (!next.includes(tag))
             next.push(tag);

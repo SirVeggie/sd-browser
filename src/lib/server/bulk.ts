@@ -1,7 +1,7 @@
 import { canVectorizeImage, limitedParallelMap, updateLine } from "$lib/tools/misc";
 import type { BulkRequest } from "$lib/types/requests";
 import { isEmbeddingConfigured } from "$lib/types/embeddings";
-import { hasAssignedClassifyTags } from "$lib/types/nsfwClassify";
+import { hasAssignedClassifyTags, imageHasAnyClassifyTag } from "$lib/types/nsfwClassify";
 import { notifyMetadataChange } from "./imageChangeHub";
 import { vectorizeImageBatch, fetchMediaMarkerForConfig } from "./embeddings";
 import { EmbeddingDB } from "./embeddingDb";
@@ -415,12 +415,25 @@ export async function runBulkAction(
         if (!hasAssignedClassifyTags(settings))
             throw new NsfwClassifyNotConfiguredError();
 
-        const workIds = ids.filter((id) => {
+        const overwrite = request.action.overwrite;
+        const workIds: string[] = [];
+        let alreadyClassified = 0;
+        let noPreview = 0;
+        for (const id of ids) {
             const image = getImage(id);
-            return Boolean(image && canVectorizeImage(image));
-        });
+            if (!image)
+                continue;
+            if (!canVectorizeImage(image)) {
+                noPreview++;
+                continue;
+            }
+            if (!overwrite && imageHasAnyClassifyTag(image.tags, settings)) {
+                alreadyClassified++;
+                continue;
+            }
+            workIds.push(id);
+        }
         const workTotal = workIds.length;
-        const skippedNoPreview = ids.length - workTotal;
         const tracker: BulkFailureTracker = { failures: 0, errors: [] };
         let completed = 0;
         let totalTaskDurationMs = 0;
@@ -430,11 +443,22 @@ export async function runBulkAction(
         onProgress(completed, workTotal);
         console.log(
             `Bulk classify: ${workTotal} images`
-            + (skippedNoPreview ? ` (${skippedNoPreview} videos without preview skipped)` : ""),
+            + (alreadyClassified ? ` (${alreadyClassified} already classified, skipped)` : "")
+            + (noPreview ? ` (${noPreview} videos without preview skipped)` : "")
+            + (overwrite ? ", overwrite on" : ""),
         );
 
         if (workTotal === 0) {
             updateLine("");
+            if (ids.length === 0)
+                return completeBulk(false);
+            if (alreadyClassified > 0 && noPreview === 0) {
+                throw new Error(
+                    `All ${ids.length} matching image${ids.length === 1 ? "" : "s"} `
+                    + `${ids.length === 1 ? "already has" : "already have"} classification tags. `
+                    + `Enable "Overwrite classified images" to classify again.`,
+                );
+            }
             return completeBulk(false);
         }
 

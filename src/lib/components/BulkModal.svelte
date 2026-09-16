@@ -22,6 +22,7 @@
         hasAssignedClassifyTags,
         nsfwClassifyStore,
     } from "$lib/stores/nsfwClassifyStore";
+    import { managedClassifyTagList } from "$lib/types/nsfwClassify";
     import type { SearchParams } from "$lib/stores/searchStore";
     import { resolveSearchMatch, runBulkAction } from "$lib/requests/bulkRequests";
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
@@ -180,6 +181,7 @@
     $: llmConfigured = Boolean($llmStore.modelId.trim() && $llmStore.baseUrl.trim());
     $: embeddingConfigured = isEmbeddingConfigured($embeddingStore);
     $: classifyConfigured = hasAssignedClassifyTags($nsfwClassifyStore);
+    $: classifyMappedTags = managedClassifyTagList($nsfwClassifyStore);
     $: annotateGenerateBlocked =
         $bulkModalStore.action === "annotate"
         && $bulkModalStore.annotateMode === "generate"
@@ -314,7 +316,7 @@
                     force: s.vectorizeForce,
                 };
             case "classify":
-                return { type: "classify" };
+                return { type: "classify", overwrite: s.classifyOverwrite };
             default: {
                 const _exhaustive: never = s.action;
                 return _exhaustive;
@@ -703,9 +705,22 @@
         {#if $bulkModalStore.action === "classify"}
             <div class="classify">
                 {#if classifyConfigured}
-                    <p class="hint">
-                        Runs the image rating classifier and adds the tags assigned in Settings → NSFW classification.
-                    </p>
+                    <label class="checkbox">
+                        <input
+                            type="checkbox"
+                            bind:checked={$bulkModalStore.classifyOverwrite}
+                            disabled={running}
+                        />
+                        Overwrite classified images
+                    </label>
+                    {#if $bulkModalStore.classifyOverwrite}
+                        <p class="hint">Appends classification tags to all images</p>
+                    {:else}
+                        <p class="hint">Ignores images with any of the following tags</p>
+                        <div class="classify-tags">
+                            <TagPillRow tags={classifyMappedTags} />
+                        </div>
+                    {/if}
                 {:else}
                     <p class="llm-warning">{NSFW_CLASSIFY_NOT_CONFIGURED_MESSAGE}</p>
                 {/if}
@@ -872,7 +887,8 @@
         margin-bottom: 0.5em;
     }
 
-    .vectorize {
+    .vectorize,
+    .classify {
         display: flex;
         flex-direction: column;
         gap: 0.25em;
@@ -898,6 +914,10 @@
 
     .tags-row {
         position: relative;
+    }
+
+    .classify-tags {
+        min-width: 0;
     }
 
     .separator {
