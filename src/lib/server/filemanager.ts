@@ -31,6 +31,7 @@ import {
 } from './dataIndex';
 import type { IndexingJob, IndexingResult } from './indexingComputeCore';
 import { indexingWorkerPool } from './workers/indexingWorkerPool';
+import { scheduleAutoNsfwClassify } from './nsfwClassify';
 
 const pollingInterval = Number(env.POLLING_SECONDS ?? 0) * 1000;
 
@@ -696,8 +697,11 @@ async function addFileInner(file: string, hash?: string) {
     // Change events can still retry a video that was indexed before its preview existed.
     const existing = getImageList().get(hash);
     if (existing) {
-        if (isVideo(file) && !existing.preview)
+        if (isVideo(file) && !existing.preview) {
             await attachVideoPreview(existing, file);
+            if (existing.preview)
+                scheduleAutoNsfwClassify(existing.id);
+        }
         return;
     }
 
@@ -708,6 +712,7 @@ async function addFileInner(file: string, hash?: string) {
                 return;
             await updateImageMetadata(video, file);
             notifyImageChange();
+            scheduleAutoNsfwClassify(video.id);
             return;
         }
         await sleep(100);
@@ -751,6 +756,7 @@ async function addFileInner(file: string, hash?: string) {
     MetaCalcDB.set(image);
 
     notifyImageChange();
+    scheduleAutoNsfwClassify(hash);
 }
 
 function videoExists(imagefile: string): ServerImage | undefined {

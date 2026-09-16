@@ -58,6 +58,8 @@
     import CustomFilterModal from "$lib/components/CustomFilterModal.svelte";
     import SearchKeywordHelpModal from "$lib/components/SearchKeywordHelpModal.svelte";
     import TagModal from "$lib/components/TagModal.svelte";
+    import HoverTooltip from "$lib/components/HoverTooltip.svelte";
+    import NsfwClassifySettings from "$lib/components/NsfwClassifySettings.svelte";
     import TagPillRow from "$lib/components/TagPillRow.svelte";
     import { askConfirmation } from "$lib/components/Confirm.svelte";
     import {
@@ -65,6 +67,7 @@
         type SystemInstruction,
     } from "$lib/stores/llmStore";
     import { embeddingStore } from "$lib/stores/embeddingStore";
+    import { nsfwClassifyStore } from "$lib/stores/nsfwClassifyStore";
     import { mmrStore, mmrCandidatePoolStrategies } from "$lib/stores/mmrStore";
     import { embeddingApiTypeOptions } from "$lib/types/embeddings";
     import { authLogout, authStore } from "$lib/stores/authStore";
@@ -81,6 +84,11 @@
         upsertTagDefinition,
     } from "$lib/stores/tagsStore";
     import type { TagDefinition } from "$lib/types/tags";
+    import {
+        NSFW_CLASSIFY_HELP,
+        removeMappedClassifyTag,
+        renameMappedClassifyTags,
+    } from "$lib/types/nsfwClassify";
     import SortableList from "$lib/components/SortableList.svelte";
     import DragHandle from "$lib/components/DragHandle.svelte";
     import SvGenAutocompleteSettings from "$lib/svgen/components/SvGenAutocompleteSettings.svelte";
@@ -475,6 +483,9 @@
                 tagsStore.update((state) =>
                     renameTagDefinition(state, previous.name, { name, color }),
                 );
+                nsfwClassifyStore.update((settings) =>
+                    renameMappedClassifyTags(settings, previous.name, name),
+                );
                 notify(
                     renamedFrom > 0
                         ? `Renamed tag to '${name}' (updated ${renamedFrom} images)`
@@ -505,6 +516,7 @@
         try {
             const removedFrom = await deleteTagFromImages(tag.name);
             tagsStore.update((state) => removeTagDefinition(state, tag.name));
+            nsfwClassifyStore.update((settings) => removeMappedClassifyTag(settings, tag.name));
             notify(`Deleted tag '${tag.name}' (removed from ${removedFrom} images)`);
         } catch (cause) {
             console.error(cause);
@@ -517,6 +529,11 @@
         { value: 'index', label: 'Uniqueness index' },
         { value: 'pre-rank', label: 'Current-match uniqueness' },
     ] satisfies { value: typeof mmrCandidatePoolStrategies[number]; label: string }[];
+
+    function setNsfwAutoClassify(event: Event) {
+        const checked = event.currentTarget instanceof HTMLInputElement && event.currentTarget.checked;
+        nsfwClassifyStore.update((settings) => ({ ...settings, autoClassify: checked }));
+    }
 
     async function onBuildUniquenessIndex() {
         if (buildingUniquenessIndex)
@@ -1154,6 +1171,24 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
     </div>
 
     <div class="settings-card">
+        <div class="card-heading">
+            <HoverTooltip text={NSFW_CLASSIFY_HELP}>
+                <h4>NSFW classification</h4>
+                <span class="help-q" aria-hidden="true">?</span>
+            </HoverTooltip>
+        </div>
+        <label class="checkbox">
+            Automatically classify new images
+            <input
+                type="checkbox"
+                checked={$nsfwClassifyStore.autoClassify}
+                on:change={setNsfwAutoClassify}
+            />
+        </label>
+        <NsfwClassifySettings />
+    </div>
+
+    <div class="settings-card">
         <h4>Image quality</h4>
     <div class="settings-group">
         <p class="gray quality-hint">
@@ -1440,6 +1475,30 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
             font-weight: 700;
             color: var(--accent);
             letter-spacing: 0.02em;
+        }
+
+        .card-heading {
+            width: 100%;
+            min-width: 0;
+
+            :global(h4) {
+                margin: 0;
+            }
+        }
+
+        .help-q {
+            flex-shrink: 0;
+            width: 1.15rem;
+            height: 1.15rem;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.68rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
         }
     }
 

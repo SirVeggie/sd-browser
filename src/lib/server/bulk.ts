@@ -1,10 +1,14 @@
 import { canVectorizeImage, limitedParallelMap, updateLine } from "$lib/tools/misc";
 import type { BulkRequest } from "$lib/types/requests";
 import { isEmbeddingConfigured } from "$lib/types/embeddings";
+import { hasAssignedClassifyTags } from "$lib/types/nsfwClassify";
 import { notifyMetadataChange } from "./imageChangeHub";
 import { vectorizeImageBatch, fetchMediaMarkerForConfig } from "./embeddings";
 import { EmbeddingDB } from "./embeddingDb";
 import { annotateImage, clearAnnotation, modifyAnnotation } from "./llm";
+import { classifyImage, NsfwClassifyNotConfiguredError } from "./nsfwClassify";
+import { ensureNsfwClassifyModel } from "./nsfwClassifyModel";
+import { readNsfwClassifySettings } from "./nsfwClassifySettings";
 import { bulkUpdateImageTags } from "./tags";
 import { copyImages, deleteImages, moveImages } from "./filemanager";
 import { explorationFromRequest, searchImagesAsync } from "./searching";
@@ -404,6 +408,72 @@ export async function runBulkAction(
 
         const _exhaustive: never = vectorizeOptions.mode;
         throw new Error(`Unknown vectorize mode: ${_exhaustive}`);
+    }
+
+    if (request.action.type === "classify") {
+        const settings = readNsfwClassifySettings();
+        if (!hasAssignedClassifyTags(settings))
+            throw new NsfwClassifyNotConfiguredError();
+
+        const workIds = ids.filter((id) => {
+            const image = getImage(id);
+            return Boolean(image && canVectorizeImage(image));
+        });
+        const workTotal = workIds.length;
+        const skippedNoPreview = ids.length - workTotal;
+        const tracker: BulkFailureTracker = { failures: 0, errors: [] };
+        let completed = 0;
+        let totalTaskDurationMs = 0;
+        let aborted = false;
+        const shouldContinue = () => !aborted && !isCancelled();
+
+        onProgress(completed, workTotal);
+        console.log(
+            `Bulk classify: ${workTotal} images`
+            + (skippedNoPreview ? ` (${skippedNoPreview} videos without preview skipped)` : ""),
+        );
+
+        if (workTotal === 0) {
+            updateLine("");
+            return completeBulk(false);
+        }
+
+        const modelPath = await ensureNsfwClassifyModel();
+        await limitedParallelMap(workIds, async (id) => {
+            if (aborted)
+                return;
+            const taskStart = Date.now();
+            try {
+                const result = await classifyImage(id, { settings, modelPath, notify: false });
+                if (result.status === 'applied')
+                    markChanged(id);
+            } catch (cause) {
+                const message = cause instanceof Error ? cause.message : String(cause);
+                tracker.lastError = message;
+                tracker.failures++;
+                tracker.errors.push(`${id}: ${message}`);
+                console.error(`Bulk classify failed: ${message}`);
+            }
+            totalTaskDurationMs += Date.now() - taskStart;
+            completed++;
+            onProgress(completed, workTotal, bulkProgressStats(tracker, totalTaskDurationMs));
+            updateLine(`Bulk classify: completed ${completed}/${workTotal}`);
+            if (shouldAbortBulkRun(tracker.failures, completed, workTotal)) {
+                aborted = true;
+                updateLine("");
+                throwBulkAborted(tracker, completed);
+            }
+        }, 2, shouldContinue);
+
+        updateLine("");
+        if (isCancelled())
+            return false;
+        if (tracker.failures) {
+            throw new Error(
+                `Bulk classify finished with ${tracker.failures}/${workTotal} failures:\n${tracker.errors.slice(0, 5).join("\n")}`,
+            );
+        }
+        return completeBulk(false);
     }
 
     throw new Error("Unknown bulk action");

@@ -307,7 +307,11 @@ export type BulkVectorizeOptions = {
     force: boolean;
 };
 
-export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOptions | BulkTagOptions | BulkVectorizeOptions;
+export type BulkClassifyOptions = {
+    type: 'classify';
+};
+
+export type BulkAction = MoveAction | CopyAction | DeleteAction | BulkAnnotateOptions | BulkTagOptions | BulkVectorizeOptions | BulkClassifyOptions;
 
 export type MatchRequest = {
     search: string;

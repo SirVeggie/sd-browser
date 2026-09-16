@@ -13,6 +13,7 @@ import { syncLlmWithLocalStorage } from "$lib/stores/llmStore";
 import { syncEmbeddingWithLocalStorage } from "$lib/stores/embeddingStore";
 import { syncImageRefsWithLocalStorage } from "$lib/stores/imageRefStore";
 import { syncMmrWithLocalStorage } from "$lib/stores/mmrStore";
+import { syncNsfwClassifyWithLocalStorage } from "$lib/stores/nsfwClassifyStore";
 import { syncVideoPlaybackWithLocalStorage } from "$lib/stores/videoPlaybackStore";
 import { migrateFolderFilterToCustomFilters } from "$lib/migrations/folderFilterMigration";
 import { subscribeAuth } from "$lib/tools/requests";
@@ -34,6 +35,7 @@ export async function load() {
         syncEmbeddingWithLocalStorage();
         syncImageRefsWithLocalStorage();
         syncMmrWithLocalStorage();
+        syncNsfwClassifyWithLocalStorage();
         syncVideoPlaybackWithLocalStorage();
         syncBulkModalWithLocalStorage();
         syncTagsWithLocalStorage();

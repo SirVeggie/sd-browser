@@ -17,6 +17,11 @@
         resolveSystemInstruction,
     } from "$lib/stores/llmStore";
     import { embeddingStore, isEmbeddingConfigured } from "$lib/stores/embeddingStore";
+    import {
+        NSFW_CLASSIFY_NOT_CONFIGURED_MESSAGE,
+        hasAssignedClassifyTags,
+        nsfwClassifyStore,
+    } from "$lib/stores/nsfwClassifyStore";
     import type { SearchParams } from "$lib/stores/searchStore";
     import { resolveSearchMatch, runBulkAction } from "$lib/requests/bulkRequests";
     import { fetchFolderPaths } from "$lib/requests/miscRequests";
@@ -27,7 +32,7 @@
     import { askConfirmation } from "./Confirm.svelte";
     import { notify } from "./Notifier.svelte";
 
-    const bulkActions = ["move", "copy", "delete", "annotate", "tag", "vectorize"] as const;
+    const bulkActions = ["move", "copy", "delete", "annotate", "tag", "vectorize", "classify"] as const;
     const tagModes = ["add", "remove", "replace"] as const;
 
     const dispatch = createEventDispatcher<{ close: void }>();
@@ -63,7 +68,11 @@
         ? Math.min(100, (progressDone / progressTotal) * 100)
         : 0;
 
-    $: showProgressStats = running && ($bulkModalStore.action === "annotate" || $bulkModalStore.action === "vectorize");
+    $: showProgressStats = running && (
+        $bulkModalStore.action === "annotate"
+        || $bulkModalStore.action === "vectorize"
+        || $bulkModalStore.action === "classify"
+    );
     $: elapsedMs = bulkStartTime
         ? (progressHovering ? tickNow : Date.now()) - bulkStartTime
         : 0;
@@ -148,6 +157,8 @@
                         return _exhaustive;
                     }
                 }
+            case "classify":
+                return `Classify ${images} and apply the tags from Settings.`;
             default: {
                 const _exhaustive: never = action;
                 return _exhaustive;
@@ -168,6 +179,7 @@
 
     $: llmConfigured = Boolean($llmStore.modelId.trim() && $llmStore.baseUrl.trim());
     $: embeddingConfigured = isEmbeddingConfigured($embeddingStore);
+    $: classifyConfigured = hasAssignedClassifyTags($nsfwClassifyStore);
     $: annotateGenerateBlocked =
         $bulkModalStore.action === "annotate"
         && $bulkModalStore.annotateMode === "generate"
@@ -176,6 +188,7 @@
         $bulkModalStore.action === "vectorize"
         && $bulkModalStore.vectorizeMode === "embed"
         && !embeddingConfigured;
+    $: classifyBlocked = $bulkModalStore.action === "classify" && !classifyConfigured;
 
     function onProgressMouseEnter() {
         progressHovering = true;
@@ -300,6 +313,8 @@
                     mode: s.vectorizeMode,
                     force: s.vectorizeForce,
                 };
+            case "classify":
+                return { type: "classify" };
             default: {
                 const _exhaustive: never = s.action;
                 return _exhaustive;
@@ -382,6 +397,13 @@
         if (bulkAction.type === "vectorize" && bulkAction.mode === "embed") {
             if (!embeddingConfigured) {
                 notify("Configure embedding API settings first", "warn");
+                return;
+            }
+        }
+
+        if (bulkAction.type === "classify") {
+            if (!classifyConfigured) {
+                notify(NSFW_CLASSIFY_NOT_CONFIGURED_MESSAGE, "warn");
                 return;
             }
         }
@@ -678,6 +700,18 @@
             </div>
         {/if}
 
+        {#if $bulkModalStore.action === "classify"}
+            <div class="classify">
+                {#if classifyConfigured}
+                    <p class="hint">
+                        Runs the image rating classifier and adds the tags assigned in Settings → NSFW classification.
+                    </p>
+                {:else}
+                    <p class="llm-warning">{NSFW_CLASSIFY_NOT_CONFIGURED_MESSAGE}</p>
+                {/if}
+            </div>
+        {/if}
+
         {#if running || progressFailures > 0}
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div
@@ -731,7 +765,7 @@
         {/if}
 
         <div class="buttons">
-            <Button disabled={running || imageCount === 0 || annotateGenerateBlocked || vectorizeBlocked} on:click={execute}>
+            <Button disabled={running || imageCount === 0 || annotateGenerateBlocked || vectorizeBlocked || classifyBlocked} on:click={execute}>
                 {running ? "Running..." : "Run"}
             </Button>
             <Button on:click={close}>{running ? "Stop" : "Cancel"}</Button>

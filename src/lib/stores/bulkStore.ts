@@ -2,7 +2,7 @@ import { CUSTOM_INSTRUCTION_ID } from "$lib/stores/llmStore";
 import type { BulkVectorizeMode } from "$lib/types/requests";
 import { writable } from "svelte/store";
 
-export type BulkActionType = "move" | "copy" | "delete" | "annotate" | "tag" | "vectorize";
+export type BulkActionType = "move" | "copy" | "delete" | "annotate" | "tag" | "vectorize" | "classify";
 
 export type BulkAnnotateMode = "generate" | "clear" | "modify";
 

@@ -32,3 +32,10 @@ await build({
     outfile: path.join(outDir, 'indexing.js'),
 });
 console.log('Built indexing worker to build/workers/indexing.js');
+
+await build({
+    ...shared,
+    entryPoints: [path.join(projectRoot, 'src/lib/server/workers/nsfwClassify.worker.ts')],
+    outfile: path.join(outDir, 'nsfwClassify.js'),
+});
+console.log('Built NSFW classify worker to build/workers/nsfwClassify.js');
