@@ -342,6 +342,41 @@ export function isMatchResponse(object: any): object is MatchResponse {
     return testType(object, ['total']);
 }
 
+/** One-shot random pick for Comfy `SV-SdBrowserImage` (not the gallery SSE stream). */
+export type RandomImageRequest = {
+    search: string;
+    matching?: SearchMode;
+    explorationMode?: ExplorationMode;
+    sparseFrequency?: number;
+    similarityAlgorithm?: SimilarityAlgorithm;
+    similarityThreshold?: number;
+    skipVideos?: boolean;
+    tempEmbeddings?: TempEmbeddingsMap;
+};
+export function isRandomImageRequest(object: any): object is RandomImageRequest {
+    return testType(object, [
+        'search',
+        (o) => typeof o.search === 'string',
+        (o) => o.matching === undefined || typeof o.matching === 'string',
+        (o) => o.explorationMode === undefined || typeof o.explorationMode === 'string',
+        (o) => o.sparseFrequency === undefined || typeof o.sparseFrequency === 'number',
+        (o) => o.similarityAlgorithm === undefined || isSimilarityAlgorithm(o.similarityAlgorithm),
+        (o) => o.similarityThreshold === undefined || typeof o.similarityThreshold === 'number',
+        (o) => o.skipVideos === undefined || typeof o.skipVideos === 'boolean',
+        (o) => optionalTempEmbeddingsCheck(o),
+    ]);
+}
+
+export type RandomImageResponse = {
+    id: string;
+};
+export function isRandomImageResponse(object: any): object is RandomImageResponse {
+    return testType(object, [
+        'id',
+        (o) => typeof o.id === 'string',
+    ]);
+}
+
 export type BulkRequest = {
     search: string;
     matching: SearchMode;

@@ -1,4 +1,5 @@
 import { isVideo, parseSearchDate, validRegex, XOR, yieldToEventLoop, getEmbeddingImagePath } from "$lib/tools/misc";
+import { takeRandomMatch } from "$lib/tools/randomPick";
 import {
     getPositiveSimilarSourceIds,
     parseSimilarSearchTarget,
@@ -1433,6 +1434,86 @@ export type SearchStreamResult = {
     pruneSearchContext?: PruneSearchContext;
     mmrSearchContext?: MmrSearchContext;
 };
+
+const RANDOM_PICK_YIELD_EVERY = 50;
+
+function randomPickCandidateIds(plan: SearchPlan): string[] {
+    switch (plan.kind) {
+        case 'stream-scan':
+        case 'img-ranked':
+            return [...plan.pool];
+        case 'prune-ranked':
+        case 'mmr-ranked':
+            return [...plan.orderedIds];
+        default: {
+            const _never: never = plan;
+            return _never;
+        }
+    }
+}
+
+function needsFullPlanForRandomPick(search: string, exploration: ExplorationSettings): boolean {
+    if (exploration.explorationMode !== 'none')
+        return true;
+    if (hasRankedSearch(search) || hasEmbeddingImgSearch(search))
+        return true;
+    return splitSearchParts(search).some((part) => isMmrSearchPart(part) || isPruneSearchPart(part));
+}
+
+/**
+ * Uniform random still (by default) among current search matches.
+ * Does not create a gallery session or shuffle the full result list first.
+ */
+export async function pickRandomMatchingImage(
+    search: string,
+    matching: SearchMode,
+    exploration: ExplorationSettings,
+    options: SearchAbortOptions & { skipVideos?: boolean } = {},
+): Promise<ServerImage | undefined> {
+    if (matching === 'regex' && search && !validRegex(search))
+        throw new Error('Invalid regex');
+
+    const skipVideos = options.skipVideos !== false;
+    const isAborted = () => Boolean(options.isAborted?.() || options.signal?.aborted);
+    const pickOptions = {
+        yieldEvery: RANDOM_PICK_YIELD_EVERY,
+        yieldFn: yieldToEventLoop,
+        isAborted,
+    };
+    const allowImage = (image: ServerImage, matches: boolean) => {
+        if (!matches)
+            return false;
+        if (skipVideos && isVideo(image.file))
+            return false;
+        return true;
+    };
+
+    throwIfSearchAborted(options);
+
+    if (!needsFullPlanForRandomPick(search, exploration)) {
+        const imageList = getImageList();
+        const matcher = buildMatcher(stripResultShapingParts(search), matching, exploration);
+        const picked = await takeRandomMatch(
+            [...imageList.keys()],
+            (id) => imageList.get(id),
+            (image) => allowImage(image, matcher(image)),
+            pickOptions,
+        );
+        throwIfSearchAborted(options);
+        return picked;
+    }
+
+    const plan = await buildSearchPlan(search, matching, exploration, 'random', undefined, options);
+    throwIfSearchAborted(options);
+    const picked = await takeRandomMatch(
+        randomPickCandidateIds(plan),
+        (id) => plan.imageList.get(id),
+        (image) => allowImage(image, plan.matcher(image)),
+        pickOptions,
+    );
+    throwIfSearchAborted(options);
+    return picked;
+}
 
 export async function searchImagesStreaming(
     search: string,

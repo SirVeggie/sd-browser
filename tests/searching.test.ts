@@ -22,12 +22,14 @@ import {
 } from '../src/lib/tools/searchParsing.ts';
 import {
     isStreamRequest,
+    isRandomImageRequest,
     isTempEmbeddingsMap,
 } from '../src/lib/types/requests.ts';
 import {
     encodeFloat32Embedding,
     decodeFloat32Embedding,
 } from '../src/lib/tools/tempEmbeddings.ts';
+import { takeRandomMatch } from '../src/lib/tools/randomPick.ts';
 import {
     matchesAspectComparisons,
     parseAspectComparisons,
@@ -845,6 +847,56 @@ assert.equal(
     true,
     'stream request accepts optional tempEmbeddings',
 );
+
+assert.equal(
+    isRandomImageRequest({ search: '' }),
+    true,
+    'random pick accepts a search-only body',
+);
+
+assert.equal(
+    isRandomImageRequest({
+        search: 'TAG foo',
+        matching: 'regex',
+        sorting: 'random',
+        explorationMode: 'none',
+        sparseFrequency: 25,
+        similarityAlgorithm: 'token-jaccard',
+        similarityThreshold: 0.5,
+        skipVideos: true,
+    }),
+    true,
+    'random pick ignores extra Comfy stream fields',
+);
+
+assert.equal(
+    await takeRandomMatch([], () => 1, () => true),
+    undefined,
+    'random pick of an empty id list is empty',
+);
+
+assert.equal(
+    await takeRandomMatch(['missing'], () => undefined, () => true),
+    undefined,
+    'random pick skips ids with no lookup',
+);
+
+{
+    const lookup = (id: string) => ({ id, video: id.startsWith('v') });
+    const still = (item: { video: boolean }) => !item.video;
+    const picked = await takeRandomMatch(['v1', 'still-a', 'v2'], lookup, still);
+    assert.equal(picked?.id, 'still-a', 'random pick skips videos until a still');
+}
+
+{
+    const seen = new Set<string>();
+    const lookup = (id: string) => id;
+    for (let i = 0; i < 40; i++) {
+        const picked = await takeRandomMatch(['a', 'b', 'c'], lookup, (id) => id !== 'b');
+        if (picked) seen.add(picked);
+    }
+    assert.deepEqual([...seen].sort(), ['a', 'c'], 'random pick only returns matching ids');
+}
 
 console.log('searching.test.ts: all tests passed');
 
