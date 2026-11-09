@@ -24,7 +24,7 @@
     getModelCandidates,
     getPrimaryModel,
     getPrompts,
-    getExtraLoras,
+    getExtraLoraGroups,
     getExtraSections,
     getSeed,
     getSvNegativePrompt,
@@ -249,6 +249,7 @@
       blocks.push({
         header: "models",
         content: modelsText,
+        collapsed: true,
       });
     if (d.positive)
       blocks.push({
@@ -291,6 +292,7 @@
       blocks.push({
         header: "models",
         content: modelsText,
+        collapsed: true,
       });
     const original = (text: string | undefined, shown: string | undefined) =>
       text && text !== shown ? text : undefined;
@@ -313,11 +315,10 @@
         header: "seed",
         content: seed,
       });
-    const loras = getExtraLoras(extra);
-    if (loras.length)
+    for (const group of getExtraLoraGroups(extra))
       blocks.push({
-        header: "loras",
-        content: loras.map((l) => `${l.name}: ${l.strength}`).join("\n"),
+        header: (group.title || "loras").toLowerCase(),
+        content: group.loras.map((l) => `${l.name}: ${l.strength}`).join("\n"),
         copy: "loras",
       });
     for (const section of getExtraSections(extra))

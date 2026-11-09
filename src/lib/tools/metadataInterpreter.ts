@@ -504,6 +504,24 @@ export function getExtraLoras(extra: string | undefined): { name: string, streng
         .map((l: any) => ({ name: l.name, strength: String(l.strength ?? '1') }));
 }
 
+/** Dynamic Comfy: LoRAs per loader when there are several (e.g. a second model's set),
+ * `extra.lora_groups = [{ title, loras: [{ name, strength }] }]`; otherwise one untitled group. */
+export function getExtraLoraGroups(extra: string | undefined): { title: string, loras: { name: string, strength: string }[] }[] {
+    const groups = parseExtraJson(extra)?.lora_groups;
+    if (Array.isArray(groups)) {
+        const out = groups
+            .filter((g: any) => g && Array.isArray(g.loras))
+            .map((g: any) => ({
+                title: typeof g.title === 'string' ? g.title : '',
+                loras: getExtraLoras(JSON.stringify({ loras: g.loras })),
+            }))
+            .filter((g: any) => g.loras.length);
+        if (out.length) return out;
+    }
+    const loras = getExtraLoras(extra);
+    return loras.length ? [{ title: '', loras }] : [];
+}
+
 /** Generation time in seconds from `extra` JSON `duration`, when present and finite. */
 export function getDuration(extra: string | undefined): number | undefined {
     const data = parseExtraJson(extra);
