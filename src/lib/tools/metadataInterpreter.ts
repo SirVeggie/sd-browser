@@ -209,6 +209,23 @@ function getExplicitModelNames(extra: string | undefined, prompt: string | undef
     return [...names];
 }
 
+function getExtraModelList(extra: string | undefined): { model: string; class?: string; input?: string; }[] {
+    const list = parseExtraJson(extra)?.models;
+    if (!Array.isArray(list))
+        return [];
+    return list.flatMap(entry => {
+        if (typeof entry === 'string')
+            return [{ model: entry }];
+        if (entry && typeof entry === 'object' && typeof entry.model === 'string')
+            return [{
+                model: entry.model,
+                class: typeof entry.class === 'string' ? entry.class : undefined,
+                input: typeof entry.input === 'string' ? entry.input : undefined,
+            }];
+        return [];
+    });
+}
+
 function getExplicitPrimaryModel(extra: string | undefined): string | undefined {
     const data = parseExtraJson(extra);
     if (typeof data?.model === 'string' && data.model.trim())
@@ -375,6 +392,11 @@ function collectExplicitModelCandidates(
         seen.add(normalized);
         candidates.push({ model: normalized, ...info });
     };
+
+    // Dynamic Comfy writes every model file a run loaded: extra.models = [{ class, input, model }].
+    // First, so the class/input context (checkpoint vs LoRA) wins over the bare extra.model name.
+    for (const entry of getExtraModelList(extra))
+        add(entry.model, { className: entry.class, inputKey: entry.input });
 
     for (const name of getExplicitModelNames(extra, prompt))
         add(name);

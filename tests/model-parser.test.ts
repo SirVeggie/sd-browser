@@ -363,4 +363,31 @@ assert.equal(
     'model search text multiline formatted string',
 );
 
+// Dynamic Comfy: extra.models lists every model file the run loaded, with class/input context.
+const dcomfyExtra = JSON.stringify({
+    model: 'anima/main.safetensors',
+    models: [
+        { class: 'SV-UniversalLoader', input: 'name', model: 'anima/main.safetensors' },
+        { class: 'SV-UniversalLoader', input: 'clip', model: 'qwen_clip.safetensors' },
+        { class: 'SV-LoraTagLoader', input: 'lora', model: 'anima/style.safetensors' },
+    ],
+});
+const dcomfyCandidates = getModelCandidates(undefined, undefined, dcomfyExtra);
+assert.equal(dcomfyCandidates.length, 3, 'extra.models: all files, main not duplicated');
+assert.equal(getPrimaryModel(dcomfyCandidates, dcomfyExtra), 'anima/main.safetensors', 'extra.models primary');
+assert.deepEqual(
+    getModels(undefined, undefined, dcomfyExtra).split('\n'),
+    [
+        'SV-UniversalLoader: anima/main.safetensors',
+        'SV-LoraTagLoader: anima/style.safetensors',
+        'SV-UniversalLoader: qwen_clip.safetensors',
+    ],
+    'extra.models: main first, lora after, clip last',
+);
+assert.equal(
+    getModels(undefined, undefined, JSON.stringify({ models: ['plain.safetensors', 42, { nope: 1 }] })),
+    'plain.safetensors',
+    'extra.models: plain strings ok, junk ignored',
+);
+
 console.log('model parser tests passed');
