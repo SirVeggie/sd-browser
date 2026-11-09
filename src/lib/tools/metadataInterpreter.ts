@@ -67,8 +67,9 @@ export function getPrompts(prompt: string | undefined, workflow: string | undefi
                 return {
                     pos: pos.trim() || get().pos,
                     neg: neg.trim() || get().neg,
-                    ogpos: (pos && og) ? get().pos : undefined,
-                    ogneg: (neg && og) ? get().neg : undefined,
+                    // Dynamic Comfy: original_* is the template text (e.g. with {rand}) the prompt came from.
+                    ogpos: og ? (custom.original_positive || (pos ? get().pos : undefined)) : undefined,
+                    ogneg: og ? (custom.original_negative || (neg ? get().neg : undefined)) : undefined,
                     params,
                 };
             }
@@ -477,6 +478,30 @@ export function formatModels(candidates: ModelCandidate[]): string {
 
 export function getModelSearchText(models: string | undefined): string {
     return (models ?? '').replace(/\\/g, '/');
+}
+
+/** Dynamic Comfy: params grouped by the form's cards, `extra.sections = [{ title, fields: [{ label, value }] }]`. */
+export function getExtraSections(extra: string | undefined): { title: string, fields: { label: string, value: string }[] }[] {
+    const sections = parseExtraJson(extra)?.sections;
+    if (!Array.isArray(sections)) return [];
+    return sections
+        .filter((s: any) => s && typeof s.title === 'string' && Array.isArray(s.fields))
+        .map((s: any) => ({
+            title: s.title,
+            fields: s.fields
+                .filter((f: any) => f && f.label != null)
+                .map((f: any) => ({ label: String(f.label), value: String(f.value ?? '') })),
+        }))
+        .filter((s: any) => s.fields.length);
+}
+
+/** Dynamic Comfy: LoRAs the run loaded, `extra.loras = [{ name, strength }]`. */
+export function getExtraLoras(extra: string | undefined): { name: string, strength: string }[] {
+    const loras = parseExtraJson(extra)?.loras;
+    if (!Array.isArray(loras)) return [];
+    return loras
+        .filter((l: any) => l && typeof l.name === 'string')
+        .map((l: any) => ({ name: l.name, strength: String(l.strength ?? '1') }));
 }
 
 /** Generation time in seconds from `extra` JSON `duration`, when present and finite. */

@@ -2,13 +2,18 @@
   type PromptFragment = {
     header: string;
     content: string;
-    action?: () => void;
+    /** Copy button: copies the visible text; the name goes in the notification. */
+    copy?: string;
+    /** The template text it came from (e.g. `1girl, {rand}`); an "original" toggle shows it. */
+    original?: string;
+    /** Starts collapsed; the header opens it. */
+    collapsed?: boolean;
   };
 </script>
 
 <script lang="ts">
   import { browser } from "$app/environment";
-  import { onDestroy } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { fade } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { notify } from "$lib/components/Notifier.svelte";
@@ -19,6 +24,8 @@
     getModelCandidates,
     getPrimaryModel,
     getPrompts,
+    getExtraLoras,
+    getExtraSections,
     getSeed,
     getSvNegativePrompt,
     getSvPositivePrompt,
@@ -65,8 +72,13 @@
   let hiddenElementFull: HTMLDivElement;
   let hiddenElementPos: HTMLDivElement;
   let hiddenElementNeg: HTMLDivElement;
-  let hiddenElementSvPos: HTMLDivElement;
-  let hiddenElementSvNeg: HTMLDivElement;
+  let hiddenElementCopy: HTMLDivElement;
+  let copyBuffer = "";
+  /** Cards showing their original (template) text; reset per image. */
+  let originalShown: Record<string, boolean> = {};
+  let originalShownFor = "";
+  /** Collapsed cards the user opened; kept across images. */
+  let cardOpen: Record<string, boolean> = {};
   let hiddenElementParams: HTMLDivElement;
   let hiddenElementAnnotation: HTMLDivElement;
   let hiddenElementWorkflow: HTMLDivElement;
@@ -129,12 +141,10 @@
   $: prompts = !stageInfo || !hasMetadataBlobs
     ? undefined
     : getPrompts(stageInfo.prompt, stageInfo.workflow, stageInfo.extra, true);
-  $: svPositivePrompt = !stageInfo
-    ? ""
-    : prompts?.ogpos || (hasMetadataBlobs ? getSvPositivePrompt(stageInfo.prompt) : "");
-  $: svNegativePrompt = !stageInfo
-    ? ""
-    : prompts?.ogneg || (hasMetadataBlobs ? getSvNegativePrompt(stageInfo.prompt) : "");
+  $: if (stageId !== originalShownFor) {
+    originalShownFor = stageId;
+    originalShown = {};
+  }
   $: paramsPrompt = !stageInfo ? "" : (prompts?.params ?? stageInfo.params ?? "");
   $: workflowPrompt = !stageInfo ? "" : stageInfo.workflow;
   $: {
@@ -227,7 +237,7 @@
     blocks.unshift({
       header: "annotation",
       content: d.annotation,
-      action: copyAnnotation,
+      copy: "annotation",
     });
     return blocks;
   }
@@ -244,19 +254,20 @@
       blocks.push({
         header: "positive prompt",
         content: d.positive,
-        action: copyPositive,
+        copy: "positive",
       });
     if (d.negative)
       blocks.push({
         header: "negative prompt",
         content: d.negative,
-        action: copyNegative,
+        copy: "negative",
       });
     if (d.params)
       blocks.push({
-        header: "parameters",
+        header: "raw parameters",
         content: d.params,
-        action: copyParams,
+        copy: "parameters",
+        collapsed: true,
       });
     return blocks;
   }
@@ -281,51 +292,56 @@
         header: "models",
         content: modelsText,
       });
+    const original = (text: string | undefined, shown: string | undefined) =>
+      text && text !== shown ? text : undefined;
     if (prompts?.pos)
       blocks.push({
         header: "positive prompt",
         content: prompts.pos,
-        action: copyPositive,
+        original: original(sv_pos, prompts.pos),
+        copy: "positive",
       });
     if (prompts?.neg)
       blocks.push({
         header: "negative prompt",
         content: prompts.neg,
-        action: copyNegative,
-      });
-    if (sv_pos && prompts?.pos !== sv_pos)
-      blocks.push({
-        header: "original positive prompt",
-        content: sv_pos,
-        action: copySvPositive,
-      });
-    if (sv_neg && prompts?.neg !== sv_neg)
-      blocks.push({
-        header: "original negative prompt",
-        content: sv_neg,
-        action: copySvNegative,
+        original: original(sv_neg, prompts.neg),
+        copy: "negative",
       });
     if (seed)
       blocks.push({
         header: "seed",
         content: seed,
       });
+    const loras = getExtraLoras(extra);
+    if (loras.length)
+      blocks.push({
+        header: "loras",
+        content: loras.map((l) => `${l.name}: ${l.strength}`).join("\n"),
+        copy: "loras",
+      });
+    for (const section of getExtraSections(extra))
+      blocks.push({
+        header: section.title.toLowerCase(),
+        content: section.fields.map((f) => `${f.label}: ${f.value}`).join("\n"),
+      });
     if (params)
       blocks.push({
-        header: "parameters",
+        header: "raw parameters",
         content: params,
-        action: copyParams,
+        copy: "parameters",
+        collapsed: true,
       });
-    if (extra) blocks.push({ header: "extra", content: extra });
+    if (extra) blocks.push({ header: "extra", content: extra, collapsed: true });
     if (version === "comfy" && prompt)
       blocks = blocks.concat(formatComfy(prompt, workflow));
     if (prompt && (blocks.length === 0 || version === "comfy"))
-      blocks.push({ header: "metadata", content: prompt, action: copyPrompt });
+      blocks.push({ header: "metadata", content: prompt, copy: "prompt" });
     if (workflow)
       blocks.push({
         header: "workflow",
         content: workflow,
-        action: copyWorkflow,
+        copy: "workflow",
       });
     return blocks;
   }
@@ -481,12 +497,19 @@
     copyInfo(hiddenElementNeg, prompts?.neg ?? stageInfo?.negative, "negative");
   }
 
-  function copySvPositive() {
-    copyInfo(hiddenElementSvPos, svPositivePrompt, "sv_positive");
+  /** A card's copy button: the text it shows (current or original). */
+  async function copyText(content: string, name: string) {
+    copyBuffer = content;
+    await tick();
+    copyInfo(hiddenElementCopy, content, name);
   }
 
-  function copySvNegative() {
-    copyInfo(hiddenElementSvNeg, svNegativePrompt, "sv_negative");
+  function toggleOriginal(header: string) {
+    originalShown = { ...originalShown, [header]: !originalShown[header] };
+  }
+
+  function toggleCard(header: string) {
+    cardOpen = { ...cardOpen, [header]: !cardOpen[header] };
   }
 
   function copyParams() {
@@ -838,16 +861,30 @@
                 />
               </div>
               {#each promptInfo as info}
+                {@const showOriginal = !!info.original && !!originalShown[info.header]}
+                {@const text = showOriginal ? info.original ?? "" : info.content}
+                {@const closed = !!info.collapsed && !cardOpen[info.header]}
                 <div class="extra">
                   <h1 class="header">
-                    {info.header}
-                    {#if info.action}
-                      <button on:click={info.action}>copy</button>
+                    {#if info.collapsed}
+                      <button class="collapse" aria-expanded={!closed} on:click={() => toggleCard(info.header)}>
+                        <span class="caret" class:open={!closed}>▸</span>{info.header}
+                      </button>
+                    {:else}
+                      {info.header}
+                    {/if}
+                    {#if info.copy}
+                      <button on:click={() => copyText(text, info.copy ?? "")}>copy</button>
+                    {/if}
+                    {#if info.original}
+                      <button class:on={showOriginal} aria-pressed={showOriginal} on:click={() => toggleOriginal(info.header)}>original</button>
                     {/if}
                   </h1>
-                  <p>
-                    {info.content}
-                  </p>
+                  {#if !closed}
+                    <p>
+                      {text}
+                    </p>
+                  {/if}
                 </div>
               {/each}
             </div>
@@ -881,8 +918,7 @@
   <div class="fallback" bind:this={hiddenElementFull}>{fullPrompt}</div>
   <div class="fallback" bind:this={hiddenElementPos}>{prompts?.pos ?? ""}</div>
   <div class="fallback" bind:this={hiddenElementNeg}>{prompts?.neg ?? ""}</div>
-  <div class="fallback" bind:this={hiddenElementSvPos}>{svPositivePrompt}</div>
-  <div class="fallback" bind:this={hiddenElementSvNeg}>{svNegativePrompt}</div>
+  <div class="fallback" bind:this={hiddenElementCopy}>{copyBuffer}</div>
   <div class="fallback" bind:this={hiddenElementParams}>{paramsPrompt}</div>
   <div class="fallback" bind:this={hiddenElementAnnotation}>{annotationText}</div>
   <div class="fallback" bind:this={hiddenElementWorkflow}>{workflowPrompt}</div>
@@ -1232,6 +1268,35 @@
           &:hover {
             color: var(--ink);
             border-color: rgba(196, 165, 116, 0.35);
+          }
+
+          & + button {
+            margin-right: 0.35rem;
+          }
+
+          &.on {
+            color: var(--accent);
+            border-color: rgba(196, 165, 116, 0.5);
+          }
+
+          // Header of a collapsed card: the whole title opens it.
+          &.collapse {
+            float: none;
+            border: 0;
+            padding: 0;
+            font: inherit;
+            color: inherit;
+            text-align: left;
+
+            .caret {
+              display: inline-block;
+              margin-right: 0.35em;
+              transition: transform 0.15s ease;
+
+              &.open {
+                transform: rotate(90deg);
+              }
+            }
           }
         }
       }
