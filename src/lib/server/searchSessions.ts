@@ -5,7 +5,7 @@ import type { StreamRequest } from '$lib/types/requests';
 import { getImage, getImageList } from './dataIndex';
 import { getPositiveSimilarSourceIds, pinIdsToFront } from '$lib/tools/searchParsing';
 import type { ImgSearchContext, PruneSearchContext, MmrSearchContext } from './searching';
-import { orderShapedResultIds, sortImages } from './searching';
+import { createComparer, orderShapedResultIds, sortImages } from './searching';
 
 export const imageLimit = 1000;
 export const sessionReconnectGraceMs = 10 * 60 * 1000;
@@ -288,6 +288,73 @@ export function sortSessionIds(ids: string[], session: SearchSession): string[] 
         return sorted;
 
     return pinIdsToFront(sorted, getPositiveSimilarSourceIds(session.query.search));
+}
+
+/**
+ * Pairwise form of sortSessionIds, for inserting a few ids into an already sorted
+ * session. Undefined when that order can't be expressed pairwise (shaped results,
+ * reshuffled random, pinned `similar:` refs); callers then fall back to a full sort.
+ */
+export function sessionIdComparator(session: SearchSession): ((a: string, b: string) => number) | undefined {
+    if (session.mmrSearchContext || session.pruneSearchContext)
+        return undefined;
+    const pinsFront = session.sorting !== 'similar'
+        && session.sorting !== 'similar (inverse)'
+        && session.sorting !== 'uniqueness';
+    if (pinsFront && getPositiveSimilarSourceIds(session.query.search).length)
+        return undefined;
+
+    if (session.sorting === 'random') {
+        if (!session.sourceOrder.length)
+            return undefined;
+        const positions = session.sourcePositions;
+        return (a, b) => {
+            const positionA = positions.get(a) ?? Number.MAX_SAFE_INTEGER;
+            const positionB = positions.get(b) ?? Number.MAX_SAFE_INTEGER;
+            return positionA - positionB;
+        };
+    }
+
+    const matchScores = session.imgSearchContext?.matchScores;
+    if (matchScores?.size && (session.sorting === 'similar' || session.sorting === 'similar (inverse)')) {
+        const descending = session.sorting === 'similar';
+        return (a, b) => {
+            const scoreA = matchScores.get(a);
+            const scoreB = matchScores.get(b);
+            if (scoreA !== undefined && scoreB !== undefined)
+                return descending ? scoreB - scoreA : scoreA - scoreB;
+            if (scoreA !== undefined)
+                return -1;
+            if (scoreB !== undefined)
+                return 1;
+            return 0;
+        };
+    }
+
+    const byImage = (compare: (a: ServerImage, b: ServerImage) => number) => (a: string, b: string) => {
+        const imageA = getImage(a);
+        const imageB = getImage(b);
+        return imageA && imageB ? compare(imageA, imageB) : 0;
+    };
+    switch (session.sorting) {
+        case 'date':
+            return byImage(createComparer<ServerImage>(x => x.modifiedDate, true));
+        case 'date (asc)':
+            return byImage(createComparer<ServerImage>(x => x.modifiedDate, false));
+        case 'name':
+            return byImage(createComparer<ServerImage>(x => x.file, true));
+        case 'name (desc)':
+            return byImage(createComparer<ServerImage>(x => x.file, false));
+        case 'similar':
+        case 'similar (inverse)':
+        case 'uniqueness':
+            // sortImages keeps input order, and new ids are appended.
+            return () => 0;
+        default: {
+            const _never: never = session.sorting;
+            return _never;
+        }
+    }
 }
 
 export function trackSessionViewIds(sessionId: string, ids: string[]): void {

@@ -36,7 +36,8 @@ import type { ServerImage } from '$lib/types/images';
 
 const encoder = new TextEncoder();
 const staleCheckMs = 10_000;
-const debounceMs = 100;
+/** Coalesces the add + auto-tag notifies a new image produces. */
+const debounceMs = 300;
 const heartbeatIntervalMs = 15_000;
 const streamYieldEvery = 50;
 const streamChunkIntervalMs = 100;
@@ -122,14 +123,20 @@ export async function POST(e) {
                 try {
                     if (!session) return;
 
+                    const start = performance.now();
                     const result = await computeImageUpdate(
                         {
                             ...query,
                             timestamp: connectionTimestamp,
-                            currentIds: [...session.viewIds],
+                            // Sessions don't read currentIds; copying a large session is not free.
+                            currentIds: [],
                         },
                         session,
+                        { incremental: true },
                     );
+                    const ms = performance.now() - start;
+                    if (ms > 100)
+                        console.log(`WARN: live update ${Math.round(ms)} ms (${session.orderedIds.length} results)`);
 
                     if ('error' in result) return;
                     if (!hasUpdateChanges(result, session.viewIds)) {
@@ -139,6 +146,9 @@ export async function POST(e) {
 
                     if (result.orderedIds) {
                         replaceSessionResults(sessionId, result.orderedIds);
+                    } else {
+                        for (const id of result.deletions) session.viewIds.delete(id);
+                        for (const image of result.additions) session.viewIds.add(image.id);
                     }
                     connectionTimestamp = result.timestamp;
 
@@ -160,6 +170,9 @@ export async function POST(e) {
 
             const beginLiveUpdates = () => {
                 unsubscribe = subscribeImageChanges(schedulePush);
+                // Incremental only: a periodic full pass froze the server ~400 ms per tab.
+                // Changes it alone would catch (e.g. a `similar:` ref's prompt edited)
+                // show up on the next search.
                 staleTimer = setInterval(pushIfChanged, staleCheckMs);
             };
 

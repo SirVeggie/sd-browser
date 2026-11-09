@@ -107,6 +107,11 @@ export type UpdateResponse = {
     deletions: string[];
     /** Canonical session order after an update, when the update came from a session. */
     orderedIds?: string[];
+    /**
+     * Incremental session updates send this instead of orderedIds: for each addition,
+     * the id it goes before (null: after everything).
+     */
+    anchors?: Record<string, string | null>;
     timestamp: number;
 };
 export function isUpdateResponse(object: any): object is UpdateResponse {

@@ -602,6 +602,8 @@ function setupWatcher() {
                     deletedImages.push(value);
                     getImageList().delete(key);
                     deleteTempImage(key);
+                    removeFreshImage(key);
+                    recordDeletion(key);
                     deletions.push(key);
                 }
             }
@@ -613,6 +615,8 @@ function setupWatcher() {
             MetaDB.deleteAll(deletions);
             MetaCalcDB.deleteAll(deletions);
             EmbeddingDB.deleteAll(deletions);
+            if (deletions.length)
+                notifyImageChange();
         });
 
         watchers.push(watcher);

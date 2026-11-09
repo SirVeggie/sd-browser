@@ -12,9 +12,145 @@ import { stripResultShapingParts } from '$lib/tools/searchParsing';
 import { mapServerImageToClient } from '$lib/tools/misc';
 import type { ServerImage } from '$lib/types/images';
 import type { UpdateRequest, UpdateResponse } from '$lib/types/requests';
-import { sortSessionIds, type SearchSession } from './searchSessions';
+import { sessionIdComparator, sortSessionIds, type SearchSession } from './searchSessions';
 
 export type ImageUpdateResult = UpdateResponse | { error: string; status?: number };
+
+export type ImageUpdateOptions = {
+    /**
+     * Only look at images added, changed or deleted since `query.timestamp`, instead of
+     * re-matching and re-sorting the whole session. Updates the session's order in place
+     * and returns insert anchors instead of the full order. Falls back to the full
+     * recompute when the session's order can't be patched.
+     */
+    incremental?: boolean;
+};
+
+const sessionIdSets = new WeakMap<string[], Set<string>>();
+
+function getSessionIdSet(session: SearchSession): Set<string> {
+    let ids = sessionIdSets.get(session.orderedIds);
+    if (!ids || ids.size !== session.orderedIds.length) {
+        ids = new Set(session.orderedIds);
+        sessionIdSets.set(session.orderedIds, ids);
+    }
+    return ids;
+}
+
+/** First index whose id sorts after `id`, so equal ids keep their earlier place. */
+function upperBound(ids: string[], id: string, compare: (a: string, b: string) => number): number {
+    let low = 0;
+    let high = ids.length;
+    while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (compare(id, ids[middle]) < 0)
+            high = middle;
+        else
+            low = middle + 1;
+    }
+    return low;
+}
+
+function latestFreshTimestamp(sinceTimestamp: number): number {
+    return getFreshImages(sinceTimestamp).reduce((latest, image) => {
+        return Math.max(latest, getFreshImageTimestamp(image.id) ?? latest);
+    }, sinceTimestamp);
+}
+
+function computeIncrementalSessionUpdate(
+    session: SearchSession,
+    query: UpdateRequest,
+    exploration: ReturnType<typeof explorationFromRequest>,
+): UpdateResponse | undefined {
+    if (session.mmrSearchContext || session.pruneSearchContext)
+        return undefined;
+    if (getResultWindow(query.search).take !== 0)
+        return undefined;
+    const compare = sessionIdComparator(session);
+    if (!compare)
+        return undefined;
+
+    const freshImages = getFreshImages(query.timestamp);
+    const deletedIds = getDeletedImageIds(query.timestamp);
+    const timestamp = latestFreshTimestamp(query.timestamp);
+    if (!freshImages.length && !deletedIds.length)
+        return { additions: [], deletions: [], timestamp };
+
+    const inSession = getSessionIdSet(session);
+    const removals = new Set<string>();
+    for (const id of deletedIds) {
+        if (inSession.has(id) && !getImage(id))
+            removals.add(id);
+    }
+
+    const matcher = buildMatcher(
+        stripResultShapingParts(query.search),
+        query.matching,
+        exploration,
+        session.imgSearchContext,
+    );
+    const added: ServerImage[] = [];
+    const addedIds = new Set<string>();
+    for (const image of freshImages) {
+        if (!inSession.has(image.id) && !session.sourcePositions.has(image.id)) {
+            session.sourcePositions.set(image.id, session.sourceOrder.length);
+            session.sourceOrder.push(image.id);
+        }
+        const matches = !session.excludedIds.has(image.id) && matcher(image);
+        if (inSession.has(image.id)) {
+            if (!matches)
+                removals.add(image.id);
+        } else if (matches && !addedIds.has(image.id)) {
+            added.push(image);
+            addedIds.add(image.id);
+        }
+    }
+
+    if (!removals.size && !added.length)
+        return { additions: [], deletions: [], timestamp };
+
+    const ids = removals.size
+        ? session.orderedIds.filter((id) => !removals.has(id))
+        : [...session.orderedIds];
+    for (const image of added)
+        ids.splice(upperBound(ids, image.id, compare), 0, image.id);
+
+    // Each addition goes before the next id the client already has (null: at the end).
+    // Additions are sent in their final order, so several with one anchor stay in order.
+    const anchors: Record<string, string | null> = {};
+    const orderedAdded: ServerImage[] = [];
+    let waiting: string[] = [];
+    for (const id of ids) {
+        if (addedIds.has(id)) {
+            waiting.push(id);
+            orderedAdded.push(getImage(id)!);
+            continue;
+        }
+        if (!waiting.length)
+            continue;
+        for (const waitingId of waiting)
+            anchors[waitingId] = id;
+        waiting = [];
+        if (orderedAdded.length === addedIds.size)
+            break;
+    }
+    for (const waitingId of waiting)
+        anchors[waitingId] = null;
+
+    for (const id of removals)
+        inSession.delete(id);
+    for (const id of addedIds)
+        inSession.add(id);
+    session.orderedIds = ids;
+    sessionIdSets.set(ids, inSession);
+
+    return {
+        additions: mapServerImageToClient(orderedAdded),
+        deletions: [...removals],
+        anchors,
+        timestamp,
+    };
+}
 
 function getSessionResultImages(
     session: SearchSession,
@@ -115,21 +251,25 @@ function getMetadataMembershipDeletions(
 export async function computeImageUpdate(
     query: UpdateRequest,
     session?: SearchSession,
+    options: ImageUpdateOptions = {},
 ): Promise<ImageUpdateResult> {
     let images: ServerImage[] = [];
     let resultIds: Set<string>;
 
     try {
         const exploration = explorationFromRequest(query);
+        if (session && options.incremental) {
+            const incremental = computeIncrementalSessionUpdate(session, query, exploration);
+            if (incremental)
+                return incremental;
+        }
         if (session) {
             const desired = getSessionResultImages(session, query, exploration);
             const desiredIds = new Set(desired.map((image) => image.id));
             const resultIds = new Set(session.orderedIds);
             const images = desired.filter((image) => !resultIds.has(image.id));
             const deletions = session.orderedIds.filter((id) => !desiredIds.has(id));
-            const timestamp = getFreshImages(query.timestamp).reduce((latest, image) => {
-                return Math.max(latest, getFreshImageTimestamp(image.id) ?? latest);
-            }, query.timestamp);
+            const timestamp = latestFreshTimestamp(query.timestamp);
 
             return {
                 additions: mapServerImageToClient(images),

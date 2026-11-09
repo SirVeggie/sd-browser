@@ -2030,7 +2030,7 @@ function getFullMetaForImage(id: string): string {
     return `${image?.prompt}\n${image?.workflow}\n${image?.extra}\n${image?.folder}`;
 }
 
-function createComparer<T>(selector: (a: T) => any, descending: boolean) {
+export function createComparer<T>(selector: (a: T) => any, descending: boolean) {
     return (a: T, b: T) => {
         return selector(a) < selector(b)
             ? (descending ? 1 : -1)

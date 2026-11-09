@@ -1324,6 +1324,46 @@
         return unique.length ? existing.concat(unique) : existing;
     }
 
+    /** Insert each addition before its anchor id; additions whose anchor isn't loaded go last. */
+    function insertImagesAtAnchors(
+        existing: ClientImage[],
+        additions: ClientImage[],
+        anchors: Record<string, string | null>,
+    ): ClientImage[] {
+        const ids = new Set(existing.map((image) => image.id));
+        const before = new Map<string, ClientImage[]>();
+        const atEnd: ClientImage[] = [];
+        for (const image of additions) {
+            if (ids.has(image.id))
+                continue;
+            ids.add(image.id);
+            const anchor = anchors[image.id];
+            if (anchor) {
+                const group = before.get(anchor);
+                if (group) group.push(image);
+                else before.set(anchor, [image]);
+            } else {
+                atEnd.push(image);
+            }
+        }
+        if (!before.size && !atEnd.length)
+            return existing;
+
+        const result: ClientImage[] = [];
+        for (const image of existing) {
+            const group = before.get(image.id);
+            if (group) {
+                result.push(...group);
+                before.delete(image.id);
+            }
+            result.push(image);
+        }
+        for (const group of before.values())
+            result.push(...group);
+        result.push(...atEnd);
+        return result;
+    }
+
     function connectImageStream(
         expectedSessionId: number,
         resumeSessionId?: string,
@@ -1476,7 +1516,9 @@
             );
             deletions = x.length - modified.length;
             const beforeAdditions = modified.length;
-            const combined = appendUniqueImages(modified, mapped);
+            const combined = res.anchors && !res.orderedIds
+                ? insertImagesAtAnchors(modified, mapped, res.anchors)
+                : appendUniqueImages(modified, mapped);
             additions = combined.length - beforeAdditions;
             if (!res.orderedIds) return combined;
 

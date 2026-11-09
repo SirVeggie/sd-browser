@@ -3,8 +3,9 @@ import { similarityPromptText } from "$lib/tools/metadataInterpreter";
 import { calcProgress, calcTimeRemaining, updateLine } from "$lib/tools/misc";
 import type { ServerImage } from "$lib/types/images";
 import { isSimilarityAlgorithm, type ExplorationSettings, type SimilarityAlgorithm } from "$lib/types/misc";
-import { buildUniqueHashToId, repairUniqueHashToIdAfterDeletes } from "./explorationUnique";
+import { buildUniqueHashToId, repairUniqueHashToIdAfterDeletesInPlace } from "./explorationUnique";
 import { MiscDB } from "./db";
+import { getImageList } from "./dataIndex";
 
 type SourceState = {
     fingerprint: string;
@@ -40,15 +41,38 @@ type ExplorationCachePayload = SparseCachePayload | SimilarCachePayload | Unique
 type RuntimeCache<TPayload extends ExplorationCachePayload> = {
     payload: TPayload;
     pool: Set<string>;
+    /** sourceGeneration this cache was last brought up to date with. */
+    generation: number;
 };
+
+type PendingUniqueOp =
+    | { type: 'add'; image: ServerImage }
+    | { type: 'delete'; images: ServerImage[] };
 
 const sparseCacheKey = 'exploration-cache:sparse';
 const similarCacheKey = 'exploration-cache:similar';
 const uniqueCacheKey = 'exploration-cache:unique';
 
+/** Repairs wait this long after the last image change unless a search needs a pool first. */
+const REPAIR_IDLE_MS = 10_000;
+/** Persisting the caches (MBs of JSON) waits for a longer quiet period. */
+const PERSIST_IDLE_MS = 30_000;
+
 let sparseCache: RuntimeCache<SparseCachePayload> | undefined;
 let similarCache: RuntimeCache<SimilarCachePayload> | undefined;
 let uniqueCache: RuntimeCache<UniqueCachePayload> | undefined;
+
+/**
+ * Bumped on every image add/delete/move reported here, so runtime caches can be
+ * checked in O(1) instead of re-hashing every id. Persisted payloads still carry
+ * the full fingerprint, computed when they are saved.
+ */
+let sourceGeneration = 0;
+let pendingUniqueOps: PendingUniqueOp[] = [];
+let pendingAffectedDate = Number.POSITIVE_INFINITY;
+let repairTimer: ReturnType<typeof setTimeout> | undefined;
+let persistTimer: ReturnType<typeof setTimeout> | undefined;
+const dirtyPersist = new Set<'sparse' | 'similar' | 'unique'>();
 
 function getSourceState(images: ServerImage[]): SourceState {
     const ids = images.map(image => image.id).sort();
@@ -148,6 +172,7 @@ function cachePool<TPayload extends SparseCachePayload | SimilarCachePayload>(pa
     return {
         payload,
         pool: new Set(payload.poolIds),
+        generation: sourceGeneration,
     };
 }
 
@@ -155,7 +180,14 @@ function cacheUniquePool(payload: UniqueCachePayload): RuntimeCache<UniqueCacheP
     return {
         payload,
         pool: new Set(Object.values(payload.hashToId)),
+        generation: sourceGeneration,
     };
+}
+
+function runtimeCacheIsCurrent(cache: RuntimeCache<ExplorationCachePayload> | undefined, images: ServerImage[]): boolean {
+    return cache !== undefined
+        && cache.generation === sourceGeneration
+        && cache.payload.sourceCount === images.length;
 }
 
 function saveSparseCache(payload: SparseCachePayload) {
@@ -171,6 +203,7 @@ function saveUniqueCache(payload: UniqueCachePayload) {
 }
 
 export function verifyExplorationCaches(images: ServerImage[]): void {
+    clearPendingRepairs();
     const source = getSourceState(images);
     const sparse = parseSparseCache(MiscDB.get(sparseCacheKey));
     if (sparse && !(sourceMatches(sparse, source) && poolIdsAreValid(sparse.poolIds, images))) {
@@ -200,6 +233,8 @@ export function verifyExplorationCaches(images: ServerImage[]): void {
 }
 
 export function invalidateExplorationPools(reason?: string): void {
+    clearPendingRepairs();
+    sourceGeneration++;
     sparseCache = undefined;
     similarCache = undefined;
     uniqueCache = undefined;
@@ -211,7 +246,9 @@ export function recalculateSimilarCache(
     algorithm: SimilarityAlgorithm,
     threshold: number,
 ): Set<string> {
+    flushExplorationRepairs(images);
     similarCache = undefined;
+    dirtyPersist.delete('similar');
     MiscDB.delete(similarCacheKey);
     return getCachedSimilarPool(images, algorithm, threshold);
 }
@@ -258,47 +295,144 @@ function buildAndSaveUniqueCache(images: ServerImage[]): RuntimeCache<UniqueCach
     return cached;
 }
 
+/**
+ * Queue a unique-cache repair for an added image. The `images` argument is kept for
+ * callers; the repair runs later against the image list at that time.
+ */
 export function repairUniqueCacheOnAdd(images: ServerImage[], added: ServerImage): void {
-    if (!added.hash)
-        return;
+    void images;
+    sourceGeneration++;
+    if (added.hash)
+        pendingUniqueOps.push({ type: 'add', image: added });
+    scheduleRepair();
+}
 
+/** Queue a unique-cache repair for deleted images (see repairUniqueCacheOnAdd). */
+export function repairUniqueCacheAfterDeletes(remaining: ServerImage[], deleted: ServerImage[]): void {
+    void remaining;
+    sourceGeneration++;
+    if (deleted.length)
+        pendingUniqueOps.push({ type: 'delete', images: deleted });
+    scheduleRepair();
+}
+
+function applyUniqueOps(images: ServerImage[], ops: PendingUniqueOp[]): void {
     const existing = getUniquePayloadForRepair();
     if (!existing) {
-        uniqueCache = buildAndSaveUniqueCache(images);
+        if (ops.some(op => op.type === 'add')) {
+            uniqueCache = buildAndSaveUniqueCache(images);
+            dirtyPersist.delete('unique');
+        }
         return;
     }
 
-    const source = getSourceState(images);
-    const payload: UniqueCachePayload = {
-        type: 'unique',
-        sourceFingerprint: source.fingerprint,
-        sourceCount: source.count,
-        hashToId: {
-            ...existing.hashToId,
-            [added.hash]: added.id,
-        },
-    };
-    uniqueCache = cacheUniquePool(payload);
-    saveUniqueCache(payload);
+    // Mutate in place: copying a 100k+ entry record per image was the main cost.
+    const hashToId = existing.hashToId;
+    const pool = uniqueCache?.payload === existing
+        ? uniqueCache.pool
+        : new Set(Object.values(hashToId));
+    for (const op of ops) {
+        if (op.type === 'add') {
+            const hash = op.image.hash;
+            if (!hash)
+                continue;
+            const previous = hashToId[hash];
+            if (previous && previous !== op.image.id)
+                pool.delete(previous);
+            hashToId[hash] = op.image.id;
+            pool.add(op.image.id);
+        } else {
+            repairUniqueHashToIdAfterDeletesInPlace(hashToId, images, op.images, pool);
+        }
+    }
+    existing.sourceCount = images.length;
+    uniqueCache = { payload: existing, pool, generation: sourceGeneration };
+    dirtyPersist.add('unique');
 }
 
-export function repairUniqueCacheAfterDeletes(remaining: ServerImage[], deleted: ServerImage[]): void {
-    if (!deleted.length)
-        return;
+function clearPendingRepairs(): void {
+    clearTimeout(repairTimer);
+    repairTimer = undefined;
+    pendingUniqueOps = [];
+    pendingAffectedDate = Number.POSITIVE_INFINITY;
+}
 
-    const existing = getUniquePayloadForRepair();
-    if (!existing)
-        return;
+function scheduleRepair(): void {
+    clearTimeout(repairTimer);
+    repairTimer = setTimeout(() => flushExplorationRepairs(), REPAIR_IDLE_MS);
+}
 
-    const source = getSourceState(remaining);
-    const payload: UniqueCachePayload = {
-        type: 'unique',
-        sourceFingerprint: source.fingerprint,
-        sourceCount: source.count,
-        hashToId: repairUniqueHashToIdAfterDeletes(existing.hashToId, remaining, deleted),
-    };
-    uniqueCache = cacheUniquePool(payload);
-    saveUniqueCache(payload);
+function schedulePersist(): void {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(persistExplorationCaches, PERSIST_IDLE_MS);
+}
+
+/** Apply queued add/delete/move repairs to the in-memory caches in one pass. */
+export function flushExplorationRepairs(images: ServerImage[] = [...getImageList().values()]): void {
+    const ops = pendingUniqueOps;
+    const affectedDate = pendingAffectedDate;
+    clearPendingRepairs();
+    if (!ops.length && affectedDate === Number.POSITIVE_INFINITY) {
+        refreshCacheGenerations(images);
+        return;
+    }
+
+    const start = performance.now();
+    if (ops.length)
+        applyUniqueOps(images, ops);
+    if (affectedDate !== Number.POSITIVE_INFINITY) {
+        repairSparseCache(images, affectedDate);
+        repairSimilarCache(images, affectedDate);
+    }
+    refreshCacheGenerations(images);
+    const ms = performance.now() - start;
+    if (ms > 50)
+        console.log(`Repaired exploration caches (${ops.length} changes) in ${Math.round(ms)}ms`);
+    if (dirtyPersist.size)
+        schedulePersist();
+}
+
+/** A change that touched no pool (e.g. an image without a prompt hash) still bumps the generation. */
+function refreshCacheGenerations(images: ServerImage[]): void {
+    for (const cache of [sparseCache, similarCache, uniqueCache]) {
+        if (!cache || cache.generation === sourceGeneration)
+            continue;
+        cache.generation = sourceGeneration;
+        if (cache.payload.sourceCount !== images.length) {
+            cache.payload.sourceCount = images.length;
+            dirtyPersist.add(cache.payload.type);
+        }
+    }
+}
+
+function persistExplorationCaches(): void {
+    persistTimer = undefined;
+    if (pendingUniqueOps.length || pendingAffectedDate !== Number.POSITIVE_INFINITY) {
+        // Still changing: persist after the next repair settles.
+        return;
+    }
+    if (!dirtyPersist.size)
+        return;
+    const start = performance.now();
+    const source = getSourceState([...getImageList().values()]);
+    for (const type of dirtyPersist) {
+        const cache = type === 'sparse' ? sparseCache : type === 'similar' ? similarCache : uniqueCache;
+        if (!cache)
+            continue;
+        cache.payload.sourceFingerprint = source.fingerprint;
+        cache.payload.sourceCount = source.count;
+        MiscDB.set(cacheKeyFor(type), JSON.stringify(cache.payload));
+    }
+    dirtyPersist.clear();
+    console.log(`Saved exploration caches in ${Math.round(performance.now() - start)}ms`);
+}
+
+function cacheKeyFor(type: ExplorationCachePayload['type']): string {
+    switch (type) {
+        case 'sparse': return sparseCacheKey;
+        case 'similar': return similarCacheKey;
+        case 'unique': return uniqueCacheKey;
+    }
 }
 
 function repairSparseCache(images: ServerImage[], affectedModifiedDate: number): boolean {
@@ -307,7 +441,6 @@ function repairSparseCache(images: ServerImage[], affectedModifiedDate: number):
         return false;
 
     const frequency = Math.max(1, Math.floor(existing.frequency));
-    const source = getSourceState(images);
     const sorted = sortByModifiedDate(images);
     const imageMap = getImageMap(images);
     const startIndex = firstIndexAtOrAfter(sorted, affectedModifiedDate);
@@ -324,12 +457,11 @@ function repairSparseCache(images: ServerImage[], affectedModifiedDate: number):
     const payload: SparseCachePayload = {
         ...existing,
         frequency,
-        sourceFingerprint: source.fingerprint,
-        sourceCount: source.count,
+        sourceCount: images.length,
         poolIds: [...prefixIds, ...suffixIds],
     };
     sparseCache = cachePool(payload);
-    saveSparseCache(payload);
+    dirtyPersist.add('sparse');
     return true;
 }
 
@@ -338,7 +470,6 @@ function repairSimilarCache(images: ServerImage[], affectedModifiedDate: number)
     if (!existing)
         return false;
 
-    const source = getSourceState(images);
     const sorted = sortByModifiedDate(images);
     const imageMap = getImageMap(images);
     const selectedPrefix = existing.poolIds
@@ -372,22 +503,26 @@ function repairSimilarCache(images: ServerImage[], affectedModifiedDate: number)
 
     const payload: SimilarCachePayload = {
         ...existing,
-        sourceFingerprint: source.fingerprint,
-        sourceCount: source.count,
+        sourceCount: images.length,
         poolIds,
     };
     similarCache = cachePool(payload);
-    saveSimilarCache(payload);
+    dirtyPersist.add('similar');
     return true;
 }
 
+/** Queue a sparse/similar repair from `affectedModifiedDate` on (see repairUniqueCacheOnAdd). */
 export function repairExplorationCaches(images: ServerImage[], affectedModifiedDate: number, reason: string): void {
-    repairSparseCache(images, affectedModifiedDate);
-    repairSimilarCache(images, affectedModifiedDate);
+    void images;
     void reason;
+    sourceGeneration++;
+    pendingAffectedDate = Math.min(pendingAffectedDate, affectedModifiedDate);
+    scheduleRepair();
 }
 
 export function getExplorationPool(settings: ExplorationSettings, images: ServerImage[]): Set<string> {
+    if (settings.explorationMode !== 'none' && (pendingUniqueOps.length || pendingAffectedDate !== Number.POSITIVE_INFINITY))
+        flushExplorationRepairs(images);
 
     switch (settings.explorationMode) {
         case 'none':
@@ -407,9 +542,14 @@ export function getExplorationPool(settings: ExplorationSettings, images: Server
 
 function getCachedSparsePool(images: ServerImage[], frequency: number): Set<string> {
     const freq = Math.max(1, Math.floor(frequency));
-    const source = getSourceState(images);
-    if (sparseCache && sparseCache.payload.frequency === freq && sourceMatches(sparseCache.payload, source))
+    if (sparseCache && sparseCache.payload.frequency === freq && runtimeCacheIsCurrent(sparseCache, images))
         return sparseCache.pool;
+
+    const source = getSourceState(images);
+    if (sparseCache && sparseCache.payload.frequency === freq && sourceMatches(sparseCache.payload, source)) {
+        sparseCache.generation = sourceGeneration;
+        return sparseCache.pool;
+    }
 
     const persisted = parseSparseCache(MiscDB.get(sparseCacheKey));
     if (persisted && persisted.frequency === freq && sourceMatches(persisted, source) && poolIdsAreValid(persisted.poolIds, images)) {
@@ -438,14 +578,16 @@ function getCachedSimilarPool(
     algorithm: SimilarityAlgorithm,
     threshold: number,
 ): Set<string> {
+    const settingsMatch = similarCache !== undefined
+        && similarCache.payload.algorithm === algorithm
+        && similarCache.payload.threshold === threshold;
+    if (settingsMatch && runtimeCacheIsCurrent(similarCache, images))
+        return similarCache!.pool;
+
     const source = getSourceState(images);
-    if (
-        similarCache &&
-        similarCache.payload.algorithm === algorithm &&
-        similarCache.payload.threshold === threshold &&
-        sourceMatches(similarCache.payload, source)
-    ) {
-        return similarCache.pool;
+    if (settingsMatch && sourceMatches(similarCache!.payload, source)) {
+        similarCache!.generation = sourceGeneration;
+        return similarCache!.pool;
     }
 
     const persisted = parseSimilarCache(MiscDB.get(similarCacheKey));
@@ -477,9 +619,14 @@ function getCachedSimilarPool(
 }
 
 function getCachedUniquePool(images: ServerImage[]): Set<string> {
+    if (runtimeCacheIsCurrent(uniqueCache, images))
+        return uniqueCache!.pool;
+
     const source = getSourceState(images);
-    if (uniqueCache && sourceMatches(uniqueCache.payload, source))
+    if (uniqueCache && sourceMatches(uniqueCache.payload, source)) {
+        uniqueCache.generation = sourceGeneration;
         return uniqueCache.pool;
+    }
 
     const persisted = parseUniqueCache(MiscDB.get(uniqueCacheKey));
     if (persisted && sourceMatches(persisted, source) && hashToIdAreValid(persisted.hashToId, images)) {
