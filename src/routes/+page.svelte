@@ -114,6 +114,7 @@
     import { tagsStore } from "$lib/stores/tagsStore";
     import { isExactTagTerm, tagsAddableToSelection } from "$lib/types/tags";
     import { flyoutState } from "$lib/stores/flyoutStore";
+    import { dcomfyStatus, refreshDcomfyStatus, sendToDcomfy } from "$lib/stores/dcomfyStore";
     import {
         requestOpenInPanel,
         requestUseParamsFromImage,
@@ -602,6 +603,7 @@
     $: selecting, closeNavMenu();
 
     onMount(() => {
+        void refreshDcomfyStatus(true);
         try {
             quickTagSelectedTags = loadQuickTagSelectedTags(localStorage);
         } catch {
@@ -1810,6 +1812,7 @@
         return async (e: InputEvent) => {
             const pos = getEventCoords(e);
             closeAllContextMenus();
+            void refreshDcomfyStatus();
             openContextMenu(pos, [
                 {
                     name: "Select",
@@ -1879,6 +1882,11 @@
                         }
                         requestUseParamsFromImage(id);
                     },
+                },
+                {
+                    name: "Send to DC",
+                    visible: !selecting && $dcomfyStatus.available,
+                    handler: () => sendToDcomfy(id),
                 },
                 {
                     name: "Similar prompts",

@@ -60,6 +60,7 @@
   } from "./ContextMenuManager.svelte";
   import FullscreenMediaStage from "./FullscreenMediaStage.svelte";
   import { dismissOverlayOnClick } from "$lib/tools/dropdownOutsideClick";
+  import { dcomfyStatus, refreshDcomfyStatus, sendToDcomfy } from "$lib/stores/dcomfyStore";
 
   export let cancel: () => void;
   export let image: ClientImage | undefined;
@@ -156,6 +157,7 @@
     comfyWorkflowAuthRequired = false;
     void refreshComfyWorkflowOpenStatus(stageId);
   }
+  $: if (enabled && stageId) void refreshDcomfyStatus();
   $: if (!enabled || !stageId || !stageInfo?.workflow) {
     comfyStatusImageId = undefined;
     comfyWorkflowOpenAvailable = false;
@@ -411,6 +413,10 @@
       }
     } else if (stageInfo?.prompt) {
       actions.push({ name: "Copy all", handler: copyPrompt });
+    }
+
+    if ($dcomfyStatus.available) {
+      actions.push({ name: "Send to DC", handler: () => sendToDcomfy(stageId) });
     }
 
     actions.push({
