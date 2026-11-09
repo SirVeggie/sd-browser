@@ -4,10 +4,10 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"start": "cross-env BODY_SIZE_LIMIT=10485760 node -r dotenv/config build",
+		"start": "cross-env BODY_SIZE_LIMIT=10485760 UV_THREADPOOL_SIZE=16 node -r dotenv/config build",
 		"start:pm2": "pm2 startOrReload ecosystem.config.cjs",
 		"stop:pm2": "pm2 delete ecosystem.config.cjs",
-		"dev": "cross-env LOCAL_DATA=./devLocalData IMG_FOLDER=./devImages BODY_SIZE_LIMIT=10485760 vite dev",
+		"dev": "cross-env LOCAL_DATA=./devLocalData IMG_FOLDER=./devImages BODY_SIZE_LIMIT=10485760 UV_THREADPOOL_SIZE=16 vite dev",
 		"ddev": "npm run dev -- --host",
 		"setup": "npm i && npm run build",
 		"prod": "npm i && npm run build && npm start",

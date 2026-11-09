@@ -6,6 +6,7 @@ module.exports = {
     env: {
       // adapter-node uses parseInt — no K/M/G suffixes (10M becomes 10 bytes).
       BODY_SIZE_LIMIT: '10485760',
+      UV_THREADPOOL_SIZE: '16',
     },
   }]
 };

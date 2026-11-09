@@ -743,6 +743,92 @@
     </div>
 
     <div class="settings-card">
+        <h4>Tags &amp; filters</h4>
+    <div class="tags-inline">
+        <span class="subsection-title">Tags</span>
+        <TagPillRow
+            tags={$tagsStore.tags.map((tag) => tag.name)}
+            showAdd
+            clickable
+            compact
+            sortable
+            on:add={openAddTag}
+            on:reorder={onTagsReorder}
+            on:edit={(event) => {
+                const tag = $tagsStore.tags.find((item) => item.name === event.detail);
+                if (tag) openEditTag(tag);
+            }}
+        />
+    </div>
+
+    <div class="sgroup llm-settings custom-filters-section">
+        <button
+            type="button"
+            class="llm-summary"
+            aria-expanded={customFiltersOpen}
+            on:click={() => (customFiltersOpen = !customFiltersOpen)}
+        >
+            Custom Filters
+            <span class="chevron" class:open={customFiltersOpen} aria-hidden="true" />
+        </button>
+
+        <div class="wrapper" class:isOpen={customFiltersOpen}>
+            <div class="inner llm-inner custom-filters-inner">
+                {#if $customFiltersStore.filters.length}
+                    <div class="filter-list">
+                        <SortableList
+                            ids={$customFiltersStore.filters.map((filter) => filter.id)}
+                            axis="y"
+                            role="list"
+                            on:reorder={onFiltersReorder}
+                            let:id
+                            let:startDrag
+                        >
+                            {@const filter = $customFiltersStore.filters.find((item) => item.id === id)}
+                            {#if filter}
+                                <div class="filter-card">
+                                    <div class="filter-header">
+                                        <DragHandle
+                                            label="Drag to reorder {filter.name}"
+                                            on:pointerdown={startDrag}
+                                        />
+                                        <span class="filter-name">{filter.name}</span>
+                                        <div class="filter-actions">
+                                            <button
+                                                type="button"
+                                                class="filter-edit"
+                                                on:click={() => openEditFilter(filter)}
+                                            >
+                                                edit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="filter-delete"
+                                                aria-label="Delete filter {filter.name}"
+                                                on:click={() => deleteFilter(filter)}
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <code class="filter-expression" title={filter.filter}
+                                        >{filter.filter}</code
+                                    >
+                                </div>
+                            {/if}
+                        </SortableList>
+                    </div>
+                {/if}
+
+                <div class="inline-action">
+                    <Button on:click={openAddFilter}>Add filter</Button>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <div class="settings-card">
         <h4>Autocomplete</h4>
         <SvGenAutocompleteSettings
             bind:this={autocompleteSettings}
@@ -996,92 +1082,6 @@ Masonry: Tile images by placing them in the shortest column, like a photo wall."
                 <p class="hint">
                     Builds the optional full-library uniqueness index used by MMR with the <code>index</code> candidate strategy. Rebuild manually after embeddings change.
                 </p>
-            </div>
-        </div>
-    </div>
-    </div>
-
-    <div class="settings-card">
-        <h4>Tags &amp; filters</h4>
-    <div class="tags-inline">
-        <span class="subsection-title">Tags</span>
-        <TagPillRow
-            tags={$tagsStore.tags.map((tag) => tag.name)}
-            showAdd
-            clickable
-            compact
-            sortable
-            on:add={openAddTag}
-            on:reorder={onTagsReorder}
-            on:edit={(event) => {
-                const tag = $tagsStore.tags.find((item) => item.name === event.detail);
-                if (tag) openEditTag(tag);
-            }}
-        />
-    </div>
-
-    <div class="sgroup llm-settings custom-filters-section">
-        <button
-            type="button"
-            class="llm-summary"
-            aria-expanded={customFiltersOpen}
-            on:click={() => (customFiltersOpen = !customFiltersOpen)}
-        >
-            Custom Filters
-            <span class="chevron" class:open={customFiltersOpen} aria-hidden="true" />
-        </button>
-
-        <div class="wrapper" class:isOpen={customFiltersOpen}>
-            <div class="inner llm-inner custom-filters-inner">
-                {#if $customFiltersStore.filters.length}
-                    <div class="filter-list">
-                        <SortableList
-                            ids={$customFiltersStore.filters.map((filter) => filter.id)}
-                            axis="y"
-                            role="list"
-                            on:reorder={onFiltersReorder}
-                            let:id
-                            let:startDrag
-                        >
-                            {@const filter = $customFiltersStore.filters.find((item) => item.id === id)}
-                            {#if filter}
-                                <div class="filter-card">
-                                    <div class="filter-header">
-                                        <DragHandle
-                                            label="Drag to reorder {filter.name}"
-                                            on:pointerdown={startDrag}
-                                        />
-                                        <span class="filter-name">{filter.name}</span>
-                                        <div class="filter-actions">
-                                            <button
-                                                type="button"
-                                                class="filter-edit"
-                                                on:click={() => openEditFilter(filter)}
-                                            >
-                                                edit
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="filter-delete"
-                                                aria-label="Delete filter {filter.name}"
-                                                on:click={() => deleteFilter(filter)}
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <code class="filter-expression" title={filter.filter}
-                                        >{filter.filter}</code
-                                    >
-                                </div>
-                            {/if}
-                        </SortableList>
-                    </div>
-                {/if}
-
-                <div class="inline-action">
-                    <Button on:click={openAddFilter}>Add filter</Button>
-                </div>
             </div>
         </div>
     </div>
