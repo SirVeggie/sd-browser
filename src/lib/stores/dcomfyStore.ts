@@ -1,5 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { notify } from '$lib/components/Notifier.svelte';
+import { authStore } from '$lib/stores/authStore';
 
 /** Dynamic Comfy on its port (default 8190): offers "Send to DC" in image menus while it runs. */
 export type DcomfyClientStatus = { available: boolean; publicUrl: string; port: number };
@@ -7,6 +8,10 @@ export type DcomfyClientStatus = { available: boolean; publicUrl: string; port: 
 export const dcomfyStatus = writable<DcomfyClientStatus>({ available: false, publicUrl: '', port: 8190 });
 
 const REFRESH_MS = 15_000;
+
+function authHeaders(): Record<string, string> {
+    return { Authorization: `Bearer ${get(authStore).password}` };
+}
 let lastRefresh = 0;
 let inFlight: Promise<void> | undefined;
 
@@ -15,8 +20,12 @@ export function refreshDcomfyStatus(force = false): Promise<void> {
     if (inFlight) return inFlight;
     if (!force && Date.now() - lastRefresh < REFRESH_MS) return Promise.resolve();
     lastRefresh = Date.now();
-    inFlight = fetch('/api/dcomfy/status')
-        .then((r) => (r.ok ? r.json() : null))
+    inFlight = fetch('/api/dcomfy/status', { headers: authHeaders() })
+        .then((r) => {
+            if (r.ok) return r.json();
+            lastRefresh = 0;  // e.g. signed in after this ran: try again on the next menu
+            return null;
+        })
         .then((body) => {
             if (body && typeof body.available === 'boolean')
                 dcomfyStatus.set({
@@ -43,7 +52,7 @@ export async function sendToDcomfy(imageId: string): Promise<void> {
     try {
         const response = await fetch('/api/dcomfy/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ imageId }),
         });
         body = await response.json().catch(() => ({}));
