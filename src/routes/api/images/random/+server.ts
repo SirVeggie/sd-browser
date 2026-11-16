@@ -39,6 +39,7 @@ export async function POST(e) {
                 signal: e.request.signal,
                 tempEmbeddings: query.tempEmbeddings,
                 skipVideos: query.skipVideos !== false,
+                seed: query.seed,
             },
         );
         if (!image)

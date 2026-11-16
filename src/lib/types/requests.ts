@@ -357,6 +357,8 @@ export type RandomImageRequest = {
     similarityThreshold?: number;
     skipVideos?: boolean;
     tempEmbeddings?: TempEmbeddingsMap;
+    /** Same seed and matches: same image. An integer, or a string of digits past 2^53. */
+    seed?: number | string;
 };
 export function isRandomImageRequest(object: any): object is RandomImageRequest {
     return testType(object, [
@@ -369,6 +371,7 @@ export function isRandomImageRequest(object: any): object is RandomImageRequest 
         (o) => o.similarityThreshold === undefined || typeof o.similarityThreshold === 'number',
         (o) => o.skipVideos === undefined || typeof o.skipVideos === 'boolean',
         (o) => optionalTempEmbeddingsCheck(o),
+        (o) => o.seed === undefined || Number.isInteger(o.seed) || (typeof o.seed === 'string' && /^-?\d+$/.test(o.seed)),
     ]);
 }
 

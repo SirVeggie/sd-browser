@@ -29,7 +29,7 @@ import {
     encodeFloat32Embedding,
     decodeFloat32Embedding,
 } from '../src/lib/tools/tempEmbeddings.ts';
-import { takeRandomMatch } from '../src/lib/tools/randomPick.ts';
+import { seededRandom, takeRandomMatch } from '../src/lib/tools/randomPick.ts';
 import {
     matchesAspectComparisons,
     parseAspectComparisons,
@@ -896,6 +896,21 @@ assert.equal(
         if (picked) seen.add(picked);
     }
     assert.deepEqual([...seen].sort(), ['a', 'c'], 'random pick only returns matching ids');
+}
+
+{
+    const ids = Array.from({ length: 50 }, (_, i) => `id${i}`);
+    const pick = (seed: number | string) =>
+        takeRandomMatch([...ids], (id) => id, (id) => id !== 'id7', { random: seededRandom(seed) });
+    assert.equal(await pick(42), await pick(42), 'seeded random pick repeats');
+    assert.equal(await pick('18446744073709551615'), await pick('18446744073709551615'), 'seeds past 2^53 as strings');
+    const picks = new Set<string | undefined>();
+    for (let seed = 0; seed < 30; seed++) picks.add(await pick(seed));
+    assert.ok(picks.size > 10, 'different seeds pick different images');
+    assert.ok(!picks.has('id7'), 'seeded pick only returns matching ids');
+    assert.equal(isRandomImageRequest({ search: '', seed: 5 }), true, 'random request takes a number seed');
+    assert.equal(isRandomImageRequest({ search: '', seed: '18446744073709551615' }), true, 'random request takes a digit-string seed');
+    assert.equal(isRandomImageRequest({ search: '', seed: 1.5 }), false, 'random request refuses a fractional seed');
 }
 
 console.log('searching.test.ts: all tests passed');
