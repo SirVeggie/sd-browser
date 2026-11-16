@@ -29,7 +29,7 @@ import {
     encodeFloat32Embedding,
     decodeFloat32Embedding,
 } from '../src/lib/tools/tempEmbeddings.ts';
-import { seededRandom, takeRandomMatch } from '../src/lib/tools/randomPick.ts';
+import { PickCache, seededRandom, takeRandomMatch } from '../src/lib/tools/randomPick.ts';
 import {
     matchesAspectComparisons,
     parseAspectComparisons,
@@ -911,6 +911,23 @@ assert.equal(
     assert.equal(isRandomImageRequest({ search: '', seed: 5 }), true, 'random request takes a number seed');
     assert.equal(isRandomImageRequest({ search: '', seed: '18446744073709551615' }), true, 'random request takes a digit-string seed');
     assert.equal(isRandomImageRequest({ search: '', seed: 1.5 }), false, 'random request refuses a fractional seed');
+}
+
+{
+    let now = 0;
+    const cache = new PickCache<string>(2, 1000, () => now);
+    cache.set('a', 's1', 'img-a');
+    assert.equal(cache.get('a', 's1'), 'img-a', 'pick cache hit');
+    assert.equal(cache.get('a', 's2'), undefined, 'pick cache misses once the images change');
+    assert.equal(cache.get('a', 's1'), undefined, 'a stale entry is dropped');
+    cache.set('a', 's1', 'img-a');
+    now = 1001;
+    assert.equal(cache.get('a', 's1'), undefined, 'pick cache entries expire');
+    cache.set('a', 's1', 'img-a');
+    cache.set('b', 's1', 'img-b');
+    cache.set('c', 's1', 'img-c');
+    assert.equal(cache.get('a', 's1'), undefined, 'pick cache drops the oldest past its size');
+    assert.equal(cache.get('c', 's1'), 'img-c');
 }
 
 console.log('searching.test.ts: all tests passed');

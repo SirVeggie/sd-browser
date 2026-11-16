@@ -1,5 +1,5 @@
 import { isVideo, parseSearchDate, validRegex, XOR, yieldToEventLoop, getEmbeddingImagePath } from "$lib/tools/misc";
-import { seededRandom, takeRandomMatch } from "$lib/tools/randomPick";
+import { PickCache, seededRandom, takeRandomMatch } from "$lib/tools/randomPick";
 import {
     getPositiveSimilarSourceIds,
     parseSimilarSearchTarget,
@@ -1494,29 +1494,57 @@ export async function pickRandomMatchingImage(
 
     throwIfSearchAborted(options);
 
+    // A seeded pick is the same while the images are: asked again (a preview, a retry), skip the search.
+    const cacheKey = seeded && !options.tempEmbeddings
+        ? JSON.stringify([search, matching, exploration, skipVideos, String(options.seed)])
+        : undefined;
+    const stamp = imageListStamp();
+    if (cacheKey) {
+        const id = seededPicks.get(cacheKey, stamp);
+        const image = id === undefined ? undefined : getImageList().get(id);
+        if (image)
+            return image;
+    }
+
+    let picked: ServerImage | undefined;
     if (!needsFullPlanForRandomPick(search, exploration)) {
         const imageList = getImageList();
         const matcher = buildMatcher(stripResultShapingParts(search), matching, exploration);
-        const picked = await takeRandomMatch(
+        picked = await takeRandomMatch(
             candidates([...imageList.keys()]),
             (id) => imageList.get(id),
             (image) => allowImage(image, matcher(image)),
             pickOptions,
         );
+    } else {
+        const plan = await buildSearchPlan(search, matching, exploration, 'random', undefined, options);
         throwIfSearchAborted(options);
-        return picked;
+        picked = await takeRandomMatch(
+            candidates(randomPickCandidateIds(plan)),
+            (id) => plan.imageList.get(id),
+            (image) => allowImage(image, plan.matcher(image)),
+            pickOptions,
+        );
     }
-
-    const plan = await buildSearchPlan(search, matching, exploration, 'random', undefined, options);
     throwIfSearchAborted(options);
-    const picked = await takeRandomMatch(
-        candidates(randomPickCandidateIds(plan)),
-        (id) => plan.imageList.get(id),
-        (image) => allowImage(image, plan.matcher(image)),
-        pickOptions,
-    );
-    throwIfSearchAborted(options);
+    if (cacheKey && picked && imageListStamp() === stamp)
+        seededPicks.set(cacheKey, stamp, picked.id);
     return picked;
+}
+
+const seededPicks = new PickCache<string>();
+const imageListIds = new WeakMap<object, number>();
+let nextImageListId = 0;
+
+/** Changes when the image list is replaced or gains or loses images. */
+function imageListStamp(): string {
+    const list = getImageList();
+    let id = imageListIds.get(list);
+    if (id === undefined) {
+        id = ++nextImageListId;
+        imageListIds.set(list, id);
+    }
+    return `${id}:${list.size}`;
 }
 
 export async function searchImagesStreaming(

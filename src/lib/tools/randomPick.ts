@@ -22,6 +22,41 @@ export function seededRandom(seed: number | string): () => number {
 }
 
 /**
+ * Recent seeded picks by request, so asking again skips the search. An entry holds while
+ * `stamp` is unchanged (e.g. the image list and its size) and for `ttlMs` at most.
+ */
+export class PickCache<S> {
+    private entries = new Map<string, { id: string; stamp: S; at: number }>();
+    private readonly max: number;
+    private readonly ttlMs: number;
+    private readonly now: () => number;
+
+    constructor(max = 200, ttlMs = 5 * 60_000, now = () => Date.now()) {
+        this.max = max;
+        this.ttlMs = ttlMs;
+        this.now = now;
+    }
+
+    get(key: string, stamp: S): string | undefined {
+        const entry = this.entries.get(key);
+        if (!entry)
+            return undefined;
+        if (entry.stamp !== stamp || this.now() - entry.at > this.ttlMs) {
+            this.entries.delete(key);
+            return undefined;
+        }
+        return entry.id;
+    }
+
+    set(key: string, stamp: S, id: string): void {
+        this.entries.delete(key);
+        this.entries.set(key, { id, stamp, at: this.now() });
+        while (this.entries.size > this.max)
+            this.entries.delete(this.entries.keys().next().value!);
+    }
+}
+
+/**
  * Partial Fisher–Yates until the first match. Mutates `ids` in place.
  * Optional yielding is for long scans on the server event loop.
  */
