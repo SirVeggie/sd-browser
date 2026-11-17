@@ -1,5 +1,5 @@
 import { isVideo, parseSearchDate, validRegex, XOR, yieldToEventLoop, getEmbeddingImagePath } from "$lib/tools/misc";
-import { PickCache, seededRandom, takeRandomMatch } from "$lib/tools/randomPick";
+import { PickCache, takeRandomMatch, takeSeededMatch } from "$lib/tools/randomPick";
 import {
     getPositiveSimilarSourceIds,
     parseSimilarSearchTarget,
@@ -1436,6 +1436,7 @@ export type SearchStreamResult = {
 };
 
 const RANDOM_PICK_YIELD_EVERY = 50;
+const SEEDED_PICK_YIELD_EVERY = 5000;
 
 function randomPickCandidateIds(plan: SearchPlan): string[] {
     switch (plan.kind) {
@@ -1463,7 +1464,8 @@ function needsFullPlanForRandomPick(search: string, exploration: ExplorationSett
 /**
  * Uniform random still (by default) among current search matches.
  * Does not create a gallery session or shuffle the full result list first.
- * With a seed the pick repeats while the matches stay the same (candidates in id order).
+ * With a seed it is the match with the lowest seeded score (takeSeededMatch): the same image for
+ * that seed while it still matches and no newer match scores lower, whatever else is added.
  */
 export async function pickRandomMatchingImage(
     search: string,
@@ -1478,12 +1480,13 @@ export async function pickRandomMatchingImage(
     const isAborted = () => Boolean(options.isAborted?.() || options.signal?.aborted);
     const seeded = options.seed !== undefined;
     const pickOptions = {
-        yieldEvery: RANDOM_PICK_YIELD_EVERY,
+        // A seeded pick scores every id (a cheap hash), so it yields less often.
+        yieldEvery: seeded ? SEEDED_PICK_YIELD_EVERY : RANDOM_PICK_YIELD_EVERY,
         yieldFn: yieldToEventLoop,
         isAborted,
-        random: seeded ? seededRandom(options.seed!) : undefined,
     };
-    const candidates = (ids: string[]) => (seeded ? ids.sort() : ids);
+    const take = (ids: string[], lookup: (id: string) => ServerImage | undefined, match: (image: ServerImage) => boolean) =>
+        seeded ? takeSeededMatch(ids, options.seed!, lookup, match, pickOptions) : takeRandomMatch(ids, lookup, match, pickOptions);
     const allowImage = (image: ServerImage, matches: boolean) => {
         if (!matches)
             return false;
@@ -1510,20 +1513,18 @@ export async function pickRandomMatchingImage(
     if (!needsFullPlanForRandomPick(search, exploration)) {
         const imageList = getImageList();
         const matcher = buildMatcher(stripResultShapingParts(search), matching, exploration);
-        picked = await takeRandomMatch(
-            candidates([...imageList.keys()]),
+        picked = await take(
+            [...imageList.keys()],
             (id) => imageList.get(id),
             (image) => allowImage(image, matcher(image)),
-            pickOptions,
         );
     } else {
         const plan = await buildSearchPlan(search, matching, exploration, 'random', undefined, options);
         throwIfSearchAborted(options);
-        picked = await takeRandomMatch(
-            candidates(randomPickCandidateIds(plan)),
+        picked = await take(
+            randomPickCandidateIds(plan),
             (id) => plan.imageList.get(id),
             (image) => allowImage(image, plan.matcher(image)),
-            pickOptions,
         );
     }
     throwIfSearchAborted(options);

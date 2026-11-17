@@ -29,7 +29,7 @@ import {
     encodeFloat32Embedding,
     decodeFloat32Embedding,
 } from '../src/lib/tools/tempEmbeddings.ts';
-import { PickCache, seededRandom, takeRandomMatch } from '../src/lib/tools/randomPick.ts';
+import { PickCache, takeRandomMatch, takeSeededMatch } from '../src/lib/tools/randomPick.ts';
 import {
     matchesAspectComparisons,
     parseAspectComparisons,
@@ -900,9 +900,17 @@ assert.equal(
 
 {
     const ids = Array.from({ length: 50 }, (_, i) => `id${i}`);
-    const pick = (seed: number | string) =>
-        takeRandomMatch([...ids], (id) => id, (id) => id !== 'id7', { random: seededRandom(seed) });
+    const pick = (seed: number | string, list = ids) =>
+        takeSeededMatch(list, seed, (id) => id, (id) => id !== 'id7' && !id.startsWith('other'));
     assert.equal(await pick(42), await pick(42), 'seeded random pick repeats');
+    assert.equal(await pick(42, [...ids].reverse()), await pick(42), 'seeded pick ignores list order');
+    const grown = [...ids, ...Array.from({ length: 500 }, (_, i) => `other${i}`)];
+    for (let seed = 0; seed < 20; seed++)
+        assert.equal(await pick(seed, grown), await pick(seed), 'non-matching images added elsewhere keep the seeded pick');
+    let moved = 0;
+    for (let seed = 0; seed < 200; seed++)
+        if (await pick(seed, [...ids, 'id-new']) !== await pick(seed)) moved++;
+    assert.ok(moved < 30, `one new match moves few seeded picks (moved ${moved}/200)`);
     assert.equal(await pick('18446744073709551615'), await pick('18446744073709551615'), 'seeds past 2^53 as strings');
     const picks = new Set<string | undefined>();
     for (let seed = 0; seed < 30; seed++) picks.add(await pick(seed));
